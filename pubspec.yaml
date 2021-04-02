@@ -9,6 +9,7 @@ environment:
 dependencies:
   swiss_knife: ^3.0.6
   petitparser: ^4.0.2
+  collection: ^1.15.0
 
 dev_dependencies:
   pedantic: ^1.9.0
