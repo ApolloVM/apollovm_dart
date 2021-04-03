@@ -104,12 +104,12 @@ Any help from open-source community is always welcome and needed:
 - Which a feature?
   - Open a feature request.
 - Are you using and liking the project?
-  - Prommote the project: create an article, post or a donation.
+  - Promote the project: create an article, post or a donation.
 - Are you a developer?
   - Fix a bug and send a pull request.
   - Implement a new feature.
   - Implement/improve a language support.
-- Have you already help in any way?
+- Have you already helped in any way?
   - **Many thanks from me, the contributors and everybody that uses this project!**
 
 

@@ -4,12 +4,12 @@ import 'package:petitparser/petitparser.dart';
 
 import 'java8_grammar_lexer.dart';
 
-/// Dart grammar.
+/// Java8 grammar.
 class Java8Grammar extends GrammarParser {
   Java8Grammar() : super(Java8GrammarDefinition());
 }
 
-/// Dart grammar definition.
+/// Java8 grammar definition.
 class Java8GrammarDefinition extends Java8GrammarLexer {
   static ASTType getTypeByName(String name) {
     switch (name) {

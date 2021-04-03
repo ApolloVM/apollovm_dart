@@ -63,7 +63,7 @@ class ASTCodeBlock extends ASTStatement {
 
   final Map<String, ASTCodeFunctionSet> _functions = {};
 
-  Map<String, ASTCodeFunctionSet> get functions => _functions;
+  List<ASTCodeFunctionSet> get functions => _functions.values.toList();
 
   void addFunction(ASTFunctionDeclaration f) {
     var name = f.name;
@@ -84,6 +84,13 @@ class ASTCodeBlock extends ASTStatement {
     for (var f in fs) {
       addFunction(f);
     }
+  }
+
+  bool containsFunctionWithName(
+    String name,
+  ) {
+    var set = _functions[name];
+    return set != null;
   }
 
   ASTFunctionDeclaration? getFunction(
@@ -107,7 +114,7 @@ class ASTCodeBlock extends ASTStatement {
 
   final List<ASTStatement> _statements = [];
 
-  List<ASTStatement> get statements => _statements;
+  List<ASTStatement> get statements => _statements.toList();
 
   void set(ASTCodeBlock? other) {
     if (other == null) return;
@@ -132,19 +139,23 @@ class ASTCodeBlock extends ASTStatement {
     }
   }
 
-  ASTValue execute(String entryFunctionName, List arguments) {
+  ASTValue execute(String entryFunctionName, dynamic? positionalParameters,
+      dynamic? namedParameters) {
     var rootContext = ASTContext(this);
     var rootStatus = ASTRunStatus();
 
     run(rootContext, rootStatus);
 
-    var fSignature = ASTFunctionSignature.from(arguments, null);
+    var fSignature =
+        ASTFunctionSignature.from(positionalParameters, namedParameters);
 
     var f = getFunction(entryFunctionName, fSignature, rootContext);
     if (f == null) {
       throw StateError("Can't find entry function: $entryFunctionName");
     }
-    return f.call(rootContext, positionalParameters: arguments);
+    return f.call(rootContext,
+        positionalParameters: positionalParameters,
+        namedParameters: namedParameters);
   }
 
   @override
@@ -230,7 +241,11 @@ class ASTCodeClass extends ASTCodeBlock {
 class ASTCodeRoot extends ASTCodeBlock {
   ASTCodeRoot() : super(null);
 
+  String namespace = '';
+
   final Map<String, ASTCodeClass> _classes = <String, ASTCodeClass>{};
+
+  List<ASTCodeClass> get classes => _classes.values.toList();
 
   void addClass(ASTCodeClass clazz) {
     _classes[clazz.name] = clazz;
@@ -548,6 +563,8 @@ class ASTFunctionDeclaration<T> extends ASTCodeBlock {
     set(block);
   }
 
+  ASTParametersDeclaration get parameters => _parameters;
+
   int get parametersSize => _parameters.size;
 
   ASTFunctionParameterDeclaration? getParameterByIndex(int index) =>
@@ -593,7 +610,10 @@ class ASTFunctionDeclaration<T> extends ASTCodeBlock {
     if (positionalParameters != null) {
       for (var i = 0; i < positionalParameters.length; ++i) {
         var paramVal = positionalParameters[i];
-        var fParam = getParameterByIndex(i)!;
+        var fParam = getParameterByIndex(i);
+        if (fParam == null) {
+          throw StateError("Can't find parameter at index: $i");
+        }
         var value = fParam.toValue(context, paramVal) ?? ASTValueNull.INSTANCE;
         context.declareVariableWithValue(fParam.type, fParam.name, value);
       }

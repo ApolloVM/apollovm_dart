@@ -1,20 +1,21 @@
-import 'package:apollovm/src/apollovm_ast.dart';
+import 'package:apollovm/src/apollovm_base.dart';
 import 'package:apollovm/src/apollovm_parser.dart';
+import 'package:apollovm/src/apollovm_runner.dart';
 
 import 'dart_grammar.dart';
 
 class ApolloParserDart extends ApolloParser {
-  final DartGrammar _grammar = DartGrammar();
+  static final ApolloParserDart INSTANCE = ApolloParserDart();
+
+  ApolloParserDart() : super(DartGrammar());
 
   @override
-  Future<ASTCodeRoot?> parse(String source) async {
-    var result = _grammar.parse(source);
+  String get language => 'dart';
+}
 
-    if (!result.isSuccess) {
-      print('!!! ${result.message}');
-      return null;
-    }
+class ApolloRunnerDart extends ApolloLanguageRunner {
+  ApolloRunnerDart(ApolloVM apolloVM) : super(apolloVM);
 
-    return result.value;
-  }
+  @override
+  String get language => 'dart';
 }

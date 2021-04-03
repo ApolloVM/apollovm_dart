@@ -1,3 +1,15 @@
+## 0.0.2
+
+- Improved execution:
+  - Now can call a class method or a function.
+- Improved code generation:
+  - Now supporting Java8 and Dart.
+- Grammars:
+  - Dart:
+    - Basic class definition.
+  - Java8:
+    - Basic class definition.
+
 ## 0.0.1
 
 - Basic Dart and Java8 support.

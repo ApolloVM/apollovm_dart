@@ -1,20 +1,21 @@
-import 'package:apollovm/src/apollovm_ast.dart';
+import 'package:apollovm/src/apollovm_base.dart';
 import 'package:apollovm/src/apollovm_parser.dart';
+import 'package:apollovm/src/apollovm_runner.dart';
 
 import 'java8_grammar.dart';
 
 class ApolloParserJava8 extends ApolloParser {
-  final Java8Grammar _grammar = Java8Grammar();
+  static final ApolloParserJava8 INSTANCE = ApolloParserJava8();
+
+  ApolloParserJava8() : super(Java8Grammar());
 
   @override
-  Future<ASTCodeRoot?> parse(String source) async {
-    var result = _grammar.parse(source);
+  String get language => 'java8';
+}
 
-    if (!result.isSuccess) {
-      print('!!! ${result.message}');
-      return null;
-    }
+class ApolloRunnerJava8 extends ApolloLanguageRunner {
+  ApolloRunnerJava8(ApolloVM apolloVM) : super(apolloVM);
 
-    return result.value;
-  }
+  @override
+  String get language => 'java8';
 }

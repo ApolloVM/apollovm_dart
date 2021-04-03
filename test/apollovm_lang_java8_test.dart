@@ -1,32 +1,46 @@
-import 'package:apollovm/src/languages/java/java8/java8_parser.dart';
+import 'package:apollovm/apollovm.dart';
 import 'package:test/test.dart';
 
 void main() {
   group('Java8', () {
     test('Basic main()', () async {
-      var parser = ApolloParserJava8();
+      var vm = ApolloVM();
 
-      var root = await parser.parse(r'''
+      var codeUnit = CodeUnit(
+          'java8',
+          r'''
         class Foo {
            static public void main(String[] args) {
              String s = args[0] ;
              print(s);
            }
         }
-      ''');
+      ''',
+          'test');
 
-      //Point p = new Point(10,20);
-      //System.out.println("The Point: "+ p);
+      var loadOK = await vm.loadCodeUnit(codeUnit);
 
-      expect(root, isNotNull);
+      expect(loadOK, isTrue);
 
-      print('<<<<<<<<<<<<<<<<<<<< REGENERATE PARSED JAVA CODE:');
-      print(root!.generateCode());
-      print('>>>>>>>>>>>>>>>>>>>>');
-
-      root.getClass('Foo')!.execute('main', [
+      var java8Runner = vm.getRunner('java8')!;
+      java8Runner.executeClassMethod('', 'Foo', 'main', [
         ['foo!', 'abc']
       ]);
+
+      print('---------------------------------------');
+      // Regenerate code:
+      var codeStorageDart = vm.generateAllCodeIn('dart');
+      var allSourcesDart = codeStorageDart.writeAllSources().toString();
+      print(allSourcesDart);
+
+      print('---------------------------------------');
+      // Regenerate code:
+      var codeStorageJava8 = vm.generateAllCodeIn('java8');
+      var allSourcesJava8 = codeStorageJava8.writeAllSources().toString();
+      print(allSourcesJava8);
+
+      expect(allSourcesDart, contains('void main('));
+      expect(allSourcesJava8, contains('void main('));
     });
   });
 }

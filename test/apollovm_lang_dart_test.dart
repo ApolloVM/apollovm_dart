@@ -1,27 +1,35 @@
-import 'package:apollovm/src/languages/dart/dart_parser.dart';
+import 'package:apollovm/apollovm.dart';
 import 'package:test/test.dart';
 
 void main() {
   group('Dart', () {
     test('Basic main()', () async {
-      var parser = ApolloParserDart();
+      var vm = ApolloVM();
 
-      var root = await parser.parse(r'''
+      var codeUnit = CodeUnit(
+          'dart',
+          r'''
           void main(List<String> args) {
             var s = args[0] ;
             print(s);
           }
-      ''');
+      ''',
+          'test');
 
-      expect(root, isNotNull);
+      var loadOK = await vm.loadCodeUnit(codeUnit);
 
-      print('<<<<<<<<<<<<<<<<<<<< REGENERATE PARSED DART CODE:');
-      print(root!.generateCode());
-      print('>>>>>>>>>>>>>>>>>>>>');
+      expect(loadOK, isTrue);
 
-      root.execute('main', [
+      var dartRunner = vm.getRunner('dart')!;
+      dartRunner.executeFunction('', 'main', [
         ['foo!', 'abc']
       ]);
+
+      print('---------------------------------------');
+      // Regenerate code:
+      var codeStorageDart = vm.generateAllCodeIn('dart');
+      var allSourcesDart = codeStorageDart.writeAllSources().toString();
+      print(allSourcesDart);
     });
   });
 }

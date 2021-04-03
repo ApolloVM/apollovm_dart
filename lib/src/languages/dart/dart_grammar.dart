@@ -38,18 +38,40 @@ class DartGrammarDefinition extends DartGrammarLexer {
               //ref(importDirective).star() &
               ref(topLevelDefinition).star())
           .map((v) {
-        var topDef = v[1];
-
-        var functions = topDef as List;
+        var topDef = v[1] as List;
 
         var root = ASTCodeRoot();
 
-        root.addAllFunctions(functions.cast());
+        for (var defList in topDef) {
+          for (var def in defList) {
+            if (def is ASTFunctionDeclaration) {
+              root.addFunction(def);
+            } else if (def is ASTCodeClass) {
+              root.addClass(def);
+            }
+          }
+        }
 
         return root;
       });
 
-  Parser topLevelDefinition() => functionDeclaration();
+  Parser topLevelDefinition() =>
+      (functionDeclaration() | classDeclaration()).plus();
+
+  Parser<ASTCodeClass> classDeclaration() =>
+      (string('class').trim() & identifier() & classCodeBlock()).map((v) {
+        var block = v[2];
+        var clazz = ASTCodeClass(v[1], null);
+        clazz.set(block);
+        return clazz;
+      });
+
+  Parser<ASTCodeBlock> classCodeBlock() =>
+      (char('{').trim() & ref(functionDeclaration).star() & char('}').trim())
+          .map((v) {
+        var functions = (v[1] as List).cast<ASTFunctionDeclaration>().toList();
+        return ASTCodeBlock(null)..addAllFunctions(functions);
+      });
 
   Parser<ASTFunctionDeclaration> functionDeclaration() =>
       (type() & identifier() & parametersDeclaration() & codeBlock()).map((v) {

@@ -1,7 +1,43 @@
+import 'package:apollovm/apollovm.dart';
 import 'package:apollovm/src/apollovm_ast.dart';
+import 'package:petitparser/petitparser.dart';
 
 abstract class ApolloParser {
-  Future<ASTCodeRoot?> parse(String source);
+  final GrammarParser _grammar;
+
+  ApolloParser(this._grammar);
+
+  String get language;
+
+  Future<ParseResult> parse(CodeUnit codeUnit) async {
+    check(codeUnit);
+
+    var result = _grammar.parse(codeUnit.source);
+
+    if (!result.isSuccess) {
+      return ParseResult(errorMessage: result.message);
+    }
+
+    var root = result.value;
+    return ParseResult(root: root);
+  }
+
+  void check(CodeUnit codeUnit) {
+    if (codeUnit.language != language) {
+      throw StateError(
+          "This parser is for the language '$language'. Trying to parse a CodeUnit of language: '${codeUnit.language}'");
+    }
+  }
+}
+
+class ParseResult {
+  final ASTCodeRoot? root;
+  final String? errorMessage;
+
+  bool get isOK => root != null;
+  bool get hasError => root == null;
+
+  ParseResult({this.root, this.errorMessage});
 }
 
 class UnsupportedTypeError extends UnsupportedError {
