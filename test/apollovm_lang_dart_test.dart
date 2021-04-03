@@ -9,11 +9,11 @@ void main() {
       var codeUnit = CodeUnit(
           'dart',
           r'''
-          void main(List<String> args) {
-            var s = args[0] ;
-            print(s);
-          }
-      ''',
+            void main(List<String> args) {
+              var s = args[0] ;
+              print(s);
+            }
+          ''',
           'test');
 
       var loadOK = await vm.loadCodeUnit(codeUnit);

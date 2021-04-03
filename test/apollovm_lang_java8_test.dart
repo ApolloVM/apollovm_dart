@@ -9,13 +9,13 @@ void main() {
       var codeUnit = CodeUnit(
           'java8',
           r'''
-        class Foo {
-           static public void main(String[] args) {
-             String s = args[0] ;
-             print(s);
-           }
-        }
-      ''',
+            class Foo {
+               static public void main(String[] args) {
+                 String s = args[0] ;
+                 print(s);
+               }
+            }
+          ''',
           'test');
 
       var loadOK = await vm.loadCodeUnit(codeUnit);

@@ -17,7 +17,7 @@ ApolloVM is a portable VM (native, JS/Web, Flutter) that can parser, translate a
 
 ## Usage
 
-The ApolloVM is still in alpha stage. Below we can see simple examples in Dart and Java.
+The ApolloVM is still in alpha stage. Below we can see simple usage examples in Dart and Java.
 
 ### Language: Dart
 
@@ -25,28 +25,35 @@ The ApolloVM is still in alpha stage. Below we can see simple examples in Dart a
 import 'package:apollovm/apollovm.dart';
 
 void main() async {
+  var vm = ApolloVM();
 
-  var parser = ApolloParserDart();
+  var codeUnit = CodeUnit(
+          'dart',
+          r'''
+            void main(List<String> args) {
+              var s = args[0] ;
+              print(s);
+            }
+          ''',
+          'test');
 
-  var root = await parser.parse(r'''
-          void main(List<String> args) {
-            var s = args[0] ;
-            print(s);
-          }
-      ''');
+  var loadOK = await vm.loadCodeUnit(codeUnit);
 
-  if (root == null) {
+  if (!loadOK) {
     throw StateError('Error parsing Dart code!');
   }
 
-  print('<<<<<<<<<<<<<<<<<<<< REGENERATE PARSED DART CODE:');
-  print(root.generateCode());
-  print('>>>>>>>>>>>>>>>>>>>>');
-
-  // Execute parsed code, calling function `main`:
-  root.execute('main', [
+  var dartRunner = vm.getRunner('dart')!;
+  dartRunner.executeFunction('', 'main', [
     ['foo!', 'abc']
   ]);
+
+  print('---------------------------------------');
+  // Regenerate code:
+  var codeStorageDart = vm.generateAllCodeIn('dart');
+  var allSourcesDart = codeStorageDart.writeAllSources().toString();
+  print(allSourcesDart);
+  
 }
 ```
 
@@ -58,28 +65,44 @@ void main() async {
 import 'package:apollovm/apollovm.dart';
 
 void main() async {
-  var parser = ApolloParserJava8();
 
-  var root = await parser.parse(r'''
-        class Foo {
-           static public void main(String[] args) {
-             String s = args[0] ;
-             print(s);
-           }
-        }
-      ''');
+  var vm = ApolloVM();
 
-  if (root == null) {
+  var codeUnit = CodeUnit(
+          'java8',
+          r'''
+            class Foo {
+               static public void main(String[] args) {
+                 String s = args[0] ;
+                 print(s);
+               }
+            }
+          ''',
+          'test');
+
+  var loadOK = await vm.loadCodeUnit(codeUnit);
+
+  if (!loadOK) {
     throw StateError('Error parsing Java8 code!');
   }
 
-  print('<<<<<<<<<<<<<<<<<<<< REGENERATE PARSED JAVA CODE:');
-  print(root.generateCode());
-  print('>>>>>>>>>>>>>>>>>>>>');
-
-  root.getClass('Foo')!.execute('main', [
+  var java8Runner = vm.getRunner('java8')!;
+  java8Runner.executeClassMethod('', 'Foo', 'main', [
     ['foo!', 'abc']
   ]);
+
+  print('---------------------------------------');
+  // Regenerate code:
+  var codeStorageDart = vm.generateAllCodeIn('dart');
+  var allSourcesDart = codeStorageDart.writeAllSources().toString();
+  print(allSourcesDart);
+
+  print('---------------------------------------');
+  // Regenerate code:
+  var codeStorageJava8 = vm.generateAllCodeIn('java8');
+  var allSourcesJava8 = codeStorageJava8.writeAllSources().toString();
+  print(allSourcesJava8);
+  
 }
 ```
 
@@ -88,9 +111,12 @@ void main() async {
 
 ## See Also
 
-ApolloVM uses [PetitParser for Dart][petitparser] (a very nice project) to define language grammar and parse source code.
+ApolloVM uses [PetitParser for Dart][petitparser-pub] to define the grammars of the languages and to analyze the source codes.
 
-[petitparser]: https://pub.dev/packages/petitparser
+- [PetitParser @ GitHub][petitparser-github] (a very nice project to build parsers).
+
+[petitparser-pub]: https://pub.dev/packages/petitparser
+[petitparser-github]: https://github.com/petitparser
 
 ## Features and bugs
 
