@@ -90,11 +90,11 @@ class ASTCodeBlock extends ASTStatement {
 
   ASTFunctionDeclaration? getFunction(
     String name,
-    ASTFunctionSignature parametersTypes,
+    ASTFunctionSignature parametersSignature,
     ASTContext context,
   ) {
     var set = _functions[name];
-    if (set != null) return set.get(parametersTypes);
+    if (set != null) return set.get(parametersSignature);
 
     if (name == 'print') {
       return context.mappedPrintFunction;
@@ -296,7 +296,7 @@ class ASTFunctionSignature implements ASTNode {
 abstract class ASTCodeFunctionSet implements ASTNode {
   List<ASTFunctionDeclaration> get functions;
 
-  ASTFunctionDeclaration get(ASTFunctionSignature parametersTypes);
+  ASTFunctionDeclaration get(ASTFunctionSignature parametersSignature);
 
   ASTCodeFunctionSet add(ASTFunctionDeclaration f);
 }
@@ -310,7 +310,7 @@ class ASTCodeFunctionSetSingle extends ASTCodeFunctionSet {
   List<ASTFunctionDeclaration> get functions => [f];
 
   @override
-  ASTFunctionDeclaration get(ASTFunctionSignature parametersTypes) {
+  ASTFunctionDeclaration get(ASTFunctionSignature parametersSignature) {
     return f;
   }
 
@@ -330,9 +330,9 @@ class ASTCodeFunctionSetMultiple extends ASTCodeFunctionSet {
   List<ASTFunctionDeclaration> get functions => _functions;
 
   @override
-  ASTFunctionDeclaration get(ASTFunctionSignature parametersTypes) {
+  ASTFunctionDeclaration get(ASTFunctionSignature parametersSignature) {
     for (var f in _functions) {
-      if (f.matchesParametersTypes(parametersTypes)) {
+      if (f.matchesParametersTypes(parametersSignature)) {
         return f;
       }
     }
@@ -694,12 +694,12 @@ class ASTContext {
 
   ASTFunctionDeclaration? getFunction(
     String name,
-    ASTFunctionSignature parametersTypes, [
+    ASTFunctionSignature parametersSignature, [
     ASTContext? context,
   ]) {
-    var f = block.getFunction(name, parametersTypes, this);
+    var f = block.getFunction(name, parametersSignature, this);
     if (f != null) return f;
-    return parent?.getFunction(name, parametersTypes);
+    return parent?.getFunction(name, parametersSignature);
   }
 
   ASTExternalFunction<void> get mappedPrintFunction {
