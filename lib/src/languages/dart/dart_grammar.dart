@@ -112,12 +112,16 @@ class DartGrammarDefinition extends DartGrammarLexer {
       .cast<ASTExpression>();
 
   Parser<ASTExpressionLocalFunctionInvocation>
-      expressionLocalFunctionInvocation() =>
-          (identifier() & char('(') & ref(expression).star() & char(')'))
+      expressionLocalFunctionInvocation() => (string('this').optional() &
+                  identifier() &
+                  char('(') &
+                  ref(expression).star() &
+                  char(')'))
               .map((v) {
-            var args = v[2] as List;
+            var name = v[1];
+            var args = v[3] as List;
             return ASTExpressionLocalFunctionInvocation(
-                v[0], args.cast<ASTExpression>().toList());
+                name, args.cast<ASTExpression>().toList());
           });
 
   Parser<ASTExpressionVariableAccess> expressionVariableAccess() =>
