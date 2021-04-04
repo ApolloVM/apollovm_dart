@@ -31,8 +31,15 @@ void main() async {
           'dart',
           r'''
             void main(List<String> args) {
-              var s = args[0] ;
-              print(s);
+              var title = args[0];
+              var a = args[1];
+              var b = args[2];
+              var c = args[3];
+              var sumAB = a + b ;
+              var sumABC = a + b + c;
+              print(title);
+              print(sumAB);
+              print(sumABC);
             }
           ''',
           'test');
@@ -46,7 +53,7 @@ void main() async {
   var dartRunner = vm.getRunner('dart')!;
   
   dartRunner.executeFunction('', 'main', [
-    ['foo!', 'abc']
+    ['Sums:', 10, 20, 30]
   ]);
 
   print('---------------------------------------');
@@ -74,8 +81,15 @@ void main() async {
           r'''
             class Foo {
                static public void main(String[] args) {
-                 String s = args[0] ;
-                 print(s);
+                 var title = args[0];
+                 var a = args[1];
+                 var b = args[2];
+                 var c = args[3];
+                 var sumAB = a + b ;
+                 var sumABC = a + b + c;
+                 print(title);
+                 print(sumAB);
+                 print(sumABC);
                }
             }
           ''',
@@ -90,7 +104,7 @@ void main() async {
   var java8Runner = vm.getRunner('java8')!;
   
   java8Runner.executeClassMethod('', 'Foo', 'main', [
-    ['foo!', 'abc']
+    ['Sums:', 10, 20, 30]
   ]);
 
   print('---------------------------------------');
