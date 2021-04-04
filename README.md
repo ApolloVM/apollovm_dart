@@ -44,6 +44,7 @@ void main() async {
   }
 
   var dartRunner = vm.getRunner('dart')!;
+  
   dartRunner.executeFunction('', 'main', [
     ['foo!', 'abc']
   ]);
@@ -87,6 +88,7 @@ void main() async {
   }
 
   var java8Runner = vm.getRunner('java8')!;
+  
   java8Runner.executeClassMethod('', 'Foo', 'main', [
     ['foo!', 'abc']
   ]);
