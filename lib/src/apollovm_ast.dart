@@ -6,10 +6,6 @@ import 'apollovm_parser.dart';
 
 abstract class ASTNode {}
 
-abstract class ASTCodeGenerator {
-  StringBuffer generateCode([String indent = '', StringBuffer? s]);
-}
-
 class ASTRunStatus {
   static final ASTRunStatus DUMMY = ASTRunStatus();
 
@@ -48,8 +44,7 @@ abstract class ASTCodeRunner {
   ASTValue run(ASTContext parentContext, ASTRunStatus runStatus);
 }
 
-abstract class ASTStatement
-    implements ASTCodeGenerator, ASTCodeRunner, ASTNode {
+abstract class ASTStatement implements ASTCodeRunner, ASTNode {
   @override
   ASTContext defineRunContext(ASTContext parentContext) {
     return parentContext;
@@ -182,32 +177,6 @@ class ASTCodeBlock extends ASTStatement {
     return returnValue;
   }
 
-  bool generateCodeWithBrackets = true;
-
-  @override
-  StringBuffer generateCode([String indent = '', StringBuffer? s]) {
-    s ??= StringBuffer();
-
-    var indent2 = indent + '  ';
-
-    if (generateCodeWithBrackets) s.write('$indent{\n');
-
-    for (var set in _functions.values) {
-      for (var f in set.functions) {
-        f.generateCode(indent2, s);
-      }
-    }
-
-    for (var stm in _statements) {
-      stm.generateCode(indent2, s);
-      s.write('\n');
-    }
-
-    if (generateCodeWithBrackets) s.write('$indent}\n');
-
-    return s;
-  }
-
   ASTClassField? getField(String name) =>
       parentBlock != null ? parentBlock!.getField(name) : null;
 }
@@ -221,21 +190,6 @@ class ASTCodeClass extends ASTCodeBlock {
 
   @override
   ASTClassField? getField(String name) => _fields[name];
-
-  @override
-  StringBuffer generateCode(
-      [String indent = '', StringBuffer? s, bool withBrackets = true]) {
-    var code = super.generateCode();
-
-    s ??= StringBuffer();
-
-    s.write('class ');
-    s.write(name);
-    s.write(' ');
-    s.write(code);
-
-    return s;
-  }
 }
 
 class ASTCodeRoot extends ASTCodeBlock {
@@ -274,21 +228,6 @@ class ASTCodeRoot extends ASTCodeBlock {
       throw StateError("Can't find function: $functionName");
     }
     return f.call(context, positionalParameters: posParameters) as T;
-  }
-
-  @override
-  StringBuffer generateCode(
-      [String indent = '', StringBuffer? s, bool withBrackets = true]) {
-    s ??= StringBuffer();
-
-    super.generateCodeWithBrackets = false;
-    super.generateCode('', s);
-
-    for (var clazz in _classes.values) {
-      clazz.generateCode('', s);
-    }
-
-    return s;
   }
 }
 
@@ -412,7 +351,7 @@ class ASTCodeFunctionSetMultiple extends ASTCodeFunctionSet {
   }
 }
 
-class ASTParametersDeclaration implements ASTCodeGenerator {
+class ASTParametersDeclaration {
   List<ASTFunctionParameterDeclaration>? positionalParameters;
 
   List<ASTFunctionParameterDeclaration>? optionalParameters;
@@ -507,47 +446,6 @@ class ASTParametersDeclaration implements ASTCodeGenerator {
 
     return true;
   }
-
-  @override
-  StringBuffer generateCode([String indent = '', StringBuffer? s]) {
-    s ??= StringBuffer();
-
-    var positionalParameters = this.positionalParameters;
-    if (positionalParameters != null) {
-      for (var i = 0; i < positionalParameters.length; ++i) {
-        var p = positionalParameters[i];
-        if (i > 0) s.write(', ');
-        var pCode = p.generateCode();
-        s.write(pCode);
-      }
-    }
-
-    var optionalParameters = this.optionalParameters;
-    if (optionalParameters != null) {
-      s.write('[');
-      for (var i = 0; i < optionalParameters.length; ++i) {
-        var p = optionalParameters[i];
-        if (i > 0) s.write(', ');
-        var pCode = p.generateCode();
-        s.write(pCode);
-      }
-      s.write(']');
-    }
-
-    var namedParameters = this.namedParameters;
-    if (namedParameters != null) {
-      s.write('{');
-      for (var i = 0; i < namedParameters.length; ++i) {
-        var p = namedParameters[i];
-        if (i > 0) s.write(', ');
-        var pCode = p.generateCode();
-        s.write(pCode);
-      }
-      s.write('}');
-    }
-
-    return s;
-  }
 }
 
 class ASTFunctionDeclaration<T> extends ASTCodeBlock {
@@ -632,32 +530,6 @@ class ASTFunctionDeclaration<T> extends ASTCodeBlock {
     throw UnsupportedError(
         "Can't run this block directly! Should use call(...), since this block needs parameters initialization!");
   }
-
-  @override
-  StringBuffer generateCode([String indent = '', StringBuffer? s]) {
-    var typeCode = returnType.generateCode();
-
-    super.generateCodeWithBrackets = false;
-    var blockCode = super.generateCode(indent, null);
-
-    s ??= StringBuffer();
-
-    s.write(indent);
-    s.write(typeCode);
-    s.write(' ');
-    s.write(name);
-    s.write('(');
-
-    if (_parameters.isNotEmpty) {
-      _parameters.generateCode('', s);
-    }
-    s.write(') {\n');
-    s.write(blockCode);
-    s.write(indent);
-    s.write('}\n');
-
-    return blockCode;
-  }
 }
 
 class ASTExternalFunction<T> extends ASTFunctionDeclaration<T> {
@@ -692,19 +564,6 @@ class ASTExternalFunction<T> extends ASTFunctionDeclaration<T> {
 
     return resolveReturnValue(context, result);
   }
-
-  @override
-  StringBuffer generateCode([String indent = '', StringBuffer? s]) {
-    var code = super.generateCode(indent);
-
-    var codeStr = code
-        .toString()
-        .replaceAll(RegExp(r'\{\s*\}\s*$'), '{ external<$externalFunction> }');
-
-    s ??= StringBuffer();
-    s.write(codeStr);
-    return s;
-  }
 }
 
 typedef ASTPrintFunction = void Function(Object? o);
@@ -713,13 +572,6 @@ class ASTObjectValue<T> extends ASTValue<T> {
   final Map<String, ASTValue> _o = {};
 
   ASTObjectValue(ASTType<T> type) : super(type);
-
-  @override
-  StringBuffer generateCode([String indent = '', StringBuffer? s]) {
-    s ??= StringBuffer();
-    s.write('this');
-    return s;
-  }
 
   @override
   T getValue(ASTContext context) {
@@ -874,20 +726,9 @@ class ASTStatementValue extends ASTStatement {
     var context = defineRunContext(parentContext);
     return value.getValue(context);
   }
-
-  @override
-  StringBuffer generateCode([String indent = '', StringBuffer? s]) {
-    s ??= StringBuffer();
-
-    var valueCode = value.generateCode();
-
-    s.write('$indent$valueCode;\n');
-
-    return s;
-  }
 }
 
-abstract class ASTVariable implements ASTCodeGenerator, ASTNode {
+abstract class ASTVariable implements ASTNode {
   final String name;
 
   ASTVariable(this.name);
@@ -909,13 +750,6 @@ abstract class ASTVariable implements ASTCodeGenerator, ASTNode {
 
   V readKey<V>(ASTContext context, Object key) =>
       getValue(context).readKey(context, key);
-
-  @override
-  StringBuffer generateCode([String indent = '', StringBuffer? s]) {
-    s ??= StringBuffer();
-    s.write(name);
-    return s;
-  }
 }
 
 abstract class ASTTypedVariable<T> extends ASTVariable {
@@ -923,15 +757,6 @@ abstract class ASTTypedVariable<T> extends ASTVariable {
   final bool finalValue;
 
   ASTTypedVariable(this.type, String name, this.finalValue) : super(name);
-
-  @override
-  StringBuffer generateCode([String indent = '', StringBuffer? s]) {
-    s ??= StringBuffer();
-    s.write(type.generateCode());
-    s.write(' ');
-    s.write(name);
-    return s;
-  }
 }
 
 class ASTClassField<T> extends ASTTypedVariable<T> {
@@ -969,22 +794,6 @@ class ASTRuntimeVariable<T> extends ASTTypedVariable<T> {
   void setValue(ASTContext context, ASTValue value) {
     _value = value;
   }
-
-  @override
-  StringBuffer generateCode(
-      [String indent = '', StringBuffer? s, bool castType = true]) {
-    s ??= StringBuffer();
-
-    if (castType) s.write('(');
-    s.write(name);
-    if (castType) {
-      s.write(' as ');
-      s.write(type.generateCode());
-    }
-    if (castType) s.write(')');
-
-    return s;
-  }
 }
 
 class ASTScopeVariable<T> extends ASTVariable {
@@ -1013,7 +822,7 @@ class ASTThisVariable<T> extends ASTVariable {
   }
 }
 
-abstract class ASTValue<T> implements ASTCodeGenerator, ASTNode {
+abstract class ASTValue<T> implements ASTNode {
   factory ASTValue.from(ASTType<T> type, T value) {
     if (type is ASTTypeString) {
       return ASTValueString(value as String) as ASTValue<T>;
@@ -1125,20 +934,6 @@ class ASTValueStatic<T> extends ASTValue<T> {
 
     throw UnsupportedError("Can't read key for type: $type > $value");
   }
-
-  @override
-  StringBuffer generateCode([String indent = '', StringBuffer? s]) {
-    s ??= StringBuffer();
-
-    if (value is ASTCodeGenerator) {
-      var codeGenerator = value as ASTCodeGenerator;
-      codeGenerator.generateCode(indent, s);
-    } else {
-      s.write(value);
-    }
-
-    return s;
-  }
 }
 
 abstract class ASTValueNum<T extends num> extends ASTValueStatic<T> {
@@ -1166,13 +961,6 @@ abstract class ASTValueNum<T extends num> extends ASTValueStatic<T> {
 
 class ASTValueInt extends ASTValueNum<int> {
   ASTValueInt(int n) : super(ASTTypeInt.INSTANCE, n);
-
-  @override
-  StringBuffer generateCode([String indent = '', StringBuffer? s]) {
-    s ??= StringBuffer();
-    s.write(value);
-    return s;
-  }
 
   @override
   ASTValue operator +(ASTValue other) {
@@ -1229,13 +1017,6 @@ class ASTValueDouble extends ASTValueNum<double> {
   ASTValueDouble(double n) : super(ASTTypeDouble.INSTANCE, n);
 
   @override
-  StringBuffer generateCode([String indent = '', StringBuffer? s]) {
-    s ??= StringBuffer();
-    s.write(value);
-    return s;
-  }
-
-  @override
   ASTValue operator +(ASTValue other) {
     if (other is ASTValueInt) {
       return ASTValueDouble(value + other.value);
@@ -1288,112 +1069,45 @@ class ASTValueDouble extends ASTValueNum<double> {
 
 class ASTValueString extends ASTValueStatic<String> {
   ASTValueString(String s) : super(ASTTypeString.INSTANCE, s);
-
-  @override
-  StringBuffer generateCode([String indent = '', StringBuffer? s]) {
-    s ??= StringBuffer();
-
-    if (value.contains('"')) {
-      s.write("'$value'");
-    } else {
-      s.write('"$value"');
-    }
-
-    return s;
-  }
 }
 
 class ASTValueObject extends ASTValueStatic<Object> {
   ASTValueObject(Object o) : super(ASTTypeObject.INSTANCE, o);
-
-  @override
-  StringBuffer generateCode([String indent = '', StringBuffer? s]) {
-    s ??= StringBuffer();
-
-    s.write(value);
-
-    return s;
-  }
 }
 
 class ASTValueNull extends ASTValueStatic<Null> {
   ASTValueNull() : super(ASTTypeNull.INSTANCE, null);
 
   static final ASTValueNull INSTANCE = ASTValueNull();
-
-  @override
-  StringBuffer generateCode([String indent = '', StringBuffer? s]) {
-    s ??= StringBuffer();
-    s.write('null');
-    return s;
-  }
 }
 
 class ASTValueVoid extends ASTValueStatic<void> {
   ASTValueVoid() : super(ASTTypeVoid.INSTANCE, null);
 
   static final ASTValueVoid INSTANCE = ASTValueVoid();
-
-  @override
-  StringBuffer generateCode([String indent = '', StringBuffer? s]) {
-    s ??= StringBuffer();
-    return s;
-  }
 }
 
 class ASTValueArray<T extends ASTType<V>, V> extends ASTValueStatic<List<V>> {
   ASTValueArray(T type, List<V> value) : super(ASTTypeArray<T, V>(type), value);
-
-  @override
-  StringBuffer generateCode([String indent = '', StringBuffer? s]) {
-    s ??= StringBuffer();
-    s.write(value);
-    return s;
-  }
 }
 
 class ASTValueArray2D<T extends ASTType<V>, V>
     extends ASTValueArray<ASTTypeArray<T, V>, List<V>> {
   ASTValueArray2D(T type, List<List<V>> value)
       : super(ASTTypeArray<T, V>(type), value);
-
-  @override
-  StringBuffer generateCode([String indent = '', StringBuffer? s]) {
-    s ??= StringBuffer();
-
-    s.write(value);
-
-    return s;
-  }
 }
 
 class ASTValueArray3D<T extends ASTType<V>, V>
     extends ASTValueArray2D<ASTTypeArray<T, V>, List<V>> {
   ASTValueArray3D(T type, List<List<List<V>>> value)
       : super(ASTTypeArray<T, V>(type), value);
-
-  @override
-  StringBuffer generateCode([String indent = '', StringBuffer? s]) {
-    s ??= StringBuffer();
-
-    s.write(value);
-
-    return s;
-  }
 }
 
 class ASTValueVar extends ASTValueStatic<dynamic> {
   ASTValueVar(Object o) : super(ASTTypeVar.INSTANCE, o);
-
-  @override
-  StringBuffer generateCode([String indent = '', StringBuffer? s]) {
-    s ??= StringBuffer();
-    s.write(value);
-    return s;
-  }
 }
 
-class ASTType<V> implements ASTCodeGenerator, ASTNode {
+class ASTType<V> implements ASTNode {
   static ASTType from(dynamic o) {
     if (o == null) return ASTTypeNull.INSTANCE;
 
@@ -1487,27 +1201,6 @@ class ASTType<V> implements ASTCodeGenerator, ASTNode {
 
     var t = v as V;
     return ASTValue.from(this, t);
-  }
-
-  @override
-  StringBuffer generateCode([String indent = '', StringBuffer? s]) {
-    s ??= StringBuffer();
-
-    s.write(name);
-
-    if (generics != null) {
-      var generics = this.generics!;
-
-      s.write('<');
-      for (var i = 0; i < generics.length; ++i) {
-        var g = generics[i];
-        if (i > 0) s.write(', ');
-        s.write(g.generateCode());
-      }
-      s.write('>');
-    }
-
-    return s;
   }
 }
 
@@ -1814,13 +1507,6 @@ class CallReadIndex<T> extends ASTValue<T> {
     var v = getValue(context);
     return ASTValue.from(type, v);
   }
-
-  @override
-  StringBuffer generateCode([String indent = '', StringBuffer? s]) {
-    s ??= StringBuffer();
-    s.write('${variable.name}[$_index]');
-    return s;
-  }
 }
 
 class CallReadKey<T> extends ASTValue<T> {
@@ -1844,13 +1530,6 @@ class CallReadKey<T> extends ASTValue<T> {
   ASTValue<T> resolve(ASTContext context) {
     var v = getValue(context);
     return ASTValue.from(type, v);
-  }
-
-  @override
-  StringBuffer generateCode([String indent = '', StringBuffer? s]) {
-    s ??= StringBuffer();
-    s.write('${variable.name}[$_key]');
-    return s;
   }
 }
 
@@ -1900,29 +1579,9 @@ class ASTFunctionInvocation2<T> extends ASTValue<T> {
     var v = getValue(context);
     return ASTValue.from(type, v);
   }
-
-  @override
-  StringBuffer generateCode([String indent = '', StringBuffer? s]) {
-    s ??= StringBuffer();
-    s.write(name);
-    s.write('(');
-
-    var parameters = this.parameters;
-    for (var i = 0; i < parameters.length; ++i) {
-      var p = parameters[i];
-
-      var pCode = p.generateCode();
-      if (i > 0) s.write(', ');
-      s.write(pCode);
-    }
-
-    s.write(')');
-
-    return s;
-  }
 }
 
-class ASTParameterDeclaration<T> implements ASTCodeGenerator, ASTNode {
+class ASTParameterDeclaration<T> implements ASTNode {
   final ASTType<T> type;
 
   final String name;
@@ -1931,15 +1590,6 @@ class ASTParameterDeclaration<T> implements ASTCodeGenerator, ASTNode {
 
   ASTValue<T>? toValue(ASTContext context, Object? v) =>
       type.toValue(context, v);
-
-  @override
-  StringBuffer generateCode([String indent = '', StringBuffer? s]) {
-    s ??= StringBuffer();
-    s.write(type.generateCode());
-    s.write(' ');
-    s.write(name);
-    return s;
-  }
 }
 
 class ASTFunctionParameterDeclaration<T> extends ASTParameterDeclaration<T> {
@@ -1996,15 +1646,6 @@ class ASTStatementExpression extends ASTStatement {
   ASTStatementExpression(this.expression);
 
   @override
-  StringBuffer generateCode([String indent = '', StringBuffer? s]) {
-    s ??= StringBuffer();
-    s.write(indent);
-    expression.generateCode('', s, true);
-    s.write(';');
-    return s;
-  }
-
-  @override
   ASTValue run(ASTContext parentContext, ASTRunStatus runStatus) {
     var context = defineRunContext(parentContext);
     return expression.run(context, runStatus);
@@ -2013,26 +1654,12 @@ class ASTStatementExpression extends ASTStatement {
 
 class ASTStatementReturn extends ASTStatement {
   @override
-  StringBuffer generateCode([String indent = '', StringBuffer? s]) {
-    s ??= StringBuffer();
-    s.write('return;');
-    return s;
-  }
-
-  @override
   ASTValue run(ASTContext parentContext, ASTRunStatus runStatus) {
     return runStatus.returnVoid();
   }
 }
 
 class ASTStatementReturnNull extends ASTStatementReturn {
-  @override
-  StringBuffer generateCode([String indent = '', StringBuffer? s]) {
-    s ??= StringBuffer();
-    s.write('return null;');
-    return s;
-  }
-
   @override
   ASTValue run(ASTContext parentContext, ASTRunStatus runStatus) {
     return runStatus.returnNull();
@@ -2045,16 +1672,6 @@ class ASTStatementReturnValue extends ASTStatementReturn {
   ASTStatementReturnValue(this.value);
 
   @override
-  StringBuffer generateCode([String indent = '', StringBuffer? s]) {
-    s ??= StringBuffer();
-    s.write(indent);
-    s.write('return ');
-    value.generateCode('', s);
-    s.write(';');
-    return s;
-  }
-
-  @override
   ASTValue run(ASTContext parentContext, ASTRunStatus runStatus) {
     return runStatus.returnValue(value);
   }
@@ -2064,16 +1681,6 @@ class ASTStatementReturnVariable extends ASTStatementReturn {
   ASTVariable variable;
 
   ASTStatementReturnVariable(this.variable);
-
-  @override
-  StringBuffer generateCode([String indent = '', StringBuffer? s]) {
-    s ??= StringBuffer();
-    s.write(indent);
-    s.write('return ');
-    variable.generateCode('', s);
-    s.write(';');
-    return s;
-  }
 
   @override
   ASTValue run(ASTContext parentContext, ASTRunStatus runStatus) {
@@ -2088,48 +1695,23 @@ class ASTStatementReturnWithExpression extends ASTStatementReturn {
   ASTStatementReturnWithExpression(this.expression);
 
   @override
-  StringBuffer generateCode([String indent = '', StringBuffer? s]) {
-    s ??= StringBuffer();
-    s.write(indent);
-    s.write('return ');
-    expression.generateCode('', s);
-    s.write(';');
-    return s;
-  }
-
-  @override
   ASTValue run(ASTContext parentContext, ASTRunStatus runStatus) {
     var value = expression.run(parentContext, runStatus);
     return runStatus.returnValue(value);
   }
 }
 
-abstract class ASTExpression
-    implements ASTCodeGenerator, ASTCodeRunner, ASTNode {
+abstract class ASTExpression implements ASTCodeRunner, ASTNode {
   @override
   ASTContext defineRunContext(ASTContext parentContext) {
     return parentContext;
   }
-
-  @override
-  StringBuffer generateCode(
-      [String indent = '', StringBuffer? s, bool finalExpression = false]);
 }
 
 class ASTExpressionVariableAccess extends ASTExpression {
   ASTVariable variable;
 
   ASTExpressionVariableAccess(this.variable);
-
-  @override
-  StringBuffer generateCode(
-      [String indent = '', StringBuffer? s, bool finalExpression = false]) {
-    s ??= StringBuffer();
-
-    s.write(indent);
-    variable.generateCode('', s);
-    return s;
-  }
 
   @override
   ASTValue run(ASTContext parentContext, ASTRunStatus runStatus) {
@@ -2144,16 +1726,6 @@ class ASTExpressionLiteral extends ASTExpression {
   ASTExpressionLiteral(this.value);
 
   @override
-  StringBuffer generateCode(
-      [String indent = '', StringBuffer? s, bool finalExpression = false]) {
-    s ??= StringBuffer();
-
-    s.write(indent);
-    value.generateCode('', s);
-    return s;
-  }
-
-  @override
   ASTValue run(ASTContext parentContext, ASTRunStatus runStatus) {
     return value;
   }
@@ -2164,19 +1736,6 @@ class ASTExpressionVariableEntryAccess extends ASTExpression {
   ASTExpression expression;
 
   ASTExpressionVariableEntryAccess(this.variable, this.expression);
-
-  @override
-  StringBuffer generateCode(
-      [String indent = '', StringBuffer? s, bool finalExpression = false]) {
-    s ??= StringBuffer();
-
-    s.write(indent);
-    variable.generateCode('', s);
-    s.write('[');
-    expression.generateCode('', s);
-    s.write(']');
-    return s;
-  }
 
   @override
   ASTValue run(ASTContext parentContext, ASTRunStatus runStatus) {
@@ -2208,23 +1767,6 @@ class ASTExpressionVariableAssignment extends ASTExpression {
 
   ASTExpressionVariableAssignment(
       this.variable, this.operator, this.expression);
-
-  @override
-  StringBuffer generateCode(
-      [String indent = '', StringBuffer? s, bool finalExpression = false]) {
-    s ??= StringBuffer();
-
-    s.write(indent);
-    if (!finalExpression) s.write('(');
-    variable.generateCode('', s);
-    s.write(' ');
-    s.write(getAssignmentOperatorText(operator));
-    s.write(' ');
-    expression.generateCode('', s);
-    if (!finalExpression) s.write(')');
-
-    return s;
-  }
 
   @override
   ASTValue run(ASTContext parentContext, ASTRunStatus runStatus) {
@@ -2276,24 +1818,6 @@ class ASTExpressionLocalFunctionInvocation extends ASTExpression {
   ASTExpressionLocalFunctionInvocation(this.name, this.arguments);
 
   @override
-  StringBuffer generateCode(
-      [String indent = '', StringBuffer? s, bool finalExpression = false]) {
-    s ??= StringBuffer();
-
-    s.write(indent);
-    s.write(name);
-    s.write('(');
-    for (var i = 0; i < arguments.length; ++i) {
-      var arg = arguments[i];
-      if (i > 0) s.write(', ');
-      arg.generateCode('', s);
-    }
-    s.write(')');
-
-    return s;
-  }
-
-  @override
   ASTValue run(ASTContext parentContext, ASTRunStatus runStatus) {
     var fSignature = ASTFunctionSignature.from(arguments, null);
     var f = parentContext.block.getFunction(name, fSignature, parentContext);
@@ -2317,13 +1841,6 @@ class ASTExpressionFunctionInvocation extends ASTExpression {
   ASTExpressionFunctionInvocation(this.variable, this.name, this.arguments);
 
   @override
-  StringBuffer generateCode(
-      [String indent = '', StringBuffer? s, bool finalExpression = false]) {
-    // TODO: implement generateCode
-    throw UnimplementedError();
-  }
-
-  @override
   ASTValue run(ASTContext parentContext, ASTRunStatus runStatus) {
     // TODO: implement run
     throw UnimplementedError();
@@ -2338,21 +1855,6 @@ class ASTStatementVariableDeclaration<V> extends ASTStatement {
   ASTExpression? value;
 
   ASTStatementVariableDeclaration(this.type, this.name, this.value);
-
-  @override
-  StringBuffer generateCode([String indent = '', StringBuffer? s]) {
-    s ??= StringBuffer();
-    s.write(indent);
-    type.generateCode('', s);
-    s.write(' ');
-    s.write(name);
-    if (value != null) {
-      s.write(' = ');
-      value!.generateCode('', s);
-    }
-    s.write(';');
-    return s;
-  }
 
   @override
   ASTValue run(ASTContext parentContext, ASTRunStatus runStatus) {

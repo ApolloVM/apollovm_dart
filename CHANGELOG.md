@@ -1,3 +1,7 @@
+## 0.0.3
+
+- Removed `ASTCodeGenerator`, that is language specific now: `ApolloCodeGenerator`.
+
 ## 0.0.2
 
 - Improved execution:

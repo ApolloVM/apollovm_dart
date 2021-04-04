@@ -17,7 +17,7 @@ ApolloVM is a portable VM (native, JS/Web, Flutter) that can parser, translate a
 
 ## Usage
 
-The ApolloVM is still in alpha stage. Below we can see simple usage examples in Dart and Java.
+The ApolloVM is still in alpha stage. Below, we can see simple usage examples in Dart and Java.
 
 ### Language: Dart
 
@@ -130,11 +130,12 @@ Any help from open-source community is always welcome and needed:
 - Which a feature?
   - Open a feature request.
 - Are you using and liking the project?
-  - Promote the project: create an article, post or a donation.
+  - Promote the project: create an article, post or make a donation.
 - Are you a developer?
   - Fix a bug and send a pull request.
   - Implement a new feature.
   - Implement/improve a language support.
+  - Added support for another language.
 - Have you already helped in any way?
   - **Many thanks from me, the contributors and everybody that uses this project!**
 
