@@ -114,12 +114,44 @@ class Java8GrammarDefinition extends Java8GrammarLexer {
         return ASTStatementVariableDeclaration(v[0], v[1], value);
       });
 
-  Parser<ASTExpression> expression() => (expressionVariableAssigment() |
-          expressionLocalFunctionInvocation() |
-          expressionVariableEntryAccess() |
-          expressionVariableAccess() |
-          expressionLiteral())
-      .cast<ASTExpression>();
+  Parser<ASTExpression> expression() => (ref(expressionNoOperation) &
+              (expressionOperator() & ref(expressionNoOperation)).star())
+          .map((v) {
+        var exp1 = v[0];
+
+        var rest = v[1] as List;
+        if (rest.isEmpty) {
+          return exp1;
+        }
+
+        var extra = rest.expand((e) => e is List ? e : [e]).toList();
+
+        var all = <dynamic>[exp1, ...extra];
+
+        while (all.length >= 3) {
+          var e2 = all.removeLast();
+          var op = all.removeLast();
+          var e1 = all.removeLast();
+          var exp = ASTExpressionOperation(e1, op, e2);
+          all.add(exp);
+        }
+        assert(all.length == 1);
+
+        return all[0] as ASTExpressionOperation;
+      });
+
+  Parser<ASTExpressionOperator> expressionOperator() =>
+      (char('+') | char('-') | char('*') | char('/')).trim().map((v) {
+        return getASTExpressionOperator(v);
+      });
+
+  Parser<ASTExpression> expressionNoOperation() =>
+      (expressionVariableAssigment() |
+              expressionLocalFunctionInvocation() |
+              expressionVariableEntryAccess() |
+              expressionVariableAccess() |
+              expressionLiteral())
+          .cast<ASTExpression>();
 
   Parser<ASTExpressionLocalFunctionInvocation>
       expressionLocalFunctionInvocation() => (string('this').optional() &
@@ -155,9 +187,9 @@ class Java8GrammarDefinition extends Java8GrammarLexer {
         return ASTExpressionVariableAssignment(v[0], v[1], v[2]);
       });
 
-  Parser<AssignmentOperator> assigmentOperator() =>
-      (char('=').trim() | string('+=').trim()).map((v) {
-        return getAssignmentOperator(v);
+  Parser<ASTAssignmentOperator> assigmentOperator() =>
+      (char('=') | string('+=')).trim().map((v) {
+        return getASTAssignmentOperator(v);
       });
 
   Parser<ASTVariable> variable() =>

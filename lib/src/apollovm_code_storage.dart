@@ -12,7 +12,7 @@ abstract class ApolloCodeStorage {
     var s = StringBuffer();
 
     s.write(commentPrefix);
-    s.write(' [SOURCES BEGIN] ');
+    s.write(' [SOURCES_BEGIN] ');
     s.write(commentSuffix);
     s.write('\n');
 
@@ -41,7 +41,7 @@ abstract class ApolloCodeStorage {
     }
 
     s.write(commentPrefix);
-    s.write(' [SOURCES END] ');
+    s.write(' [SOURCES_END] ');
     s.write(commentSuffix);
     s.write('\n');
 

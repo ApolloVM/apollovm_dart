@@ -1,4 +1,5 @@
 import 'package:apollovm/apollovm.dart';
+import 'package:apollovm/src/apollovm_ast.dart';
 import 'package:apollovm/src/apollovm_code_generator.dart';
 import 'package:apollovm/src/apollovm_code_storage.dart';
 
@@ -90,6 +91,14 @@ class ApolloCodeGeneratorJava8 extends ApolloCodeGenerator {
       [String indent = '',
       StringBuffer? s]) {
     return generateASTParameterDeclaration(parameter, indent, s);
+  }
+
+  @override
+  String resolveASTExpressionOperatorText(ASTExpressionOperator operator) {
+    if (operator == ASTExpressionOperator.divideAsInt) {
+      return getASTExpressionOperatorText(ASTExpressionOperator.divide);
+    }
+    return getASTExpressionOperatorText(operator);
   }
 
   @override

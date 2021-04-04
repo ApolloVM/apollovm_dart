@@ -37,16 +37,16 @@ class ASTRunStatus {
 }
 
 abstract class ASTCodeRunner {
-  ASTContext defineRunContext(ASTContext parentContext) {
+  VMContext defineRunContext(VMContext parentContext) {
     return parentContext;
   }
 
-  ASTValue run(ASTContext parentContext, ASTRunStatus runStatus);
+  ASTValue run(VMContext parentContext, ASTRunStatus runStatus);
 }
 
 abstract class ASTStatement implements ASTCodeRunner, ASTNode {
   @override
-  ASTContext defineRunContext(ASTContext parentContext) {
+  VMContext defineRunContext(VMContext parentContext) {
     return parentContext;
   }
 }
@@ -89,22 +89,20 @@ class ASTCodeBlock extends ASTStatement {
   }
 
   ASTFunctionDeclaration? getFunction(
-    String name,
+    String fName,
     ASTFunctionSignature parametersSignature,
-    ASTContext context,
+    VMContext context,
   ) {
-    var set = _functions[name];
-    if (set != null) return set.get(parametersSignature);
+    var set = _functions[fName];
+    if (set != null) return set.get(parametersSignature, false);
 
-    if (name == 'print') {
-      return context.mappedPrintFunction;
-    }
-
-    return null;
+    var fExternal =
+        context.getMappedExternalFunction(fName, parametersSignature);
+    return fExternal;
   }
 
   ASTType<T>? getFunctionReturnType<T>(String name,
-          ASTFunctionSignature parametersTypes, ASTContext context) =>
+          ASTFunctionSignature parametersTypes, VMContext context) =>
       getFunction(name, parametersTypes, context)?.returnType as ASTType<T>?;
 
   final List<ASTStatement> _statements = [];
@@ -135,8 +133,13 @@ class ASTCodeBlock extends ASTStatement {
   }
 
   ASTValue execute(String entryFunctionName, dynamic? positionalParameters,
-      dynamic? namedParameters) {
-    var rootContext = ASTContext(this);
+      dynamic? namedParameters,
+      {ApolloExternalFunctionMapper? externalFunctionMapper}) {
+    var rootContext = VMContext(this);
+    if (externalFunctionMapper != null) {
+      rootContext.externalFunctionMapper = externalFunctionMapper;
+    }
+
     var rootStatus = ASTRunStatus();
 
     run(rootContext, rootStatus);
@@ -154,12 +157,12 @@ class ASTCodeBlock extends ASTStatement {
   }
 
   @override
-  ASTContext defineRunContext(ASTContext parentContext) {
+  VMContext defineRunContext(VMContext parentContext) {
     return parentContext;
   }
 
   @override
-  ASTValue run(ASTContext parentContext, ASTRunStatus runStatus) {
+  ASTValue run(VMContext parentContext, ASTRunStatus runStatus) {
     var blockContext = defineRunContext(parentContext);
 
     ASTValue returnValue = ASTValueVoid.INSTANCE;
@@ -213,21 +216,6 @@ class ASTCodeRoot extends ASTCodeBlock {
     for (var clazz in classes) {
       addClass(clazz);
     }
-  }
-
-  T runFunction<T>(String functionName,
-      {List? posParameters,
-      Map? namedParameters,
-      ExternalFunctionSet? externalFunctionSet}) {
-    var context = ASTContext(this, externalFunctionSet: externalFunctionSet);
-
-    var signature = ASTFunctionSignature.from(posParameters, namedParameters);
-
-    var f = getFunction(functionName, signature, context);
-    if (f == null) {
-      throw StateError("Can't find function: $functionName");
-    }
-    return f.call(context, positionalParameters: posParameters) as T;
   }
 }
 
@@ -291,12 +279,37 @@ class ASTFunctionSignature implements ASTNode {
   }
 
   bool get isNotEmpty => !isEmpty;
+
+  @override
+  String toString() {
+    var s = StringBuffer();
+
+    s.write('{');
+
+    if (positionalTypes != null && positionalTypes!.isNotEmpty) {
+      s.write('positionalTypes: ');
+      s.write(positionalTypes);
+    }
+
+    if (namedTypes != null && namedTypes!.isNotEmpty) {
+      if (s.length > 1) s.write(', ');
+      s.write('namedTypes: ');
+      s.write(namedTypes!.map((e) => e != null ? '$e' : '?').toList());
+    }
+
+    s.write('}');
+
+    return s.toString();
+  }
 }
 
 abstract class ASTCodeFunctionSet implements ASTNode {
   List<ASTFunctionDeclaration> get functions;
 
-  ASTFunctionDeclaration get(ASTFunctionSignature parametersSignature);
+  ASTFunctionDeclaration get firstFunction;
+
+  ASTFunctionDeclaration get(
+      ASTFunctionSignature parametersSignature, bool exactTypes);
 
   ASTCodeFunctionSet add(ASTFunctionDeclaration f);
 }
@@ -307,10 +320,14 @@ class ASTCodeFunctionSetSingle extends ASTCodeFunctionSet {
   ASTCodeFunctionSetSingle(this.f);
 
   @override
+  ASTFunctionDeclaration get firstFunction => f;
+
+  @override
   List<ASTFunctionDeclaration> get functions => [f];
 
   @override
-  ASTFunctionDeclaration get(ASTFunctionSignature parametersSignature) {
+  ASTFunctionDeclaration get(
+      ASTFunctionSignature parametersSignature, bool exactTypes) {
     return f;
   }
 
@@ -327,12 +344,16 @@ class ASTCodeFunctionSetMultiple extends ASTCodeFunctionSet {
   final List<ASTFunctionDeclaration> _functions = <ASTFunctionDeclaration>[];
 
   @override
+  ASTFunctionDeclaration get firstFunction => _functions.first;
+
+  @override
   List<ASTFunctionDeclaration> get functions => _functions;
 
   @override
-  ASTFunctionDeclaration get(ASTFunctionSignature parametersSignature) {
+  ASTFunctionDeclaration get(
+      ASTFunctionSignature parametersSignature, bool exactTypes) {
     for (var f in _functions) {
-      if (f.matchesParametersTypes(parametersSignature)) {
+      if (f.matchesParametersTypes(parametersSignature, exactTypes)) {
         return f;
       }
     }
@@ -347,6 +368,13 @@ class ASTCodeFunctionSetMultiple extends ASTCodeFunctionSet {
   @override
   ASTCodeFunctionSet add(ASTFunctionDeclaration f) {
     _functions.add(f);
+
+    _functions.sort((a, b) {
+      var pSize1 = a.parametersSize;
+      var pSize2 = b.parametersSize;
+      return pSize1.compareTo(pSize2);
+    });
+
     return this;
   }
 }
@@ -409,7 +437,7 @@ class ASTParametersDeclaration {
     return null;
   }
 
-  bool matchesParametersTypes(ASTFunctionSignature types) {
+  bool matchesParametersTypes(ASTFunctionSignature types, bool exactTypes) {
     var parametersSize = size;
     var typesSize = types.size;
 
@@ -471,25 +499,26 @@ class ASTFunctionDeclaration<T> extends ASTCodeBlock {
   ASTFunctionParameterDeclaration? getParameterByName(String name) =>
       _parameters.getParameterByName(name);
 
-  ASTValue? getParameterValueByIndex(ASTContext context, int index) {
+  ASTValue? getParameterValueByIndex(VMContext context, int index) {
     var p = getParameterByIndex(index);
     if (p == null) return null;
     var variable = context.getVariable(p.name, false);
     return variable!.getValue(context);
   }
 
-  ASTValue? getParameterValueByName(ASTContext context, String name) {
+  ASTValue? getParameterValueByName(VMContext context, String name) {
     var p = getParameterByName(name);
     if (p == null) return null;
     return context.getVariable(p.name, false)?.getValue(context);
   }
 
-  bool matchesParametersTypes(ASTFunctionSignature signature) =>
-      _parameters.matchesParametersTypes(signature);
+  bool matchesParametersTypes(
+          ASTFunctionSignature signature, bool exactTypes) =>
+      _parameters.matchesParametersTypes(signature, exactTypes);
 
-  ASTValue<T> call(ASTContext parent,
+  ASTValue<T> call(VMContext parent,
       {List? positionalParameters, Map? namedParameters}) {
-    var context = ASTContext(this, parent: parent);
+    var context = VMContext(this, parent: parent);
 
     initializeVariables(context, positionalParameters, namedParameters);
 
@@ -497,14 +526,14 @@ class ASTFunctionDeclaration<T> extends ASTCodeBlock {
     return resolveReturnValue(context, result);
   }
 
-  ASTValue<T> resolveReturnValue(ASTContext context, Object? returnValue) {
+  ASTValue<T> resolveReturnValue(VMContext context, Object? returnValue) {
     var resolved = returnType.toValue(context, returnValue) ??
         (ASTValueVoid.INSTANCE as ASTValue<T>);
     return resolved;
   }
 
   void initializeVariables(
-      ASTContext context, List? positionalParameters, Map? namedParameters) {
+      VMContext context, List? positionalParameters, Map? namedParameters) {
     if (positionalParameters != null) {
       for (var i = 0; i < positionalParameters.length; ++i) {
         var paramVal = positionalParameters[i];
@@ -519,14 +548,14 @@ class ASTFunctionDeclaration<T> extends ASTCodeBlock {
   }
 
   @override
-  ASTContext defineRunContext(ASTContext parentContext) {
+  VMContext defineRunContext(VMContext parentContext) {
     // Ensure the the passed parentContext will be used by the block,
     // since is already instantiated by call(...).
     return parentContext;
   }
 
   @override
-  ASTValue run(ASTContext parentContext, ASTRunStatus runStatus) {
+  ASTValue run(VMContext parentContext, ASTRunStatus runStatus) {
     throw UnsupportedError(
         "Can't run this block directly! Should use call(...), since this block needs parameters initialization!");
   }
@@ -535,18 +564,14 @@ class ASTFunctionDeclaration<T> extends ASTCodeBlock {
 class ASTExternalFunction<T> extends ASTFunctionDeclaration<T> {
   final Function externalFunction;
 
-  ASTExternalFunction(
-      ASTCodeBlock parent,
-      String name,
-      ASTParametersDeclaration parameters,
-      ASTType<T> returnType,
-      this.externalFunction)
+  ASTExternalFunction(String name, ASTParametersDeclaration parameters,
+      ASTType<T> returnType, this.externalFunction)
       : super(name, parameters, returnType);
 
   @override
-  ASTValue<T> call(ASTContext parent,
+  ASTValue<T> call(VMContext parent,
       {List? positionalParameters, Map? namedParameters}) {
-    var context = ASTContext(this, parent: parent);
+    var context = VMContext(this, parent: parent);
 
     initializeVariables(context, positionalParameters, namedParameters);
 
@@ -574,12 +599,12 @@ class ASTObjectValue<T> extends ASTValue<T> {
   ASTObjectValue(ASTType<T> type) : super(type);
 
   @override
-  T getValue(ASTContext context) {
+  T getValue(VMContext context) {
     return _o as T;
   }
 
   @override
-  ASTValue<T> resolve(ASTContext context) {
+  ASTValue<T> resolve(VMContext context) {
     return this;
   }
 
@@ -607,7 +632,7 @@ class ASTObjectInstance extends ASTVariable {
       _value.setField(name, value);
 
   @override
-  ASTVariable resolveVariable(ASTContext context) {
+  ASTVariable resolveVariable(VMContext context) {
     return this;
   }
 }
@@ -616,113 +641,13 @@ class ExternalFunctionSet {
   ASTPrintFunction? printFunction;
 }
 
-class ASTContext {
-  final ASTContext? parent;
-  final ASTCodeBlock block;
-  final ASTObjectInstance? objectInstance;
-
-  final ExternalFunctionSet? externalFunctionSet;
-
-  ASTContext(this.block,
-      {this.parent, this.objectInstance, this.externalFunctionSet});
-
-  final Map<String, ASTTypedVariable> _variables = {};
-
-  ASTVariable? getVariable(String name, bool allowField) {
-    var variable = _variables[name];
-    if (variable != null) return variable;
-    if (allowField) {
-      var field = block.getField(name);
-      return field;
-    }
-    return parent?.getVariable(name, allowField);
-  }
-
-  bool setVariable(String name, ASTValue value, bool allowField) {
-    var variable = _variables[name];
-    if (variable != null) {
-      variable.setValue(this, value);
-      return true;
-    }
-    var field = block.getField(name);
-
-    if (field != null) {
-      field.setValue(this, value);
-      return true;
-    }
-
-    return false;
-  }
-
-  bool declareVariableWithValue(ASTType type, String name, ASTValue? value) {
-    value ??= ASTValueNull.INSTANCE;
-    var variable = ASTRuntimeVariable(type, name, value);
-    return declareVariable(variable);
-  }
-
-  bool declareVariable(ASTTypedVariable variable) {
-    var name = variable.name;
-    if (_variables.containsKey(name)) {
-      throw StateError("Variable '$name' already declared: $variable");
-    }
-    _variables[name] = variable;
-    return false;
-  }
-
-  ASTVariable? getField(String name) {
-    return block.getField(name);
-  }
-
-  ASTObjectInstance? getASTObjectInstance() {
-    if (objectInstance != null) {
-      return objectInstance!;
-    }
-    return parent?.getASTObjectInstance();
-  }
-
-  ExternalFunctionSet? getExternalFunctionSet() {
-    if (externalFunctionSet != null) {
-      return externalFunctionSet;
-    }
-
-    if (parent != null) {
-      return parent!.getExternalFunctionSet();
-    }
-
-    return null;
-  }
-
-  ASTFunctionDeclaration? getFunction(
-    String name,
-    ASTFunctionSignature parametersSignature, [
-    ASTContext? context,
-  ]) {
-    var f = block.getFunction(name, parametersSignature, this);
-    if (f != null) return f;
-    return parent?.getFunction(name, parametersSignature);
-  }
-
-  ASTExternalFunction<void> get mappedPrintFunction {
-    var printFunction = getExternalFunctionSet()?.printFunction ?? print;
-
-    return ASTExternalFunction(
-        block,
-        'print',
-        ASTParametersDeclaration([
-          ASTFunctionParameterDeclaration(ASTTypeObject.INSTANCE, 'o', 0, true)
-        ], null, null),
-        ASTTypeVoid.INSTANCE,
-        printFunction);
-  }
-}
-
 class ASTStatementValue extends ASTStatement {
   ASTValue value;
 
   ASTStatementValue(ASTCodeBlock block, this.value) : super();
 
   @override
-  ASTValue run(ASTContext parentContext, ASTRunStatus runStatus) {
+  ASTValue run(VMContext parentContext, ASTRunStatus runStatus) {
     var context = defineRunContext(parentContext);
     return value.getValue(context);
   }
@@ -733,22 +658,22 @@ abstract class ASTVariable implements ASTNode {
 
   ASTVariable(this.name);
 
-  ASTVariable resolveVariable(ASTContext context);
+  ASTVariable resolveVariable(VMContext context);
 
-  ASTValue getValue(ASTContext context) {
+  ASTValue getValue(VMContext context) {
     var variable = resolveVariable(context);
     return variable.getValue(context);
   }
 
-  void setValue(ASTContext context, ASTValue value) {
+  void setValue(VMContext context, ASTValue value) {
     var variable = resolveVariable(context);
     variable.setValue(context, value);
   }
 
-  V readIndex<V>(ASTContext context, int index) =>
+  V readIndex<V>(VMContext context, int index) =>
       getValue(context).readIndex(context, index);
 
-  V readKey<V>(ASTContext context, Object key) =>
+  V readKey<V>(VMContext context, Object key) =>
       getValue(context).readKey(context, key);
 }
 
@@ -764,7 +689,7 @@ class ASTClassField<T> extends ASTTypedVariable<T> {
       : super(type, name, finalValue);
 
   @override
-  ASTVariable resolveVariable(ASTContext context) {
+  ASTVariable resolveVariable(VMContext context) {
     var variable = context.getField(name);
     if (variable == null) {
       throw StateError("Can't find Class field: $name");
@@ -781,17 +706,17 @@ class ASTRuntimeVariable<T> extends ASTTypedVariable<T> {
         super(type, name, false);
 
   @override
-  ASTVariable resolveVariable(ASTContext context) {
+  ASTVariable resolveVariable(VMContext context) {
     return this;
   }
 
   @override
-  ASTValue getValue(ASTContext context) {
+  ASTValue getValue(VMContext context) {
     return _value;
   }
 
   @override
-  void setValue(ASTContext context, ASTValue value) {
+  void setValue(VMContext context, ASTValue value) {
     _value = value;
   }
 }
@@ -800,7 +725,7 @@ class ASTScopeVariable<T> extends ASTVariable {
   ASTScopeVariable(String name) : super(name);
 
   @override
-  ASTVariable resolveVariable(ASTContext context) {
+  ASTVariable resolveVariable(VMContext context) {
     var variable = context.getVariable(name, true);
     if (variable == null) {
       throw StateError("Can't find variable: $name");
@@ -813,7 +738,7 @@ class ASTThisVariable<T> extends ASTVariable {
   ASTThisVariable() : super('this');
 
   @override
-  ASTVariable resolveVariable(ASTContext context) {
+  ASTVariable resolveVariable(VMContext context) {
     var astObjectInstance = context.getASTObjectInstance();
     if (astObjectInstance == null) {
       throw StateError("Can't determine 'this'! No ASTObjectInstance defined!");
@@ -860,17 +785,17 @@ abstract class ASTValue<T> implements ASTNode {
 
   ASTType<T> type;
 
-  T getValue(ASTContext context);
+  T getValue(VMContext context);
 
-  ASTValue<T> resolve(ASTContext context);
+  ASTValue<T> resolve(VMContext context);
 
   ASTValue(this.type);
 
-  V readIndex<V>(ASTContext context, int index) {
+  V readIndex<V>(VMContext context, int index) {
     throw UnsupportedError("Can't read index for type: $type");
   }
 
-  V readKey<V>(ASTContext context, Object key) {
+  V readKey<V>(VMContext context, Object key) {
     throw UnsupportedError("Can't read key for type: $type");
   }
 
@@ -896,15 +821,15 @@ class ASTValueStatic<T> extends ASTValue<T> {
   ASTValueStatic(ASTType<T> type, this.value) : super(type);
 
   @override
-  T getValue(ASTContext context) => value;
+  T getValue(VMContext context) => value;
 
   @override
-  ASTValue<T> resolve(ASTContext context) {
+  ASTValue<T> resolve(VMContext context) {
     return this;
   }
 
   @override
-  V readIndex<V>(ASTContext context, int index) {
+  V readIndex<V>(VMContext context, int index) {
     if (value is List) {
       var list = value as List;
       return list[index] as V;
@@ -926,7 +851,7 @@ class ASTValueStatic<T> extends ASTValue<T> {
   }
 
   @override
-  V readKey<V>(ASTContext context, Object key) {
+  V readKey<V>(VMContext context, Object key) {
     if (value is Map) {
       var map = value as Map;
       return map[key];
@@ -1192,7 +1117,7 @@ class ASTType<V> implements ASTNode {
 
   ASTType(this.name, [this.generics, this.annotations]);
 
-  ASTValue<V>? toValue(ASTContext context, Object? v) {
+  ASTValue<V>? toValue(VMContext context, Object? v) {
     if (v is ASTValue<V>) return v;
 
     if (v is ASTValue) {
@@ -1201,6 +1126,11 @@ class ASTType<V> implements ASTNode {
 
     var t = v as V;
     return ASTValue.from(this, t);
+  }
+
+  @override
+  String toString() {
+    return generics == null ? name : '$name<${generics!.join(',')}>';
   }
 }
 
@@ -1215,7 +1145,7 @@ class ASTTypeInt extends ASTType<int> {
   ASTTypeInt() : super('int');
 
   @override
-  ASTValueInt? toValue(ASTContext context, Object? v) {
+  ASTValueInt? toValue(VMContext context, Object? v) {
     if (v is ASTValueInt) return v;
 
     if (v is ASTValue) {
@@ -1233,7 +1163,7 @@ class ASTTypeDouble extends ASTType<double> {
   ASTTypeDouble() : super('double');
 
   @override
-  ASTValueDouble? toValue(ASTContext context, Object? v) {
+  ASTValueDouble? toValue(VMContext context, Object? v) {
     if (v is ASTValueDouble) return v;
 
     if (v is ASTValue) {
@@ -1251,7 +1181,7 @@ class ASTTypeString extends ASTType<String> {
   ASTTypeString() : super('String');
 
   @override
-  ASTValueString? toValue(ASTContext context, Object? v) {
+  ASTValueString? toValue(VMContext context, Object? v) {
     if (v is ASTValueString) return v;
 
     if (v is ASTValue) {
@@ -1269,7 +1199,7 @@ class ASTTypeObject extends ASTType<Object> {
   ASTTypeObject() : super('Object');
 
   @override
-  ASTValueObject? toValue(ASTContext context, Object? v) {
+  ASTValueObject? toValue(VMContext context, Object? v) {
     if (v is ASTValueObject) return v;
 
     if (v is ASTValue) {
@@ -1286,7 +1216,7 @@ class ASTTypeVar extends ASTType<dynamic> {
   ASTTypeVar() : super('var');
 
   @override
-  ASTValue<dynamic> toValue(ASTContext context, Object? v) {
+  ASTValue<dynamic> toValue(VMContext context, Object? v) {
     if (v is ASTValue<dynamic> && v.type == this) return v;
 
     if (v is ASTValue) {
@@ -1303,7 +1233,7 @@ class ASTTypeDynamic extends ASTType<dynamic> {
   ASTTypeDynamic() : super('dynamic');
 
   @override
-  ASTValue<dynamic> toValue(ASTContext context, Object? v) {
+  ASTValue<dynamic> toValue(VMContext context, Object? v) {
     if (v is ASTValue<dynamic> && v.type == this) return v;
 
     if (v is ASTValue) {
@@ -1320,7 +1250,7 @@ class ASTTypeNull extends ASTType<Null> {
   ASTTypeNull() : super('Null');
 
   @override
-  ASTValueNull toValue(ASTContext context, Object? v) {
+  ASTValueNull toValue(VMContext context, Object? v) {
     if (v is ASTValueNull) return v;
     return ASTValueNull.INSTANCE;
   }
@@ -1332,7 +1262,7 @@ class ASTTypeVoid extends ASTType<void> {
   ASTTypeVoid() : super('void');
 
   @override
-  ASTValueVoid toValue(ASTContext context, Object? v) {
+  ASTValueVoid toValue(VMContext context, Object? v) {
     return ASTValueVoid.INSTANCE;
   }
 }
@@ -1348,7 +1278,7 @@ class ASTTypeGenericVariable extends ASTType<Object> {
       (type as ASTType<Object>?) ?? ASTTypeObject.INSTANCE;
 
   @override
-  ASTValue<Object>? toValue(ASTContext context, Object? v) {
+  ASTValue<Object>? toValue(VMContext context, Object? v) {
     return resolveType.toValue(context, v);
   }
 }
@@ -1369,7 +1299,7 @@ class ASTTypeArray<T extends ASTType<V>, V> extends ASTType<List<V>> {
   }
 
   @override
-  ASTValueArray<T, V>? toValue(ASTContext context, Object? v) {
+  ASTValueArray<T, V>? toValue(VMContext context, Object? v) {
     if (v == null) return null;
     if (v is ASTValueArray) return v as ASTValueArray<T, V>;
 
@@ -1404,7 +1334,7 @@ class ASTTypeArray2D<T extends ASTType<V>, V>
   ASTType get elementType => componentType.elementType;
 
   @override
-  ASTValueArray2D<T, V>? toValue(ASTContext context, Object? v) {
+  ASTValueArray2D<T, V>? toValue(VMContext context, Object? v) {
     if (v == null) return null;
     if (v is ASTValueArray2D) return v as ASTValueArray2D<T, V>;
 
@@ -1440,7 +1370,7 @@ class ASTTypeArray3D<T extends ASTType<V>, V>
   ASTType get elementType => componentType.elementType;
 
   @override
-  ASTValueArray3D<T, V>? toValue(ASTContext context, Object? v) {
+  ASTValueArray3D<T, V>? toValue(VMContext context, Object? v) {
     if (v == null) return null;
     if (v is ASTValueArray2D) return v as ASTValueArray3D<T, V>;
 
@@ -1487,7 +1417,7 @@ class CallReadIndex<T> extends ASTValue<T> {
 
   CallReadIndex(ASTType<T> type, this.variable, this._index) : super(type);
 
-  int getIndex(ASTContext context) {
+  int getIndex(VMContext context) {
     if (_index is int) {
       return _index as int;
     } else if (_index is ASTValue) {
@@ -1499,11 +1429,11 @@ class CallReadIndex<T> extends ASTValue<T> {
   }
 
   @override
-  T getValue(ASTContext context) =>
+  T getValue(VMContext context) =>
       variable.readIndex(context, getIndex(context));
 
   @override
-  ASTValue<T> resolve(ASTContext context) {
+  ASTValue<T> resolve(VMContext context) {
     var v = getValue(context);
     return ASTValue.from(type, v);
   }
@@ -1515,7 +1445,7 @@ class CallReadKey<T> extends ASTValue<T> {
 
   CallReadKey(ASTType<T> type, this.variable, this._key) : super(type);
 
-  Object getKey(ASTContext context) {
+  Object getKey(VMContext context) {
     if (_key is ASTValue) {
       return (_key as ASTValue).getValue(context);
     } else {
@@ -1524,10 +1454,10 @@ class CallReadKey<T> extends ASTValue<T> {
   }
 
   @override
-  T getValue(ASTContext context) => variable.readKey(context, getKey(context));
+  T getValue(VMContext context) => variable.readKey(context, getKey(context));
 
   @override
-  ASTValue<T> resolve(ASTContext context) {
+  ASTValue<T> resolve(VMContext context) {
     var v = getValue(context);
     return ASTValue.from(type, v);
   }
@@ -1552,7 +1482,7 @@ class ASTFunctionInvocation2<T> extends ASTValue<T> {
     _callSignature = ASTFunctionSignature.from(parameters, namedParameters);
   }
 
-  ASTFunctionDeclaration getFunction(ASTContext context) {
+  ASTFunctionDeclaration getFunction(VMContext context) {
     if (_targetFunction != null) {
       return _targetFunction!;
     }
@@ -1568,14 +1498,14 @@ class ASTFunctionInvocation2<T> extends ASTValue<T> {
   }
 
   @override
-  T getValue(ASTContext context) {
+  T getValue(VMContext context) {
     var f = getFunction(context);
     var result = f.call(context, positionalParameters: parameters);
     return result.getValue(context);
   }
 
   @override
-  ASTValue<T> resolve(ASTContext context) {
+  ASTValue<T> resolve(VMContext context) {
     var v = getValue(context);
     return ASTValue.from(type, v);
   }
@@ -1588,7 +1518,7 @@ class ASTParameterDeclaration<T> implements ASTNode {
 
   ASTParameterDeclaration(this.type, this.name);
 
-  ASTValue<T>? toValue(ASTContext context, Object? v) =>
+  ASTValue<T>? toValue(VMContext context, Object? v) =>
       type.toValue(context, v);
 }
 
@@ -1602,38 +1532,38 @@ class ASTFunctionParameterDeclaration<T> extends ASTParameterDeclaration<T> {
       : super(type, name);
 }
 
-enum AssignmentOperator { set, multiply, divide, sum, subtract }
+enum ASTAssignmentOperator { set, multiply, divide, sum, subtract }
 
-AssignmentOperator getAssignmentOperator(String op) {
+ASTAssignmentOperator getASTAssignmentOperator(String op) {
   op = op.trim();
 
   switch (op) {
     case '=':
-      return AssignmentOperator.set;
+      return ASTAssignmentOperator.set;
     case '*=':
-      return AssignmentOperator.multiply;
+      return ASTAssignmentOperator.multiply;
     case '/=':
-      return AssignmentOperator.divide;
+      return ASTAssignmentOperator.divide;
     case '+=':
-      return AssignmentOperator.sum;
+      return ASTAssignmentOperator.sum;
     case '-=':
-      return AssignmentOperator.subtract;
+      return ASTAssignmentOperator.subtract;
     default:
       throw UnsupportedError('$op');
   }
 }
 
-String getAssignmentOperatorText(AssignmentOperator op) {
+String getASTAssignmentOperatorText(ASTAssignmentOperator op) {
   switch (op) {
-    case AssignmentOperator.set:
+    case ASTAssignmentOperator.set:
       return '=';
-    case AssignmentOperator.multiply:
+    case ASTAssignmentOperator.multiply:
       return '*=';
-    case AssignmentOperator.divide:
+    case ASTAssignmentOperator.divide:
       return '/=';
-    case AssignmentOperator.sum:
+    case ASTAssignmentOperator.sum:
       return '+=';
-    case AssignmentOperator.subtract:
+    case ASTAssignmentOperator.subtract:
       return '-=';
     default:
       throw UnsupportedError('$op');
@@ -1646,7 +1576,7 @@ class ASTStatementExpression extends ASTStatement {
   ASTStatementExpression(this.expression);
 
   @override
-  ASTValue run(ASTContext parentContext, ASTRunStatus runStatus) {
+  ASTValue run(VMContext parentContext, ASTRunStatus runStatus) {
     var context = defineRunContext(parentContext);
     return expression.run(context, runStatus);
   }
@@ -1654,14 +1584,14 @@ class ASTStatementExpression extends ASTStatement {
 
 class ASTStatementReturn extends ASTStatement {
   @override
-  ASTValue run(ASTContext parentContext, ASTRunStatus runStatus) {
+  ASTValue run(VMContext parentContext, ASTRunStatus runStatus) {
     return runStatus.returnVoid();
   }
 }
 
 class ASTStatementReturnNull extends ASTStatementReturn {
   @override
-  ASTValue run(ASTContext parentContext, ASTRunStatus runStatus) {
+  ASTValue run(VMContext parentContext, ASTRunStatus runStatus) {
     return runStatus.returnNull();
   }
 }
@@ -1672,7 +1602,7 @@ class ASTStatementReturnValue extends ASTStatementReturn {
   ASTStatementReturnValue(this.value);
 
   @override
-  ASTValue run(ASTContext parentContext, ASTRunStatus runStatus) {
+  ASTValue run(VMContext parentContext, ASTRunStatus runStatus) {
     return runStatus.returnValue(value);
   }
 }
@@ -1683,7 +1613,7 @@ class ASTStatementReturnVariable extends ASTStatementReturn {
   ASTStatementReturnVariable(this.variable);
 
   @override
-  ASTValue run(ASTContext parentContext, ASTRunStatus runStatus) {
+  ASTValue run(VMContext parentContext, ASTRunStatus runStatus) {
     var value = variable.getValue(parentContext);
     return runStatus.returnValue(value);
   }
@@ -1695,7 +1625,7 @@ class ASTStatementReturnWithExpression extends ASTStatementReturn {
   ASTStatementReturnWithExpression(this.expression);
 
   @override
-  ASTValue run(ASTContext parentContext, ASTRunStatus runStatus) {
+  ASTValue run(VMContext parentContext, ASTRunStatus runStatus) {
     var value = expression.run(parentContext, runStatus);
     return runStatus.returnValue(value);
   }
@@ -1703,7 +1633,7 @@ class ASTStatementReturnWithExpression extends ASTStatementReturn {
 
 abstract class ASTExpression implements ASTCodeRunner, ASTNode {
   @override
-  ASTContext defineRunContext(ASTContext parentContext) {
+  VMContext defineRunContext(VMContext parentContext) {
     return parentContext;
   }
 }
@@ -1714,7 +1644,7 @@ class ASTExpressionVariableAccess extends ASTExpression {
   ASTExpressionVariableAccess(this.variable);
 
   @override
-  ASTValue run(ASTContext parentContext, ASTRunStatus runStatus) {
+  ASTValue run(VMContext parentContext, ASTRunStatus runStatus) {
     var context = defineRunContext(parentContext);
     return variable.getValue(context);
   }
@@ -1726,7 +1656,7 @@ class ASTExpressionLiteral extends ASTExpression {
   ASTExpressionLiteral(this.value);
 
   @override
-  ASTValue run(ASTContext parentContext, ASTRunStatus runStatus) {
+  ASTValue run(VMContext parentContext, ASTRunStatus runStatus) {
     return value;
   }
 }
@@ -1738,7 +1668,7 @@ class ASTExpressionVariableEntryAccess extends ASTExpression {
   ASTExpressionVariableEntryAccess(this.variable, this.expression);
 
   @override
-  ASTValue run(ASTContext parentContext, ASTRunStatus runStatus) {
+  ASTValue run(VMContext parentContext, ASTRunStatus runStatus) {
     var context = defineRunContext(parentContext);
 
     var key = expression.run(context, runStatus);
@@ -1758,10 +1688,247 @@ class ASTExpressionVariableEntryAccess extends ASTExpression {
   }
 }
 
+enum ASTExpressionOperator {
+  add,
+  subtract,
+  multiply,
+  divide,
+  divideAsInt,
+  divideAsDouble
+}
+
+ASTExpressionOperator getASTExpressionOperator(String op) {
+  op = op.trim();
+  switch (op) {
+    case '+':
+      return ASTExpressionOperator.add;
+    case '-':
+      return ASTExpressionOperator.subtract;
+    case '*':
+      return ASTExpressionOperator.multiply;
+    case '/':
+      return ASTExpressionOperator.divide;
+    case '~/':
+      return ASTExpressionOperator.divideAsInt;
+    default:
+      throw UnsupportedError('$op');
+  }
+}
+
+String getASTExpressionOperatorText(ASTExpressionOperator op) {
+  switch (op) {
+    case ASTExpressionOperator.add:
+      return '+';
+    case ASTExpressionOperator.subtract:
+      return '-';
+    case ASTExpressionOperator.multiply:
+      return '*';
+    case ASTExpressionOperator.divide:
+    case ASTExpressionOperator.divideAsDouble:
+      return '/';
+    case ASTExpressionOperator.divideAsInt:
+      return '~/';
+    default:
+      throw UnsupportedError('$op');
+  }
+}
+
+class ASTExpressionOperation extends ASTExpression {
+  ASTExpression expression1;
+  ASTExpressionOperator operator;
+  ASTExpression expression2;
+
+  ASTExpressionOperation(this.expression1, this.operator, this.expression2);
+
+  @override
+  ASTValue run(VMContext parentContext, ASTRunStatus runStatus) {
+    var context = defineRunContext(parentContext);
+
+    var val2 = expression2.run(context, runStatus);
+    var val1 = expression1.run(context, runStatus);
+
+    switch (operator) {
+      case ASTExpressionOperator.add:
+        return operatorAdd(parentContext, val1, val2);
+      case ASTExpressionOperator.subtract:
+        return operatorSubtract(parentContext, val1, val2);
+      case ASTExpressionOperator.multiply:
+        return operatorMultiply(parentContext, val1, val2);
+      case ASTExpressionOperator.divide:
+        return operatorDivide(parentContext, val1, val2);
+      case ASTExpressionOperator.divideAsInt:
+        return operatorDivideAsInt(parentContext, val1, val2);
+      case ASTExpressionOperator.divideAsDouble:
+        return operatorDivideAsDouble(parentContext, val1, val2);
+    }
+  }
+
+  ASTValue operatorAdd(VMContext context, ASTValue val1, ASTValue val2) {
+    var t1 = val1.type;
+    var t2 = val2.type;
+
+    if (t1 is ASTTypeString || t2 is ASTTypeString) {
+      var v1 = val1.getValue(context);
+      var v2 = val2.getValue(context);
+      var r = '$v1$v2';
+      return ASTValueString(r);
+    }
+
+    if (t1 is ASTTypeInt) {
+      if (t2 is ASTTypeInt) {
+        var v1 = val1.getValue(context) as int;
+        var v2 = val2.getValue(context) as int;
+        var r = v1 + v2;
+        return ASTValueInt(r);
+      } else if (t2 is ASTTypeDouble) {
+        var v1 = val1.getValue(context) as int;
+        var v2 = val2.getValue(context) as double;
+        var r = v1 + v2;
+        return ASTValueDouble(r);
+      }
+    }
+
+    if (t1 is ASTTypeDouble) {
+      if (t2 is ASTTypeInt || t2 is ASTTypeDouble) {
+        var v1 = val1.getValue(context) as double;
+        var v2 = val2.getValue(context) as num;
+        var r = v1 + v2;
+        return ASTValueDouble(r);
+      }
+    }
+
+    throw UnsupportedError("Can't perform '+' operation in types: $t1 + $t2");
+  }
+
+  ASTValue operatorSubtract(VMContext context, ASTValue val1, ASTValue val2) {
+    var t1 = val1.type;
+    var t2 = val2.type;
+
+    if (t1 is ASTTypeInt) {
+      if (t2 is ASTTypeInt) {
+        var v1 = val1.getValue(context) as int;
+        var v2 = val2.getValue(context) as int;
+        var r = v1 - v2;
+        return ASTValueInt(r);
+      } else if (t2 is ASTTypeDouble) {
+        var v1 = val1.getValue(context) as int;
+        var v2 = val2.getValue(context) as double;
+        var r = v1 - v2;
+        return ASTValueDouble(r);
+      }
+    }
+
+    if (t1 is ASTTypeDouble) {
+      if (t2 is ASTTypeInt || t2 is ASTTypeDouble) {
+        var v1 = val1.getValue(context) as double;
+        var v2 = val2.getValue(context) as num;
+        var r = v1 - v2;
+        return ASTValueDouble(r);
+      }
+    }
+
+    throw UnsupportedError("Can't perform '-' operation in types: $t1 - $t2");
+  }
+
+  ASTValue operatorMultiply(VMContext context, ASTValue val1, ASTValue val2) {
+    var t1 = val1.type;
+    var t2 = val2.type;
+
+    if (t1 is ASTTypeInt) {
+      if (t2 is ASTTypeInt) {
+        var v1 = val1.getValue(context) as int;
+        var v2 = val2.getValue(context) as int;
+        var r = v1 * v2;
+        return ASTValueInt(r);
+      } else if (t2 is ASTTypeDouble) {
+        var v1 = val1.getValue(context) as int;
+        var v2 = val2.getValue(context) as double;
+        var r = v1 * v2;
+        return ASTValueDouble(r);
+      }
+    }
+
+    if (t1 is ASTTypeDouble) {
+      if (t2 is ASTTypeInt || t2 is ASTTypeDouble) {
+        var v1 = val1.getValue(context) as double;
+        var v2 = val2.getValue(context) as num;
+        var r = v1 * v2;
+        return ASTValueDouble(r);
+      }
+    }
+
+    throw UnsupportedError("Can't perform '*' operation in types: $t1 * $t2");
+  }
+
+  ASTValue operatorDivide(VMContext context, ASTValue val1, ASTValue val2) {
+    var t1 = val1.type;
+    var t2 = val2.type;
+
+    if (t1 is ASTTypeInt) {
+      if (t2 is ASTTypeInt) {
+        var v1 = val1.getValue(context) as int;
+        var v2 = val2.getValue(context) as int;
+        var r = v1 ~/ v2;
+        return ASTValueInt(r);
+      } else if (t2 is ASTTypeDouble) {
+        var v1 = val1.getValue(context) as int;
+        var v2 = val2.getValue(context) as double;
+        var r = v1 / v2;
+        return ASTValueDouble(r);
+      }
+    }
+
+    if (t1 is ASTTypeDouble) {
+      if (t2 is ASTTypeInt || t2 is ASTTypeDouble) {
+        var v1 = val1.getValue(context) as double;
+        var v2 = val2.getValue(context) as num;
+        var r = v1 / v2;
+        return ASTValueDouble(r);
+      }
+    }
+
+    throw UnsupportedError("Can't perform '/' operation in types: $t1 / $t2");
+  }
+
+  ASTValue operatorDivideAsInt(
+      VMContext context, ASTValue val1, ASTValue val2) {
+    var t1 = val1.type;
+    var t2 = val2.type;
+
+    if (t1 is ASTTypeInt || t1 is ASTTypeDouble) {
+      if (t2 is ASTTypeInt || t2 is ASTTypeDouble) {
+        var v1 = val1.getValue(context) as double;
+        var v2 = val2.getValue(context) as num;
+        var r = v1 / v2;
+        return ASTValueInt(r.toInt());
+      }
+    }
+
+    throw UnsupportedError("Can't perform '/' operation in types: $t1 / $t2");
+  }
+
+  ASTValue operatorDivideAsDouble(
+      VMContext context, ASTValue val1, ASTValue val2) {
+    var t1 = val1.type;
+    var t2 = val2.type;
+
+    if (t1 is ASTTypeInt || t1 is ASTTypeDouble) {
+      if (t2 is ASTTypeInt || t2 is ASTTypeDouble) {
+        var v1 = val1.getValue(context) as double;
+        var v2 = val2.getValue(context) as num;
+        var r = v1 / v2;
+        return ASTValueDouble(r);
+      }
+    }
+
+    throw UnsupportedError("Can't perform '/' operation in types: $t1 / $t2");
+  }
+}
+
 class ASTExpressionVariableAssignment extends ASTExpression {
   ASTVariable variable;
 
-  AssignmentOperator operator;
+  ASTAssignmentOperator operator;
 
   ASTExpression expression;
 
@@ -1769,37 +1936,37 @@ class ASTExpressionVariableAssignment extends ASTExpression {
       this.variable, this.operator, this.expression);
 
   @override
-  ASTValue run(ASTContext parentContext, ASTRunStatus runStatus) {
+  ASTValue run(VMContext parentContext, ASTRunStatus runStatus) {
     var context = defineRunContext(parentContext);
 
     var value = expression.run(context, runStatus);
     var variableValue = variable.getValue(context);
 
     switch (operator) {
-      case AssignmentOperator.set:
+      case ASTAssignmentOperator.set:
         {
           variable.setValue(context, value);
           return value;
         }
-      case AssignmentOperator.sum:
+      case ASTAssignmentOperator.sum:
         {
           var res = variableValue + value;
           variable.setValue(context, res);
           return value;
         }
-      case AssignmentOperator.subtract:
+      case ASTAssignmentOperator.subtract:
         {
           var res = variableValue - value;
           variable.setValue(context, res);
           return value;
         }
-      case AssignmentOperator.divide:
+      case ASTAssignmentOperator.divide:
         {
           var res = variableValue / value;
           variable.setValue(context, res);
           return value;
         }
-      case AssignmentOperator.multiply:
+      case ASTAssignmentOperator.multiply:
         {
           var res = variableValue * value;
           variable.setValue(context, res);
@@ -1818,11 +1985,12 @@ class ASTExpressionLocalFunctionInvocation extends ASTExpression {
   ASTExpressionLocalFunctionInvocation(this.name, this.arguments);
 
   @override
-  ASTValue run(ASTContext parentContext, ASTRunStatus runStatus) {
+  ASTValue run(VMContext parentContext, ASTRunStatus runStatus) {
     var fSignature = ASTFunctionSignature.from(arguments, null);
     var f = parentContext.block.getFunction(name, fSignature, parentContext);
     if (f == null) {
-      throw StateError("Can't find function: $name");
+      throw StateError(
+          'Can\'t find function "$name" with parameters signature: $fSignature');
     }
 
     var argumentsValues = arguments.map((e) {
@@ -1841,7 +2009,7 @@ class ASTExpressionFunctionInvocation extends ASTExpression {
   ASTExpressionFunctionInvocation(this.variable, this.name, this.arguments);
 
   @override
-  ASTValue run(ASTContext parentContext, ASTRunStatus runStatus) {
+  ASTValue run(VMContext parentContext, ASTRunStatus runStatus) {
     // TODO: implement run
     throw UnimplementedError();
   }
@@ -1857,7 +2025,7 @@ class ASTStatementVariableDeclaration<V> extends ASTStatement {
   ASTStatementVariableDeclaration(this.type, this.name, this.value);
 
   @override
-  ASTValue run(ASTContext parentContext, ASTRunStatus runStatus) {
+  ASTValue run(VMContext parentContext, ASTRunStatus runStatus) {
     var result = value?.run(parentContext, runStatus) ?? ASTValueNull.INSTANCE;
     parentContext.declareVariableWithValue(type, name, result);
     return ASTValueVoid.INSTANCE;

@@ -97,6 +97,10 @@ class ApolloCodeGeneratorDart extends ApolloCodeGenerator {
   }
 
   @override
+  String resolveASTExpressionOperatorText(ASTExpressionOperator operator) =>
+      getASTExpressionOperatorText(operator);
+
+  @override
   StringBuffer generateASTTypeArray(ASTTypeArray type,
           [String indent = '', StringBuffer? s]) =>
       generateASTTypeDefault(type, indent, s);

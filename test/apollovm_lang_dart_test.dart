@@ -10,8 +10,15 @@ void main() {
           'dart',
           r'''
             void main(List<String> args) {
-              var s = args[0] ;
-              print(s);
+              var title = args[0];
+              var a = args[1];
+              var b = args[2];
+              var c = args[3];
+              var sumAB = a + b ;
+              var sumABC = a + b + c;
+              print(title);
+              print(sumAB);
+              print(sumABC);
             }
           ''',
           'test');
@@ -20,16 +27,41 @@ void main() {
 
       expect(loadOK, isTrue);
 
-      var dartRunner = vm.getRunner('dart')!;
+      var dartRunner = vm.createRunner('dart')!;
+
+      var output = [];
+      dartRunner.externalPrintFunction = (o) => output.add(o);
+
       dartRunner.executeFunction('', 'main', [
-        ['foo!', 'abc']
+        ['Sums:', 10, 20, 50]
       ]);
+
+      expect(output, equals(['Sums:', 30, 80]));
+
+      print('---------------------------------------');
+      print('OUTPUT:');
+      output.forEach((o) => print('>> $o'));
 
       print('---------------------------------------');
       // Regenerate code:
       var codeStorageDart = vm.generateAllCodeIn('dart');
       var allSourcesDart = codeStorageDart.writeAllSources().toString();
       print(allSourcesDart);
+
+      expect(
+          allSourcesDart,
+          matches(RegExp(r'\s*'
+              r'void\s+main\(List<String> args\)\s*\{'
+              r'\s*var\s+title\s+=\s+args\[0\]\s*;'
+              r'\s*var\s+a\s+=\s+args\[1\]\s*;'
+              r'\s*var\s+b\s+=\s+args\[2\]\s*;'
+              r'\s*var\s+c\s+=\s+args\[3\]\s*;'
+              r'\s*var\s+sumAB\s+=\s+a\s*\+\s*b\s*;'
+              r'\s*var\s+sumABC\s+=\s+a\s*\+\s*b\s*\+\s*c\s*;'
+              r'\s*print\(title\)\s*;'
+              r'\s*print\(sumAB\)\s*;'
+              r'\s*print\(sumABC\)\s*;'
+              r'\s*\}\s*')));
     });
   });
 }

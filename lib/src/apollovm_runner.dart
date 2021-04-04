@@ -7,9 +7,25 @@ abstract class ApolloLanguageRunner {
 
   late LanguageNamespaces _languageNamespaces;
 
+  ApolloExternalFunctionMapper? externalFunctionMapper;
+
   ApolloLanguageRunner(this.apolloVM) {
     _languageNamespaces = apolloVM.getLanguageNamespaces(language);
+    externalFunctionMapper = createDefaultApolloExternalFunctionMapper();
   }
+
+  ApolloLanguageRunner copy();
+
+  ApolloExternalFunctionMapper? createDefaultApolloExternalFunctionMapper() {
+    var externalFunctionMapper = ApolloExternalFunctionMapper();
+
+    externalFunctionMapper.mapExternalFunction1(ASTTypeVoid.INSTANCE, 'print',
+        ASTTypeObject.INSTANCE, 'o', (o) => externalPrintFunction(o));
+
+    return externalFunctionMapper;
+  }
+
+  void Function(Object? o) externalPrintFunction = print;
 
   ASTValue executeClassMethod(String namespace, String className,
       String methodName, dynamic? positionalParameters,
@@ -27,8 +43,9 @@ abstract class ApolloLanguageRunner {
           "Can't find class method to execute: $className->$methodName");
     }
 
-    var result =
-        clazz.execute(methodName, positionalParameters, namedParameters);
+    var result = clazz.execute(
+        methodName, positionalParameters, namedParameters,
+        externalFunctionMapper: externalFunctionMapper);
     return result;
   }
 
@@ -42,8 +59,13 @@ abstract class ApolloLanguageRunner {
       throw StateError("Can't find function to execute: $functionName");
     }
 
-    var result = codeUnit.codeRoot!
-        .execute(functionName, positionalParameters, namedParameters);
+    var result = codeUnit.codeRoot!.execute(
+        functionName, positionalParameters, namedParameters,
+        externalFunctionMapper: externalFunctionMapper);
     return result;
+  }
+
+  void reset() {
+    externalFunctionMapper = createDefaultApolloExternalFunctionMapper();
   }
 }

@@ -1,6 +1,13 @@
 ## 0.0.3
 
 - Removed `ASTCodeGenerator`, that is language specific now: `ApolloCodeGenerator`.
+- Better external function mapping.
+- Grammars:
+  - Dart:
+    - Expression operations: `+`, `-`, `*`, `/`, `~/`.
+  - Java8:
+    - Expression operations: `+`, `-`, `*`, `/`.
+- Improved tests.
 
 ## 0.0.2
 

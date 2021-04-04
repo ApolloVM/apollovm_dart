@@ -8,8 +8,15 @@ void main() async {
       r'''
       class Foo {
           void main(List<String> args) {
-            var s = args[0] ;
-            print(s);
+            var title = args[0];
+            var a = args[1];
+            var b = args[2];
+            var c = args[3];
+            var sumAB = a + b ;
+            var sumABC = a + b + c;
+            print(title);
+            print(sumAB);
+            print(sumABC);
           }
       }
       ''',
@@ -22,9 +29,9 @@ void main() async {
     return;
   }
 
-  var dartRunner = vm.getRunner('dart')!;
+  var dartRunner = vm.createRunner('dart')!;
   dartRunner.executeClassMethod('', 'Foo', 'main', [
-    ['foo!', 'abc']
+    ['Sums:', 10, 20, 50]
   ]);
 
   print('---------------------------------------');

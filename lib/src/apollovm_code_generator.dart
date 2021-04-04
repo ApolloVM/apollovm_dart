@@ -188,6 +188,24 @@ abstract class ApolloCodeGenerator {
     return s;
   }
 
+  StringBuffer generateASTExpressionVariableAssignment(
+      ASTExpressionVariableAssignment expression,
+      [String indent = '',
+      StringBuffer? s]) {
+    s ??= StringBuffer();
+
+    s.write(indent);
+
+    generateASTVariable(expression.variable, '', s);
+    var op = getASTAssignmentOperatorText(expression.operator);
+    s.write(op);
+    generateASTExpression(expression.expression, '', s);
+
+    s.write(';');
+
+    return s;
+  }
+
   StringBuffer generateASTStatementReturn(ASTStatementReturn statement,
       [String indent = '', StringBuffer? s]) {
     s ??= StringBuffer();
@@ -242,6 +260,8 @@ abstract class ApolloCodeGenerator {
       [String indent = '', StringBuffer? s]) {
     if (expression is ASTExpressionVariableAccess) {
       return generateASTExpressionVariableAccess(expression, indent, s);
+    } else if (expression is ASTExpressionVariableAssignment) {
+      return generateASTExpressionVariableAssignment(expression, indent, s);
     } else if (expression is ASTExpressionVariableEntryAccess) {
       return generateASTExpressionVariableEntryAccess(expression, indent, s);
     } else if (expression is ASTExpressionLiteral) {
@@ -251,10 +271,26 @@ abstract class ApolloCodeGenerator {
           expression, indent, s);
     } else if (expression is ASTExpressionFunctionInvocation) {
       return generateASTExpressionFunctionInvocation(expression, indent, s);
+    } else if (expression is ASTExpressionOperation) {
+      return generateASTExpressionOperation(expression, indent, s);
     }
 
     throw UnsupportedError("Can't generate expression: $expression");
   }
+
+  StringBuffer generateASTExpressionOperation(ASTExpressionOperation expression,
+      [String indent = '', StringBuffer? s]) {
+    s ??= StringBuffer();
+    s.write(indent);
+    generateASTExpression(expression.expression1, '', s);
+    s.write(' ');
+    s.write(resolveASTExpressionOperatorText(expression.operator));
+    s.write(' ');
+    generateASTExpression(expression.expression2, '', s);
+    return s;
+  }
+
+  String resolveASTExpressionOperatorText(ASTExpressionOperator operator);
 
   StringBuffer generateASTExpressionLiteral(ASTExpressionLiteral expression,
       [String indent = '', StringBuffer? s]) {

@@ -18,4 +18,9 @@ class ApolloRunnerJava8 extends ApolloLanguageRunner {
 
   @override
   String get language => 'java8';
+
+  @override
+  ApolloRunnerJava8 copy() {
+    return ApolloRunnerJava8(apolloVM);
+  }
 }

@@ -1,3 +1,4 @@
+import 'package:apollovm/apollovm.dart';
 import 'package:apollovm/src/apollovm_base.dart';
 import 'package:apollovm/src/apollovm_parser.dart';
 import 'package:apollovm/src/apollovm_runner.dart';
@@ -18,4 +19,9 @@ class ApolloRunnerDart extends ApolloLanguageRunner {
 
   @override
   String get language => 'dart';
+
+  @override
+  ApolloRunnerDart copy() {
+    return ApolloRunnerDart(apolloVM);
+  }
 }
