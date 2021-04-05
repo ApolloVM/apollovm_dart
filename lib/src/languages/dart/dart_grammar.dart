@@ -141,13 +141,12 @@ class DartGrammarDefinition extends DartGrammarLexer {
         return op;
       });
 
-  Parser<ASTExpression> expressionNoOperation() =>
-      (expressionVariableAssigment() |
-              expressionLocalFunctionInvocation() |
-              expressionVariableEntryAccess() |
-              expressionVariableAccess() |
-              expressionLiteral())
-          .cast<ASTExpression>();
+  Parser<ASTExpression> expressionNoOperation() => (expressionLiteral() |
+          expressionVariableAssigment() |
+          expressionLocalFunctionInvocation() |
+          expressionVariableEntryAccess() |
+          expressionVariableAccess())
+      .cast<ASTExpression>();
 
   Parser<ASTExpressionLocalFunctionInvocation>
       expressionLocalFunctionInvocation() => (string('this').optional() &

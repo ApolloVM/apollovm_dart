@@ -146,10 +146,6 @@ abstract class DartGrammarLexer extends GrammarDefinition {
 
   Parser numberOptIllegalEndLexicalToken() => epsilon();
 
-//        ref(IDENTIFIER_START).end()
-//      | epsilon()
-//      ;
-
   Parser hexDigitLexicalToken() => pattern('0-9a-fA-F');
 
   Parser identifierStartLexicalToken() =>
@@ -168,25 +164,69 @@ abstract class DartGrammarLexer extends GrammarDefinition {
   Parser exponentLexicalToken() =>
       pattern('eE') & pattern('+-').optional() & ref(digitLexicalToken).plus();
 
-  Parser<String> stringLexicalToken() =>
-      (ref(multiLineStringLexicalToken) | ref(singleLineStringLexicalToken))
-          .trim()
+  Parser<String> stringLexicalToken() => (multiLineRawStringLexicalToken() |
+          ref(singleLineRawStringLexicalToken) |
+          ref(multiLineStringLexicalToken) |
+          ref(singleLineStringLexicalToken))
+      .trim()
+      .cast<String>();
+
+  Parser<String> multiLineRawStringLexicalToken() =>
+      (multiLineSingleQuotedRawStringLexicalToken() |
+              multiLineDoubleQuotedRawStringLexicalToken())
           .cast<String>();
+
+  Parser<String> multiLineSingleQuotedRawStringLexicalToken() =>
+      (string("r'''") & any().starLazy(string("'''")) & string("'''")).map((v) {
+        var l = v[1] as List;
+        return l.length == 1 ? l[0] : l.join('');
+      });
+
+  Parser<String> multiLineDoubleQuotedRawStringLexicalToken() =>
+      (string('r"""') & any().starLazy(string('"""')) & string('"""')).map((v) {
+        var l = v[1] as List;
+        return l.length == 1 ? l[0] : l.join('');
+      });
 
   Parser<String> multiLineStringLexicalToken() =>
       (multiLineSingleQuotedStringLexicalToken() |
               multiLineDoubleQuotedStringLexicalToken())
           .cast<String>();
 
-  Parser<String> multiLineSingleQuotedStringLexicalToken() =>
-      (string("'''") & any().starLazy(string("'''")).flatten() & string("'''"))
+  Parser<String> multiLineSingleQuotedStringLexicalToken() => (string("'''") &
+              (string(r"\'").map((_) => "'") |
+                      stringContentQuotedLexicalTokenEscaped() |
+                      any())
+                  .starLazy(string("'''")) &
+              string("'''"))
           .map((v) {
+        var l = v[1] as List;
+        return l.length == 1 ? l[0] : l.join('');
+      });
+
+  Parser<String> multiLineDoubleQuotedStringLexicalToken() => (string('"""') &
+              (string(r'\"').map((_) => '"') |
+                      stringContentQuotedLexicalTokenEscaped() |
+                      any())
+                  .starLazy(string('"""')) &
+              string('"""'))
+          .map((v) {
+        var l = v[1] as List;
+        return l.length == 1 ? l[0] : l.join('');
+      });
+
+  Parser<String> singleLineRawStringLexicalToken() =>
+      (singleLineRawStringSingleQuotedLexicalToken() |
+              singleLineRawStringDoubleQuotedLexicalToken())
+          .cast<String>();
+
+  Parser<String> singleLineRawStringSingleQuotedLexicalToken() =>
+      (string("r'") & pattern("^'").star().flatten() & char("'")).map((v) {
         return v[1];
       });
 
-  Parser<String> multiLineDoubleQuotedStringLexicalToken() =>
-      (string('"""') & any().starLazy(string('"""')).flatten() & string('"""'))
-          .map((v) {
+  Parser<String> singleLineRawStringDoubleQuotedLexicalToken() =>
+      (string('r"') & pattern('^"').star().flatten() & char('"')).map((v) {
         return v[1];
       });
 

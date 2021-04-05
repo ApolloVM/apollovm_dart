@@ -1,3 +1,10 @@
+## 0.0.5
+
+- Grammars:
+  - Dart:
+    - Rae single line and raw multiline line strings.
+    - Improved parser tests for literal String.
+
 ## 0.0.4
 
 - Added type check:

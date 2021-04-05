@@ -136,7 +136,7 @@ void main() {
               var a = args[1];
               var b = args[2];
               var s1 = 'inline';
-              var s2 = 'string';
+              var s2 = r'string';
               var c = s1 + ' \t' +"\t " + s2 ;
               var sumAB = a + b ;
               var sumABC = a + b + c;
@@ -252,6 +252,141 @@ line3
     var s = a + r'\::' + l + b;
     print(title);
     print(s);
+  }
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+'''));
+    });
+
+    test('Basic main(List<String>) with raw strings', () async {
+      var vm = ApolloVM();
+
+      var codeUnit = CodeUnit(
+          'dart',
+          r'''
+            void main(List<String> args) {
+              var s1 = 'single \'quote\'';
+              var s2 = "double \"quote\"";
+              var r1 = r"single \'quote\'";
+              var r2 = r'double \"quote\"'; 
+              print(s1);
+              print(s2);
+              print(r1);
+              print(r2);
+            }
+          ''',
+          'test');
+
+      var loadOK = await vm.loadCodeUnit(codeUnit);
+
+      expect(loadOK, isTrue, reason: 'Error loading Dart code!');
+
+      var dartRunner = vm.createRunner('dart')!;
+
+      var output = [];
+      dartRunner.externalPrintFunction = (o) => output.add(o);
+
+      dartRunner.executeFunction('', 'main', []);
+
+      expect(
+          output,
+          equals([
+            r"single 'quote'",
+            r'double "quote"',
+            r"single \'quote\'",
+            r'double \"quote\"'
+          ]));
+
+      print('---------------------------------------');
+      print('OUTPUT:');
+      output.forEach((o) => print('>> $o'));
+
+      print('---------------------------------------');
+      // Regenerate code:
+      var codeStorageDart = vm.generateAllCodeIn('dart');
+      var allSourcesDart = codeStorageDart.writeAllSources().toString();
+      print(allSourcesDart);
+
+      expect(allSourcesDart, equals(r'''<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+  void main(List<String> args) {
+    var s1 = "single 'quote'";
+    var s2 = 'double "quote"';
+    var r1 = r"single \'quote\'";
+    var r2 = r'double \"quote\"';
+    print(s1);
+    print(s2);
+    print(r1);
+    print(r2);
+  }
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+'''));
+    });
+
+    test('Basic main(List<String>) with raw multiline strings', () async {
+      var vm = ApolloVM();
+
+      var codeUnit = CodeUnit(
+          'dart',
+          r"""
+            void main(List<String> args) {
+              var m1 = '''single \'quote\'''';
+              var rm1 = r'''double \"quote\"''';"""
+              r'''
+              var m2 = """double \"quote\"""";
+              var rm2 = r"""single \'quote\'""";
+              print(m1);
+              print(m2);
+              print(rm1);
+              print(rm2);
+            }
+          ''',
+          'test');
+
+      var loadOK = await vm.loadCodeUnit(codeUnit);
+
+      expect(loadOK, isTrue, reason: 'Error loading Dart code!');
+
+      var dartRunner = vm.createRunner('dart')!;
+
+      var output = [];
+      dartRunner.externalPrintFunction = (o) => output.add(o);
+
+      dartRunner.executeFunction('', 'main', []);
+
+      expect(
+          output,
+          equals([
+            "single \'quote\'",
+            'double \"quote\"',
+            r'double \"quote\"',
+            r"single \'quote\'",
+          ]));
+
+      print('---------------------------------------');
+      print('OUTPUT:');
+      output.forEach((o) => print('>> $o'));
+
+      print('---------------------------------------');
+      // Regenerate code:
+      var codeStorageDart = vm.generateAllCodeIn('dart');
+      var allSourcesDart = codeStorageDart.writeAllSources().toString();
+      print(allSourcesDart);
+
+      expect(allSourcesDart, equals(r'''<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+  void main(List<String> args) {
+    var m1 = "single 'quote'";
+    var rm1 = r'double \"quote\"';
+    var m2 = 'double "quote"';
+    var rm2 = r"single \'quote\'";
+    print(m1);
+    print(m2);
+    print(rm1);
+    print(rm2);
   }
 <<<< CODE_UNIT_END="/test" >>>>
 <<<< [SOURCES_END] >>>>
