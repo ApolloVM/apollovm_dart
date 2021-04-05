@@ -122,12 +122,49 @@ class ApolloCodeGeneratorDart extends ApolloCodeGenerator {
 
     s.write(indent);
 
-    var str = value.value;
+    var strRaw = value.value;
 
-    if (str.contains('"')) {
-      s.write("'$str'");
+    var containsSingleQuote = strRaw.contains("'");
+    var containsDoubleQuote = strRaw.contains('"');
+    var containsBackslash = strRaw.contains('\\');
+
+    var escapedBackslashCount = 0;
+
+    var strEscaped = strRaw
+        .replaceAllMapped('\\', (m) {
+          escapedBackslashCount++;
+          return r'\\';
+        })
+        .replaceAll('\t', r'\t')
+        .replaceAll('\r', r'\r')
+        .replaceAll('\n', r'\n')
+        .replaceAll('\b', r'\b');
+
+    var noEscapedChar =
+        (strEscaped.length - escapedBackslashCount) == strRaw.length;
+
+    if (noEscapedChar && containsBackslash) {
+      if (containsSingleQuote) {
+        if (!containsDoubleQuote) {
+          s.write('r"$strRaw"');
+          return s;
+        }
+      } else if (containsDoubleQuote) {
+        if (!containsSingleQuote) {
+          s.write("r'$strRaw'");
+          return s;
+        }
+      } else {
+        s.write("r'$strRaw'");
+        return s;
+      }
+    }
+
+    if (containsSingleQuote) {
+      if (containsDoubleQuote) strEscaped = strEscaped.replaceAll('"', r'\"');
+      s.write('"$strEscaped"');
     } else {
-      s.write('"$str"');
+      s.write("'$strEscaped'");
     }
 
     return s;

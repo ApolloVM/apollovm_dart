@@ -168,36 +168,83 @@ abstract class DartGrammarLexer extends GrammarDefinition {
   Parser exponentLexicalToken() =>
       pattern('eE') & pattern('+-').optional() & ref(digitLexicalToken).plus();
 
-  Parser stringLexicalToken() =>
-      char('@').optional() & ref(multiLineStringLexicalToken) |
-      ref(singleLineStringLexicalToken);
+  Parser<String> stringLexicalToken() =>
+      (ref(multiLineStringLexicalToken) | ref(singleLineStringLexicalToken))
+          .trim()
+          .cast<String>();
 
-  Parser multiLineStringLexicalToken() =>
-      string('"""') & any().starLazy(string('"""')) & string('"""') |
-      string("'''") & any().starLazy(string("'''")) & string("'''");
+  Parser<String> multiLineStringLexicalToken() =>
+      (multiLineSingleQuotedStringLexicalToken() |
+              multiLineDoubleQuotedStringLexicalToken())
+          .cast<String>();
 
-  Parser singleLineStringLexicalToken() =>
-      char('"') &
-          ref(stringContentDoubleQuotedLexicalToken).star() &
-          char('"') |
-      char("'") &
-          ref(stringContentSingleQuotedLexicalToken).star() &
-          char("'") |
-      string('@"') & pattern('^"\n\r').star() & char('"') |
-      string("@'") & pattern("^'\n\r").star() & char("'");
+  Parser<String> multiLineSingleQuotedStringLexicalToken() =>
+      (string("'''") & any().starLazy(string("'''")).flatten() & string("'''"))
+          .map((v) {
+        return v[1];
+      });
 
-  Parser stringContentDoubleQuotedLexicalToken() =>
-      pattern('^\\"\n\r') | char('\\') & pattern('\n\r');
+  Parser<String> multiLineDoubleQuotedStringLexicalToken() =>
+      (string('"""') & any().starLazy(string('"""')).flatten() & string('"""'))
+          .map((v) {
+        return v[1];
+      });
 
-  Parser stringContentSingleQuotedLexicalToken() =>
-      pattern("^\\'\n\r") | char('\\') & pattern('\n\r');
+  Parser<String> singleLineStringLexicalToken() =>
+      (singleLineStringSingleQuotedLexicalToken() |
+              singleLineStringDoubleQuotedLexicalToken())
+          .cast<String>();
 
-  Parser newlineLexicalToken() => pattern('\n\r');
+  Parser<String> singleLineStringSingleQuotedLexicalToken() => (char("'") &
+              ref(stringContentSingleQuotedLexicalToken).star() &
+              char("'"))
+          .map((v) {
+        var list = v[1] as List;
+        return list.length == 1 ? list[0] : list.join('');
+      });
 
-  Parser hashbangLexicalToken() =>
-      string('#!') &
-      pattern('^\n\r').star() &
-      ref(newlineLexicalToken).optional();
+  Parser<String> singleLineStringDoubleQuotedLexicalToken() => (char('"') &
+              ref(stringContentDoubleQuotedLexicalToken).star() &
+              char('"'))
+          .map((v) {
+        var list = v[1] as List;
+        return list.length == 1 ? list[0] : list.join('');
+      });
+
+  Parser<String> stringContentSingleQuotedLexicalToken() =>
+      (stringContentSingleQuotedLexicalTokenUnescaped() |
+              stringContentQuotedLexicalTokenEscaped())
+          .cast<String>();
+
+  Parser<String> stringContentDoubleQuotedLexicalToken() =>
+      (stringContentDoubleQuotedLexicalTokenUnescaped() |
+              stringContentQuotedLexicalTokenEscaped())
+          .cast<String>();
+
+  Parser<String> stringContentSingleQuotedLexicalTokenUnescaped() =>
+      pattern("^\\'\n\r").plus().flatten();
+
+  Parser<String> stringContentDoubleQuotedLexicalTokenUnescaped() =>
+      pattern('^\\"\n\r').plus().flatten();
+
+  Parser<String> stringContentQuotedLexicalTokenEscaped() => (char('\\') &
+              (char('n').map((_) => '\n') |
+                  char('r').map((_) => '\r') |
+                  char('"').map((_) => '"') |
+                  char("'").map((_) => "'") |
+                  char('t').map((_) => '\t') |
+                  char('b').map((_) => '\b') |
+                  char('\\').map((_) => '\\')))
+          .map((v) {
+        return v[1] as String;
+      });
+
+  Parser<String> newlineLexicalToken() => pattern('\n\r');
+
+  Parser<String> hashbangLexicalToken() => (string('#!') &
+          pattern('^\n\r').star() &
+          ref(newlineLexicalToken).optional())
+      .flatten();
 
   // -----------------------------------------------------------------
   // Whitespace and comments.

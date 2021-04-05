@@ -25,7 +25,7 @@ void main() {
 
       var loadOK = await vm.loadCodeUnit(codeUnit);
 
-      expect(loadOK, isTrue);
+      expect(loadOK, isTrue, reason: 'Error loading Dart code!');
 
       var dartRunner = vm.createRunner('dart')!;
 
@@ -86,7 +86,7 @@ void main() {
 
       var loadOK = await vm.loadCodeUnit(codeUnit);
 
-      expect(loadOK, isTrue);
+      expect(loadOK, isTrue, reason: 'Error loading Dart code!');
 
       var dartRunner = vm.createRunner('dart')!;
 
@@ -123,6 +123,139 @@ void main() {
               r'\s*print\(sumAB\)\s*;'
               r'\s*print\(sumABC\)\s*;'
               r'\s*\}\s*')));
+    });
+
+    test('Basic main(List<Object>) with inline String', () async {
+      var vm = ApolloVM();
+
+      var codeUnit = CodeUnit(
+          'dart',
+          r'''
+            void main(List<Object> args) {
+              var title = args[0];
+              var a = args[1];
+              var b = args[2];
+              var s1 = 'inline';
+              var s2 = 'string';
+              var c = s1 + ' \t' +"\t " + s2 ;
+              var sumAB = a + b ;
+              var sumABC = a + b + c;
+              print(title);
+              print(sumAB);
+              print(sumABC);
+            }
+          ''',
+          'test');
+
+      var loadOK = await vm.loadCodeUnit(codeUnit);
+
+      expect(loadOK, isTrue, reason: 'Error loading Dart code!');
+
+      var dartRunner = vm.createRunner('dart')!;
+
+      var output = [];
+      dartRunner.externalPrintFunction = (o) => output.add(o);
+
+      dartRunner.executeFunction('', 'main', [
+        ['Operations:', 10, 20]
+      ]);
+
+      print('---------------------------------------');
+      print('OUTPUT:');
+      output.forEach((o) => print('>> $o'));
+
+      expect(output, equals(['Operations:', 30, '1020inline \t\t string']));
+
+      print('---------------------------------------');
+      // Regenerate code:
+      var codeStorageDart = vm.generateAllCodeIn('dart');
+      var allSourcesDart = codeStorageDart.writeAllSources().toString();
+      print(allSourcesDart);
+
+      expect(allSourcesDart, equals(r'''<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+  void main(List<Object> args) {
+    var title = args[0];
+    var a = args[1];
+    var b = args[2];
+    var s1 = 'inline';
+    var s2 = 'string';
+    var c = s1 + ' \t' + '\t ' + s2;
+    var sumAB = a + b;
+    var sumABC = a + b + c;
+    print(title);
+    print(sumAB);
+    print(sumABC);
+  }
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+'''));
+    });
+
+    test('Basic main(List<Object>) with multiline String', () async {
+      var vm = ApolloVM();
+
+      var codeUnit = CodeUnit(
+          'dart',
+          '''
+            void main(List<Object> args) {
+              var title = args[0];
+              var a = args[1];
+              var b = args[2];
+              var l = \'''line1
+line2
+line3
+\''';
+              var s = a + '\\\\::' + l + b;
+              print(title);
+              print(s);
+            }
+          ''',
+          'test');
+
+      print(codeUnit.source);
+
+      var loadOK = await vm.loadCodeUnit(codeUnit);
+
+      expect(loadOK, isTrue, reason: 'Error loading Dart code!');
+
+      var dartRunner = vm.createRunner('dart')!;
+
+      var output = [];
+      dartRunner.externalPrintFunction = (o) => output.add(o);
+
+      dartRunner.executeFunction('', 'main', [
+        ['Multiline:', 10, 20]
+      ]);
+
+      print('---------------------------------------');
+      print('OUTPUT:');
+      output.forEach((o) => print('>> $o'));
+
+      expect(output, equals(['Multiline:', '10\\::line1\nline2\nline3\n20']));
+
+      print('---------------------------------------');
+      // Regenerate code:
+      var codeStorageDart = vm.generateAllCodeIn('dart');
+      var allSourcesDart = codeStorageDart.writeAllSources().toString();
+      print(allSourcesDart);
+
+      expect(allSourcesDart, equals(r'''<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+  void main(List<Object> args) {
+    var title = args[0];
+    var a = args[1];
+    var b = args[2];
+    var l = 'line1\nline2\nline3\n';
+    var s = a + r'\::' + l + b;
+    print(title);
+    print(s);
+  }
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+'''));
     });
   });
 }

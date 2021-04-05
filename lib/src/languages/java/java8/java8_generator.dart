@@ -139,7 +139,15 @@ class ApolloCodeGeneratorJava8 extends ApolloCodeGenerator {
     s.write(indent);
 
     var str = value.value;
-    s.write("'$str'");
+
+    str = str
+        .replaceAll('\t', r'\t')
+        .replaceAll('"', r'\"')
+        .replaceAll('\r', r'\r')
+        .replaceAll('\n', r'\n')
+        .replaceAll('\b', r'\b');
+
+    s.write('"$str"');
 
     return s;
   }

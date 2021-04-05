@@ -3,7 +3,12 @@
 - Added type check:
   - `ASTType.isInstance`.
   - Function call now checks type signature and type inheritance.
-  
+- Grammars:
+  - Dart:
+    - Single line and multiline line strings with escaped chars.
+  - Java8:
+    - Single line strings with escaped chars.
+
 ## 0.0.3
 
 - Removed `ASTCodeGenerator`, that is language specific now: `ApolloCodeGenerator`.

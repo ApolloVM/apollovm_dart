@@ -32,10 +32,7 @@ class Java8GrammarDefinition extends Java8GrammarLexer {
   Parser start() => ref(compilationUnit).trim().end();
 
   Parser<ASTCodeRoot> compilationUnit() =>
-      (ref(hashbangLexicalToken).optional() &
-              //ref(importDirective).star() &
-              ref(topLevelDefinition).star())
-          .map((v) {
+      (ref(importDirective).star() & ref(topLevelDefinition).star()).map((v) {
         var topDef = v[1];
 
         var classes = topDef as List;
@@ -46,6 +43,9 @@ class Java8GrammarDefinition extends Java8GrammarLexer {
 
         return root;
       });
+
+  Parser importDirective() =>
+      (string('import') & literalString() & char(';').trim());
 
   Parser topLevelDefinition() => (classDeclaration());
 

@@ -168,26 +168,37 @@ abstract class Java8GrammarLexer extends GrammarDefinition {
   Parser exponentLexicalToken() =>
       pattern('eE') & pattern('+-').optional() & ref(digitLexicalToken).plus();
 
-  Parser stringLexicalToken() => ref(singleLineStringLexicalToken);
+  Parser<String> stringLexicalToken() => singleLineStringLexicalToken().trim();
 
-  Parser singleLineStringLexicalToken() =>
-      char('"') &
-          ref(stringContentDoubleQuotedLexicalToken).star() &
-          char('"') |
-      char("'") & ref(stringContentSingleQuotedLexicalToken).star() & char("'");
+  Parser<String> singleLineStringLexicalToken() => (char('"') &
+              ref(stringContentDoubleQuotedLexicalToken).star() &
+              char('"'))
+          .map((v) {
+        var list = v[1] as List;
+        return list.length == 1 ? list[0] : list.join('');
+      });
 
-  Parser stringContentDoubleQuotedLexicalToken() =>
-      pattern('^\\"\n\r') | char('\\') & pattern('\n\r');
+  Parser<String> stringContentDoubleQuotedLexicalToken() =>
+      (stringContentDoubleQuotedLexicalTokenUnescaped() |
+              stringContentQuotedLexicalTokenEscaped())
+          .cast<String>();
 
-  Parser stringContentSingleQuotedLexicalToken() =>
-      pattern("^\\'\n\r") | char('\\') & pattern('\n\r');
+  Parser<String> stringContentDoubleQuotedLexicalTokenUnescaped() =>
+      pattern('^\\"\n\r').plus().flatten();
 
-  Parser newlineLexicalToken() => pattern('\n\r');
+  Parser<String> stringContentQuotedLexicalTokenEscaped() => (char('\\') &
+              (char('n').map((_) => '\n') |
+                  char('r').map((_) => '\r') |
+                  char('"').map((_) => '"') |
+                  char("'").map((_) => "'") |
+                  char('t').map((_) => '\t') |
+                  char('b').map((_) => '\b') |
+                  char('\\').map((_) => '\\')))
+          .map((v) {
+        return v[1] as String;
+      });
 
-  Parser hashbangLexicalToken() =>
-      string('#!') &
-      pattern('^\n\r').star() &
-      ref(newlineLexicalToken).optional();
+  Parser<String> newlineLexicalToken() => pattern('\n\r');
 
   // -----------------------------------------------------------------
   // Whitespace and comments.
