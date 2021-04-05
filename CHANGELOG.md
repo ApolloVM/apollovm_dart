@@ -1,8 +1,9 @@
 ## 0.0.4
 
 - Added type check:
+  - `ASTType.isInstance`.
   - Function call now checks type signature and type inheritance.
-
+  
 ## 0.0.3
 
 - Removed `ASTCodeGenerator`, that is language specific now: `ApolloCodeGenerator`.
