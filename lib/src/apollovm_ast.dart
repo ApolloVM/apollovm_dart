@@ -494,7 +494,7 @@ class ASTParametersDeclaration {
 
     if (exactType) {
       if (param.type != type) return false;
-    } else if (!param.type.isAssignableFrom(type)) {
+    } else if (!param.type.isInstance(type)) {
       return false;
     }
 
@@ -1151,7 +1151,9 @@ class ASTType<V> implements ASTNode {
 
   ASTType(this.name, {this.generics, this.superType, this.annotations});
 
-  bool isAssignableFrom(ASTType type) {
+  /// Will return true if [type] can be cast to [this] type.
+  /// Note: This is similar to Java `isInstance` and `isAssignableFrom`.
+  bool isInstance(ASTType type) {
     if (type == this) return true;
 
     if (type == ASTTypeGenericWildcard.INSTANCE) return true;
@@ -1160,7 +1162,7 @@ class ASTType<V> implements ASTNode {
       var typeSuperType = type.superType;
       if (typeSuperType == null) return false;
 
-      if (!typeSuperType.isAssignableFrom(this)) return false;
+      if (!typeSuperType.isInstance(this)) return false;
     }
 
     var generics = this.generics;
@@ -1182,7 +1184,7 @@ class ASTType<V> implements ASTNode {
       var g = generics[i];
       var tg = typeGenerics[i];
 
-      if (!g.isAssignableFrom(tg)) {
+      if (!g.isInstance(tg)) {
         return false;
       }
     }
@@ -1238,7 +1240,7 @@ abstract class ASTTypePrimitive<T> extends ASTType<T> {
   ASTTypePrimitive(String name) : super(name);
 
   @override
-  bool isAssignableFrom(ASTType type);
+  bool isInstance(ASTType type);
 }
 
 abstract class ASTTypeNum<T extends num> extends ASTTypePrimitive<T> {
@@ -1251,7 +1253,7 @@ class ASTTypeInt extends ASTTypeNum<int> {
   ASTTypeInt() : super('int');
 
   @override
-  bool isAssignableFrom(ASTType type) {
+  bool isInstance(ASTType type) {
     if (type == this) return true;
     return false;
   }
@@ -1288,7 +1290,7 @@ class ASTTypeDouble extends ASTType<double> {
   ASTTypeDouble() : super('double');
 
   @override
-  bool isAssignableFrom(ASTType type) {
+  bool isInstance(ASTType type) {
     if (type == this) return true;
     return false;
   }
@@ -1325,7 +1327,7 @@ class ASTTypeString extends ASTTypePrimitive<String> {
   ASTTypeString() : super('String');
 
   @override
-  bool isAssignableFrom(ASTType type) {
+  bool isInstance(ASTType type) {
     if (type == this) return true;
     return false;
   }
@@ -1362,7 +1364,7 @@ class ASTTypeObject extends ASTType<Object> {
   ASTTypeObject() : super('Object');
 
   @override
-  bool isAssignableFrom(ASTType type) => true;
+  bool isInstance(ASTType type) => true;
 
   @override
   ASTValueObject? toValue(VMContext context, Object? v) {
@@ -1395,7 +1397,7 @@ class ASTTypeVar extends ASTType<dynamic> {
   ASTTypeVar() : super('var');
 
   @override
-  bool isAssignableFrom(ASTType type) => true;
+  bool isInstance(ASTType type) => true;
 
   @override
   ASTValue<dynamic> toValue(VMContext context, Object? v) {
@@ -1428,7 +1430,7 @@ class ASTTypeDynamic extends ASTType<dynamic> {
   ASTTypeDynamic() : super('dynamic');
 
   @override
-  bool isAssignableFrom(ASTType type) => true;
+  bool isInstance(ASTType type) => true;
 
   @override
   ASTValue<dynamic> toValue(VMContext context, Object? v) {
@@ -1461,7 +1463,7 @@ class ASTTypeNull extends ASTType<Null> {
   ASTTypeNull() : super('Null');
 
   @override
-  bool isAssignableFrom(ASTType type) {
+  bool isInstance(ASTType type) {
     if (type == this) return true;
     return false;
   }
@@ -1492,7 +1494,7 @@ class ASTTypeVoid extends ASTType<void> {
   ASTTypeVoid() : super('void');
 
   @override
-  bool isAssignableFrom(ASTType type) {
+  bool isInstance(ASTType type) {
     if (type == this) return true;
     return false;
   }
