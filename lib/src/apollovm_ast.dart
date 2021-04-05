@@ -233,8 +233,10 @@ class ASTFunctionSignature implements ASTNode {
       return ASTFunctionSignature(null, null);
     }
 
-    var pos = toASTTypeList(positionalParameters);
-    var named = toASTTypeList(namedParameters);
+    var pos = positionalParameters != null
+        ? toASTTypeList(positionalParameters)
+        : null;
+    var named = namedParameters != null ? toASTTypeList(namedParameters) : null;
 
     return ASTFunctionSignature(pos, named);
   }
@@ -250,7 +252,8 @@ class ASTFunctionSignature implements ASTNode {
     }
 
     if (o is List) {
-      return o.expand((e) => toASTTypeList(e)).toList();
+      var typesList = o.map((e) => ASTType.from(e)).toList();
+      return typesList;
     }
 
     var t = ASTType.from(o);
@@ -328,7 +331,12 @@ class ASTCodeFunctionSetSingle extends ASTCodeFunctionSet {
   @override
   ASTFunctionDeclaration get(
       ASTFunctionSignature parametersSignature, bool exactTypes) {
-    return f;
+    if (f.matchesParametersTypes(parametersSignature, exactTypes)) {
+      return f;
+    }
+
+    throw StateError(
+        'Function parameters signature not compatible: $parametersSignature != ${f.parameters}');
   }
 
   @override
@@ -437,42 +445,65 @@ class ASTParametersDeclaration {
     return null;
   }
 
-  bool matchesParametersTypes(ASTFunctionSignature types, bool exactTypes) {
+  bool matchesParametersTypes(
+      ASTFunctionSignature parametersSignature, bool exactTypes) {
     var parametersSize = size;
-    var typesSize = types.size;
+    var paramsSignSize = parametersSignature.size;
 
-    if (typesSize == 0 && parametersSize == 0) return false;
-    if (typesSize > parametersSize) return false;
+    if (paramsSignSize == 0 && parametersSize == 0) return false;
+    if (paramsSignSize > parametersSize) return false;
 
-    var positionalTypes = types.positionalTypes;
+    var paramsSignPositionalTypes = parametersSignature.positionalTypes;
 
     var i = 0;
-    if (positionalTypes != null) {
-      var positionalSize = positionalTypes.length;
+    if (paramsSignPositionalTypes != null) {
+      var positionalSize = paramsSignPositionalTypes.length;
 
       for (; i < positionalSize; ++i) {
-        var t = positionalTypes[i];
-        if (t == null) continue;
+        var signParamType = paramsSignPositionalTypes[i];
+        if (signParamType == null) continue;
 
-        var p = getParameterByIndex(i);
-        if (p != null && p.type != t) {
+        var param = getParameterByIndex(i);
+
+        if (!parameterAcceptsType(param, signParamType, exactTypes)) {
           return false;
         }
       }
     }
 
-    var namedTypes = types.namedTypes;
+    var namedTypes = parametersSignature.namedTypes;
     if (namedTypes != null) {
-      for (var t in namedTypes) {
-        if (t == null) continue;
-        var p = getParameterByName(t.name);
-        if (p != null && p.type != t) {
+      for (var signParamType in namedTypes) {
+        if (signParamType == null) continue;
+        var param = getParameterByName(signParamType.name);
+
+        if (!parameterAcceptsType(param, signParamType, exactTypes)) {
           return false;
         }
       }
     }
 
     return true;
+  }
+
+  static bool parameterAcceptsType(
+      ASTFunctionParameterDeclaration? param, ASTType? type, bool exactType) {
+    if (param == null || type == null) {
+      return false;
+    }
+
+    if (exactType) {
+      if (param.type != type) return false;
+    } else if (!param.type.isAssignableFrom(type)) {
+      return false;
+    }
+
+    return true;
+  }
+
+  @override
+  String toString() {
+    return '{positionalParameters: $positionalParameters, optionalParameters: $optionalParameters, namedParameters: $namedParameters}';
   }
 }
 
@@ -1051,7 +1082,6 @@ class ASTType<V> implements ASTNode {
     if (o is String) return ASTTypeString.INSTANCE;
     if (o is int) return ASTTypeInt.INSTANCE;
     if (o is double) return ASTTypeDouble.INSTANCE;
-    if (o is Object) return ASTTypeObject.INSTANCE;
 
     if (o is List) {
       if (o is List<String>) return ASTTypeArray(ASTTypeString.INSTANCE);
@@ -1106,6 +1136,8 @@ class ASTType<V> implements ASTNode {
       return ASTTypeArray(t);
     }
 
+    if (o.runtimeType == Object) return ASTTypeObject.INSTANCE;
+
     return ASTTypeDynamic.INSTANCE;
   }
 
@@ -1113,9 +1145,50 @@ class ASTType<V> implements ASTNode {
 
   List<ASTType>? generics;
 
+  ASTType? superType;
+
   List<ASTAnnotation>? annotations;
 
-  ASTType(this.name, [this.generics, this.annotations]);
+  ASTType(this.name, {this.generics, this.superType, this.annotations});
+
+  bool isAssignableFrom(ASTType type) {
+    if (type == this) return true;
+
+    if (type == ASTTypeGenericWildcard.INSTANCE) return true;
+
+    if (type.name != type.name) {
+      var typeSuperType = type.superType;
+      if (typeSuperType == null) return false;
+
+      if (!typeSuperType.isAssignableFrom(this)) return false;
+    }
+
+    var generics = this.generics;
+    var typeGenerics = type.generics;
+
+    if (generics == null || generics.isEmpty) {
+      return typeGenerics == null || typeGenerics.isEmpty;
+    }
+
+    if (typeGenerics == null || typeGenerics.isEmpty) {
+      return false;
+    }
+
+    if (generics.length != typeGenerics.length) return false;
+
+    var genericsLength = generics.length;
+
+    for (var i = 0; i < genericsLength; ++i) {
+      var g = generics[i];
+      var tg = typeGenerics[i];
+
+      if (!g.isAssignableFrom(tg)) {
+        return false;
+      }
+    }
+
+    return true;
+  }
 
   ASTValue<V>? toValue(VMContext context, Object? v) {
     if (v is ASTValue<V>) return v;
@@ -1129,20 +1202,59 @@ class ASTType<V> implements ASTNode {
   }
 
   @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ASTType &&
+          runtimeType == other.runtimeType &&
+          name == other.name &&
+          generics == other.generics &&
+          superType == other.superType;
+
+  @override
+  int get hashCode {
+    return name.hashCode ^
+        (superType?.hashCode ?? 0) ^
+        (generics?.hashCode ?? 0);
+  }
+
+  @override
   String toString() {
     return generics == null ? name : '$name<${generics!.join(',')}>';
   }
 }
 
 class ASTTypeInterface<V> extends ASTType<V> {
-  ASTTypeInterface(String name, [List<ASTType>? generics])
-      : super(name, generics);
+  ASTTypeInterface(String name,
+      {List<ASTType>? generics,
+      ASTType? superInterface,
+      List<ASTAnnotation>? annotations})
+      : super(name,
+            generics: generics,
+            superType: superInterface,
+            annotations: annotations);
 }
 
-class ASTTypeInt extends ASTType<int> {
+abstract class ASTTypePrimitive<T> extends ASTType<T> {
+  ASTTypePrimitive(String name) : super(name);
+
+  @override
+  bool isAssignableFrom(ASTType type);
+}
+
+abstract class ASTTypeNum<T extends num> extends ASTTypePrimitive<T> {
+  ASTTypeNum(String name) : super(name);
+}
+
+class ASTTypeInt extends ASTTypeNum<int> {
   static final ASTTypeInt INSTANCE = ASTTypeInt();
 
   ASTTypeInt() : super('int');
+
+  @override
+  bool isAssignableFrom(ASTType type) {
+    if (type == this) return true;
+    return false;
+  }
 
   @override
   ASTValueInt? toValue(VMContext context, Object? v) {
@@ -1155,12 +1267,31 @@ class ASTTypeInt extends ASTType<int> {
     var n = parseInt(v);
     return n != null ? ASTValueInt(n) : null;
   }
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      super == other && other is ASTTypeInt && runtimeType == other.runtimeType;
+
+  @override
+  int get hashCode => name.hashCode;
+
+  @override
+  String toString() {
+    return 'int';
+  }
 }
 
 class ASTTypeDouble extends ASTType<double> {
   static final ASTTypeDouble INSTANCE = ASTTypeDouble();
 
   ASTTypeDouble() : super('double');
+
+  @override
+  bool isAssignableFrom(ASTType type) {
+    if (type == this) return true;
+    return false;
+  }
 
   @override
   ASTValueDouble? toValue(VMContext context, Object? v) {
@@ -1173,12 +1304,31 @@ class ASTTypeDouble extends ASTType<double> {
     var n = parseDouble(v);
     return n != null ? ASTValueDouble(n) : null;
   }
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      super == other && other is ASTTypeInt && runtimeType == other.runtimeType;
+
+  @override
+  int get hashCode => name.hashCode;
+
+  @override
+  String toString() {
+    return 'double';
+  }
 }
 
-class ASTTypeString extends ASTType<String> {
+class ASTTypeString extends ASTTypePrimitive<String> {
   static final ASTTypeString INSTANCE = ASTTypeString();
 
   ASTTypeString() : super('String');
+
+  @override
+  bool isAssignableFrom(ASTType type) {
+    if (type == this) return true;
+    return false;
+  }
 
   @override
   ASTValueString? toValue(VMContext context, Object? v) {
@@ -1191,12 +1341,28 @@ class ASTTypeString extends ASTType<String> {
     var n = parseString(v);
     return n != null ? ASTValueString(n) : null;
   }
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      super == other && other is ASTTypeInt && runtimeType == other.runtimeType;
+
+  @override
+  int get hashCode => name.hashCode;
+
+  @override
+  String toString() {
+    return 'String';
+  }
 }
 
 class ASTTypeObject extends ASTType<Object> {
   static final ASTTypeObject INSTANCE = ASTTypeObject();
 
   ASTTypeObject() : super('Object');
+
+  @override
+  bool isAssignableFrom(ASTType type) => true;
 
   @override
   ASTValueObject? toValue(VMContext context, Object? v) {
@@ -1208,12 +1374,28 @@ class ASTTypeObject extends ASTType<Object> {
 
     return v != null ? ASTValueObject(v) : null;
   }
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      super == other && other is ASTTypeInt && runtimeType == other.runtimeType;
+
+  @override
+  int get hashCode => name.hashCode;
+
+  @override
+  String toString() {
+    return 'Object';
+  }
 }
 
 class ASTTypeVar extends ASTType<dynamic> {
   static final ASTTypeVar INSTANCE = ASTTypeVar();
 
   ASTTypeVar() : super('var');
+
+  @override
+  bool isAssignableFrom(ASTType type) => true;
 
   @override
   ASTValue<dynamic> toValue(VMContext context, Object? v) {
@@ -1225,12 +1407,28 @@ class ASTTypeVar extends ASTType<dynamic> {
 
     return ASTValueStatic<dynamic>(this, v);
   }
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      super == other && other is ASTTypeInt && runtimeType == other.runtimeType;
+
+  @override
+  int get hashCode => name.hashCode;
+
+  @override
+  String toString() {
+    return 'var';
+  }
 }
 
 class ASTTypeDynamic extends ASTType<dynamic> {
   static final ASTTypeDynamic INSTANCE = ASTTypeDynamic();
 
   ASTTypeDynamic() : super('dynamic');
+
+  @override
+  bool isAssignableFrom(ASTType type) => true;
 
   @override
   ASTValue<dynamic> toValue(VMContext context, Object? v) {
@@ -1242,6 +1440,19 @@ class ASTTypeDynamic extends ASTType<dynamic> {
 
     return ASTValue.from(this, v);
   }
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      super == other && other is ASTTypeInt && runtimeType == other.runtimeType;
+
+  @override
+  int get hashCode => name.hashCode;
+
+  @override
+  String toString() {
+    return 'dynamic';
+  }
 }
 
 class ASTTypeNull extends ASTType<Null> {
@@ -1250,9 +1461,28 @@ class ASTTypeNull extends ASTType<Null> {
   ASTTypeNull() : super('Null');
 
   @override
+  bool isAssignableFrom(ASTType type) {
+    if (type == this) return true;
+    return false;
+  }
+
+  @override
   ASTValueNull toValue(VMContext context, Object? v) {
     if (v is ASTValueNull) return v;
     return ASTValueNull.INSTANCE;
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      super == other && other is ASTTypeInt && runtimeType == other.runtimeType;
+
+  @override
+  int get hashCode => name.hashCode;
+
+  @override
+  String toString() {
+    return 'Null';
   }
 }
 
@@ -1262,8 +1492,27 @@ class ASTTypeVoid extends ASTType<void> {
   ASTTypeVoid() : super('void');
 
   @override
+  bool isAssignableFrom(ASTType type) {
+    if (type == this) return true;
+    return false;
+  }
+
+  @override
   ASTValueVoid toValue(VMContext context, Object? v) {
     return ASTValueVoid.INSTANCE;
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      super == other && other is ASTTypeInt && runtimeType == other.runtimeType;
+
+  @override
+  int get hashCode => name.hashCode;
+
+  @override
+  String toString() {
+    return 'void';
   }
 }
 
@@ -1520,6 +1769,11 @@ class ASTParameterDeclaration<T> implements ASTNode {
 
   ASTValue<T>? toValue(VMContext context, Object? v) =>
       type.toValue(context, v);
+
+  @override
+  String toString() {
+    return '$type $name';
+  }
 }
 
 class ASTFunctionParameterDeclaration<T> extends ASTParameterDeclaration<T> {

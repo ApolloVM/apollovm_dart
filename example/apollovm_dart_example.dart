@@ -7,7 +7,7 @@ void main() async {
       'dart',
       r'''
       class Foo {
-          void main(List<String> args) {
+          void main(List<Object> args) {
             var title = args[0];
             var a = args[1];
             var b = args[2];

@@ -9,7 +9,7 @@ void main() {
       var codeUnit = CodeUnit(
           'dart',
           r'''
-            void main(List<String> args) {
+            void main(List<Object> args) {
               var title = args[0];
               var a = args[1];
               var b = args[2];
@@ -51,7 +51,7 @@ void main() {
       expect(
           allSourcesDart,
           matches(RegExp(r'\s*'
-              r'void\s+main\(List<String> args\)\s*\{'
+              r'void\s+main\(List<Object> args\)\s*\{'
               r'\s*var\s+title\s+=\s+args\[0\]\s*;'
               r'\s*var\s+a\s+=\s+args\[1\]\s*;'
               r'\s*var\s+b\s+=\s+args\[2\]\s*;'

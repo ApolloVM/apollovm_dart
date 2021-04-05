@@ -10,7 +10,7 @@ void main() {
           'java8',
           r'''
             class Foo {
-               static public void main(String[] args) {
+               static public void main(Object[] args) {
                  var title = args[0];
                  var a = args[1];
                  var b = args[2];
@@ -60,7 +60,7 @@ void main() {
           allSourcesDart,
           matches(RegExp(r'\s*'
               r'class\s+Foo\s*\{'
-              r'\s*void\s+main\(List<String> args\)\s*\{'
+              r'\s*void\s+main\(List<Object> args\)\s*\{'
               r'\s*var\s+title\s+=\s+args\[0\]\s*;'
               r'\s*var\s+a\s+=\s+args\[1\]\s*;'
               r'\s*var\s+b\s+=\s+args\[2\]\s*;'
