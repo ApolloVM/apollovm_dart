@@ -392,5 +392,82 @@ line3
 <<<< [SOURCES_END] >>>>
 '''));
     });
+
+    test('Basic main(List<String>) with string variable', () async {
+      var vm = ApolloVM();
+
+      var codeUnit = CodeUnit(
+          'dart',
+          r"""
+            class Foo {
+              void main(List<String> args) {
+                var a = 123 ;
+                var b = 123 * 2 ;
+                var sv1 = 'a: <$a>;\t\$b->a*2: $b ;\ta*3: ${ a * 3 }!' ;
+                print(sv1);
+              }
+            }
+          """,
+          'test');
+
+      var loadOK = await vm.loadCodeUnit(codeUnit);
+
+      expect(loadOK, isTrue, reason: 'Error loading Dart code!');
+
+      var dartRunner = vm.createRunner('dart')!;
+
+      var output = [];
+      dartRunner.externalPrintFunction = (o) => output.add(o);
+
+      dartRunner.executeClassMethod('', 'Foo', 'main', []);
+
+      expect(output, equals(['a: <123>;\t\$b->a*2: 246 ;\ta*3: 369!']));
+
+      print('---------------------------------------');
+      print('OUTPUT:');
+      output.forEach((o) => print('>> $o'));
+
+      print('---------------------------------------');
+      // Regenerate code:
+      var codeStorageDart = vm.generateAllCodeIn('dart');
+      var allSourcesDart = codeStorageDart.writeAllSources().toString();
+      print(allSourcesDart);
+
+      expect(allSourcesDart, equals(r'''<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+class Foo {
+  void main(List<String> args) {
+    var a = 123;
+    var b = 123 * 2;
+    var sv1 = 'a: <$a>;\t\$b->a*2: $b ;\ta*3: ${a * 3}!';
+    print(sv1);
+  }
+}
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+'''));
+
+      print('---------------------------------------');
+      // Regenerate code:
+      var codeStorageJava8 = vm.generateAllCodeIn('java8');
+      var allSourcesJava8 = codeStorageJava8.writeAllSources().toString();
+      print(allSourcesJava8);
+
+      expect(allSourcesJava8, equals(r'''<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+class Foo {
+  void main(String[] args) {
+    var a = 123;
+    var b = 123 * 2;
+    var sv1 = "a: <" + String.valueOf( a ) + ">;\t$b->a*2: " + String.valueOf( b ) + " ;\ta*3: " + String.valueOf( a * 3 ) + "!";
+    print(sv1);
+  }
+}
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+'''));
+    });
   });
 }

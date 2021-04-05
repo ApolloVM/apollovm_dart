@@ -1,3 +1,4 @@
+import 'package:apollovm/apollovm.dart';
 import 'package:petitparser/petitparser.dart';
 
 abstract class DartGrammarLexer extends GrammarDefinition {
@@ -164,91 +165,132 @@ abstract class DartGrammarLexer extends GrammarDefinition {
   Parser exponentLexicalToken() =>
       pattern('eE') & pattern('+-').optional() & ref(digitLexicalToken).plus();
 
-  Parser<String> stringLexicalToken() => (multiLineRawStringLexicalToken() |
-          ref(singleLineRawStringLexicalToken) |
-          ref(multiLineStringLexicalToken) |
-          ref(singleLineStringLexicalToken))
-      .trim()
-      .cast<String>();
+  Parser<ParsedString> stringLexicalToken() =>
+      (multiLineRawStringLexicalToken() |
+              ref(singleLineRawStringLexicalToken) |
+              ref(multiLineStringLexicalToken) |
+              ref(singleLineStringLexicalToken))
+          .trim()
+          .cast<ParsedString>();
 
-  Parser<String> multiLineRawStringLexicalToken() =>
+  Parser<ParsedString> multiLineRawStringLexicalToken() =>
       (multiLineSingleQuotedRawStringLexicalToken() |
               multiLineDoubleQuotedRawStringLexicalToken())
-          .cast<String>();
+          .cast<ParsedString>();
 
-  Parser<String> multiLineSingleQuotedRawStringLexicalToken() =>
+  Parser<ParsedString> multiLineSingleQuotedRawStringLexicalToken() =>
       (string("r'''") & any().starLazy(string("'''")) & string("'''")).map((v) {
         var l = v[1] as List;
-        return l.length == 1 ? l[0] : l.join('');
+        var s = l.length == 1 ? l[0] : l.join('');
+        return ParsedString.literal(s);
       });
 
-  Parser<String> multiLineDoubleQuotedRawStringLexicalToken() =>
+  Parser<ParsedString> multiLineDoubleQuotedRawStringLexicalToken() =>
       (string('r"""') & any().starLazy(string('"""')) & string('"""')).map((v) {
         var l = v[1] as List;
-        return l.length == 1 ? l[0] : l.join('');
+        var s = l.length == 1 ? l[0] : l.join('');
+        return ParsedString.literal(s);
       });
 
-  Parser<String> multiLineStringLexicalToken() =>
+  Parser<ParsedString> multiLineStringLexicalToken() =>
       (multiLineSingleQuotedStringLexicalToken() |
               multiLineDoubleQuotedStringLexicalToken())
-          .cast<String>();
+          .cast<ParsedString>();
 
-  Parser<String> multiLineSingleQuotedStringLexicalToken() => (string("'''") &
+  Parser<ParsedString> multiLineSingleQuotedStringLexicalToken() =>
+      (string("'''") &
               (string(r"\'").map((_) => "'") |
                       stringContentQuotedLexicalTokenEscaped() |
                       any())
                   .starLazy(string("'''")) &
               string("'''"))
           .map((v) {
-        var l = v[1] as List;
-        return l.length == 1 ? l[0] : l.join('');
+        var list = v[1] as List;
+        var list2 = list
+            .map((e) => e is ParsedString ? e : ParsedString.literal(e))
+            .toList();
+        return list2.length == 1 ? list2[0] : ParsedString.list(list2);
       });
 
-  Parser<String> multiLineDoubleQuotedStringLexicalToken() => (string('"""') &
+  Parser<ParsedString> multiLineDoubleQuotedStringLexicalToken() =>
+      (string('"""') &
               (string(r'\"').map((_) => '"') |
                       stringContentQuotedLexicalTokenEscaped() |
                       any())
                   .starLazy(string('"""')) &
               string('"""'))
           .map((v) {
-        var l = v[1] as List;
-        return l.length == 1 ? l[0] : l.join('');
+        var list = v[1] as List;
+        var list2 = list
+            .map((e) => e is ParsedString ? e : ParsedString.literal(e))
+            .toList();
+        return list2.length == 1 ? list2[0] : ParsedString.list(list2);
       });
 
-  Parser<String> singleLineRawStringLexicalToken() =>
+  Parser<ParsedString> singleLineRawStringLexicalToken() =>
       (singleLineRawStringSingleQuotedLexicalToken() |
               singleLineRawStringDoubleQuotedLexicalToken())
-          .cast<String>();
+          .cast<ParsedString>();
 
-  Parser<String> singleLineRawStringSingleQuotedLexicalToken() =>
+  Parser<ParsedString> singleLineRawStringSingleQuotedLexicalToken() =>
       (string("r'") & pattern("^'").star().flatten() & char("'")).map((v) {
-        return v[1];
+        var s = v[1];
+        return ParsedString.literal(s);
       });
 
-  Parser<String> singleLineRawStringDoubleQuotedLexicalToken() =>
+  Parser<ParsedString> singleLineRawStringDoubleQuotedLexicalToken() =>
       (string('r"') & pattern('^"').star().flatten() & char('"')).map((v) {
-        return v[1];
+        var s = v[1];
+        return ParsedString.literal(s);
       });
 
-  Parser<String> singleLineStringLexicalToken() =>
+  Parser<ParsedString> singleLineStringLexicalToken() =>
       (singleLineStringSingleQuotedLexicalToken() |
               singleLineStringDoubleQuotedLexicalToken())
-          .cast<String>();
+          .cast<ParsedString>();
 
-  Parser<String> singleLineStringSingleQuotedLexicalToken() => (char("'") &
-              ref(stringContentSingleQuotedLexicalToken).star() &
+  Parser<ParsedString> singleLineStringSingleQuotedLexicalToken() =>
+      (char("'") &
+              (ref(stringVariable) |
+                      ref(stringExpression) |
+                      ref(stringContentSingleQuotedLexicalToken))
+                  .star() &
               char("'"))
           .map((v) {
         var list = v[1] as List;
-        return list.length == 1 ? list[0] : list.join('');
+        var list2 = list
+            .map((e) => e is ParsedString ? e : ParsedString.literal(e))
+            .toList();
+        return list2.length == 1 ? list2[0] : ParsedString.list(list2);
       });
 
-  Parser<String> singleLineStringDoubleQuotedLexicalToken() => (char('"') &
-              ref(stringContentDoubleQuotedLexicalToken).star() &
+  Parser<ParsedString> singleLineStringDoubleQuotedLexicalToken() =>
+      (char('"') &
+              (ref(stringVariable) |
+                      ref(stringExpression) |
+                      ref(stringContentDoubleQuotedLexicalToken))
+                  .star() &
               char('"'))
           .map((v) {
         var list = v[1] as List;
-        return list.length == 1 ? list[0] : list.join('');
+        var list2 = list
+            .map((e) => e is ParsedString ? e : ParsedString.literal(e))
+            .toList();
+        return list2.length == 1 ? list2[0] : ParsedString.list(list2);
+      });
+
+  Parser<ParsedString> stringVariable() =>
+      (char(r'$') & ((char('_') | letter()) & word().star()).flatten())
+          .map((v) {
+        return ParsedString.variable(v[1]);
+      });
+
+  Parser<ParsedString> parseExpressionInString();
+
+  Parser<ParsedString> stringExpression() =>
+      (string(r'${') & (ref(() => parseExpressionInString())) & char('}'))
+          .map((v) {
+        return v[1];
       });
 
   Parser<String> stringContentSingleQuotedLexicalToken() =>
@@ -262,16 +304,17 @@ abstract class DartGrammarLexer extends GrammarDefinition {
           .cast<String>();
 
   Parser<String> stringContentSingleQuotedLexicalTokenUnescaped() =>
-      pattern("^\\'\n\r").plus().flatten();
+      pattern("^\\'\n\r\$").plus().flatten();
 
   Parser<String> stringContentDoubleQuotedLexicalTokenUnescaped() =>
-      pattern('^\\"\n\r').plus().flatten();
+      pattern('^\\"\n\r\$').plus().flatten();
 
   Parser<String> stringContentQuotedLexicalTokenEscaped() => (char('\\') &
               (char('n').map((_) => '\n') |
                   char('r').map((_) => '\r') |
                   char('"').map((_) => '"') |
                   char("'").map((_) => "'") |
+                  char(r'$').map((_) => r'$') |
                   char('t').map((_) => '\t') |
                   char('b').map((_) => '\b') |
                   char('\\').map((_) => '\\')))
@@ -305,4 +348,66 @@ abstract class DartGrammarLexer extends GrammarDefinition {
       string('/*') &
       (ref(multiLineComment) | string('*/').neg()).star() &
       string('*/');
+}
+
+class ParsedString {
+  String? literalString;
+
+  String? variableName;
+
+  ASTExpression? expression;
+
+  List<ParsedString>? list;
+
+  ParsedString.literal(this.literalString);
+
+  ParsedString.variable(this.variableName);
+
+  ParsedString.expression(this.expression);
+
+  ParsedString.list(this.list);
+
+  bool get isLiteral {
+    if (literalString != null) return true;
+
+    if (variableName != null) return false;
+
+    if (list != null) {
+      return list!.every((e) => e.isLiteral);
+    }
+
+    return false;
+  }
+
+  String asLiteral() {
+    if (literalString != null) return literalString!;
+    if (list != null) {
+      return list!.map((e) => e.asLiteral()).join('');
+    }
+    throw StateError('Not literal!');
+  }
+
+  ASTValue<String> asValue() {
+    if (literalString != null) {
+      return ASTValueString(literalString!);
+    } else if (variableName != null) {
+      var variable = ASTScopeVariable(variableName!);
+      return ASTValueStringVariable(variable);
+    } else if (list != null) {
+      var list = this.list!;
+      if (list.length == 1) {
+        return list[0].asValue();
+      } else if (list.every((e) => e.isLiteral)) {
+        var s = list.map((e) => e.asLiteral()).join();
+        return ASTValueString(s);
+      } else {
+        var values = list.map((e) => e.asValue()).toList();
+        return ASTValueStringConcatenation(values);
+      }
+    } else if (expression != null) {
+      return ASTValueStringExpresion(expression!);
+    }
+
+    throw StateError("Can't resolve value!");
+  }
 }

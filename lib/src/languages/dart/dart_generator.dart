@@ -138,6 +138,7 @@ class ApolloCodeGeneratorDart extends ApolloCodeGenerator {
         .replaceAll('\t', r'\t')
         .replaceAll('\r', r'\r')
         .replaceAll('\n', r'\n')
+        .replaceAll('\$', r'\$')
         .replaceAll('\b', r'\b');
 
     var noEscapedChar =
@@ -165,6 +166,124 @@ class ApolloCodeGeneratorDart extends ApolloCodeGenerator {
       s.write('"$strEscaped"');
     } else {
       s.write("'$strEscaped'");
+    }
+
+    return s;
+  }
+
+  @override
+  StringBuffer generateASTValueStringConcatenation(
+      ASTValueStringConcatenation value,
+      [String indent = '',
+      StringBuffer? s]) {
+    var list = <dynamic>[];
+
+    for (var v in value.values) {
+      if (v is ASTValueStringVariable) {
+        var s2 = generateASTValueStringVariable(v, '');
+        list.add(s2);
+      } else if (v is ASTValueStringExpresion) {
+        var s2 = generateASTValueStringExpresion(v, '');
+        list.add(s2.toString());
+      } else if (v is ASTValueStringConcatenation) {
+        var s2 = generateASTValueStringConcatenation(v, '');
+        list.add(s2.toString());
+      } else if (v is ASTValueString) {
+        var s2 = generateASTValueString(v, '');
+        list.add(s2.toString());
+      }
+    }
+
+    var generatedStrings = list.whereType<String>().toList();
+
+    s ??= StringBuffer();
+
+    if (generatedStrings.every((s) => s.startsWith("'''")) ||
+        generatedStrings.every((s) => s.startsWith('"""'))) {
+      // will generate concatenation at end...
+    } else if (generatedStrings.every((s) => s.startsWith("'"))) {
+      s.write("'");
+
+      for (var e in list) {
+        if (e is String) {
+          s.write(e.substring(1, e.length - 1));
+        } else {
+          var s2 = e.toString();
+          s.write(s2.substring(1, s2.length - 1));
+        }
+      }
+
+      s.write("'");
+
+      return s;
+    } else if (generatedStrings.every((s) => s.startsWith('"'))) {
+      s.write('"');
+
+      for (var e in list) {
+        if (e is String) {
+          s.write(e.substring(1, s.length - 1));
+        } else {
+          var s2 = e.toString();
+          s.write(s2.substring(1, s2.length - 1));
+        }
+      }
+
+      s.write('"');
+
+      return s;
+    }
+
+    for (var i = 0; i < list.length; ++i) {
+      var e = list[i];
+
+      if (e is String) {
+        var multiline = e.startsWith("'''") ||
+            e.startsWith('"""') ||
+            e.startsWith("r'''") ||
+            e.startsWith('r"""');
+        if (multiline && i > 0) {
+          s.write('\n');
+        }
+        s.write(e);
+      } else {
+        var s2 = e.toString();
+        s.write(s2);
+      }
+    }
+
+    return s;
+  }
+
+  @override
+  StringBuffer generateASTValueStringVariable(ASTValueStringVariable value,
+      [String indent = '', StringBuffer? s]) {
+    s ??= StringBuffer();
+    s.write("'");
+    s.write(r'$');
+    s.write(value.variable.name);
+    s.write("'");
+    return s;
+  }
+
+  @override
+  StringBuffer generateASTValueStringExpresion(ASTValueStringExpresion value,
+      [String indent = '', StringBuffer? s]) {
+    s ??= StringBuffer();
+
+    var exp = generateASTExpression(value.expression, '').toString();
+
+    if (exp.contains("'")) {
+      s.write('"');
+      s.write(r'${');
+      s.write(exp);
+      s.write(r'}');
+      s.write('"');
+    } else {
+      s.write("'");
+      s.write(r'${');
+      s.write(exp);
+      s.write(r'}');
+      s.write("'");
     }
 
     return s;

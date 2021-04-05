@@ -1662,11 +1662,101 @@ class ASTAnnotationParameter implements ASTNode {
       [this.defaultParameter = false]);
 }
 
-class CallReadIndex<T> extends ASTValue<T> {
+class ASTValueAsString<T> extends ASTValue<String> {
+  ASTValue<T> value;
+
+  ASTValueAsString(this.value) : super(ASTTypeString.INSTANCE);
+
+  @override
+  String getValue(VMContext context) {
+    var v = value.getValue(context);
+    return '$v';
+  }
+
+  @override
+  ASTValue<String> resolve(VMContext context) {
+    return ASTValueString(getValue(context));
+  }
+}
+
+class ASTValuesListAsString extends ASTValue<String> {
+  List<ASTValue> values;
+
+  ASTValuesListAsString(this.values) : super(ASTTypeString.INSTANCE);
+
+  @override
+  String getValue(VMContext context) {
+    return values.map((e) {
+      var v = e.resolve(context).getValue(context);
+      return '$v';
+    }).join();
+  }
+
+  @override
+  ASTValue<String> resolve(VMContext context) {
+    return ASTValueString(getValue(context));
+  }
+}
+
+class ASTValueStringExpresion<T> extends ASTValue<String> {
+  final ASTExpression expression;
+
+  ASTValueStringExpresion(this.expression) : super(ASTTypeString.INSTANCE);
+
+  @override
+  String getValue(VMContext context) {
+    var res = expression.run(context, ASTRunStatus()).getValue(context);
+    return '$res';
+  }
+
+  @override
+  ASTValue<String> resolve(VMContext context) {
+    var s = getValue(context);
+    return ASTValueString(s);
+  }
+}
+
+class ASTValueStringVariable<T> extends ASTValue<String> {
+  final ASTVariable variable;
+
+  ASTValueStringVariable(this.variable) : super(ASTTypeString.INSTANCE);
+
+  @override
+  String getValue(VMContext context) {
+    var v = variable.getValue(context).getValue(context);
+    return '$v';
+  }
+
+  @override
+  ASTValue<String> resolve(VMContext context) {
+    var value = variable.getValue(context);
+    return value is ASTValue<String> ? value : ASTValueAsString(value);
+  }
+}
+
+class ASTValueStringConcatenation extends ASTValue<String> {
+  final List<ASTValue<String>> values;
+
+  ASTValueStringConcatenation(this.values) : super(ASTTypeString.INSTANCE);
+
+  @override
+  String getValue(VMContext context) {
+    var vs = values.map((e) => e.getValue(context)).toList();
+    return vs.join();
+  }
+
+  @override
+  ASTValue<String> resolve(VMContext context) {
+    var vs = values.map((e) => e.resolve(context)).toList();
+    return ASTValuesListAsString(vs);
+  }
+}
+
+class ASTValueReadIndex<T> extends ASTValue<T> {
   final ASTVariable variable;
   final Object _index;
 
-  CallReadIndex(ASTType<T> type, this.variable, this._index) : super(type);
+  ASTValueReadIndex(ASTType<T> type, this.variable, this._index) : super(type);
 
   int getIndex(VMContext context) {
     if (_index is int) {
@@ -1690,11 +1780,11 @@ class CallReadIndex<T> extends ASTValue<T> {
   }
 }
 
-class CallReadKey<T> extends ASTValue<T> {
+class ASTValueReadKey<T> extends ASTValue<T> {
   final ASTVariable variable;
   final Object _key;
 
-  CallReadKey(ASTType<T> type, this.variable, this._key) : super(type);
+  ASTValueReadKey(ASTType<T> type, this.variable, this._key) : super(type);
 
   Object getKey(VMContext context) {
     if (_key is ASTValue) {
@@ -1706,54 +1796,6 @@ class CallReadKey<T> extends ASTValue<T> {
 
   @override
   T getValue(VMContext context) => variable.readKey(context, getKey(context));
-
-  @override
-  ASTValue<T> resolve(VMContext context) {
-    var v = getValue(context);
-    return ASTValue.from(type, v);
-  }
-}
-
-class ASTFunctionInvocation2<T> extends ASTValue<T> {
-  ASTCodeBlock? block;
-  final String name;
-
-  final List<ASTValue> parameters;
-  final List<ASTValue>? namedParameters;
-
-  late ASTFunctionSignature _callSignature;
-
-  ASTFunctionSignature get callSignature => _callSignature;
-
-  ASTFunctionDeclaration? _targetFunction;
-
-  ASTFunctionInvocation2(String name, this.parameters, [this.namedParameters])
-      : name = name,
-        super(ASTTypeDynamic.INSTANCE as ASTType<T>) {
-    _callSignature = ASTFunctionSignature.from(parameters, namedParameters);
-  }
-
-  ASTFunctionDeclaration getFunction(VMContext context) {
-    if (_targetFunction != null) {
-      return _targetFunction!;
-    }
-
-    var f = block!.getFunction(name, _callSignature, context);
-    if (f != null) {
-      _targetFunction = f;
-      type = f.returnType as ASTType<T>;
-      return f;
-    } else {
-      throw StateError("Can't find function: $name");
-    }
-  }
-
-  @override
-  T getValue(VMContext context) {
-    var f = getFunction(context);
-    var result = f.call(context, positionalParameters: parameters);
-    return result.getValue(context);
-  }
 
   @override
   ASTValue<T> resolve(VMContext context) {
@@ -1913,7 +1955,7 @@ class ASTExpressionLiteral extends ASTExpression {
 
   @override
   ASTValue run(VMContext parentContext, ASTRunStatus runStatus) {
-    return value;
+    return value.resolve(parentContext);
   }
 }
 
@@ -2257,12 +2299,13 @@ class ASTExpressionLocalFunctionInvocation extends ASTExpression {
   }
 }
 
-class ASTExpressionFunctionInvocation extends ASTExpression {
+class ASTExpressionObjectFunctionInvocation extends ASTExpression {
   ASTVariable variable;
   String name;
   List arguments;
 
-  ASTExpressionFunctionInvocation(this.variable, this.name, this.arguments);
+  ASTExpressionObjectFunctionInvocation(
+      this.variable, this.name, this.arguments);
 
   @override
   ASTValue run(VMContext parentContext, ASTRunStatus runStatus) {

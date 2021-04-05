@@ -1,8 +1,22 @@
+## 0.0.6
+
+- Grammars:
+  - Dart:
+    - Added support for string templates:
+      - including variable access: `$x`.
+      - including expressions: `${ x * 2 }`.
+      - Not implemented for multiline string yet.
+  - Java8:
+    - Support for string concatenation.
+- Code Generators:
+  - Java8:
+    - Translate string templates to Java String concatenations.
+
 ## 0.0.5
 
 - Grammars:
   - Dart:
-    - Rae single line and raw multiline line strings.
+    - Raw single line and raw multiline line strings.
     - Improved parser tests for literal String.
 
 ## 0.0.4

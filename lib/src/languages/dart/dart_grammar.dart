@@ -104,6 +104,10 @@ class DartGrammarDefinition extends DartGrammarLexer {
         return ASTStatementVariableDeclaration(v[0], v[1], value);
       });
 
+  @override
+  Parser<ParsedString> parseExpressionInString() =>
+      expression().map((e) => ParsedString.expression(e));
+
   Parser<ASTExpression> expression() => (ref(expressionNoOperation) &
               (expressionOperator() & ref(expressionNoOperation)).star())
           .map((v) {
@@ -296,11 +300,10 @@ class DartGrammarDefinition extends DartGrammarLexer {
   Parser<ASTValue> literal() =>
       (literalNum() | literalString()).cast<ASTValue>();
 
-  Parser<ASTValueNum> literalNum() => (numberLexicalToken()).map((v) {
+  Parser<ASTValueNum> literalNum() => (numberLexicalToken().trim()).map((v) {
         return ASTValueNum.from(v);
       });
 
-  Parser<ASTValueString> literalString() => (stringLexicalToken()).map((v) {
-        return ASTValueString(v);
-      });
+  Parser<ASTValue<String>> literalString() =>
+      (stringLexicalToken()).map((v) => v.asValue());
 }

@@ -269,7 +269,7 @@ abstract class ApolloCodeGenerator {
     } else if (expression is ASTExpressionLocalFunctionInvocation) {
       return generateASTExpressionLocalFunctionInvocation(
           expression, indent, s);
-    } else if (expression is ASTExpressionFunctionInvocation) {
+    } else if (expression is ASTExpressionObjectFunctionInvocation) {
       return generateASTExpressionFunctionInvocation(expression, indent, s);
     } else if (expression is ASTExpressionOperation) {
       return generateASTExpressionOperation(expression, indent, s);
@@ -301,7 +301,7 @@ abstract class ApolloCodeGenerator {
   }
 
   StringBuffer generateASTExpressionFunctionInvocation(
-      ASTExpressionFunctionInvocation expression,
+      ASTExpressionObjectFunctionInvocation expression,
       [String indent = '',
       StringBuffer? s]) {
     s ??= StringBuffer();
@@ -393,6 +393,12 @@ abstract class ApolloCodeGenerator {
       return generateASTValueObject(value, indent, s);
     } else if (value is ASTValueStatic) {
       return generateASTValueStatic(value, indent, s);
+    } else if (value is ASTValueStringVariable) {
+      return generateASTValueStringVariable(value, indent, s);
+    } else if (value is ASTValueStringConcatenation) {
+      return generateASTValueStringConcatenation(value, indent, s);
+    } else if (value is ASTValueStringExpresion) {
+      return generateASTValueStringExpresion(value, indent, s);
     } else if (value is ASTValueArray) {
       return generateASTValueArray(value, indent, s);
     } else if (value is ASTValueArray2D) {
@@ -403,6 +409,17 @@ abstract class ApolloCodeGenerator {
 
     throw UnsupportedError("Can't generate value: $value");
   }
+
+  StringBuffer generateASTValueStringConcatenation(
+      ASTValueStringConcatenation value,
+      [String indent = '',
+      StringBuffer? s]);
+
+  StringBuffer generateASTValueStringVariable(ASTValueStringVariable value,
+      [String indent = '', StringBuffer? s]);
+
+  StringBuffer generateASTValueStringExpresion(ASTValueStringExpresion value,
+      [String indent = '', StringBuffer? s]);
 
   StringBuffer generateASTValueString(ASTValueString value,
       [String indent = '', StringBuffer? s]);
