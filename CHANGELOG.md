@@ -5,6 +5,7 @@
 - Grammars & Code Generators:
   - Dart & Java8:
     - Support to expression comparison operators `==`, `!=`, `>`, `<`, `>=`, `<=`.
+- Upgrade: petitparser: ^4.1.0
 
 ## 0.0.6
 

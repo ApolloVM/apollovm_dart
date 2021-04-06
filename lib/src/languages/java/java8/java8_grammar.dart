@@ -4,11 +4,6 @@ import 'package:petitparser/petitparser.dart';
 
 import 'java8_grammar_lexer.dart';
 
-/// Java8 grammar.
-class Java8Grammar extends GrammarParser {
-  Java8Grammar() : super(Java8GrammarDefinition());
-}
-
 /// Java8 grammar definition.
 class Java8GrammarDefinition extends Java8GrammarLexer {
   static ASTType getTypeByName(String name) {
@@ -29,10 +24,10 @@ class Java8GrammarDefinition extends Java8GrammarLexer {
   }
 
   @override
-  Parser start() => ref(compilationUnit).trim().end();
+  Parser start() => ref0(compilationUnit).trim().end();
 
   Parser<ASTCodeRoot> compilationUnit() =>
-      (ref(importDirective).star() & ref(topLevelDefinition).star()).map((v) {
+      (ref0(importDirective).star() & ref0(topLevelDefinition).star()).map((v) {
         var topDef = v[1];
 
         var classes = topDef as List;
@@ -58,7 +53,7 @@ class Java8GrammarDefinition extends Java8GrammarLexer {
       });
 
   Parser<ASTCodeBlock> classCodeBlock() =>
-      (char('{').trim() & ref(functionDeclaration).star() & char('}').trim())
+      (char('{').trim() & ref0(functionDeclaration).star() & char('}').trim())
           .map((v) {
         var functions = (v[1] as List).cast<ASTFunctionDeclaration>().toList();
         return ASTCodeBlock(null)..addAllFunctions(functions);
@@ -89,7 +84,7 @@ class Java8GrammarDefinition extends Java8GrammarLexer {
       .flatten();
 
   Parser<ASTCodeBlock> codeBlock() =>
-      (char('{').trim() & ref(statement).star() & char('}').trim()).map((v) {
+      (char('{').trim() & ref0(statement).star() & char('}').trim()).map((v) {
         var statements = (v[1] as List).cast<ASTStatement>().toList();
         return ASTCodeBlock(null)..addAllStatements(statements);
       });
@@ -106,7 +101,7 @@ class Java8GrammarDefinition extends Java8GrammarLexer {
   Parser<ASTStatementVariableDeclaration> statementVariableDeclaration() =>
       (type() &
               identifier() &
-              (char('=') & ref(expression)).optional() &
+              (char('=') & ref0(expression)).optional() &
               char(';').trim())
           .map((v) {
         var valueOpt = v[2];
@@ -114,8 +109,8 @@ class Java8GrammarDefinition extends Java8GrammarLexer {
         return ASTStatementVariableDeclaration(v[0], v[1], value);
       });
 
-  Parser<ASTExpression> expression() => (ref(expressionNoOperation) &
-              (expressionOperator() & ref(expressionNoOperation)).star())
+  Parser<ASTExpression> expression() => (ref0(expressionNoOperation) &
+              (expressionOperator() & ref0(expressionNoOperation)).star())
           .map((v) {
         var exp1 = v[0];
 
@@ -163,7 +158,7 @@ class Java8GrammarDefinition extends Java8GrammarLexer {
       expressionLocalFunctionInvocation() => (string('this').optional() &
                   identifier() &
                   char('(') &
-                  ref(expression).star() &
+                  ref0(expression).star() &
                   char(')'))
               .map((v) {
             var name = v[1];
@@ -182,14 +177,14 @@ class Java8GrammarDefinition extends Java8GrammarLexer {
       });
 
   Parser<ASTExpressionVariableEntryAccess> expressionVariableEntryAccess() =>
-      (variable() & char('[') & ref(expression) & char(']')).map((v) {
+      (variable() & char('[') & ref0(expression) & char(']')).map((v) {
         var variable = v[0];
         var expression = v[2];
         return ASTExpressionVariableEntryAccess(variable, expression);
       });
 
   Parser<ASTExpressionVariableAssignment> expressionVariableAssigment() =>
-      (variable() & assigmentOperator() & ref(expression)).map((v) {
+      (variable() & assigmentOperator() & ref0(expression)).map((v) {
         return ASTExpressionVariableAssignment(v[0], v[1], v[2]);
       });
 

@@ -3,16 +3,23 @@ import 'package:apollovm/src/apollovm_ast.dart';
 import 'package:petitparser/petitparser.dart';
 
 abstract class ApolloParser {
-  final GrammarParser _grammar;
+  final GrammarDefinition _grammar;
 
   ApolloParser(this._grammar);
 
   String get language;
 
+  Parser<dynamic>? _grammarParserInstance;
+
+  Parser<dynamic> get _grammarParser {
+    _grammarParserInstance ??= _grammar.build();
+    return _grammarParserInstance!;
+  }
+
   Future<ParseResult> parse(CodeUnit codeUnit) async {
     check(codeUnit);
 
-    var result = _grammar.parse(codeUnit.source);
+    var result = _grammarParser.parse(codeUnit.source);
 
     if (!result.isSuccess) {
       return ParseResult(errorMessage: result.message);

@@ -7,7 +7,7 @@ import 'java8_grammar.dart';
 class ApolloParserJava8 extends ApolloParser {
   static final ApolloParserJava8 INSTANCE = ApolloParserJava8();
 
-  ApolloParserJava8() : super(Java8Grammar());
+  ApolloParserJava8() : super(Java8GrammarDefinition());
 
   @override
   String get language => 'java8';

@@ -3,11 +3,6 @@ import 'package:petitparser/petitparser.dart';
 
 import 'dart_grammar_lexer.dart';
 
-/// Dart grammar.
-class DartGrammar extends GrammarParser {
-  DartGrammar() : super(DartGrammarDefinition());
-}
-
 /// Dart grammar definition.
 class DartGrammarDefinition extends DartGrammarLexer {
   static ASTType getTypeByName(String name) {
@@ -30,13 +25,13 @@ class DartGrammarDefinition extends DartGrammarLexer {
   }
 
   @override
-  Parser start() => ref(compilationUnit).trim().end();
+  Parser start() => ref0(compilationUnit).trim().end();
 
   Parser<ASTCodeRoot> compilationUnit() =>
-      (ref(hashbangLexicalToken).optional() &
-              //ref(libraryDirective).optional() &
-              //ref(importDirective).star() &
-              ref(topLevelDefinition).star())
+      (ref0(hashbangLexicalToken).optional() &
+              //ref0(libraryDirective).optional() &
+              //ref0(importDirective).star() &
+              ref0(topLevelDefinition).star())
           .map((v) {
         var topDef = v[1] as List;
 
@@ -67,7 +62,7 @@ class DartGrammarDefinition extends DartGrammarLexer {
       });
 
   Parser<ASTCodeBlock> classCodeBlock() =>
-      (char('{').trim() & ref(functionDeclaration).star() & char('}').trim())
+      (char('{').trim() & ref0(functionDeclaration).star() & char('}').trim())
           .map((v) {
         var functions = (v[1] as List).cast<ASTFunctionDeclaration>().toList();
         return ASTCodeBlock(null)..addAllFunctions(functions);
@@ -79,7 +74,7 @@ class DartGrammarDefinition extends DartGrammarLexer {
       });
 
   Parser<ASTCodeBlock> codeBlock() =>
-      (char('{').trim() & ref(statement).star() & char('}').trim()).map((v) {
+      (char('{').trim() & ref0(statement).star() & char('}').trim()).map((v) {
         var statements = (v[1] as List).cast<ASTStatement>().toList();
         return ASTCodeBlock(null)..addAllStatements(statements);
       });
@@ -96,7 +91,7 @@ class DartGrammarDefinition extends DartGrammarLexer {
   Parser<ASTStatementVariableDeclaration> statementVariableDeclaration() =>
       (type() &
               identifier() &
-              (char('=') & ref(expression)).optional() &
+              (char('=') & ref0(expression)).optional() &
               char(';').trim())
           .map((v) {
         var valueOpt = v[2];
@@ -108,8 +103,8 @@ class DartGrammarDefinition extends DartGrammarLexer {
   Parser<ParsedString> parseExpressionInString() =>
       expression().map((e) => ParsedString.expression(e));
 
-  Parser<ASTExpression> expression() => (ref(expressionNoOperation) &
-              (expressionOperator() & ref(expressionNoOperation)).star())
+  Parser<ASTExpression> expression() => (ref0(expressionNoOperation) &
+              (expressionOperator() & ref0(expressionNoOperation)).star())
           .map((v) {
         var exp1 = v[0];
 
@@ -165,7 +160,7 @@ class DartGrammarDefinition extends DartGrammarLexer {
       expressionLocalFunctionInvocation() => (string('this').optional() &
                   identifier() &
                   char('(') &
-                  ref(expression).star() &
+                  ref0(expression).star() &
                   char(')'))
               .map((v) {
             var name = v[1];
@@ -184,14 +179,14 @@ class DartGrammarDefinition extends DartGrammarLexer {
       });
 
   Parser<ASTExpressionVariableEntryAccess> expressionVariableEntryAccess() =>
-      (variable() & char('[') & ref(expression) & char(']')).map((v) {
+      (variable() & char('[') & ref0(expression) & char(']')).map((v) {
         var variable = v[0];
         var expression = v[2];
         return ASTExpressionVariableEntryAccess(variable, expression);
       });
 
   Parser<ASTExpressionVariableAssignment> expressionVariableAssigment() =>
-      (variable() & assigmentOperator() & ref(expression)).map((v) {
+      (variable() & assigmentOperator() & ref0(expression)).map((v) {
         return ASTExpressionVariableAssignment(v[0], v[1], v[2]);
       });
 

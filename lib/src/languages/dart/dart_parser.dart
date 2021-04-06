@@ -8,7 +8,7 @@ import 'dart_grammar.dart';
 class ApolloParserDart extends ApolloParser {
   static final ApolloParserDart INSTANCE = ApolloParserDart();
 
-  ApolloParserDart() : super(DartGrammar());
+  ApolloParserDart() : super(DartGrammarDefinition());
 
   @override
   String get language => 'dart';
