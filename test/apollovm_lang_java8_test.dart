@@ -329,7 +329,7 @@ class Bar {
         print('if: a<b');
     } else if (      a > b) {
         print('else: a>b');
-} else {
+    } else {
         print('else: a==b');
     }
 
@@ -367,7 +367,7 @@ class Bar {
         print("if: a<b");
     } else if (      a > b) {
         print("else: a>b");
-} else {
+    } else {
         print("else: a==b");
     }
 

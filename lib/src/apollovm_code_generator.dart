@@ -227,6 +227,7 @@ abstract class ApolloCodeGenerator {
       generateASTCodeBlock(branchElseIf.block, indent + '  ', s, false);
     }
 
+    s.write(indent);
     s.write('} else {\n');
     generateASTCodeBlock(branch.blockElse, indent + '  ', s, false);
     s.write(indent);
