@@ -3,8 +3,8 @@ import 'package:apollovm/src/apollovm_ast.dart';
 import 'package:apollovm/src/apollovm_code_generator.dart';
 import 'package:apollovm/src/apollovm_code_storage.dart';
 
-class ApolloCodeGeneratorJava8 extends ApolloCodeGenerator {
-  ApolloCodeGeneratorJava8(ApolloCodeStorage codeStorage) : super(codeStorage);
+class ApolloCodeGeneratorJava11 extends ApolloCodeGenerator {
+  ApolloCodeGeneratorJava11(ApolloCodeStorage codeStorage) : super(codeStorage);
 
   @override
   StringBuffer generateASTCodeClass(ASTCodeClass codeClass,

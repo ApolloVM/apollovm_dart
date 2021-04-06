@@ -1,3 +1,12 @@
+## 0.0.8
+
+- Fix package description.
+- Renamed Java8 to Java11:
+  - Java 11 is closer to Dart 2 than Java 8.
+- Grammars & Code Generators:
+  - Dart & Java11:
+    - Support `if`, `else if` and `else` branches. 
+
 ## 0.0.7
 
 - Added type `ASTTypeBool` and value `ASTValueBool`.

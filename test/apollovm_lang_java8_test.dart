@@ -2,12 +2,12 @@ import 'package:apollovm/apollovm.dart';
 import 'package:test/test.dart';
 
 void main() {
-  group('Java8', () {
+  group('Java11', () {
     test('Basic main(Object[])', () async {
       var vm = ApolloVM();
 
       var codeUnit = CodeUnit(
-          'java8',
+          'java11',
           r'''
             class Foo {
                static public void main(Object[] args) {
@@ -27,14 +27,14 @@ void main() {
 
       var loadOK = await vm.loadCodeUnit(codeUnit);
 
-      expect(loadOK, isTrue, reason: "Can't load Java8 code!");
+      expect(loadOK, isTrue, reason: "Can't load Java 11 code!");
 
-      var java8Runner = vm.createRunner('java8')!;
+      var javaRunner = vm.createRunner('java11')!;
 
       var output = [];
-      java8Runner.externalPrintFunction = (o) => output.add(o);
+      javaRunner.externalPrintFunction = (o) => output.add(o);
 
-      java8Runner.executeClassMethod('', 'Foo', 'main', [
+      javaRunner.executeClassMethod('', 'Foo', 'main', [
         ['Sums:', 10, 20, 50]
       ]);
 
@@ -52,9 +52,9 @@ void main() {
 
       print('---------------------------------------');
       // Regenerate code:
-      var codeStorageJava8 = vm.generateAllCodeIn('java8');
-      var allSourcesJava8 = codeStorageJava8.writeAllSources().toString();
-      print(allSourcesJava8);
+      var codeStorageJava = vm.generateAllCodeIn('java11');
+      var allSourcesJava = codeStorageJava.writeAllSources().toString();
+      print(allSourcesJava);
 
       expect(
           allSourcesDart,
@@ -73,14 +73,14 @@ void main() {
               r'\s*\}'
               r'\s*\}\s*')));
 
-      expect(allSourcesJava8, contains('void main('));
+      expect(allSourcesJava, contains('void main('));
     });
 
     test('Basic main(String[])', () async {
       var vm = ApolloVM();
 
       var codeUnit = CodeUnit(
-          'java8',
+          'java11',
           r'''
             class Foo {
                static public void main(String[] args) {
@@ -100,14 +100,14 @@ void main() {
 
       var loadOK = await vm.loadCodeUnit(codeUnit);
 
-      expect(loadOK, isTrue, reason: "Can't load Java8 code!");
+      expect(loadOK, isTrue, reason: "Can't load Java 11 code!");
 
-      var java8Runner = vm.createRunner('java8')!;
+      var javaRunner = vm.createRunner('java11')!;
 
       var output = [];
-      java8Runner.externalPrintFunction = (o) => output.add(o);
+      javaRunner.externalPrintFunction = (o) => output.add(o);
 
-      java8Runner.executeClassMethod('', 'Foo', 'main', [
+      javaRunner.executeClassMethod('', 'Foo', 'main', [
         ['Strings:', 'A', 'B', 'C']
       ]);
 
@@ -125,9 +125,9 @@ void main() {
 
       print('---------------------------------------');
       // Regenerate code:
-      var codeStorageJava8 = vm.generateAllCodeIn('java8');
-      var allSourcesJava8 = codeStorageJava8.writeAllSources().toString();
-      print(allSourcesJava8);
+      var codeStorageJava = vm.generateAllCodeIn('java11');
+      var allSourcesJava = codeStorageJava.writeAllSources().toString();
+      print(allSourcesJava);
 
       expect(
           allSourcesDart,
@@ -146,14 +146,14 @@ void main() {
               r'\s*\}'
               r'\s*\}\s*')));
 
-      expect(allSourcesJava8, contains('void main('));
+      expect(allSourcesJava, contains('void main('));
     });
 
     test('Basic main(Object[]) with inline string', () async {
       var vm = ApolloVM();
 
       var codeUnit = CodeUnit(
-          'java8',
+          'java11',
           r'''
             class Foo {
                static public void main(Object[] args) {
@@ -175,14 +175,14 @@ void main() {
 
       var loadOK = await vm.loadCodeUnit(codeUnit);
 
-      expect(loadOK, isTrue, reason: "Can't load Java8 code!");
+      expect(loadOK, isTrue, reason: "Can't load Java 11 code!");
 
-      var java8Runner = vm.createRunner('java8')!;
+      var javaRunner = vm.createRunner('java11')!;
 
       var output = [];
-      java8Runner.externalPrintFunction = (o) => output.add(o);
+      javaRunner.externalPrintFunction = (o) => output.add(o);
 
-      java8Runner.executeClassMethod('', 'Foo', 'main', [
+      javaRunner.executeClassMethod('', 'Foo', 'main', [
         ['Operations:', 10, 20]
       ]);
 
@@ -200,11 +200,11 @@ void main() {
 
       print('---------------------------------------');
       // Regenerate code:
-      var codeStorageJava8 = vm.generateAllCodeIn('java8');
-      var allSourcesJava8 = codeStorageJava8.writeAllSources().toString();
-      print(allSourcesJava8);
+      var codeStorageJava = vm.generateAllCodeIn('java11');
+      var allSourcesJava = codeStorageJava.writeAllSources().toString();
+      print(allSourcesJava);
 
-      expect(allSourcesJava8, r'''<<<< [SOURCES_BEGIN] >>>>
+      expect(allSourcesJava, r'''<<<< [SOURCES_BEGIN] >>>>
 <<<< NAMESPACE="" >>>>
 <<<< CODE_UNIT_START="/test" >>>>
 class Foo {
@@ -225,6 +225,157 @@ class Foo {
 <<<< CODE_UNIT_END="/test" >>>>
 <<<< [SOURCES_END] >>>>
 ''');
+    });
+
+    test('Basic main(String[]) with branches', () async {
+      var vm = ApolloVM();
+
+      var codeUnit = CodeUnit(
+          'java11',
+          r'''
+          class Bar {
+            static public void main(Object[] args) {
+              var a = args[0] ;
+              var b = args[1] ;
+              var eq = a == b ;
+              
+              if (a == b) {
+                print("if: a==b");
+              }
+              
+              if (a != b) {
+                print("if: a!=b");
+              }
+              else {
+                print("else: a!=b");
+              }
+              
+              if (a < b) {
+                print("if: a<b");
+              }
+              else if (a > b) {
+                print("else: a>b");
+              }
+              else {
+                print("else: a==b");
+              }
+              
+            }
+          }
+          ''',
+          'test');
+
+      var loadOK = await vm.loadCodeUnit(codeUnit);
+
+      expect(loadOK, isTrue, reason: 'Error loading Java 11 code!');
+
+      var javaRunner = vm.createRunner('java11')!;
+
+      {
+        var output = [];
+        javaRunner.externalPrintFunction = (o) => output.add(o);
+
+        javaRunner.executeClassMethod('', 'Bar', 'main', [
+          [10, 20]
+        ]);
+
+        expect(output, equals(['if: a!=b', 'if: a<b']));
+
+        print('---------------------------------------');
+        print('OUTPUT 1:');
+        output.forEach((o) => print('>> $o'));
+      }
+
+      {
+        var output = [];
+        javaRunner.externalPrintFunction = (o) => output.add(o);
+
+        javaRunner.executeClassMethod('', 'Bar', 'main', [
+          [20, 20]
+        ]);
+
+        expect(output, equals(['if: a==b', 'else: a!=b', 'else: a==b']));
+
+        print('---------------------------------------');
+        print('OUTPUT 1:');
+        output.forEach((o) => print('>> $o'));
+      }
+
+      print('---------------------------------------');
+      // Regenerate code:
+      var codeStorageDart = vm.generateAllCodeIn('dart');
+      var allSourcesDart = codeStorageDart.writeAllSources().toString();
+      print(allSourcesDart);
+
+      expect(allSourcesDart, equals(r'''<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+class Bar {
+  void main(List<Object> args) {
+    var a = args[0];
+    var b = args[1];
+    var eq = a == b;
+    if (a == b) {
+        print('if: a==b');
+    }
+
+    if (a != b) {
+        print('if: a!=b');
+    } else {
+        print('else: a!=b');
+    }
+
+    if (a < b) {
+        print('if: a<b');
+    } else if (      a > b) {
+        print('else: a>b');
+} else {
+        print('else: a==b');
+    }
+
+  }
+}
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+'''));
+
+      print('---------------------------------------');
+      // Regenerate code:
+      var codeStorageJava = vm.generateAllCodeIn('java11');
+      var allSourcesJava = codeStorageJava.writeAllSources().toString();
+      print(allSourcesJava);
+
+      expect(allSourcesJava, equals(r'''<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+class Bar {
+  void main(Object[] args) {
+    var a = args[0];
+    var b = args[1];
+    var eq = a == b;
+    if (a == b) {
+        print("if: a==b");
+    }
+
+    if (a != b) {
+        print("if: a!=b");
+    } else {
+        print("else: a!=b");
+    }
+
+    if (a < b) {
+        print("if: a<b");
+    } else if (      a > b) {
+        print("else: a>b");
+} else {
+        print("else: a==b");
+    }
+
+  }
+}
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+'''));
     });
   });
 }

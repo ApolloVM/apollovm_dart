@@ -41,8 +41,8 @@ void main() async {
   print(allSourcesDart);
 
   print('---------------------------------------');
-  // Regenerate code Java8:
-  var codeStorageJava8 = vm.generateAllCodeIn('java8');
-  var allSourcesJava8 = codeStorageJava8.writeAllSources();
-  print(allSourcesJava8);
+  // Regenerate code Java11:
+  var codeStorageJava = vm.generateAllCodeIn('java11');
+  var allSourcesJava = codeStorageJava.writeAllSources();
+  print(allSourcesJava);
 }

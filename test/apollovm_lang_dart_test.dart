@@ -450,11 +450,11 @@ class Foo {
 
       print('---------------------------------------');
       // Regenerate code:
-      var codeStorageJava8 = vm.generateAllCodeIn('java8');
-      var allSourcesJava8 = codeStorageJava8.writeAllSources().toString();
-      print(allSourcesJava8);
+      var codeStorageJava = vm.generateAllCodeIn('java11');
+      var allSourcesJava = codeStorageJava.writeAllSources().toString();
+      print(allSourcesJava);
 
-      expect(allSourcesJava8, equals(r'''<<<< [SOURCES_BEGIN] >>>>
+      expect(allSourcesJava, equals(r'''<<<< [SOURCES_BEGIN] >>>>
 <<<< NAMESPACE="" >>>>
 <<<< CODE_UNIT_START="/test" >>>>
 class Foo {
@@ -549,11 +549,11 @@ class Bar {
 
       print('---------------------------------------');
       // Regenerate code:
-      var codeStorageJava8 = vm.generateAllCodeIn('java8');
-      var allSourcesJava8 = codeStorageJava8.writeAllSources().toString();
-      print(allSourcesJava8);
+      var codeStorageJava = vm.generateAllCodeIn('java11');
+      var allSourcesJava = codeStorageJava.writeAllSources().toString();
+      print(allSourcesJava);
 
-      expect(allSourcesJava8, equals(r'''<<<< [SOURCES_BEGIN] >>>>
+      expect(allSourcesJava, equals(r'''<<<< [SOURCES_BEGIN] >>>>
 <<<< NAMESPACE="" >>>>
 <<<< CODE_UNIT_START="/test" >>>>
 class Bar {
@@ -572,6 +572,157 @@ class Bar {
     print(lower);
     print(greaterOrEq);
     print(lowerOrEq);
+  }
+}
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+'''));
+    });
+
+    test('Basic main(List<String>) with branches', () async {
+      var vm = ApolloVM();
+
+      var codeUnit = CodeUnit(
+          'dart',
+          r'''
+          class Bar {
+            void main(List<Object> args) {
+              var a = args[0] ;
+              var b = args[1] ;
+              var eq = a == b ;
+              
+              if (a == b) {
+                print('if: a==b');
+              }
+              
+              if (a != b) {
+                print('if: a!=b');
+              }
+              else {
+                print('else: a!=b');
+              }
+              
+              if (a < b) {
+                print('if: a<b');
+              }
+              else if (a > b) {
+                print('else: a>b');
+              }
+              else {
+                print('else: a==b');
+              }
+              
+            }
+          }
+          ''',
+          'test');
+
+      var loadOK = await vm.loadCodeUnit(codeUnit);
+
+      expect(loadOK, isTrue, reason: 'Error loading Dart code!');
+
+      var dartRunner = vm.createRunner('dart')!;
+
+      {
+        var output = [];
+        dartRunner.externalPrintFunction = (o) => output.add(o);
+
+        dartRunner.executeClassMethod('', 'Bar', 'main', [
+          [10, 20]
+        ]);
+
+        expect(output, equals(['if: a!=b', 'if: a<b']));
+
+        print('---------------------------------------');
+        print('OUTPUT 1:');
+        output.forEach((o) => print('>> $o'));
+      }
+
+      {
+        var output = [];
+        dartRunner.externalPrintFunction = (o) => output.add(o);
+
+        dartRunner.executeClassMethod('', 'Bar', 'main', [
+          [20, 20]
+        ]);
+
+        expect(output, equals(['if: a==b', 'else: a!=b', 'else: a==b']));
+
+        print('---------------------------------------');
+        print('OUTPUT 1:');
+        output.forEach((o) => print('>> $o'));
+      }
+
+      print('---------------------------------------');
+      // Regenerate code:
+      var codeStorageDart = vm.generateAllCodeIn('dart');
+      var allSourcesDart = codeStorageDart.writeAllSources().toString();
+      print(allSourcesDart);
+
+      expect(allSourcesDart, equals(r'''<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+class Bar {
+  void main(List<Object> args) {
+    var a = args[0];
+    var b = args[1];
+    var eq = a == b;
+    if (a == b) {
+        print('if: a==b');
+    }
+
+    if (a != b) {
+        print('if: a!=b');
+    } else {
+        print('else: a!=b');
+    }
+
+    if (a < b) {
+        print('if: a<b');
+    } else if (      a > b) {
+        print('else: a>b');
+} else {
+        print('else: a==b');
+    }
+
+  }
+}
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+'''));
+
+      print('---------------------------------------');
+      // Regenerate code:
+      var codeStorageJava = vm.generateAllCodeIn('java11');
+      var allSourcesJava = codeStorageJava.writeAllSources().toString();
+      print(allSourcesJava);
+
+      expect(allSourcesJava, equals(r'''<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+class Bar {
+  void main(Object[] args) {
+    var a = args[0];
+    var b = args[1];
+    var eq = a == b;
+    if (a == b) {
+        print("if: a==b");
+    }
+
+    if (a != b) {
+        print("if: a!=b");
+    } else {
+        print("else: a!=b");
+    }
+
+    if (a < b) {
+        print("if: a<b");
+    } else if (      a > b) {
+        print("else: a>b");
+} else {
+        print("else: a==b");
+    }
+
   }
 }
 <<<< CODE_UNIT_END="/test" >>>>

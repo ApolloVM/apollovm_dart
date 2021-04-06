@@ -1,6 +1,6 @@
 import 'package:petitparser/petitparser.dart';
 
-abstract class Java8GrammarLexer extends GrammarDefinition {
+abstract class Java11GrammarLexer extends GrammarDefinition {
   Parser token(Object input) {
     if (input is Parser) {
       return input.token().trim(ref0(hiddenStuffWhitespace));

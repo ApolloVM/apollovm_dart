@@ -144,6 +144,8 @@ abstract class ApolloCodeGenerator {
       return generateASTStatementExpression(statement, indent, s);
     } else if (statement is ASTStatementVariableDeclaration) {
       return generateASTStatementVariableDeclaration(statement, indent, s);
+    } else if (statement is ASTBranch) {
+      return generateASTBranch(statement, indent, s);
     } else if (statement is ASTStatementReturn) {
       return generateASTStatementReturn(statement, indent, s);
     } else if (statement is ASTStatementReturnNull) {
@@ -157,6 +159,80 @@ abstract class ApolloCodeGenerator {
     }
 
     throw UnsupportedError("Can't handle statement: $statement");
+  }
+
+  StringBuffer generateASTBranch(ASTBranch branch,
+      [String indent = '', StringBuffer? s]) {
+    if (branch is ASTBranchIfBlock) {
+      return generateASTBranchIfBlock(branch, indent, s);
+    } else if (branch is ASTBranchIfElseBlock) {
+      return generateASTBranchIfElseBlock(branch, indent, s);
+    } else if (branch is ASTBranchIfElseIfsElseBlock) {
+      return generateASTBranchIfElseIfsElseBlock(branch, indent, s);
+    }
+
+    throw UnsupportedError("Can't handle branch: $branch");
+  }
+
+  StringBuffer generateASTBranchIfBlock(ASTBranchIfBlock branch,
+      [String indent = '', StringBuffer? s]) {
+    s ??= StringBuffer();
+
+    s.write(indent);
+    s.write('if (');
+    generateASTExpression(branch.condition, '', s);
+    s.write(') {\n');
+    generateASTCodeBlock(branch.block, indent + '  ', s, false);
+    s.write(indent);
+    s.write('}\n');
+
+    return s;
+  }
+
+  StringBuffer generateASTBranchIfElseBlock(ASTBranchIfElseBlock branch,
+      [String indent = '', StringBuffer? s]) {
+    s ??= StringBuffer();
+
+    s.write(indent);
+    s.write('if (');
+    generateASTExpression(branch.condition, '', s);
+    s.write(') {\n');
+    generateASTCodeBlock(branch.blockIf, indent + '  ', s, false);
+    s.write(indent);
+    s.write('} else {\n');
+    generateASTCodeBlock(branch.blockElse, indent + '  ', s, false);
+    s.write(indent);
+    s.write('}\n');
+
+    return s;
+  }
+
+  StringBuffer generateASTBranchIfElseIfsElseBlock(
+      ASTBranchIfElseIfsElseBlock branch,
+      [String indent = '',
+      StringBuffer? s]) {
+    s ??= StringBuffer();
+
+    s.write(indent);
+    s.write('if (');
+    generateASTExpression(branch.condition, '', s);
+    s.write(') {\n');
+    generateASTCodeBlock(branch.blockIf, indent + '  ', s, false);
+
+    for (var branchElseIf in branch.blocksElseIf) {
+      s.write(indent);
+      s.write('} else if (');
+      generateASTExpression(branchElseIf.condition, indent + '  ', s);
+      s.write(') {\n');
+      generateASTCodeBlock(branchElseIf.block, indent + '  ', s, false);
+    }
+
+    s.write('} else {\n');
+    generateASTCodeBlock(branch.blockElse, indent + '  ', s, false);
+    s.write(indent);
+    s.write('}\n');
+
+    return s;
   }
 
   StringBuffer generateASTStatementExpression(ASTStatementExpression statement,

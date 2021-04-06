@@ -12,7 +12,7 @@
 [![Code size](https://img.shields.io/github/languages/code-size/ApolloVM/apollovm_dart?logo=github&logoColor=white)](https://github.com/ApolloVM/apollovm_dart)
 [![License](https://img.shields.io/github/license/ApolloVM/apollovm_dart?logo=open-source-initiative&logoColor=green)](https://github.com/ApolloVM/apollovm_dart/blob/master/LICENSE)
 
-ApolloVM is a portable VM (native, JS/Web, Flutter) that can parser, translate and run multiple languages, like Dart, Java, Kotlin and JavaScript.
+ApolloVM is a portable VM (native, JS/Web, Flutter) that can parse, translate and run multiple languages, like Dart, Java, Kotlin and JavaScript.
 
 
 ## Usage

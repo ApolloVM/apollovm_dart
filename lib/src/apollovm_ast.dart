@@ -1,7 +1,8 @@
 import 'package:apollovm/apollovm.dart';
 import 'package:collection/collection.dart' show IterableExtension;
-import 'package:swiss_knife/swiss_knife.dart';
 import 'package:collection/collection.dart';
+import 'package:swiss_knife/swiss_knife.dart';
+
 import 'apollovm_parser.dart';
 
 abstract class ASTNode {}
@@ -2811,5 +2812,90 @@ class ASTStatementVariableDeclaration<V> extends ASTStatement {
     var result = value?.run(parentContext, runStatus) ?? ASTValueNull.INSTANCE;
     parentContext.declareVariableWithValue(type, name, result);
     return ASTValueVoid.INSTANCE;
+  }
+}
+
+abstract class ASTBranch extends ASTStatement {
+  bool evaluateCondition(VMContext parentContext, ASTRunStatus runStatus,
+      ASTExpression condition) {
+    var evaluation = condition.run(parentContext, runStatus);
+    var evalValue = evaluation.getValue(parentContext);
+    if (evalValue is! bool) {
+      throw StateError(
+          'A branch condition should return a boolean: $evalValue');
+    }
+
+    return evalValue;
+  }
+}
+
+class ASTBranchIfBlock extends ASTBranch {
+  ASTExpression condition;
+  ASTCodeBlock block;
+
+  ASTBranchIfBlock(this.condition, this.block);
+
+  @override
+  ASTValue run(VMContext parentContext, ASTRunStatus runStatus) {
+    var evalValue = evaluateCondition(parentContext, runStatus, condition);
+
+    if (evalValue) {
+      block.run(parentContext, runStatus);
+    }
+
+    return ASTValueVoid.INSTANCE;
+  }
+}
+
+class ASTBranchIfElseBlock extends ASTBranch {
+  ASTExpression condition;
+  ASTCodeBlock blockIf;
+  ASTCodeBlock blockElse;
+
+  ASTBranchIfElseBlock(this.condition, this.blockIf, this.blockElse);
+
+  @override
+  ASTValue run(VMContext parentContext, ASTRunStatus runStatus) {
+    var evalValue = evaluateCondition(parentContext, runStatus, condition);
+
+    if (evalValue) {
+      blockIf.run(parentContext, runStatus);
+    } else {
+      blockElse.run(parentContext, runStatus);
+    }
+
+    return ASTValueVoid.INSTANCE;
+  }
+}
+
+class ASTBranchIfElseIfsElseBlock extends ASTBranch {
+  ASTExpression condition;
+  ASTCodeBlock blockIf;
+  List<ASTBranchIfBlock> blocksElseIf;
+  ASTCodeBlock blockElse;
+
+  ASTBranchIfElseIfsElseBlock(
+      this.condition, this.blockIf, this.blocksElseIf, this.blockElse);
+
+  @override
+  ASTValue run(VMContext parentContext, ASTRunStatus runStatus) {
+    var evalValue = evaluateCondition(parentContext, runStatus, condition);
+    if (evalValue) {
+      blockIf.run(parentContext, runStatus);
+      return ASTValueVoid.INSTANCE;
+    } else {
+      for (var branch in blocksElseIf) {
+        evalValue =
+            evaluateCondition(parentContext, runStatus, branch.condition);
+
+        if (evalValue) {
+          branch.block.run(parentContext, runStatus);
+          return ASTValueVoid.INSTANCE;
+        }
+      }
+
+      blockElse.run(parentContext, runStatus);
+      return ASTValueVoid.INSTANCE;
+    }
   }
 }

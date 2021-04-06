@@ -3,15 +3,16 @@ import 'package:apollovm/src/apollovm_code_generator.dart';
 import 'package:apollovm/src/apollovm_code_storage.dart';
 import 'package:apollovm/src/apollovm_runner.dart';
 import 'package:apollovm/src/languages/dart/dart_generator.dart';
-import 'package:apollovm/src/languages/java/java8/java8_generator.dart';
+import 'package:apollovm/src/languages/java/java11/java11_generator.dart';
 
 class ApolloVM {
   ApolloParser? getParser(String language) {
     switch (language) {
       case 'dart':
         return ApolloParserDart.INSTANCE;
-      case 'java8':
-        return ApolloParserJava8.INSTANCE;
+      case 'java':
+      case 'java11':
+        return ApolloParserJava11.INSTANCE;
       default:
         return null;
     }
@@ -57,8 +58,9 @@ class ApolloVM {
     switch (language) {
       case 'dart':
         return ApolloRunnerDart(this);
-      case 'java8':
-        return ApolloRunnerJava8(this);
+      case 'java':
+      case 'java11':
+        return ApolloRunnerJava11(this);
       default:
         return null;
     }
@@ -75,8 +77,9 @@ class ApolloVM {
     switch (language) {
       case 'dart':
         return ApolloCodeGeneratorDart(codeStorage);
-      case 'java8':
-        return ApolloCodeGeneratorJava8(codeStorage);
+      case 'java':
+      case 'java11':
+        return ApolloCodeGeneratorJava11(codeStorage);
       default:
         return null;
     }

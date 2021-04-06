@@ -80,7 +80,7 @@ class DartGrammarDefinition extends DartGrammarLexer {
       });
 
   Parser<ASTStatement> statement() =>
-      (statementVariableDeclaration() | statementExpression())
+      (branch() | statementVariableDeclaration() | statementExpression())
           .cast<ASTStatement>();
 
   Parser<ASTStatementExpression> statementExpression() =>
@@ -97,6 +97,67 @@ class DartGrammarDefinition extends DartGrammarLexer {
         var valueOpt = v[2];
         var value = valueOpt != null ? valueOpt[1] : null;
         return ASTStatementVariableDeclaration(v[0], v[1], value);
+      });
+
+  Parser<ASTBranch> branch() => (ref0(branchIfElseIfsElseBlock) |
+          ref0(branchIfElseBlock) |
+          ref0(branchIfBlock))
+      .cast<ASTBranch>();
+
+  Parser<ASTBranchIfBlock> branchIfBlock() => (string('if').trim() &
+              char('(').trim() &
+              ref0(expression) &
+              char(')').trim() &
+              codeBlock())
+          .map((v) {
+        var condition = v[2];
+        var block = v[4];
+        return ASTBranchIfBlock(condition, block);
+      });
+
+  Parser<ASTBranchIfElseBlock> branchIfElseBlock() => (string('if').trim() &
+              char('(').trim() &
+              ref0(expression) &
+              char(')').trim() &
+              codeBlock() &
+              string('else').trim() &
+              codeBlock())
+          .map((v) {
+        var condition = v[2];
+        var blockIf = v[4];
+        var blockElse = v[6];
+        return ASTBranchIfElseBlock(condition, blockIf, blockElse);
+      });
+
+  Parser<ASTBranchIfElseIfsElseBlock> branchIfElseIfsElseBlock() =>
+      (string('if').trim() &
+              char('(').trim() &
+              ref0(expression) &
+              char(')').trim() &
+              codeBlock() &
+              ref0(branchElseIfs).plus() &
+              string('else').trim() &
+              codeBlock())
+          .map((v) {
+        var condition = v[2];
+        var blockIf = v[4];
+        var blockElseIfs = v[5] as List;
+        var blockElse = v[7];
+
+        return ASTBranchIfElseIfsElseBlock(condition, blockIf,
+            blockElseIfs.cast<ASTBranchIfBlock>().toList(), blockElse);
+      });
+
+  Parser<ASTBranchIfBlock> branchElseIfs() => (string('else').trim() &
+              string('if').trim() &
+              char('(').trim() &
+              ref0(expression) &
+              char(')').trim() &
+              codeBlock())
+          .map((v) {
+        var condition = v[3];
+        var blockIf = v[5];
+        return ASTBranchIfBlock(condition, blockIf);
       });
 
   @override
