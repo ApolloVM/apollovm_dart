@@ -134,8 +134,13 @@ class DartGrammarDefinition extends DartGrammarLexer {
         return all[0] as ASTExpressionOperation;
       });
 
-  Parser<ASTExpressionOperator> expressionOperator() =>
-      (char('+') | char('-') | char('*') | char('/') | string('~/'))
+  Parser<ASTExpressionOperator> expressionOperator() => (char('+') |
+              char('-') |
+              char('*') |
+              char('/') |
+              string('~/') |
+              string('==') |
+              string('!='))
           .trim()
           .map((v) {
         var op = getASTExpressionOperator(v);

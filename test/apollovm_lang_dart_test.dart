@@ -469,5 +469,84 @@ class Foo {
 <<<< [SOURCES_END] >>>>
 '''));
     });
+
+    test('Basic main(List<String>) with comparisons', () async {
+      var vm = ApolloVM();
+
+      var codeUnit = CodeUnit(
+          'dart',
+          r'''
+            void main(List<Object> args) {
+              var a = args[0] ;
+              var b = args[1] ;
+              var eq = a == b ;
+              var notEq = a != b ;
+              print(eq);
+              print(notEq);
+            }
+          ''',
+          'test');
+
+      var loadOK = await vm.loadCodeUnit(codeUnit);
+
+      expect(loadOK, isTrue, reason: 'Error loading Dart code!');
+
+      var dartRunner = vm.createRunner('dart')!;
+
+      var output = [];
+      dartRunner.externalPrintFunction = (o) => output.add(o);
+
+      dartRunner.executeFunction('', 'main', [
+        [10, 20]
+      ]);
+
+      expect(output, equals([false, true]));
+
+      print('---------------------------------------');
+      print('OUTPUT:');
+      output.forEach((o) => print('>> $o'));
+
+      print('---------------------------------------');
+      // Regenerate code:
+      var codeStorageDart = vm.generateAllCodeIn('dart');
+      var allSourcesDart = codeStorageDart.writeAllSources().toString();
+      print(allSourcesDart);
+
+      expect(allSourcesDart, equals(r'''<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+  void main(List<Object> args) {
+    var a = args[0];
+    var b = args[1];
+    var eq = a == b;
+    var notEq = a != b;
+    print(eq);
+    print(notEq);
+  }
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+'''));
+
+      print('---------------------------------------');
+      // Regenerate code:
+      var codeStorageJava8 = vm.generateAllCodeIn('java8');
+      var allSourcesJava8 = codeStorageJava8.writeAllSources().toString();
+      print(allSourcesJava8);
+
+      expect(allSourcesJava8, equals(r'''<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+  void main(Object[] args) {
+    var a = args[0];
+    var b = args[1];
+    var eq = a == b;
+    var notEq = a != b;
+    print(eq);
+    print(notEq);
+  }
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+'''));
+    });
   });
 }

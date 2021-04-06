@@ -336,7 +336,7 @@ class ASTCodeFunctionSetSingle extends ASTCodeFunctionSet {
     }
 
     throw StateError(
-        'Function parameters signature not compatible: $parametersSignature != ${f.parameters}');
+        'Function \'${f.name}\' parameters signature not compatible: $parametersSignature != ${f.parameters}');
   }
 
   @override
@@ -366,11 +366,18 @@ class ASTCodeFunctionSetMultiple extends ASTCodeFunctionSet {
       }
     }
 
+    ASTFunctionDeclaration? first;
     for (var f in _functions) {
-      return f;
+      first = f;
+      break;
     }
 
-    throw StateError("Can't find function");
+    if (!exactTypes && first != null) {
+      return first;
+    }
+
+    throw StateError(
+        "Can't find function \'${first?.name}\' with signature: $parametersSignature");
   }
 
   @override
@@ -503,7 +510,29 @@ class ASTParametersDeclaration {
 
   @override
   String toString() {
-    return '{positionalParameters: $positionalParameters, optionalParameters: $optionalParameters, namedParameters: $namedParameters}';
+    var s = StringBuffer();
+    s.write('{');
+
+    if (positionalParameters != null) {
+      s.write('positionalParameters: ');
+      s.write(positionalParameters);
+    }
+
+    if (optionalParameters != null) {
+      if (s.length > 1) s.write(', ');
+      s.write('optionalParameters: ');
+      s.write(optionalParameters);
+    }
+
+    if (namedParameters != null) {
+      if (s.length > 1) s.write(', ');
+      s.write('namedParameters: ');
+      s.write(namedParameters);
+    }
+
+    s.write('}');
+
+    return s.toString();
   }
 }
 
@@ -565,8 +594,10 @@ class ASTFunctionDeclaration<T> extends ASTCodeBlock {
 
   void initializeVariables(
       VMContext context, List? positionalParameters, Map? namedParameters) {
+    var i = 0;
+
     if (positionalParameters != null) {
-      for (var i = 0; i < positionalParameters.length; ++i) {
+      for (; i < positionalParameters.length; ++i) {
         var paramVal = positionalParameters[i];
         var fParam = getParameterByIndex(i);
         if (fParam == null) {
@@ -575,6 +606,14 @@ class ASTFunctionDeclaration<T> extends ASTCodeBlock {
         var value = fParam.toValue(context, paramVal) ?? ASTValueNull.INSTANCE;
         context.declareVariableWithValue(fParam.type, fParam.name, value);
       }
+    }
+
+    var parametersSize = this.parametersSize;
+
+    for (; i < parametersSize; ++i) {
+      var fParam = getParameterByIndex(i)!;
+      context.declareVariableWithValue(
+          fParam.type, fParam.name, ASTValueNull.INSTANCE);
     }
   }
 
@@ -706,6 +745,11 @@ abstract class ASTVariable implements ASTNode {
 
   V readKey<V>(VMContext context, Object key) =>
       getValue(context).readKey(context, key);
+
+  @override
+  String toString() {
+    return name;
+  }
 }
 
 abstract class ASTTypedVariable<T> extends ASTVariable {
@@ -713,6 +757,11 @@ abstract class ASTTypedVariable<T> extends ASTVariable {
   final bool finalValue;
 
   ASTTypedVariable(this.type, String name, this.finalValue) : super(name);
+
+  @override
+  String toString() {
+    return '$type $name';
+  }
 }
 
 class ASTClassField<T> extends ASTTypedVariable<T> {
@@ -830,6 +879,8 @@ abstract class ASTValue<T> implements ASTNode {
     throw UnsupportedError("Can't read key for type: $type");
   }
 
+  int? size(VMContext context) => null;
+
   ASTValue operator +(ASTValue other) =>
       throw UnsupportedValueOperationError('+');
 
@@ -878,7 +929,8 @@ class ASTValueStatic<T> extends ASTValue<T> {
       throw RangeError.index(index, it);
     }
 
-    throw UnsupportedError("Can't read index for type: $type > $value");
+    throw ApolloVMNullPointerException(
+        "Can't read index '$index': type: $type ; value: $value");
   }
 
   @override
@@ -888,7 +940,30 @@ class ASTValueStatic<T> extends ASTValue<T> {
       return map[key];
     }
 
-    throw UnsupportedError("Can't read key for type: $type > $value");
+    throw ApolloVMNullPointerException(
+        "Can't read key '$key': type: $type ; value: $value");
+  }
+
+  @override
+  int? size(VMContext context) {
+    var value = this.value;
+
+    if (value is Iterable) {
+      return value.length;
+    }
+
+    return null;
+  }
+}
+
+class ASTValueBool extends ASTValueStatic<bool> {
+  ASTValueBool(bool value) : super(ASTTypeBool.INSTANCE, value);
+
+  static ASTValueBool from(dynamic o) {
+    if (o is bool) return ASTValueBool(o);
+    if (o is num) return ASTValueBool(o > 0);
+    if (o is String) return from(parseBool(o.trim()));
+    throw StateError("Can't parse boolean: $o");
   }
 }
 
@@ -1241,6 +1316,43 @@ abstract class ASTTypePrimitive<T> extends ASTType<T> {
 
   @override
   bool isInstance(ASTType type);
+}
+
+class ASTTypeBool extends ASTTypePrimitive<bool> {
+  static final ASTTypeBool INSTANCE = ASTTypeBool();
+
+  ASTTypeBool() : super('bool');
+
+  @override
+  bool isInstance(ASTType type) {
+    if (type == this) return true;
+    return false;
+  }
+
+  @override
+  ASTValueBool? toValue(VMContext context, Object? v) {
+    if (v is ASTValueBool) return v;
+
+    if (v is ASTValue) {
+      v = (v).getValue(context);
+    }
+
+    var b = parseBool(v);
+    return b != null ? ASTValueBool(b) : null;
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      super == other && other is ASTTypeInt && runtimeType == other.runtimeType;
+
+  @override
+  int get hashCode => name.hashCode;
+
+  @override
+  String toString() {
+    return 'bool';
+  }
 }
 
 abstract class ASTTypeNum<T extends num> extends ASTTypePrimitive<T> {
@@ -1973,12 +2085,23 @@ class ASTExpressionVariableEntryAccess extends ASTExpression {
     var value = variable.getValue(context);
 
     var readValue;
+
     if (key is ASTValueNum) {
       var idx = key.getValue(context).toInt();
-      readValue = value.readIndex(context, idx);
+      try {
+        readValue = value.readIndex(context, idx);
+      } on ApolloVMNullPointerException {
+        throw ApolloVMNullPointerException(
+            "Can't read variable index: $variable[$idx] (size: ${value.size(context)} ; value: $value)");
+      }
     } else {
       var k = key.getValue(context);
-      readValue = value.readKey(context, k);
+      try {
+        readValue = value.readKey(context, k);
+      } on ApolloVMNullPointerException {
+        throw ApolloVMNullPointerException(
+            "Can't read variable key: $variable[$k]  (size: ${value.size(context)} ; value: $value)");
+      }
     }
 
     var readType = ASTType.from(readValue);
@@ -1992,7 +2115,9 @@ enum ASTExpressionOperator {
   multiply,
   divide,
   divideAsInt,
-  divideAsDouble
+  divideAsDouble,
+  equals,
+  notEquals
 }
 
 ASTExpressionOperator getASTExpressionOperator(String op) {
@@ -2008,6 +2133,10 @@ ASTExpressionOperator getASTExpressionOperator(String op) {
       return ASTExpressionOperator.divide;
     case '~/':
       return ASTExpressionOperator.divideAsInt;
+    case '==':
+      return ASTExpressionOperator.equals;
+    case '!=':
+      return ASTExpressionOperator.notEquals;
     default:
       throw UnsupportedError('$op');
   }
@@ -2026,6 +2155,10 @@ String getASTExpressionOperatorText(ASTExpressionOperator op) {
       return '/';
     case ASTExpressionOperator.divideAsInt:
       return '~/';
+    case ASTExpressionOperator.equals:
+      return '==';
+    case ASTExpressionOperator.notEquals:
+      return '!=';
     default:
       throw UnsupportedError('$op');
   }
@@ -2058,6 +2191,10 @@ class ASTExpressionOperation extends ASTExpression {
         return operatorDivideAsInt(parentContext, val1, val2);
       case ASTExpressionOperator.divideAsDouble:
         return operatorDivideAsDouble(parentContext, val1, val2);
+      case ASTExpressionOperator.equals:
+        return operatorEquals(parentContext, val1, val2);
+      case ASTExpressionOperator.notEquals:
+        return operatorNotEquals(parentContext, val1, val2);
     }
   }
 
@@ -2220,6 +2357,41 @@ class ASTExpressionOperation extends ASTExpression {
     }
 
     throw UnsupportedError("Can't perform '/' operation in types: $t1 / $t2");
+  }
+
+  ASTValueBool operatorEquals(VMContext context, ASTValue val1, ASTValue val2) {
+    var t1 = val1.type;
+    var t2 = val2.type;
+
+    if (t1 is ASTTypeBool || t2 is ASTTypeBool) {
+      var v1 = val1.getValue(context) as bool;
+      var v2 = val2.getValue(context) as bool;
+      var r = v1 == v2;
+      return ASTValueBool(r);
+    } else {
+      var v1 = val1.getValue(context);
+      var v2 = val2.getValue(context);
+      var r = v1 == v2;
+      return ASTValueBool(r);
+    }
+  }
+
+  ASTValueBool operatorNotEquals(
+      VMContext context, ASTValue val1, ASTValue val2) {
+    var t1 = val1.type;
+    var t2 = val2.type;
+
+    if (t1 is ASTTypeBool || t2 is ASTTypeBool) {
+      var v1 = val1.getValue(context) as bool;
+      var v2 = val2.getValue(context) as bool;
+      var r = v1 != v2;
+      return ASTValueBool(r);
+    } else {
+      var v1 = val1.getValue(context);
+      var v2 = val2.getValue(context);
+      var r = v1 != v2;
+      return ASTValueBool(r);
+    }
   }
 }
 

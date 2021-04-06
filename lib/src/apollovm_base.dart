@@ -411,3 +411,13 @@ class VMContext {
     }
   }
 }
+
+class ApolloVMNullPointerException implements Exception {
+  String? message;
+  ApolloVMNullPointerException([this.message]);
+
+  @override
+  String toString() {
+    return 'ApolloVMNullPointerException: $message';
+  }
+}
