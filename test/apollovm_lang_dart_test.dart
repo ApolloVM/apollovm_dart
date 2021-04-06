@@ -476,14 +476,24 @@ class Foo {
       var codeUnit = CodeUnit(
           'dart',
           r'''
+          class Bar {
             void main(List<Object> args) {
               var a = args[0] ;
               var b = args[1] ;
               var eq = a == b ;
               var notEq = a != b ;
+              var greater = a > b ;
+              var lower = a < b ;
+              var greaterOrEq = a >= b ;
+              var lowerOrEq = a <= b ;
               print(eq);
               print(notEq);
+              print(greater);
+              print(lower);
+              print(greaterOrEq);
+              print(lowerOrEq);
             }
+          }
           ''',
           'test');
 
@@ -496,11 +506,11 @@ class Foo {
       var output = [];
       dartRunner.externalPrintFunction = (o) => output.add(o);
 
-      dartRunner.executeFunction('', 'main', [
+      dartRunner.executeClassMethod('', 'Bar', 'main', [
         [10, 20]
       ]);
 
-      expect(output, equals([false, true]));
+      expect(output, equals([false, true, false, true, false, true]));
 
       print('---------------------------------------');
       print('OUTPUT:');
@@ -515,14 +525,24 @@ class Foo {
       expect(allSourcesDart, equals(r'''<<<< [SOURCES_BEGIN] >>>>
 <<<< NAMESPACE="" >>>>
 <<<< CODE_UNIT_START="/test" >>>>
+class Bar {
   void main(List<Object> args) {
     var a = args[0];
     var b = args[1];
     var eq = a == b;
     var notEq = a != b;
+    var greater = a > b;
+    var lower = a < b;
+    var greaterOrEq = a >= b;
+    var lowerOrEq = a <= b;
     print(eq);
     print(notEq);
+    print(greater);
+    print(lower);
+    print(greaterOrEq);
+    print(lowerOrEq);
   }
+}
 <<<< CODE_UNIT_END="/test" >>>>
 <<<< [SOURCES_END] >>>>
 '''));
@@ -536,14 +556,24 @@ class Foo {
       expect(allSourcesJava8, equals(r'''<<<< [SOURCES_BEGIN] >>>>
 <<<< NAMESPACE="" >>>>
 <<<< CODE_UNIT_START="/test" >>>>
+class Bar {
   void main(Object[] args) {
     var a = args[0];
     var b = args[1];
     var eq = a == b;
     var notEq = a != b;
+    var greater = a > b;
+    var lower = a < b;
+    var greaterOrEq = a >= b;
+    var lowerOrEq = a <= b;
     print(eq);
     print(notEq);
+    print(greater);
+    print(lower);
+    print(greaterOrEq);
+    print(lowerOrEq);
   }
+}
 <<<< CODE_UNIT_END="/test" >>>>
 <<<< [SOURCES_END] >>>>
 '''));

@@ -140,7 +140,11 @@ class DartGrammarDefinition extends DartGrammarLexer {
               char('/') |
               string('~/') |
               string('==') |
-              string('!='))
+              string('!=') |
+              string('>=') |
+              string('<=') |
+              char('>') |
+              char('<'))
           .trim()
           .map((v) {
         var op = getASTExpressionOperator(v);

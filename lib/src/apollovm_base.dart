@@ -311,6 +311,16 @@ class ApolloExternalFunctionMapper {
 }
 
 class VMContext {
+  static VMContext? _current;
+
+  static VMContext? setCurrent(VMContext? context) {
+    var prev = _current;
+    _current = context;
+    return prev;
+  }
+
+  static VMContext? getCurrent() => _current;
+
   final VMContext? parent;
   final ASTCodeBlock block;
   final ASTObjectInstance? objectInstance;

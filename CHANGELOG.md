@@ -3,10 +3,8 @@
 - Added type `ASTTypeBool` and value `ASTValueBool`.
 - Added `ApolloVMNullPointerException`.
 - Grammars & Code Generators:
-  - Dart:
-    - Support to expression operators `==` and `!=`.
-  - Java8:
-    - Support to expression operators `==` and `!=`.
+  - Dart & Java8:
+    - Support to expression comparison operators `==`, `!=`, `>`, `<`, `>=`, `<=`.
 
 ## 0.0.6
 

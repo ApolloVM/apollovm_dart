@@ -1,7 +1,7 @@
 import 'package:apollovm/apollovm.dart';
 import 'package:collection/collection.dart' show IterableExtension;
 import 'package:swiss_knife/swiss_knife.dart';
-
+import 'package:collection/collection.dart';
 import 'apollovm_parser.dart';
 
 abstract class ASTNode {}
@@ -142,18 +142,23 @@ class ASTCodeBlock extends ASTStatement {
 
     var rootStatus = ASTRunStatus();
 
-    run(rootContext, rootStatus);
+    var prevContext = VMContext.setCurrent(rootContext);
+    try {
+      run(rootContext, rootStatus);
 
-    var fSignature =
-        ASTFunctionSignature.from(positionalParameters, namedParameters);
+      var fSignature =
+          ASTFunctionSignature.from(positionalParameters, namedParameters);
 
-    var f = getFunction(entryFunctionName, fSignature, rootContext);
-    if (f == null) {
-      throw StateError("Can't find entry function: $entryFunctionName");
+      var f = getFunction(entryFunctionName, fSignature, rootContext);
+      if (f == null) {
+        throw StateError("Can't find entry function: $entryFunctionName");
+      }
+      return f.call(rootContext,
+          positionalParameters: positionalParameters,
+          namedParameters: namedParameters);
+    } finally {
+      VMContext.setCurrent(prevContext);
     }
-    return f.call(rootContext,
-        positionalParameters: positionalParameters,
-        namedParameters: namedParameters);
   }
 
   @override
@@ -580,10 +585,15 @@ class ASTFunctionDeclaration<T> extends ASTCodeBlock {
       {List? positionalParameters, Map? namedParameters}) {
     var context = VMContext(this, parent: parent);
 
-    initializeVariables(context, positionalParameters, namedParameters);
+    var prevContext = VMContext.setCurrent(context);
+    try {
+      initializeVariables(context, positionalParameters, namedParameters);
 
-    var result = super.run(context, ASTRunStatus.DUMMY);
-    return resolveReturnValue(context, result);
+      var result = super.run(context, ASTRunStatus.DUMMY);
+      return resolveReturnValue(context, result);
+    } finally {
+      VMContext.setCurrent(prevContext);
+    }
   }
 
   ASTValue<T> resolveReturnValue(VMContext context, Object? returnValue) {
@@ -643,21 +653,26 @@ class ASTExternalFunction<T> extends ASTFunctionDeclaration<T> {
       {List? positionalParameters, Map? namedParameters}) {
     var context = VMContext(this, parent: parent);
 
-    initializeVariables(context, positionalParameters, namedParameters);
+    var prevContext = VMContext.setCurrent(context);
+    try {
+      initializeVariables(context, positionalParameters, namedParameters);
 
-    var result;
-    if (externalFunction is Function(dynamic a)) {
-      var a0 = getParameterValueByIndex(context, 0)?.getValue(context);
-      result = externalFunction(a0);
-    } else if (externalFunction is Function(dynamic a0, dynamic a1)) {
-      var a0 = getParameterValueByIndex(context, 0)?.getValue(context);
-      var a1 = getParameterValueByIndex(context, 1)?.getValue(context);
-      result = externalFunction(a0, a1);
-    } else {
-      result = externalFunction();
+      var result;
+      if (externalFunction is Function(dynamic a)) {
+        var a0 = getParameterValueByIndex(context, 0)?.getValue(context);
+        result = externalFunction(a0);
+      } else if (externalFunction is Function(dynamic a0, dynamic a1)) {
+        var a0 = getParameterValueByIndex(context, 0)?.getValue(context);
+        var a1 = getParameterValueByIndex(context, 1)?.getValue(context);
+        result = externalFunction(a0, a1);
+      } else {
+        result = externalFunction();
+      }
+
+      return resolveReturnValue(context, result);
+    } finally {
+      VMContext.setCurrent(prevContext);
     }
-
-    return resolveReturnValue(context, result);
   }
 }
 
@@ -669,9 +684,10 @@ class ASTObjectValue<T> extends ASTValue<T> {
   ASTObjectValue(ASTType<T> type) : super(type);
 
   @override
-  T getValue(VMContext context) {
-    return _o as T;
-  }
+  T getValue(VMContext context) => _o as T;
+
+  @override
+  T getValueNoContext() => _o as T;
 
   @override
   ASTValue<T> resolve(VMContext context) {
@@ -867,6 +883,8 @@ abstract class ASTValue<T> implements ASTNode {
 
   T getValue(VMContext context);
 
+  T getValueNoContext();
+
   ASTValue<T> resolve(VMContext context);
 
   ASTValue(this.type);
@@ -895,6 +913,76 @@ abstract class ASTValue<T> implements ASTNode {
 
   ASTValue operator ~/(ASTValue other) =>
       throw UnsupportedValueOperationError('+');
+
+  T _getValue(VMContext? context, ASTValue v) =>
+      context != null ? v.getValue(context) : v.getValueNoContext();
+
+  @override
+  bool operator ==(Object other) {
+    if (other is ASTValue) {
+      var context = VMContext.getCurrent();
+      var v1 = _getValue(context, this);
+      var v2 = _getValue(context, other);
+      return v1 == v2;
+    }
+    return false;
+  }
+
+  bool operator >(Object other) {
+    if (other is ASTValue) {
+      var context = VMContext.getCurrent();
+      var v1 = _getValue(context, this);
+      var v2 = _getValue(context, other);
+      if (v1 is num && v2 is num) {
+        return v1 > v2;
+      }
+      throw UnsupportedError(
+          "Can't perform operation '>' in non number values: $v1 > $v2");
+    }
+    return false;
+  }
+
+  bool operator <(Object other) {
+    if (other is ASTValue) {
+      var context = VMContext.getCurrent();
+      var v1 = _getValue(context, this);
+      var v2 = _getValue(context, other);
+      if (v1 is num && v2 is num) {
+        return v1 < v2;
+      }
+      throw UnsupportedError(
+          "Can't perform operation '<' in non number values: $v1 < $v2");
+    }
+    return false;
+  }
+
+  bool operator >=(Object other) {
+    if (other is ASTValue) {
+      var context = VMContext.getCurrent();
+      var v1 = _getValue(context, this);
+      var v2 = _getValue(context, other);
+      if (v1 is num && v2 is num) {
+        return v1 >= v2;
+      }
+      throw UnsupportedError(
+          "Can't perform operation '>=' in non number values: $v1 >= $v2");
+    }
+    return false;
+  }
+
+  bool operator <=(Object other) {
+    if (other is ASTValue) {
+      var context = VMContext.getCurrent();
+      var v1 = _getValue(context, this);
+      var v2 = _getValue(context, other);
+      if (v1 is num && v2 is num) {
+        return v1 <= v2;
+      }
+      throw UnsupportedError(
+          "Can't perform operation '<=' in non number values: $v1 <= $v2");
+    }
+    return false;
+  }
 }
 
 class ASTValueStatic<T> extends ASTValue<T> {
@@ -904,6 +992,9 @@ class ASTValueStatic<T> extends ASTValue<T> {
 
   @override
   T getValue(VMContext context) => value;
+
+  @override
+  T getValueNoContext() => value;
 
   @override
   ASTValue<T> resolve(VMContext context) {
@@ -954,9 +1045,40 @@ class ASTValueStatic<T> extends ASTValue<T> {
 
     return null;
   }
+
+  @override
+  bool operator ==(Object other) {
+    if (other is ASTValueStatic) {
+      return value == other.value;
+    }
+    return super == (other);
+  }
+
+  @override
+  bool operator >(Object other) {
+    if (other is ASTValueStatic) {
+      return value == other.value;
+    }
+    return super > (other);
+  }
 }
 
-class ASTValueBool extends ASTValueStatic<bool> {
+abstract class ASTValuePrimitive<T> extends ASTValueStatic<T> {
+  ASTValuePrimitive(ASTType<T> type, T value) : super(type, value);
+
+  @override
+  bool operator ==(Object other) {
+    if (other is ASTValuePrimitive) {
+      var context = VMContext.getCurrent();
+      var v1 = _getValue(context, this);
+      var v2 = _getValue(context, other);
+      return v1 == v2;
+    }
+    return super == (other);
+  }
+}
+
+class ASTValueBool extends ASTValuePrimitive<bool> {
   ASTValueBool(bool value) : super(ASTTypeBool.INSTANCE, value);
 
   static ASTValueBool from(dynamic o) {
@@ -967,7 +1089,7 @@ class ASTValueBool extends ASTValueStatic<bool> {
   }
 }
 
-abstract class ASTValueNum<T extends num> extends ASTValueStatic<T> {
+abstract class ASTValueNum<T extends num> extends ASTValuePrimitive<T> {
   ASTValueNum(ASTType<T> type, T value) : super(type, value);
 
   static ASTValueNum from(dynamic o) {
@@ -988,6 +1110,74 @@ abstract class ASTValueNum<T extends num> extends ASTValueStatic<T> {
 
   @override
   ASTValue operator *(ASTValue other);
+
+  @override
+  bool operator ==(Object other) {
+    if (other is ASTValueNum) {
+      return value == other.value;
+    }
+    return super == (other);
+  }
+
+  @override
+  bool operator >(Object other) {
+    if (other is ASTValueNum) {
+      var context = VMContext.getCurrent();
+      var v1 = _getValue(context, this);
+      var v2 = _getValue(context, other);
+      if (v1 is num && v2 is num) {
+        return v1 > v2;
+      }
+      throw UnsupportedError(
+          "Can't perform operation '>' in non number values: $v1 > $v2");
+    }
+    return false;
+  }
+
+  @override
+  bool operator <(Object other) {
+    if (other is ASTValueNum) {
+      var context = VMContext.getCurrent();
+      var v1 = _getValue(context, this);
+      var v2 = _getValue(context, other);
+      if (v1 is num && v2 is num) {
+        return v1 < v2;
+      }
+      throw UnsupportedError(
+          "Can't perform operation '<' in non number values: $v1 < $v2");
+    }
+    return false;
+  }
+
+  @override
+  bool operator >=(Object other) {
+    if (other is ASTValueNum) {
+      var context = VMContext.getCurrent();
+      var v1 = _getValue(context, this);
+      var v2 = _getValue(context, other);
+      if (v1 is num && v2 is num) {
+        return v1 >= v2;
+      }
+      throw UnsupportedError(
+          "Can't perform operation '>=' in non number values: $v1 >= $v2");
+    }
+    return false;
+  }
+
+  @override
+  bool operator <=(Object other) {
+    if (other is ASTValueNum) {
+      var context = VMContext.getCurrent();
+      var v1 = _getValue(context, this);
+      var v2 = _getValue(context, other);
+      if (v1 is num && v2 is num) {
+        return v1 <= v2;
+      }
+      throw UnsupportedError(
+          "Can't perform operation '<=' in non number values: $v1 <= $v2");
+    }
+    return false;
+  }
 }
 
 class ASTValueInt extends ASTValueNum<int> {
@@ -1098,8 +1288,32 @@ class ASTValueDouble extends ASTValueNum<double> {
   }
 }
 
-class ASTValueString extends ASTValueStatic<String> {
+class ASTValueString extends ASTValuePrimitive<String> {
   ASTValueString(String s) : super(ASTTypeString.INSTANCE, s);
+
+  @override
+  bool operator >(Object other) {
+    throw UnsupportedError(
+        "Can't perform operation '>' in non number values: $this > $other");
+  }
+
+  @override
+  bool operator <(Object other) {
+    throw UnsupportedError(
+        "Can't perform operation '<' in non number values: $this > $other");
+  }
+
+  @override
+  bool operator >=(Object other) {
+    throw UnsupportedError(
+        "Can't perform operation '>=' in non number values: $this > $other");
+  }
+
+  @override
+  bool operator <=(Object other) {
+    throw UnsupportedError(
+        "Can't perform operation '<=' in non number values: $this > $other");
+  }
 }
 
 class ASTValueObject extends ASTValueStatic<Object> {
@@ -1110,22 +1324,59 @@ class ASTValueNull extends ASTValueStatic<Null> {
   ASTValueNull() : super(ASTTypeNull.INSTANCE, null);
 
   static final ASTValueNull INSTANCE = ASTValueNull();
+
+  @override
+  bool operator ==(Object other) {
+    return other is ASTValueNull;
+  }
 }
 
 class ASTValueVoid extends ASTValueStatic<void> {
   ASTValueVoid() : super(ASTTypeVoid.INSTANCE, null);
 
   static final ASTValueVoid INSTANCE = ASTValueVoid();
+
+  @override
+  bool operator ==(Object other) {
+    return other is ASTValueVoid;
+  }
 }
 
 class ASTValueArray<T extends ASTType<V>, V> extends ASTValueStatic<List<V>> {
   ASTValueArray(T type, List<V> value) : super(ASTTypeArray<T, V>(type), value);
+
+  static final ListEquality _listEquality = const ListEquality();
+
+  @override
+  bool operator ==(Object other) {
+    if (other is ASTValueArray) {
+      var context = VMContext.getCurrent();
+      var v1 = _getValue(context, this);
+      var v2 = _getValue(context, other);
+      return _listEquality.equals(v1, v2);
+    }
+    return super == (other);
+  }
 }
 
 class ASTValueArray2D<T extends ASTType<V>, V>
     extends ASTValueArray<ASTTypeArray<T, V>, List<V>> {
   ASTValueArray2D(T type, List<List<V>> value)
       : super(ASTTypeArray<T, V>(type), value);
+
+  static final DeepCollectionEquality _listEquality =
+      const DeepCollectionEquality();
+
+  @override
+  bool operator ==(Object other) {
+    if (other is ASTValueArray2D) {
+      var context = VMContext.getCurrent();
+      var v1 = _getValue(context, this);
+      var v2 = _getValue(context, other);
+      return _listEquality.equals(v1, v2);
+    }
+    return super == (other);
+  }
 }
 
 class ASTValueArray3D<T extends ASTType<V>, V>
@@ -1786,6 +2037,9 @@ class ASTValueAsString<T> extends ASTValue<String> {
   }
 
   @override
+  String getValueNoContext() => value.getValueNoContext().toString();
+
+  @override
   ASTValue<String> resolve(VMContext context) {
     return ASTValueString(getValue(context));
   }
@@ -1800,6 +2054,14 @@ class ASTValuesListAsString extends ASTValue<String> {
   String getValue(VMContext context) {
     return values.map((e) {
       var v = e.resolve(context).getValue(context);
+      return '$v';
+    }).join();
+  }
+
+  @override
+  String getValueNoContext() {
+    return values.map((e) {
+      var v = e.getValueNoContext();
       return '$v';
     }).join();
   }
@@ -1822,6 +2084,10 @@ class ASTValueStringExpresion<T> extends ASTValue<String> {
   }
 
   @override
+  String getValueNoContext() => throw UnsupportedError(
+      "Can't define an expression value without a context!");
+
+  @override
   ASTValue<String> resolve(VMContext context) {
     var s = getValue(context);
     return ASTValueString(s);
@@ -1840,6 +2106,10 @@ class ASTValueStringVariable<T> extends ASTValue<String> {
   }
 
   @override
+  String getValueNoContext() => throw UnsupportedError(
+      "Can't define an variable value without a context!");
+
+  @override
   ASTValue<String> resolve(VMContext context) {
     var value = variable.getValue(context);
     return value is ASTValue<String> ? value : ASTValueAsString(value);
@@ -1854,6 +2124,12 @@ class ASTValueStringConcatenation extends ASTValue<String> {
   @override
   String getValue(VMContext context) {
     var vs = values.map((e) => e.getValue(context)).toList();
+    return vs.join();
+  }
+
+  @override
+  String getValueNoContext() {
+    var vs = values.map((e) => e.getValueNoContext()).toList();
     return vs.join();
   }
 
@@ -1886,6 +2162,10 @@ class ASTValueReadIndex<T> extends ASTValue<T> {
       variable.readIndex(context, getIndex(context));
 
   @override
+  T getValueNoContext() =>
+      throw UnsupportedError("Can't define variable value without a context!");
+
+  @override
   ASTValue<T> resolve(VMContext context) {
     var v = getValue(context);
     return ASTValue.from(type, v);
@@ -1908,6 +2188,10 @@ class ASTValueReadKey<T> extends ASTValue<T> {
 
   @override
   T getValue(VMContext context) => variable.readKey(context, getKey(context));
+
+  @override
+  T getValueNoContext() =>
+      throw UnsupportedError("Can't define variable value without a context!");
 
   @override
   ASTValue<T> resolve(VMContext context) {
@@ -2117,7 +2401,11 @@ enum ASTExpressionOperator {
   divideAsInt,
   divideAsDouble,
   equals,
-  notEquals
+  notEquals,
+  greater,
+  lower,
+  greaterOrEq,
+  lowerOrEq,
 }
 
 ASTExpressionOperator getASTExpressionOperator(String op) {
@@ -2137,6 +2425,14 @@ ASTExpressionOperator getASTExpressionOperator(String op) {
       return ASTExpressionOperator.equals;
     case '!=':
       return ASTExpressionOperator.notEquals;
+    case '>':
+      return ASTExpressionOperator.greater;
+    case '>=':
+      return ASTExpressionOperator.greaterOrEq;
+    case '<':
+      return ASTExpressionOperator.lower;
+    case '<=':
+      return ASTExpressionOperator.lowerOrEq;
     default:
       throw UnsupportedError('$op');
   }
@@ -2159,6 +2455,14 @@ String getASTExpressionOperatorText(ASTExpressionOperator op) {
       return '==';
     case ASTExpressionOperator.notEquals:
       return '!=';
+    case ASTExpressionOperator.greater:
+      return '>';
+    case ASTExpressionOperator.greaterOrEq:
+      return '>=';
+    case ASTExpressionOperator.lower:
+      return '<';
+    case ASTExpressionOperator.lowerOrEq:
+      return '<=';
     default:
       throw UnsupportedError('$op');
   }
@@ -2195,6 +2499,14 @@ class ASTExpressionOperation extends ASTExpression {
         return operatorEquals(parentContext, val1, val2);
       case ASTExpressionOperator.notEquals:
         return operatorNotEquals(parentContext, val1, val2);
+      case ASTExpressionOperator.greater:
+        return operatorGreater(parentContext, val1, val2);
+      case ASTExpressionOperator.greaterOrEq:
+        return operatorGreaterOrEq(parentContext, val1, val2);
+      case ASTExpressionOperator.lower:
+        return operatorLower(parentContext, val1, val2);
+      case ASTExpressionOperator.lowerOrEq:
+        return operatorLowerOrEq(parentContext, val1, val2);
     }
   }
 
@@ -2360,38 +2672,37 @@ class ASTExpressionOperation extends ASTExpression {
   }
 
   ASTValueBool operatorEquals(VMContext context, ASTValue val1, ASTValue val2) {
-    var t1 = val1.type;
-    var t2 = val2.type;
-
-    if (t1 is ASTTypeBool || t2 is ASTTypeBool) {
-      var v1 = val1.getValue(context) as bool;
-      var v2 = val2.getValue(context) as bool;
-      var r = v1 == v2;
-      return ASTValueBool(r);
-    } else {
-      var v1 = val1.getValue(context);
-      var v2 = val2.getValue(context);
-      var r = v1 == v2;
-      return ASTValueBool(r);
-    }
+    var b = val1 == val2;
+    return ASTValueBool(b);
   }
 
   ASTValueBool operatorNotEquals(
       VMContext context, ASTValue val1, ASTValue val2) {
-    var t1 = val1.type;
-    var t2 = val2.type;
+    var b = val1 != val2;
+    return ASTValueBool(b);
+  }
 
-    if (t1 is ASTTypeBool || t2 is ASTTypeBool) {
-      var v1 = val1.getValue(context) as bool;
-      var v2 = val2.getValue(context) as bool;
-      var r = v1 != v2;
-      return ASTValueBool(r);
-    } else {
-      var v1 = val1.getValue(context);
-      var v2 = val2.getValue(context);
-      var r = v1 != v2;
-      return ASTValueBool(r);
-    }
+  ASTValueBool operatorGreater(
+      VMContext context, ASTValue val1, ASTValue val2) {
+    var b = val1 > val2;
+    return ASTValueBool(b);
+  }
+
+  ASTValueBool operatorGreaterOrEq(
+      VMContext context, ASTValue val1, ASTValue val2) {
+    var b = val1 >= val2;
+    return ASTValueBool(b);
+  }
+
+  ASTValueBool operatorLower(VMContext context, ASTValue val1, ASTValue val2) {
+    var b = val1 < val2;
+    return ASTValueBool(b);
+  }
+
+  ASTValueBool operatorLowerOrEq(
+      VMContext context, ASTValue val1, ASTValue val2) {
+    var b = val1 <= val2;
+    return ASTValueBool(b);
   }
 }
 
