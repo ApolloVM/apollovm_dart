@@ -1,6 +1,7 @@
-import 'package:apollovm/apollovm.dart';
-import 'package:apollovm/src/apollovm_ast.dart';
 import 'package:petitparser/petitparser.dart';
+
+import 'apollovm_base.dart';
+import 'ast/apollovm_ast_toplevel.dart';
 
 abstract class ApolloParser {
   final GrammarDefinition _grammar;
@@ -42,6 +43,7 @@ class ParseResult {
   final String? errorMessage;
 
   bool get isOK => root != null;
+
   bool get hasError => root == null;
 
   ParseResult({this.root, this.errorMessage});

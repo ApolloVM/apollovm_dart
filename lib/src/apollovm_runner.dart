@@ -1,4 +1,6 @@
-import 'package:apollovm/apollovm.dart';
+import 'apollovm_base.dart';
+import 'ast/apollovm_ast_type.dart';
+import 'ast/apollovm_ast_value.dart';
 
 abstract class ApolloLanguageRunner {
   final ApolloVM apolloVM;

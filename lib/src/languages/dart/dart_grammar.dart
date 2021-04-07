@@ -1,4 +1,4 @@
-import 'package:apollovm/src/apollovm_ast.dart';
+import 'package:apollovm/apollovm.dart';
 import 'package:petitparser/petitparser.dart';
 
 import 'dart_grammar_lexer.dart';

@@ -1,3 +1,8 @@
+## 0.0.10
+
+- Refactor:
+  - Split `apollovm_ast.dart` into multiple `ast/apollovm_ast_*.dart` files.
+
 ## 0.0.9
 
 - Code Generators:

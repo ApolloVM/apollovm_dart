@@ -1,9 +1,10 @@
 import 'package:apollovm/apollovm.dart';
-import 'package:apollovm/src/apollovm_code_generator.dart';
-import 'package:apollovm/src/apollovm_code_storage.dart';
-import 'package:apollovm/src/apollovm_runner.dart';
-import 'package:apollovm/src/languages/dart/dart_generator.dart';
-import 'package:apollovm/src/languages/java/java11/java11_generator.dart';
+
+import 'apollovm_code_generator.dart';
+import 'apollovm_code_storage.dart';
+import 'apollovm_runner.dart';
+import 'languages/dart/dart_generator.dart';
+import 'languages/java/java11/java11_generator.dart';
 
 class ApolloVM {
   ApolloParser? getParser(String language) {
@@ -105,6 +106,8 @@ class LanguageNamespaces {
 
   final Map<String, CodeNamespace> _namespaces = <String, CodeNamespace>{};
 
+  List<String> get namespaces => _namespaces.keys.toList();
+
   CodeNamespace get(String namespace) => _namespaces.putIfAbsent(
       namespace, () => CodeNamespace(language, namespace));
 
@@ -113,6 +116,9 @@ class LanguageNamespaces {
       namespace.generateAllCode(codeGenerator);
     }
   }
+
+  List<String> get classesNames =>
+      _namespaces.values.expand((e) => e.classesNames).toList();
 }
 
 class CodeNamespace {
@@ -145,6 +151,9 @@ class CodeNamespace {
     }
     return null;
   }
+
+  List<String> get classesNames =>
+      _codeUnits.expand((e) => e.codeRoot!.classesNames).toList();
 
   ASTCodeClass? getClass(String className) {
     for (var cu in _codeUnits) {
@@ -427,6 +436,7 @@ class VMContext {
 
 class ApolloVMNullPointerException implements Exception {
   String? message;
+
   ApolloVMNullPointerException([this.message]);
 
   @override
