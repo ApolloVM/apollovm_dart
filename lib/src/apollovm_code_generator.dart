@@ -13,12 +13,12 @@ abstract class ApolloCodeGenerator {
       return generateASTValue(node, indent, s);
     } else if (node is ASTExpression) {
       return generateASTExpression(node, indent, s);
-    } else if (node is ASTCodeRoot) {
-      return generateASTCodeRoot(node, indent, s);
-    } else if (node is ASTCodeClass) {
-      return generateASTCodeClass(node, indent, s);
-    } else if (node is ASTCodeBlock) {
-      return generateASTCodeBlock(node, indent, s);
+    } else if (node is ASTRoot) {
+      return generateASTRoot(node, indent, s);
+    } else if (node is ASTClass) {
+      return generateASTClass(node, indent, s);
+    } else if (node is ASTBlock) {
+      return generateASTBlock(node, indent, s);
     } else if (node is ASTStatement) {
       return generateASTStatement(node, indent, s);
     } else if (node is ASTFunctionDeclaration) {
@@ -28,20 +28,20 @@ abstract class ApolloCodeGenerator {
     throw UnsupportedError("Can't handle ASTNode: $node");
   }
 
-  StringBuffer generateASTCodeRoot(ASTCodeRoot codeRoot,
+  StringBuffer generateASTRoot(ASTRoot root,
       [String indent = '', StringBuffer? s, bool withBrackets = true]) {
     s ??= StringBuffer();
 
-    generateASTCodeBlock(codeRoot, '', s, false);
+    generateASTBlock(root, '', s, false);
 
-    for (var clazz in codeRoot.classes) {
-      generateASTCodeClass(clazz, '', s);
+    for (var clazz in root.classes) {
+      generateASTClass(clazz, '', s);
     }
 
     return s;
   }
 
-  StringBuffer generateASTCodeBlock(ASTCodeBlock block,
+  StringBuffer generateASTBlock(ASTBlock block,
       [String indent = '', StringBuffer? s, bool withBrackets = true]) {
     s ??= StringBuffer();
 
@@ -65,7 +65,7 @@ abstract class ApolloCodeGenerator {
     return s;
   }
 
-  StringBuffer generateASTCodeClass(ASTCodeClass codeClass,
+  StringBuffer generateASTClass(ASTClass clazz,
       [String indent = '', StringBuffer? s]);
 
   StringBuffer generateASTFunctionDeclaration(ASTFunctionDeclaration f,
@@ -182,7 +182,7 @@ abstract class ApolloCodeGenerator {
     s.write('if (');
     generateASTExpression(branch.condition, '', s);
     s.write(') {\n');
-    generateASTCodeBlock(branch.block, indent + '  ', s, false);
+    generateASTBlock(branch.block, indent + '  ', s, false);
     s.write(indent);
     s.write('}\n');
 
@@ -197,10 +197,10 @@ abstract class ApolloCodeGenerator {
     s.write('if (');
     generateASTExpression(branch.condition, '', s);
     s.write(') {\n');
-    generateASTCodeBlock(branch.blockIf, indent + '  ', s, false);
+    generateASTBlock(branch.blockIf, indent + '  ', s, false);
     s.write(indent);
     s.write('} else {\n');
-    generateASTCodeBlock(branch.blockElse, indent + '  ', s, false);
+    generateASTBlock(branch.blockElse, indent + '  ', s, false);
     s.write(indent);
     s.write('}\n');
 
@@ -217,19 +217,19 @@ abstract class ApolloCodeGenerator {
     s.write('if (');
     generateASTExpression(branch.condition, '', s);
     s.write(') {\n');
-    generateASTCodeBlock(branch.blockIf, indent + '  ', s, false);
+    generateASTBlock(branch.blockIf, indent + '  ', s, false);
 
     for (var branchElseIf in branch.blocksElseIf) {
       s.write(indent);
       s.write('} else if (');
       generateASTExpression(branchElseIf.condition, indent + '  ', s);
       s.write(') {\n');
-      generateASTCodeBlock(branchElseIf.block, indent + '  ', s, false);
+      generateASTBlock(branchElseIf.block, indent + '  ', s, false);
     }
 
     s.write(indent);
     s.write('} else {\n');
-    generateASTCodeBlock(branch.blockElse, indent + '  ', s, false);
+    generateASTBlock(branch.blockElse, indent + '  ', s, false);
     s.write(indent);
     s.write('}\n');
 

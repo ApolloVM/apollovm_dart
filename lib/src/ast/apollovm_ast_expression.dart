@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:apollovm/apollovm.dart';
 
 import 'apollovm_ast_statement.dart';
@@ -19,7 +21,7 @@ class ASTExpressionVariableAccess extends ASTExpression {
   ASTExpressionVariableAccess(this.variable);
 
   @override
-  ASTValue run(VMContext parentContext, ASTRunStatus runStatus) {
+  FutureOr<ASTValue> run(VMContext parentContext, ASTRunStatus runStatus) {
     var context = defineRunContext(parentContext);
     return variable.getValue(context);
   }
@@ -31,7 +33,7 @@ class ASTExpressionLiteral extends ASTExpression {
   ASTExpressionLiteral(this.value);
 
   @override
-  ASTValue run(VMContext parentContext, ASTRunStatus runStatus) {
+  FutureOr<ASTValue> run(VMContext parentContext, ASTRunStatus runStatus) {
     return value.resolve(parentContext);
   }
 }
@@ -43,26 +45,27 @@ class ASTExpressionVariableEntryAccess extends ASTExpression {
   ASTExpressionVariableEntryAccess(this.variable, this.expression);
 
   @override
-  ASTValue run(VMContext parentContext, ASTRunStatus runStatus) {
+  FutureOr<ASTValue> run(
+      VMContext parentContext, ASTRunStatus runStatus) async {
     var context = defineRunContext(parentContext);
 
-    var key = expression.run(context, runStatus);
-    var value = variable.getValue(context);
+    var key = await expression.run(context, runStatus);
+    var value = await variable.getValue(context);
 
     var readValue;
 
     if (key is ASTValueNum) {
       var idx = key.getValue(context).toInt();
       try {
-        readValue = value.readIndex(context, idx);
+        readValue = await value.readIndex(context, idx);
       } on ApolloVMNullPointerException {
         throw ApolloVMNullPointerException(
             "Can't read variable index: $variable[$idx] (size: ${value.size(context)} ; value: $value)");
       }
     } else {
-      var k = key.getValue(context);
+      var k = await key.getValue(context);
       try {
-        readValue = value.readKey(context, k);
+        readValue = await value.readKey(context, k);
       } on ApolloVMNullPointerException {
         throw ApolloVMNullPointerException(
             "Can't read variable key: $variable[$k]  (size: ${value.size(context)} ; value: $value)");
@@ -157,11 +160,12 @@ class ASTExpressionOperation extends ASTExpression {
   ASTExpressionOperation(this.expression1, this.operator, this.expression2);
 
   @override
-  ASTValue run(VMContext parentContext, ASTRunStatus runStatus) {
+  FutureOr<ASTValue> run(
+      VMContext parentContext, ASTRunStatus runStatus) async {
     var context = defineRunContext(parentContext);
 
-    var val2 = expression2.run(context, runStatus);
-    var val1 = expression1.run(context, runStatus);
+    var val2 = await expression2.run(context, runStatus);
+    var val1 = await expression1.run(context, runStatus);
 
     switch (operator) {
       case ASTExpressionOperator.add:
@@ -352,38 +356,40 @@ class ASTExpressionOperation extends ASTExpression {
     throw UnsupportedError("Can't perform '/' operation in types: $t1 / $t2");
   }
 
-  ASTValueBool operatorEquals(VMContext context, ASTValue val1, ASTValue val2) {
-    var b = val1 == val2;
+  FutureOr<ASTValueBool> operatorEquals(
+      VMContext context, ASTValue val1, ASTValue val2) async {
+    var b = await val1.equals(val2);
     return ASTValueBool(b);
   }
 
-  ASTValueBool operatorNotEquals(
-      VMContext context, ASTValue val1, ASTValue val2) {
-    var b = val1 != val2;
-    return ASTValueBool(b);
+  FutureOr<ASTValueBool> operatorNotEquals(
+      VMContext context, ASTValue val1, ASTValue val2) async {
+    var b = await val1.equals(val2);
+    return ASTValueBool(!b);
   }
 
-  ASTValueBool operatorGreater(
-      VMContext context, ASTValue val1, ASTValue val2) {
+  FutureOr<ASTValueBool> operatorGreater(
+      VMContext context, ASTValue val1, ASTValue val2) async {
     var b = val1 > val2;
-    return ASTValueBool(b);
+    return ASTValueBool(await b);
   }
 
-  ASTValueBool operatorGreaterOrEq(
-      VMContext context, ASTValue val1, ASTValue val2) {
+  FutureOr<ASTValueBool> operatorGreaterOrEq(
+      VMContext context, ASTValue val1, ASTValue val2) async {
     var b = val1 >= val2;
-    return ASTValueBool(b);
+    return ASTValueBool(await b);
   }
 
-  ASTValueBool operatorLower(VMContext context, ASTValue val1, ASTValue val2) {
+  FutureOr<ASTValueBool> operatorLower(
+      VMContext context, ASTValue val1, ASTValue val2) async {
     var b = val1 < val2;
-    return ASTValueBool(b);
+    return ASTValueBool(await b);
   }
 
-  ASTValueBool operatorLowerOrEq(
-      VMContext context, ASTValue val1, ASTValue val2) {
+  FutureOr<ASTValueBool> operatorLowerOrEq(
+      VMContext context, ASTValue val1, ASTValue val2) async {
     var b = val1 <= val2;
-    return ASTValueBool(b);
+    return ASTValueBool(await b);
   }
 }
 
@@ -398,45 +404,47 @@ class ASTExpressionVariableAssignment extends ASTExpression {
       this.variable, this.operator, this.expression);
 
   @override
-  ASTValue run(VMContext parentContext, ASTRunStatus runStatus) {
+  FutureOr<ASTValue> run(
+      VMContext parentContext, ASTRunStatus runStatus) async {
     var context = defineRunContext(parentContext);
 
-    var value = expression.run(context, runStatus);
-    var variableValue = variable.getValue(context);
+    var value = await expression.run(context, runStatus);
+    var variableValue = await variable.getValue(context);
+
+    FutureOr<ASTValue> result;
 
     switch (operator) {
       case ASTAssignmentOperator.set:
         {
-          variable.setValue(context, value);
-          return value;
+          result = value;
+          break;
         }
       case ASTAssignmentOperator.sum:
         {
-          var res = variableValue + value;
-          variable.setValue(context, res);
-          return value;
+          result = variableValue + value;
+          break;
         }
       case ASTAssignmentOperator.subtract:
         {
-          var res = variableValue - value;
-          variable.setValue(context, res);
-          return value;
+          result = variableValue - value;
+          break;
         }
       case ASTAssignmentOperator.divide:
         {
-          var res = variableValue / value;
-          variable.setValue(context, res);
-          return value;
+          result = variableValue / value;
+          break;
         }
       case ASTAssignmentOperator.multiply:
         {
-          var res = variableValue * value;
-          variable.setValue(context, res);
-          return value;
+          result = variableValue * value;
+          break;
         }
       default:
         throw UnsupportedError('operator: $operator');
     }
+
+    variable.setValue(context, await result);
+    return value;
   }
 }
 
@@ -447,7 +455,8 @@ class ASTExpressionLocalFunctionInvocation extends ASTExpression {
   ASTExpressionLocalFunctionInvocation(this.name, this.arguments);
 
   @override
-  ASTValue run(VMContext parentContext, ASTRunStatus runStatus) {
+  FutureOr<ASTValue> run(
+      VMContext parentContext, ASTRunStatus runStatus) async {
     var fSignature = ASTFunctionSignature.from(arguments, null);
     var f = parentContext.block.getFunction(name, fSignature, parentContext);
     if (f == null) {
@@ -455,9 +464,11 @@ class ASTExpressionLocalFunctionInvocation extends ASTExpression {
           'Can\'t find function "$name" with parameters signature: $fSignature');
     }
 
-    var argumentsValues = arguments.map((e) {
-      return e.run(parentContext, runStatus);
+    var argumentsFuture = arguments.map((e) async {
+      return await e.run(parentContext, runStatus);
     }).toList();
+
+    var argumentsValues = await Future.wait(argumentsFuture);
 
     return f.call(parentContext, positionalParameters: argumentsValues);
   }

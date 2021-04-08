@@ -1,3 +1,21 @@
+## 0.0.11
+
+- Renamed:
+  - `ASTCodeBlock` -> `ASTBlock`. 
+  - `ASTCodeRoot` -> `ASTRoot`.
+  - `ASTCodeClass` -> `ASTClass`.
+- Added support to `async` calls in `ASTNode` execution.
+  - Any part of an `ASTNode` can have an `async` resolution.
+    This allows the mapping of external functions that
+    returns a `Future` or other languages that accepts
+    `async` at any point.
+- Better mapping of external functions:
+  - Better Identification of number of parameters of mapped
+    functions.
+- Now an `ASTRoot` or an `ASTClass` are initialized:
+  - Class/Root statements are executed once, and a context for
+    each Class/Root is held during VM execution.
+
 ## 0.0.10
 
 - Refactor:

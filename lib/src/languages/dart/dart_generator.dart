@@ -6,14 +6,14 @@ class ApolloCodeGeneratorDart extends ApolloCodeGenerator {
   ApolloCodeGeneratorDart(ApolloCodeStorage codeStorage) : super(codeStorage);
 
   @override
-  StringBuffer generateASTCodeClass(ASTCodeClass codeClass,
+  StringBuffer generateASTClass(ASTClass clazz,
       [String indent = '', StringBuffer? s]) {
     s ??= StringBuffer();
 
-    var code = generateASTCodeBlock(codeClass);
+    var code = generateASTBlock(clazz);
 
     s.write('class ');
-    s.write(codeClass.name);
+    s.write(clazz.name);
     s.write(' ');
     s.write(code);
 
@@ -27,7 +27,7 @@ class ApolloCodeGeneratorDart extends ApolloCodeGenerator {
 
     var typeCode = generateASTType(f.returnType);
 
-    var blockCode = generateASTCodeBlock(f, indent, null, false);
+    var blockCode = generateASTBlock(f, indent, null, false);
 
     s.write(indent);
     s.write(typeCode);

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:apollovm/apollovm.dart';
 
 import 'apollovm_ast_expression.dart';
@@ -13,14 +15,14 @@ abstract class ASTStatement implements ASTCodeRunner, ASTNode {
   }
 }
 
-class ASTCodeBlock extends ASTStatement {
-  ASTCodeBlock? parentBlock;
+class ASTBlock extends ASTStatement {
+  ASTBlock? parentBlock;
 
-  ASTCodeBlock(this.parentBlock);
+  ASTBlock(this.parentBlock);
 
-  final Map<String, ASTCodeFunctionSet> _functions = {};
+  final Map<String, ASTFunctionSet> _functions = {};
 
-  List<ASTCodeFunctionSet> get functions => _functions.values.toList();
+  List<ASTFunctionSet> get functions => _functions.values.toList();
 
   void addFunction(ASTFunctionDeclaration f) {
     var name = f.name;
@@ -28,7 +30,7 @@ class ASTCodeBlock extends ASTStatement {
 
     var set = _functions[name];
     if (set == null) {
-      _functions[name] = ASTCodeFunctionSetSingle(f);
+      _functions[name] = ASTFunctionSetSingle(f);
     } else {
       var set2 = set.add(f);
       if (!identical(set, set2)) {
@@ -71,7 +73,7 @@ class ASTCodeBlock extends ASTStatement {
 
   List<ASTStatement> get statements => _statements.toList();
 
-  void set(ASTCodeBlock? other) {
+  void set(ASTBlock? other) {
     if (other == null) return;
 
     _functions.clear();
@@ -83,7 +85,7 @@ class ASTCodeBlock extends ASTStatement {
 
   void addStatement(ASTStatement statement) {
     _statements.add(statement);
-    if (statement is ASTCodeBlock) {
+    if (statement is ASTBlock) {
       statement.parentBlock = this;
     }
   }
@@ -94,51 +96,23 @@ class ASTCodeBlock extends ASTStatement {
     }
   }
 
-  ASTValue execute(String entryFunctionName, dynamic? positionalParameters,
-      dynamic? namedParameters,
-      {ApolloExternalFunctionMapper? externalFunctionMapper}) {
-    var rootContext = VMContext(this);
-    if (externalFunctionMapper != null) {
-      rootContext.externalFunctionMapper = externalFunctionMapper;
-    }
-
-    var rootStatus = ASTRunStatus();
-
-    var prevContext = VMContext.setCurrent(rootContext);
-    try {
-      run(rootContext, rootStatus);
-
-      var fSignature =
-          ASTFunctionSignature.from(positionalParameters, namedParameters);
-
-      var f = getFunction(entryFunctionName, fSignature, rootContext);
-      if (f == null) {
-        throw StateError("Can't find entry function: $entryFunctionName");
-      }
-      return f.call(rootContext,
-          positionalParameters: positionalParameters,
-          namedParameters: namedParameters);
-    } finally {
-      VMContext.setCurrent(prevContext);
-    }
-  }
-
   @override
   VMContext defineRunContext(VMContext parentContext) {
     return parentContext;
   }
 
   @override
-  ASTValue run(VMContext parentContext, ASTRunStatus runStatus) {
+  FutureOr<ASTValue> run(
+      VMContext parentContext, ASTRunStatus runStatus) async {
     var blockContext = defineRunContext(parentContext);
 
-    ASTValue returnValue = ASTValueVoid.INSTANCE;
+    FutureOr<ASTValue> returnValue = ASTValueVoid.INSTANCE;
 
     for (var stm in _statements) {
-      var ret = stm.run(blockContext, runStatus);
+      var ret = await stm.run(blockContext, runStatus);
 
       if (runStatus.returned) {
-        return runStatus.returnedValue!;
+        return (runStatus.returnedFutureValue ?? runStatus.returnedValue)!;
       }
 
       returnValue = ret;
@@ -154,12 +128,12 @@ class ASTCodeBlock extends ASTStatement {
 class ASTStatementValue extends ASTStatement {
   ASTValue value;
 
-  ASTStatementValue(ASTCodeBlock block, this.value) : super();
+  ASTStatementValue(ASTBlock block, this.value) : super();
 
   @override
-  ASTValue run(VMContext parentContext, ASTRunStatus runStatus) {
+  FutureOr<ASTValue> run(VMContext parentContext, ASTRunStatus runStatus) {
     var context = defineRunContext(parentContext);
-    return value.getValue(context);
+    return value.getValue(context) as FutureOr<ASTValue>;
   }
 }
 
@@ -207,7 +181,7 @@ class ASTStatementExpression extends ASTStatement {
   ASTStatementExpression(this.expression);
 
   @override
-  ASTValue run(VMContext parentContext, ASTRunStatus runStatus) {
+  FutureOr<ASTValue> run(VMContext parentContext, ASTRunStatus runStatus) {
     var context = defineRunContext(parentContext);
     return expression.run(context, runStatus);
   }
@@ -215,7 +189,7 @@ class ASTStatementExpression extends ASTStatement {
 
 class ASTStatementReturn extends ASTStatement {
   @override
-  ASTValue run(VMContext parentContext, ASTRunStatus runStatus) {
+  FutureOr<ASTValue> run(VMContext parentContext, ASTRunStatus runStatus) {
     return runStatus.returnVoid();
   }
 }
@@ -244,9 +218,9 @@ class ASTStatementReturnVariable extends ASTStatementReturn {
   ASTStatementReturnVariable(this.variable);
 
   @override
-  ASTValue run(VMContext parentContext, ASTRunStatus runStatus) {
+  FutureOr<ASTValue> run(VMContext parentContext, ASTRunStatus runStatus) {
     var value = variable.getValue(parentContext);
-    return runStatus.returnValue(value);
+    return runStatus.returnFutureOrValue(value);
   }
 }
 
@@ -256,9 +230,9 @@ class ASTStatementReturnWithExpression extends ASTStatementReturn {
   ASTStatementReturnWithExpression(this.expression);
 
   @override
-  ASTValue run(VMContext parentContext, ASTRunStatus runStatus) {
+  FutureOr<ASTValue> run(VMContext parentContext, ASTRunStatus runStatus) {
     var value = expression.run(parentContext, runStatus);
-    return runStatus.returnValue(value);
+    return runStatus.returnFutureOrValue(value);
   }
 }
 
@@ -272,18 +246,21 @@ class ASTStatementVariableDeclaration<V> extends ASTStatement {
   ASTStatementVariableDeclaration(this.type, this.name, this.value);
 
   @override
-  ASTValue run(VMContext parentContext, ASTRunStatus runStatus) {
-    var result = value?.run(parentContext, runStatus) ?? ASTValueNull.INSTANCE;
+  FutureOr<ASTValue> run(
+      VMContext parentContext, ASTRunStatus runStatus) async {
+    var result = await value?.run(parentContext, runStatus);
+    result ??= ASTValueNull.INSTANCE;
     parentContext.declareVariableWithValue(type, name, result);
     return ASTValueVoid.INSTANCE;
   }
 }
 
 abstract class ASTBranch extends ASTStatement {
-  bool evaluateCondition(VMContext parentContext, ASTRunStatus runStatus,
-      ASTExpression condition) {
-    var evaluation = condition.run(parentContext, runStatus);
-    var evalValue = evaluation.getValue(parentContext);
+  FutureOr<bool> evaluateCondition(VMContext parentContext,
+      ASTRunStatus runStatus, ASTExpression condition) async {
+    var evaluation = await condition.run(parentContext, runStatus);
+    var evalValue = await evaluation.getValue(parentContext);
+
     if (evalValue is! bool) {
       throw StateError(
           'A branch condition should return a boolean: $evalValue');
@@ -295,16 +272,18 @@ abstract class ASTBranch extends ASTStatement {
 
 class ASTBranchIfBlock extends ASTBranch {
   ASTExpression condition;
-  ASTCodeBlock block;
+  ASTBlock block;
 
   ASTBranchIfBlock(this.condition, this.block);
 
   @override
-  ASTValue run(VMContext parentContext, ASTRunStatus runStatus) {
-    var evalValue = evaluateCondition(parentContext, runStatus, condition);
+  FutureOr<ASTValue> run(
+      VMContext parentContext, ASTRunStatus runStatus) async {
+    var evalValue =
+        await evaluateCondition(parentContext, runStatus, condition);
 
     if (evalValue) {
-      block.run(parentContext, runStatus);
+      await block.run(parentContext, runStatus);
     }
 
     return ASTValueVoid.INSTANCE;
@@ -313,19 +292,21 @@ class ASTBranchIfBlock extends ASTBranch {
 
 class ASTBranchIfElseBlock extends ASTBranch {
   ASTExpression condition;
-  ASTCodeBlock blockIf;
-  ASTCodeBlock blockElse;
+  ASTBlock blockIf;
+  ASTBlock blockElse;
 
   ASTBranchIfElseBlock(this.condition, this.blockIf, this.blockElse);
 
   @override
-  ASTValue run(VMContext parentContext, ASTRunStatus runStatus) {
-    var evalValue = evaluateCondition(parentContext, runStatus, condition);
+  FutureOr<ASTValue> run(
+      VMContext parentContext, ASTRunStatus runStatus) async {
+    var evalValue =
+        await evaluateCondition(parentContext, runStatus, condition);
 
     if (evalValue) {
-      blockIf.run(parentContext, runStatus);
+      await blockIf.run(parentContext, runStatus);
     } else {
-      blockElse.run(parentContext, runStatus);
+      await blockElse.run(parentContext, runStatus);
     }
 
     return ASTValueVoid.INSTANCE;
@@ -334,31 +315,33 @@ class ASTBranchIfElseBlock extends ASTBranch {
 
 class ASTBranchIfElseIfsElseBlock extends ASTBranch {
   ASTExpression condition;
-  ASTCodeBlock blockIf;
+  ASTBlock blockIf;
   List<ASTBranchIfBlock> blocksElseIf;
-  ASTCodeBlock blockElse;
+  ASTBlock blockElse;
 
   ASTBranchIfElseIfsElseBlock(
       this.condition, this.blockIf, this.blocksElseIf, this.blockElse);
 
   @override
-  ASTValue run(VMContext parentContext, ASTRunStatus runStatus) {
-    var evalValue = evaluateCondition(parentContext, runStatus, condition);
+  FutureOr<ASTValue> run(
+      VMContext parentContext, ASTRunStatus runStatus) async {
+    var evalValue =
+        await evaluateCondition(parentContext, runStatus, condition);
     if (evalValue) {
-      blockIf.run(parentContext, runStatus);
+      await blockIf.run(parentContext, runStatus);
       return ASTValueVoid.INSTANCE;
     } else {
       for (var branch in blocksElseIf) {
         evalValue =
-            evaluateCondition(parentContext, runStatus, branch.condition);
+            await evaluateCondition(parentContext, runStatus, branch.condition);
 
         if (evalValue) {
-          branch.block.run(parentContext, runStatus);
+          await branch.block.run(parentContext, runStatus);
           return ASTValueVoid.INSTANCE;
         }
       }
 
-      blockElse.run(parentContext, runStatus);
+      await blockElse.run(parentContext, runStatus);
       return ASTValueVoid.INSTANCE;
     }
   }

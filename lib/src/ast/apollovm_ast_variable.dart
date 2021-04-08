@@ -3,28 +3,34 @@ import 'package:apollovm/apollovm.dart';
 import 'apollovm_ast_type.dart';
 import 'apollovm_ast_value.dart';
 
+import 'dart:async';
+
 abstract class ASTVariable implements ASTNode {
   final String name;
 
   ASTVariable(this.name);
 
-  ASTVariable resolveVariable(VMContext context);
+  FutureOr<ASTVariable> resolveVariable(VMContext context);
 
-  ASTValue getValue(VMContext context) {
-    var variable = resolveVariable(context);
+  FutureOr<ASTValue> getValue(VMContext context) async {
+    var variable = await resolveVariable(context);
     return variable.getValue(context);
   }
 
-  void setValue(VMContext context, ASTValue value) {
-    var variable = resolveVariable(context);
-    variable.setValue(context, value);
+  FutureOr<void> setValue(VMContext context, ASTValue value) async {
+    var variable = await resolveVariable(context);
+    await variable.setValue(context, value);
   }
 
-  V readIndex<V>(VMContext context, int index) =>
-      getValue(context).readIndex(context, index);
+  FutureOr<V> readIndex<V>(VMContext context, int index) async {
+    var value = await getValue(context);
+    return value.readIndex(context, index);
+  }
 
-  V readKey<V>(VMContext context, Object key) =>
-      getValue(context).readKey(context, key);
+  FutureOr<V> readKey<V>(VMContext context, Object key) async {
+    var value = await getValue(context);
+    return value.readKey(context, key);
+  }
 
   @override
   String toString() {

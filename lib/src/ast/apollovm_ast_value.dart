@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:apollovm/apollovm.dart';
 import 'package:collection/collection.dart'
     show ListEquality, DeepCollectionEquality;
@@ -45,58 +47,75 @@ abstract class ASTValue<T> implements ASTNode {
 
   ASTType<T> type;
 
-  T getValue(VMContext context);
+  FutureOr<T> getValue(VMContext context);
 
-  T getValueNoContext();
+  FutureOr<T> getValueNoContext();
 
-  ASTValue<T> resolve(VMContext context);
+  FutureOr<ASTValue<T>> resolve(VMContext context);
 
   ASTValue(this.type);
 
-  V readIndex<V>(VMContext context, int index) {
+  FutureOr<V> readIndex<V>(VMContext context, int index) {
     throw UnsupportedError("Can't read index for type: $type");
   }
 
-  V readKey<V>(VMContext context, Object key) {
+  FutureOr<V> readKey<V>(VMContext context, Object key) {
     throw UnsupportedError("Can't read key for type: $type");
   }
 
-  int? size(VMContext context) => null;
+  FutureOr<int?> size(VMContext context) => null;
 
-  ASTValue operator +(ASTValue other) =>
+  FutureOr<ASTValue> operator +(ASTValue other) =>
       throw UnsupportedValueOperationError('+');
 
-  ASTValue operator -(ASTValue other) =>
+  FutureOr<ASTValue> operator -(ASTValue other) =>
       throw UnsupportedValueOperationError('+');
 
-  ASTValue operator /(ASTValue other) =>
+  FutureOr<ASTValue> operator /(ASTValue other) =>
       throw UnsupportedValueOperationError('+');
 
-  ASTValue operator *(ASTValue other) =>
+  FutureOr<ASTValue> operator *(ASTValue other) =>
       throw UnsupportedValueOperationError('+');
 
-  ASTValue operator ~/(ASTValue other) =>
+  FutureOr<ASTValue> operator ~/(ASTValue other) =>
       throw UnsupportedValueOperationError('+');
 
-  T _getValue(VMContext? context, ASTValue v) =>
-      context != null ? v.getValue(context) : v.getValueNoContext();
+  FutureOr<T> _getValue(VMContext? context, ASTValue v) =>
+      context != null ? v.getValue(context) as T : v.getValueNoContext() as T;
 
   @override
   bool operator ==(Object other) {
+    if (identical(this, other)) return true;
+
     if (other is ASTValue) {
       var context = VMContext.getCurrent();
       var v1 = _getValue(context, this);
       var v2 = _getValue(context, other);
+      if (v1 is Future || v2 is Future) {
+        throw StateError("Can't compare Future");
+      }
       return v1 == v2;
     }
     return false;
   }
 
-  bool operator >(Object other) {
+  FutureOr<bool> equals(Object other) async {
+    if (identical(this, other)) return true;
+
     if (other is ASTValue) {
       var context = VMContext.getCurrent();
-      var v1 = _getValue(context, this);
-      var v2 = _getValue(context, other);
+      var v1 = await _getValue(context, this);
+      var v2 = await _getValue(context, other);
+      return v1 == v2;
+    }
+    return false;
+  }
+
+  FutureOr<bool> operator >(Object other) async {
+    if (other is ASTValue) {
+      var context = VMContext.getCurrent();
+      var v1 = await _getValue(context, this);
+      var v2 = await _getValue(context, other);
       if (v1 is num && v2 is num) {
         return v1 > v2;
       }
@@ -106,11 +125,11 @@ abstract class ASTValue<T> implements ASTNode {
     return false;
   }
 
-  bool operator <(Object other) {
+  FutureOr<bool> operator <(Object other) async {
     if (other is ASTValue) {
       var context = VMContext.getCurrent();
-      var v1 = _getValue(context, this);
-      var v2 = _getValue(context, other);
+      var v1 = await _getValue(context, this);
+      var v2 = await _getValue(context, other);
       if (v1 is num && v2 is num) {
         return v1 < v2;
       }
@@ -120,11 +139,11 @@ abstract class ASTValue<T> implements ASTNode {
     return false;
   }
 
-  bool operator >=(Object other) {
+  FutureOr<bool> operator >=(Object other) async {
     if (other is ASTValue) {
       var context = VMContext.getCurrent();
-      var v1 = _getValue(context, this);
-      var v2 = _getValue(context, other);
+      var v1 = await _getValue(context, this);
+      var v2 = await _getValue(context, other);
       if (v1 is num && v2 is num) {
         return v1 >= v2;
       }
@@ -134,11 +153,11 @@ abstract class ASTValue<T> implements ASTNode {
     return false;
   }
 
-  bool operator <=(Object other) {
+  FutureOr<bool> operator <=(Object other) async {
     if (other is ASTValue) {
       var context = VMContext.getCurrent();
-      var v1 = _getValue(context, this);
-      var v2 = _getValue(context, other);
+      var v1 = await _getValue(context, this);
+      var v2 = await _getValue(context, other);
       if (v1 is num && v2 is num) {
         return v1 <= v2;
       }
@@ -212,18 +231,28 @@ class ASTValueStatic<T> extends ASTValue<T> {
 
   @override
   bool operator ==(Object other) {
+    if (identical(this, other)) return true;
+
     if (other is ASTValueStatic) {
       return value == other.value;
     }
+
     return super == (other);
   }
 
   @override
-  bool operator >(Object other) {
+  FutureOr<bool> equals(Object other) async {
+    if (identical(this, other)) return true;
+
     if (other is ASTValueStatic) {
       return value == other.value;
+    } else if (other is ASTValue) {
+      var context = VMContext.getCurrent();
+      var otherValue = await _getValue(context, other);
+      return value == otherValue;
     }
-    return super > (other);
+
+    return super == (other);
   }
 }
 
@@ -232,12 +261,34 @@ abstract class ASTValuePrimitive<T> extends ASTValueStatic<T> {
 
   @override
   bool operator ==(Object other) {
+    if (identical(this, other)) return true;
+
     if (other is ASTValuePrimitive) {
+      return value == other.value;
+    } else if (other is ASTValue) {
       var context = VMContext.getCurrent();
-      var v1 = _getValue(context, this);
       var v2 = _getValue(context, other);
-      return v1 == v2;
+      if (v2 is Future) {
+        throw StateError("Can't resolve a Future: $v2");
+      }
+      return value == v2;
     }
+
+    return super == (other);
+  }
+
+  @override
+  FutureOr<bool> equals(Object other) async {
+    if (identical(this, other)) return true;
+
+    if (other is ASTValuePrimitive) {
+      return value == other.value;
+    } else if (other is ASTValue) {
+      var context = VMContext.getCurrent();
+      var v2 = await _getValue(context, other);
+      return value == v2;
+    }
+
     return super == (other);
   }
 }
@@ -264,81 +315,113 @@ abstract class ASTValueNum<T extends num> extends ASTValuePrimitive<T> {
   }
 
   @override
-  ASTValue operator +(ASTValue other);
+  FutureOr<ASTValue> operator +(ASTValue other);
 
   @override
-  ASTValue operator -(ASTValue other);
+  FutureOr<ASTValue> operator -(ASTValue other);
 
   @override
-  ASTValue operator /(ASTValue other);
+  FutureOr<ASTValue> operator /(ASTValue other);
 
   @override
-  ASTValue operator *(ASTValue other);
+  FutureOr<ASTValue> operator *(ASTValue other);
 
   @override
   bool operator ==(Object other) {
+    if (identical(this, other)) return true;
+
     if (other is ASTValueNum) {
       return value == other.value;
-    }
-    return super == (other);
-  }
-
-  @override
-  bool operator >(Object other) {
-    if (other is ASTValueNum) {
+    } else if (other is ASTValue) {
       var context = VMContext.getCurrent();
-      var v1 = _getValue(context, this);
       var v2 = _getValue(context, other);
-      if (v1 is num && v2 is num) {
-        return v1 > v2;
+      if (v2 is num) {
+        return value == v2;
       }
       throw UnsupportedError(
-          "Can't perform operation '>' in non number values: $v1 > $v2");
+          "Can't perform operation '==' in non number values: $value > $v2");
     }
     return false;
   }
 
   @override
-  bool operator <(Object other) {
+  FutureOr<bool> equals(Object other) async {
+    if (identical(this, other)) return true;
+
     if (other is ASTValueNum) {
+      return value == other.value;
+    } else if (other is ASTValue) {
       var context = VMContext.getCurrent();
-      var v1 = _getValue(context, this);
-      var v2 = _getValue(context, other);
-      if (v1 is num && v2 is num) {
-        return v1 < v2;
+      var v2 = await _getValue(context, other);
+      if (v2 is num) {
+        return value == v2;
       }
       throw UnsupportedError(
-          "Can't perform operation '<' in non number values: $v1 < $v2");
+          "Can't perform operation '==' in non number values: $value > $v2");
     }
     return false;
   }
 
   @override
-  bool operator >=(Object other) {
+  FutureOr<bool> operator >(Object other) async {
     if (other is ASTValueNum) {
+      return value > other.value;
+    } else if (other is ASTValue) {
       var context = VMContext.getCurrent();
-      var v1 = _getValue(context, this);
-      var v2 = _getValue(context, other);
-      if (v1 is num && v2 is num) {
-        return v1 >= v2;
+      var v2 = await _getValue(context, other);
+      if (v2 is num) {
+        return value > v2;
       }
       throw UnsupportedError(
-          "Can't perform operation '>=' in non number values: $v1 >= $v2");
+          "Can't perform operation '>' in non number values: $value > $v2");
     }
     return false;
   }
 
   @override
-  bool operator <=(Object other) {
+  FutureOr<bool> operator <(Object other) async {
     if (other is ASTValueNum) {
+      return value < other.value;
+    } else if (other is ASTValue) {
       var context = VMContext.getCurrent();
-      var v1 = _getValue(context, this);
-      var v2 = _getValue(context, other);
-      if (v1 is num && v2 is num) {
-        return v1 <= v2;
+      var v2 = await _getValue(context, other);
+      if (v2 is num) {
+        return value < v2;
       }
       throw UnsupportedError(
-          "Can't perform operation '<=' in non number values: $v1 <= $v2");
+          "Can't perform operation '<' in non number values: $value > $v2");
+    }
+    return false;
+  }
+
+  @override
+  FutureOr<bool> operator >=(Object other) async {
+    if (other is ASTValueNum) {
+      return value >= other.value;
+    } else if (other is ASTValue) {
+      var context = VMContext.getCurrent();
+      var v2 = await _getValue(context, other);
+      if (v2 is num) {
+        return value >= v2;
+      }
+      throw UnsupportedError(
+          "Can't perform operation '>=' in non number values: $value > $v2");
+    }
+    return false;
+  }
+
+  @override
+  FutureOr<bool> operator <=(Object other) async {
+    if (other is ASTValueNum) {
+      return value <= other.value;
+    } else if (other is ASTValue) {
+      var context = VMContext.getCurrent();
+      var v2 = await _getValue(context, other);
+      if (v2 is num) {
+        return value <= v2;
+      }
+      throw UnsupportedError(
+          "Can't perform operation '<=' in non number values: $value > $v2");
     }
     return false;
   }
@@ -493,6 +576,11 @@ class ASTValueNull extends ASTValueStatic<Null> {
   bool operator ==(Object other) {
     return other is ASTValueNull;
   }
+
+  @override
+  FutureOr<bool> equals(Object other) {
+    return other is ASTValueNull;
+  }
 }
 
 class ASTValueVoid extends ASTValueStatic<void> {
@@ -504,6 +592,11 @@ class ASTValueVoid extends ASTValueStatic<void> {
   bool operator ==(Object other) {
     return other is ASTValueVoid;
   }
+
+  @override
+  FutureOr<bool> equals(Object other) {
+    return other is ASTValueVoid;
+  }
 }
 
 class ASTValueArray<T extends ASTType<V>, V> extends ASTValueStatic<List<V>> {
@@ -512,11 +605,13 @@ class ASTValueArray<T extends ASTType<V>, V> extends ASTValueStatic<List<V>> {
   static final ListEquality _listEquality = const ListEquality();
 
   @override
-  bool operator ==(Object other) {
+  FutureOr<bool> equals(Object other) async {
+    if (identical(this, other)) return true;
+
     if (other is ASTValueArray) {
       var context = VMContext.getCurrent();
-      var v1 = _getValue(context, this);
-      var v2 = _getValue(context, other);
+      var v1 = await _getValue(context, this);
+      var v2 = await _getValue(context, other);
       return _listEquality.equals(v1, v2);
     }
     return super == (other);
@@ -533,6 +628,8 @@ class ASTValueArray2D<T extends ASTType<V>, V>
 
   @override
   bool operator ==(Object other) {
+    if (identical(this, other)) return true;
+
     if (other is ASTValueArray2D) {
       var context = VMContext.getCurrent();
       var v1 = _getValue(context, this);
@@ -559,17 +656,21 @@ class ASTValueAsString<T> extends ASTValue<String> {
   ASTValueAsString(this.value) : super(ASTTypeString.INSTANCE);
 
   @override
-  String getValue(VMContext context) {
-    var v = value.getValue(context);
+  FutureOr<String> getValue(VMContext context) async {
+    var v = await value.getValue(context);
     return '$v';
   }
 
   @override
-  String getValueNoContext() => value.getValueNoContext().toString();
+  FutureOr<String> getValueNoContext() async {
+    var v = await value.getValueNoContext();
+    return '$v';
+  }
 
   @override
-  ASTValue<String> resolve(VMContext context) {
-    return ASTValueString(getValue(context));
+  FutureOr<ASTValue<String>> resolve(VMContext context) async {
+    var value = await getValue(context);
+    return ASTValueString(value);
   }
 }
 
@@ -579,24 +680,30 @@ class ASTValuesListAsString extends ASTValue<String> {
   ASTValuesListAsString(this.values) : super(ASTTypeString.INSTANCE);
 
   @override
-  String getValue(VMContext context) {
-    return values.map((e) {
-      var v = e.resolve(context).getValue(context);
+  FutureOr<String> getValue(VMContext context) async {
+    var vsFuture = values.map((e) async {
+      var resolved = await e.resolve(context);
+      var v = await resolved.getValue(context);
       return '$v';
-    }).join();
+    });
+    var vs = await Future.wait(vsFuture);
+    return vs.join();
   }
 
   @override
-  String getValueNoContext() {
-    return values.map((e) {
-      var v = e.getValueNoContext();
+  FutureOr<String> getValueNoContext() async {
+    var vsFuture = values.map((e) async {
+      var v = await e.getValueNoContext();
       return '$v';
-    }).join();
+    });
+    var vs = await Future.wait(vsFuture);
+    return vs.join();
   }
 
   @override
-  ASTValue<String> resolve(VMContext context) {
-    return ASTValueString(getValue(context));
+  FutureOr<ASTValueString> resolve(VMContext context) async {
+    var value = await getValue(context);
+    return ASTValueString(value);
   }
 }
 
@@ -606,18 +713,19 @@ class ASTValueStringExpresion<T> extends ASTValue<String> {
   ASTValueStringExpresion(this.expression) : super(ASTTypeString.INSTANCE);
 
   @override
-  String getValue(VMContext context) {
-    var res = expression.run(context, ASTRunStatus()).getValue(context);
+  FutureOr<String> getValue(VMContext context) async {
+    var result = await expression.run(context, ASTRunStatus());
+    var res = await result.getValue(context);
     return '$res';
   }
 
   @override
-  String getValueNoContext() => throw UnsupportedError(
+  FutureOr<String> getValueNoContext() => throw UnsupportedError(
       "Can't define an expression value without a context!");
 
   @override
-  ASTValue<String> resolve(VMContext context) {
-    var s = getValue(context);
+  FutureOr<ASTValueString> resolve(VMContext context) async {
+    var s = await getValue(context);
     return ASTValueString(s);
   }
 }
@@ -628,8 +736,9 @@ class ASTValueStringVariable<T> extends ASTValue<String> {
   ASTValueStringVariable(this.variable) : super(ASTTypeString.INSTANCE);
 
   @override
-  String getValue(VMContext context) {
-    var v = variable.getValue(context).getValue(context);
+  FutureOr<String> getValue(VMContext context) async {
+    var value = await variable.getValue(context);
+    var v = await value.getValue(context);
     return '$v';
   }
 
@@ -638,8 +747,8 @@ class ASTValueStringVariable<T> extends ASTValue<String> {
       "Can't define an variable value without a context!");
 
   @override
-  ASTValue<String> resolve(VMContext context) {
-    var value = variable.getValue(context);
+  FutureOr<ASTValue<String>> resolve(VMContext context) async {
+    var value = await variable.getValue(context);
     return value is ASTValue<String> ? value : ASTValueAsString(value);
   }
 }
@@ -650,20 +759,29 @@ class ASTValueStringConcatenation extends ASTValue<String> {
   ASTValueStringConcatenation(this.values) : super(ASTTypeString.INSTANCE);
 
   @override
-  String getValue(VMContext context) {
-    var vs = values.map((e) => e.getValue(context)).toList();
+  FutureOr<String> getValue(VMContext context) async {
+    var vsFuture = values.map((e) async {
+      return await e.getValue(context);
+    }).toList();
+    var vs = await Future.wait(vsFuture);
     return vs.join();
   }
 
   @override
-  String getValueNoContext() {
-    var vs = values.map((e) => e.getValueNoContext()).toList();
+  FutureOr<String> getValueNoContext() async {
+    var vsFuture = values.map((e) async {
+      return await e.getValueNoContext();
+    }).toList();
+    var vs = await Future.wait(vsFuture);
     return vs.join();
   }
 
   @override
-  ASTValue<String> resolve(VMContext context) {
-    var vs = values.map((e) => e.resolve(context)).toList();
+  FutureOr<ASTValue<String>> resolve(VMContext context) async {
+    var vsFuture = values.map((e) async {
+      return await e.resolve(context);
+    }).toList();
+    var vs = await Future.wait(vsFuture);
     return ASTValuesListAsString(vs);
   }
 }
@@ -686,16 +804,17 @@ class ASTValueReadIndex<T> extends ASTValue<T> {
   }
 
   @override
-  T getValue(VMContext context) =>
-      variable.readIndex(context, getIndex(context));
+  FutureOr<T> getValue(VMContext context) {
+    return variable.readIndex(context, getIndex(context));
+  }
 
   @override
   T getValueNoContext() =>
       throw UnsupportedError("Can't define variable value without a context!");
 
   @override
-  ASTValue<T> resolve(VMContext context) {
-    var v = getValue(context);
+  FutureOr<ASTValue<T>> resolve(VMContext context) async {
+    var v = await getValue(context);
     return ASTValue.from(type, v);
   }
 }
@@ -706,24 +825,27 @@ class ASTValueReadKey<T> extends ASTValue<T> {
 
   ASTValueReadKey(ASTType<T> type, this.variable, this._key) : super(type);
 
-  Object getKey(VMContext context) {
+  FutureOr<Object> getKey(VMContext context) async {
     if (_key is ASTValue) {
-      return (_key as ASTValue).getValue(context);
+      return await (_key as ASTValue).getValue(context);
     } else {
       return _key;
     }
   }
 
   @override
-  T getValue(VMContext context) => variable.readKey(context, getKey(context));
+  FutureOr<T> getValue(VMContext context) {
+    var key = getKey(context);
+    return variable.readKey(context, key);
+  }
 
   @override
   T getValueNoContext() =>
       throw UnsupportedError("Can't define variable value without a context!");
 
   @override
-  ASTValue<T> resolve(VMContext context) {
-    var v = getValue(context);
+  FutureOr<ASTValue<T>> resolve(VMContext context) async {
+    var v = await getValue(context);
     return ASTValue.from(type, v);
   }
 }
@@ -750,5 +872,54 @@ class ASTObjectValue<T> extends ASTValue<T> {
     var prev = _o[name];
     _o[name] = value;
     return prev;
+  }
+}
+
+class ASTValueFuture<T extends ASTType<V>, V> extends ASTValue<Future<V>> {
+  Future<V> future;
+
+  ASTValueFuture(ASTType type, this.future)
+      : super(type is ASTTypeFuture
+            ? type as ASTTypeFuture<T, V>
+            : ASTTypeFuture<T, V>(type as T));
+
+  @override
+  Future<V> getValue(VMContext context) => future;
+
+  @override
+  Future<V> getValueNoContext() => future;
+
+  @override
+  ASTValueFuture<T, V> resolve(VMContext context) {
+    return this;
+  }
+
+  @override
+  bool operator ==(Object other) {
+    if (identical(this, other)) return true;
+
+    if (other is ASTValueFuture) {
+      return future == other.future;
+    }
+
+    return super == (other);
+  }
+
+  @override
+  FutureOr<bool> equals(Object other) async {
+    if (identical(this, other)) return true;
+
+    if (other is ASTValueFuture) {
+      var v1 = await future;
+      var v2 = await other.future;
+      return v1 == v2;
+    } else if (other is ASTValue) {
+      var context = VMContext.getCurrent()!;
+      var v1 = await future;
+      var v2 = await other.getValue(context);
+      return v1 == v2;
+    }
+
+    return super == (other);
   }
 }

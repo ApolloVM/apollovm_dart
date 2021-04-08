@@ -39,7 +39,7 @@ abstract class ApolloParser {
 }
 
 class ParseResult {
-  final ASTCodeRoot? root;
+  final ASTRoot? root;
   final String? errorMessage;
 
   bool get isOK => root != null;

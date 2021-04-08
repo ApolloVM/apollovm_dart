@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:apollovm/apollovm.dart';
 
 import 'apollovm_ast_value.dart';
@@ -10,6 +12,7 @@ class ASTRunStatus {
   bool returned = false;
 
   ASTValue? returnedValue;
+  FutureOr<ASTValue>? returnedFutureValue;
 
   ASTValueVoid returnVoid() {
     returned = true;
@@ -29,6 +32,12 @@ class ASTRunStatus {
     return value;
   }
 
+  FutureOr<ASTValue> returnFutureOrValue(FutureOr<ASTValue> futureValue) {
+    returned = true;
+    returnedFutureValue = futureValue;
+    return futureValue;
+  }
+
   bool continued = false;
 
   bool broke = false;
@@ -39,5 +48,5 @@ abstract class ASTCodeRunner {
     return parentContext;
   }
 
-  ASTValue run(VMContext parentContext, ASTRunStatus runStatus);
+  FutureOr<ASTValue> run(VMContext parentContext, ASTRunStatus runStatus);
 }

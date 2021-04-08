@@ -32,7 +32,7 @@ void main() {
       var output = [];
       dartRunner.externalPrintFunction = (o) => output.add(o);
 
-      dartRunner.executeFunction('', 'main', [
+      await dartRunner.executeFunction('', 'main', [
         ['Sums:', 10, 20, 50]
       ]);
 
@@ -93,7 +93,7 @@ void main() {
       var output = [];
       dartRunner.externalPrintFunction = (o) => output.add(o);
 
-      dartRunner.executeFunction('', 'main', [
+      await dartRunner.executeFunction('', 'main', [
         ['Strings:', 'A', 'B', 'C']
       ]);
 
@@ -156,7 +156,7 @@ void main() {
       var output = [];
       dartRunner.externalPrintFunction = (o) => output.add(o);
 
-      dartRunner.executeFunction('', 'main', [
+      await dartRunner.executeFunction('', 'main', [
         ['Operations:', 10, 20]
       ]);
 
@@ -225,7 +225,7 @@ line3
       var output = [];
       dartRunner.externalPrintFunction = (o) => output.add(o);
 
-      dartRunner.executeFunction('', 'main', [
+      await dartRunner.executeFunction('', 'main', [
         ['Multiline:', 10, 20]
       ]);
 
@@ -286,7 +286,7 @@ line3
       var output = [];
       dartRunner.externalPrintFunction = (o) => output.add(o);
 
-      dartRunner.executeFunction('', 'main', []);
+      await dartRunner.executeFunction('', 'main', []);
 
       expect(
           output,
@@ -354,7 +354,7 @@ line3
       var output = [];
       dartRunner.externalPrintFunction = (o) => output.add(o);
 
-      dartRunner.executeFunction('', 'main', []);
+      await dartRunner.executeFunction('', 'main', []);
 
       expect(
           output,
@@ -419,7 +419,7 @@ line3
       var output = [];
       dartRunner.externalPrintFunction = (o) => output.add(o);
 
-      dartRunner.executeClassMethod('', 'Foo', 'main', []);
+      await dartRunner.executeClassMethod('', 'Foo', 'main', []);
 
       expect(output, equals(['a: <123>;\t\$b->a*2: 246 ;\ta*3: 369!']));
 
@@ -506,7 +506,7 @@ class Foo {
       var output = [];
       dartRunner.externalPrintFunction = (o) => output.add(o);
 
-      dartRunner.executeClassMethod('', 'Bar', 'main', [
+      await dartRunner.executeClassMethod('', 'Bar', 'main', [
         [10, 20]
       ]);
 
@@ -627,7 +627,7 @@ class Bar {
         var output = [];
         dartRunner.externalPrintFunction = (o) => output.add(o);
 
-        dartRunner.executeClassMethod('', 'Bar', 'main', [
+        await dartRunner.executeClassMethod('', 'Bar', 'main', [
           [10, 20]
         ]);
 
@@ -642,7 +642,7 @@ class Bar {
         var output = [];
         dartRunner.externalPrintFunction = (o) => output.add(o);
 
-        dartRunner.executeClassMethod('', 'Bar', 'main', [
+        await dartRunner.executeClassMethod('', 'Bar', 'main', [
           [20, 20]
         ]);
 

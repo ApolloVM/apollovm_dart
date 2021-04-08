@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:apollovm/apollovm.dart';
 import 'package:swiss_knife/swiss_knife.dart';
 
@@ -19,6 +21,10 @@ class ASTType<V> implements ASTNode {
 
     if (o is ASTTypedVariable) {
       return o.type;
+    }
+
+    if (o is ASTExpressionLiteral) {
+      return ASTType.from(o.value);
     }
 
     if (o is String) return ASTTypeString.INSTANCE;
@@ -134,11 +140,11 @@ class ASTType<V> implements ASTNode {
     return true;
   }
 
-  ASTValue<V>? toValue(VMContext context, Object? v) {
+  FutureOr<ASTValue<V>?> toValue(VMContext context, Object? v) async {
     if (v is ASTValue<V>) return v;
 
     if (v is ASTValue) {
-      v = (v).getValue(context);
+      v = await (v).getValue(context);
     }
 
     var t = v as V;
@@ -197,11 +203,11 @@ class ASTTypeBool extends ASTTypePrimitive<bool> {
   }
 
   @override
-  ASTValueBool? toValue(VMContext context, Object? v) {
+  FutureOr<ASTValueBool?> toValue(VMContext context, Object? v) async {
     if (v is ASTValueBool) return v;
 
     if (v is ASTValue) {
-      v = (v).getValue(context);
+      v = await (v).getValue(context);
     }
 
     var b = parseBool(v);
@@ -238,11 +244,12 @@ class ASTTypeInt extends ASTTypeNum<int> {
   }
 
   @override
-  ASTValueInt? toValue(VMContext context, Object? v) {
+  FutureOr<ASTValueInt?> toValue(VMContext context, Object? v) async {
     if (v is ASTValueInt) return v;
+    if (v is ASTValueDouble) return ASTValueInt(v.value.toInt());
 
     if (v is ASTValue) {
-      v = (v).getValue(context);
+      v = await (v).getValue(context);
     }
 
     var n = parseInt(v);
@@ -275,11 +282,12 @@ class ASTTypeDouble extends ASTType<double> {
   }
 
   @override
-  ASTValueDouble? toValue(VMContext context, Object? v) {
+  FutureOr<ASTValueDouble?> toValue(VMContext context, Object? v) async {
     if (v is ASTValueDouble) return v;
+    if (v is ASTValueInt) return ASTValueDouble(v.value.toDouble());
 
     if (v is ASTValue) {
-      v = (v).getValue(context);
+      v = await (v).getValue(context);
     }
 
     var n = parseDouble(v);
@@ -312,11 +320,11 @@ class ASTTypeString extends ASTTypePrimitive<String> {
   }
 
   @override
-  ASTValueString? toValue(VMContext context, Object? v) {
+  FutureOr<ASTValueString?> toValue(VMContext context, Object? v) async {
     if (v is ASTValueString) return v;
 
     if (v is ASTValue) {
-      v = (v).getValue(context);
+      v = await (v).getValue(context);
     }
 
     var n = parseString(v);
@@ -346,11 +354,24 @@ class ASTTypeObject extends ASTType<Object> {
   bool isInstance(ASTType type) => true;
 
   @override
-  ASTValueObject? toValue(VMContext context, Object? v) {
+  FutureOr<ASTValue<Object>?> toValue(VMContext context, Object? v) async {
     if (v is ASTValueObject) return v;
 
+    if (v is ASTValueNull) {
+      return null;
+    }
+
+    if (v is ASTValueVoid) {
+      throw StateError("Can't resolve 'void' to 'Object': $v");
+    }
+
     if (v is ASTValue) {
-      v = (v).getValue(context);
+      var resolved = await v.resolve(context);
+      if (resolved is! ASTValue<Object>) {
+        var vDyn = await resolved.getValue(context);
+        return ASTValueObject(vDyn);
+      }
+      return resolved;
     }
 
     return v != null ? ASTValueObject(v) : null;
@@ -379,11 +400,11 @@ class ASTTypeVar extends ASTType<dynamic> {
   bool isInstance(ASTType type) => true;
 
   @override
-  ASTValue<dynamic> toValue(VMContext context, Object? v) {
+  FutureOr<ASTValue<dynamic>> toValue(VMContext context, Object? v) async {
     if (v is ASTValue<dynamic> && v.type == this) return v;
 
     if (v is ASTValue) {
-      v = (v).getValue(context);
+      v = await (v).getValue(context);
     }
 
     return ASTValueStatic<dynamic>(this, v);
@@ -412,11 +433,11 @@ class ASTTypeDynamic extends ASTType<dynamic> {
   bool isInstance(ASTType type) => true;
 
   @override
-  ASTValue<dynamic> toValue(VMContext context, Object? v) {
+  FutureOr<ASTValue<dynamic>> toValue(VMContext context, Object? v) async {
     if (v is ASTValue<dynamic> && v.type == this) return v;
 
     if (v is ASTValue) {
-      v = (v).getValue(context);
+      v = await (v).getValue(context);
     }
 
     return ASTValue.from(this, v);
@@ -508,7 +529,7 @@ class ASTTypeGenericVariable extends ASTType<Object> {
       (type as ASTType<Object>?) ?? ASTTypeObject.INSTANCE;
 
   @override
-  ASTValue<Object>? toValue(VMContext context, Object? v) {
+  FutureOr<ASTValue<Object>?> toValue(VMContext context, Object? v) {
     return resolveType.toValue(context, v);
   }
 }
@@ -529,12 +550,12 @@ class ASTTypeArray<T extends ASTType<V>, V> extends ASTType<List<V>> {
   }
 
   @override
-  ASTValueArray<T, V>? toValue(VMContext context, Object? v) {
+  FutureOr<ASTValueArray<T, V>?> toValue(VMContext context, Object? v) async {
     if (v == null) return null;
     if (v is ASTValueArray) return v as ASTValueArray<T, V>;
 
     if (v is ASTValue) {
-      v = (v).getValue(context);
+      v = await (v).getValue(context);
     }
 
     List list;
@@ -619,5 +640,14 @@ class ASTTypeArray3D<T extends ASTType<V>, V>
 
     var value = ASTValueArray3D<T, V>(elementType as T, list2);
     return value;
+  }
+}
+
+class ASTTypeFuture<T extends ASTType<V>, V> extends ASTType<Future<V>> {
+  ASTTypeFuture(T type) : super('Future', generics: [type]);
+
+  @override
+  ASTValueFuture<T, V>? toValue(VMContext context, Object? v) {
+    return ASTValueFuture(this, v as Future<V>);
   }
 }

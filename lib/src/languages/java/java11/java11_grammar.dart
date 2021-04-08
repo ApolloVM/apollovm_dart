@@ -25,13 +25,13 @@ class Java11GrammarDefinition extends Java11GrammarLexer {
   @override
   Parser start() => ref0(compilationUnit).trim().end();
 
-  Parser<ASTCodeRoot> compilationUnit() =>
+  Parser<ASTRoot> compilationUnit() =>
       (ref0(importDirective).star() & ref0(topLevelDefinition).star()).map((v) {
         var topDef = v[1];
 
         var classes = topDef as List;
 
-        var root = ASTCodeRoot();
+        var root = ASTRoot();
 
         root.addAllClasses(classes.cast());
 
@@ -43,19 +43,19 @@ class Java11GrammarDefinition extends Java11GrammarLexer {
 
   Parser topLevelDefinition() => (classDeclaration());
 
-  Parser<ASTCodeClass> classDeclaration() =>
+  Parser<ASTClass> classDeclaration() =>
       (string('class').trim() & identifier() & classCodeBlock()).map((v) {
         var block = v[2];
-        var clazz = ASTCodeClass(v[1], null);
+        var clazz = ASTClass(v[1], null);
         clazz.set(block);
         return clazz;
       });
 
-  Parser<ASTCodeBlock> classCodeBlock() =>
+  Parser<ASTBlock> classCodeBlock() =>
       (char('{').trim() & ref0(functionDeclaration).star() & char('}').trim())
           .map((v) {
         var functions = (v[1] as List).cast<ASTFunctionDeclaration>().toList();
-        return ASTCodeBlock(null)..addAllFunctions(functions);
+        return ASTBlock(null)..addAllFunctions(functions);
       });
 
   Parser<ASTFunctionDeclaration> functionDeclaration() =>
@@ -82,10 +82,10 @@ class Java11GrammarDefinition extends Java11GrammarLexer {
       .trim()
       .flatten();
 
-  Parser<ASTCodeBlock> codeBlock() =>
+  Parser<ASTBlock> codeBlock() =>
       (char('{').trim() & ref0(statement).star() & char('}').trim()).map((v) {
         var statements = (v[1] as List).cast<ASTStatement>().toList();
-        return ASTCodeBlock(null)..addAllStatements(statements);
+        return ASTBlock(null)..addAllStatements(statements);
       });
 
   Parser<ASTStatement> statement() =>

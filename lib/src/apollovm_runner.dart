@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'apollovm_base.dart';
+import 'ast/apollovm_ast_toplevel.dart';
 import 'ast/apollovm_ast_type.dart';
 import 'ast/apollovm_ast_value.dart';
 
@@ -29,9 +32,9 @@ abstract class ApolloLanguageRunner {
 
   void Function(Object? o) externalPrintFunction = print;
 
-  ASTValue executeClassMethod(String namespace, String className,
-      String methodName, dynamic? positionalParameters,
-      [dynamic? namedParameters]) {
+  FutureOr<ASTValue> executeClassMethod(
+      String namespace, String className, String methodName,
+      [dynamic? positionalParameters, dynamic? namedParameters]) async {
     var codeNamespace = _languageNamespaces.get(namespace);
 
     var codeUnit = codeNamespace.getCodeUnitWithClass(className);
@@ -39,21 +42,36 @@ abstract class ApolloLanguageRunner {
       throw StateError("Can't find class to execute: $className->$methodName");
     }
 
-    var clazz = codeUnit.codeRoot!.getClass(className);
+    var clazz = codeUnit.root!.getClass(className);
     if (clazz == null) {
       throw StateError(
           "Can't find class method to execute: $className->$methodName");
     }
 
-    var result = clazz.execute(
+    var result = await clazz.execute(
         methodName, positionalParameters, namedParameters,
         externalFunctionMapper: externalFunctionMapper);
     return result;
   }
 
-  ASTValue executeFunction(
-      String namespace, String functionName, dynamic? positionalParameters,
-      [dynamic? namedParameters]) {
+  FutureOr<ASTFunctionDeclaration?> getClassMethod(
+      String namespace, String className, String methodName,
+      [dynamic? positionalParameters, dynamic? namedParameters]) async {
+    var codeNamespace = _languageNamespaces.get(namespace);
+
+    var codeUnit = codeNamespace.getCodeUnitWithClass(className);
+    if (codeUnit == null) return null;
+
+    var clazz = codeUnit.root!.getClass(className);
+    if (clazz == null) return null;
+
+    return clazz.getFunctionWithParameters(
+        methodName, positionalParameters, namedParameters,
+        externalFunctionMapper: externalFunctionMapper);
+  }
+
+  FutureOr<ASTValue> executeFunction(String namespace, String functionName,
+      [dynamic? positionalParameters, dynamic? namedParameters]) async {
     var codeNamespace = _languageNamespaces.get(namespace);
 
     var codeUnit = codeNamespace.getCodeUnitWithFunction(functionName);
@@ -61,10 +79,24 @@ abstract class ApolloLanguageRunner {
       throw StateError("Can't find function to execute: $functionName");
     }
 
-    var result = codeUnit.codeRoot!.execute(
+    var result = await codeUnit.root!.execute(
         functionName, positionalParameters, namedParameters,
         externalFunctionMapper: externalFunctionMapper);
+
     return result;
+  }
+
+  FutureOr<ASTFunctionDeclaration?> getFunction(
+      String namespace, String functionName,
+      [dynamic? positionalParameters, dynamic? namedParameters]) async {
+    var codeNamespace = _languageNamespaces.get(namespace);
+
+    var codeUnit = codeNamespace.getCodeUnitWithFunction(functionName);
+    if (codeUnit == null) return null;
+
+    return await codeUnit.root!.getFunctionWithParameters(
+        functionName, positionalParameters, namedParameters,
+        externalFunctionMapper: externalFunctionMapper);
   }
 
   void reset() {

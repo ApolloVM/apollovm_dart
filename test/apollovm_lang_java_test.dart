@@ -34,7 +34,7 @@ void main() {
       var output = [];
       javaRunner.externalPrintFunction = (o) => output.add(o);
 
-      javaRunner.executeClassMethod('', 'Foo', 'main', [
+      await javaRunner.executeClassMethod('', 'Foo', 'main', [
         ['Sums:', 10, 20, 50]
       ]);
 
@@ -107,7 +107,7 @@ void main() {
       var output = [];
       javaRunner.externalPrintFunction = (o) => output.add(o);
 
-      javaRunner.executeClassMethod('', 'Foo', 'main', [
+      await javaRunner.executeClassMethod('', 'Foo', 'main', [
         ['Strings:', 'A', 'B', 'C']
       ]);
 
@@ -182,7 +182,7 @@ void main() {
       var output = [];
       javaRunner.externalPrintFunction = (o) => output.add(o);
 
-      javaRunner.executeClassMethod('', 'Foo', 'main', [
+      await javaRunner.executeClassMethod('', 'Foo', 'main', [
         ['Operations:', 10, 20]
       ]);
 
@@ -275,7 +275,7 @@ class Foo {
         var output = [];
         javaRunner.externalPrintFunction = (o) => output.add(o);
 
-        javaRunner.executeClassMethod('', 'Bar', 'main', [
+        await javaRunner.executeClassMethod('', 'Bar', 'main', [
           [10, 20]
         ]);
 
@@ -290,7 +290,7 @@ class Foo {
         var output = [];
         javaRunner.externalPrintFunction = (o) => output.add(o);
 
-        javaRunner.executeClassMethod('', 'Bar', 'main', [
+        await javaRunner.executeClassMethod('', 'Bar', 'main', [
           [20, 20]
         ]);
 

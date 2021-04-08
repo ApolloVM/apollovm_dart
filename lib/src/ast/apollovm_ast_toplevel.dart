@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:apollovm/apollovm.dart';
 import 'package:collection/collection.dart' show IterableExtension;
 
@@ -6,10 +8,94 @@ import 'apollovm_ast_type.dart';
 import 'apollovm_ast_value.dart';
 import 'apollovm_ast_variable.dart';
 
-class ASTCodeClass extends ASTCodeBlock {
+class ASTEntryPointBlock extends ASTBlock {
+  ASTEntryPointBlock(ASTBlock? parentBlock) : super(parentBlock);
+
+  FutureOr<ASTValue> execute(String entryFunctionName,
+      dynamic? positionalParameters, dynamic? namedParameters,
+      {ApolloExternalFunctionMapper? externalFunctionMapper}) async {
+    var rootContext = await _initializeEntryPointBlock();
+
+    var prevContext = VMContext.setCurrent(rootContext);
+    try {
+      if (externalFunctionMapper != null) {
+        rootContext.externalFunctionMapper = externalFunctionMapper;
+      }
+
+      var fSignature =
+          ASTFunctionSignature.from(positionalParameters, namedParameters);
+
+      var f = getFunction(entryFunctionName, fSignature, rootContext);
+      if (f == null) {
+        throw StateError("Can't find entry function: $entryFunctionName");
+      }
+
+      return await f.call(rootContext,
+          positionalParameters: positionalParameters,
+          namedParameters: namedParameters);
+    } finally {
+      VMContext.setCurrent(prevContext);
+      if (identical(
+          rootContext.externalFunctionMapper, externalFunctionMapper)) {
+        rootContext.externalFunctionMapper = null;
+      }
+    }
+  }
+
+  FutureOr<ASTFunctionDeclaration?> getFunctionWithParameters(
+      String entryFunctionName,
+      dynamic? positionalParameters,
+      dynamic? namedParameters,
+      {ApolloExternalFunctionMapper? externalFunctionMapper}) async {
+    var rootContext = await _initializeEntryPointBlock();
+
+    var prevContext = VMContext.setCurrent(rootContext);
+    try {
+      if (externalFunctionMapper != null) {
+        rootContext.externalFunctionMapper = externalFunctionMapper;
+      }
+
+      var fSignature =
+          ASTFunctionSignature.from(positionalParameters, namedParameters);
+
+      try {
+        var f = getFunction(entryFunctionName, fSignature, rootContext);
+        return f;
+      } on Error {
+        return null;
+      }
+    } finally {
+      VMContext.setCurrent(prevContext);
+      if (identical(
+          rootContext.externalFunctionMapper, externalFunctionMapper)) {
+        rootContext.externalFunctionMapper = null;
+      }
+    }
+  }
+
+  VMContext? _rootContext;
+
+  Future<VMContext> _initializeEntryPointBlock() async {
+    if (_rootContext == null) {
+      var rootContext = VMContext(this);
+      var rootStatus = ASTRunStatus();
+      _rootContext = rootContext;
+
+      var prevContext = VMContext.setCurrent(rootContext);
+      try {
+        await run(rootContext, rootStatus);
+      } finally {
+        VMContext.setCurrent(prevContext);
+      }
+    }
+    return _rootContext!;
+  }
+}
+
+class ASTClass extends ASTEntryPointBlock {
   final String name;
 
-  ASTCodeClass(this.name, ASTCodeBlock? parent) : super(parent);
+  ASTClass(this.name, ASTBlock? parent) : super(parent);
 
   final Map<String, ASTClassField> _fields = <String, ASTClassField>{};
 
@@ -17,26 +103,26 @@ class ASTCodeClass extends ASTCodeBlock {
   ASTClassField? getField(String name) => _fields[name];
 }
 
-class ASTCodeRoot extends ASTCodeBlock {
-  ASTCodeRoot() : super(null);
+class ASTRoot extends ASTEntryPointBlock {
+  ASTRoot() : super(null);
 
   String namespace = '';
 
-  final Map<String, ASTCodeClass> _classes = <String, ASTCodeClass>{};
+  final Map<String, ASTClass> _classes = <String, ASTClass>{};
 
-  List<ASTCodeClass> get classes => _classes.values.toList();
+  List<ASTClass> get classes => _classes.values.toList();
 
   List<String> get classesNames => _classes.values.map((e) => e.name).toList();
 
-  void addClass(ASTCodeClass clazz) {
+  void addClass(ASTClass clazz) {
     _classes[clazz.name] = clazz;
   }
 
-  ASTCodeClass? getClass(String className) {
+  ASTClass? getClass(String className) {
     return _classes[className];
   }
 
-  void addAllClasses(List<ASTCodeClass> classes) {
+  void addAllClasses(List<ASTClass> classes) {
     for (var clazz in classes) {
       addClass(clazz);
     }
@@ -54,7 +140,7 @@ class ASTParameterDeclaration<T> implements ASTNode {
 
   ASTParameterDeclaration(this.type, this.name);
 
-  ASTValue<T>? toValue(VMContext context, Object? v) =>
+  FutureOr<ASTValue<T>?> toValue(VMContext context, Object? v) =>
       type.toValue(context, v);
 
   @override
@@ -160,7 +246,7 @@ class ASTFunctionSignature implements ASTNode {
   }
 }
 
-abstract class ASTCodeFunctionSet implements ASTNode {
+abstract class ASTFunctionSet implements ASTNode {
   List<ASTFunctionDeclaration> get functions;
 
   ASTFunctionDeclaration get firstFunction;
@@ -168,13 +254,13 @@ abstract class ASTCodeFunctionSet implements ASTNode {
   ASTFunctionDeclaration get(
       ASTFunctionSignature parametersSignature, bool exactTypes);
 
-  ASTCodeFunctionSet add(ASTFunctionDeclaration f);
+  ASTFunctionSet add(ASTFunctionDeclaration f);
 }
 
-class ASTCodeFunctionSetSingle extends ASTCodeFunctionSet {
+class ASTFunctionSetSingle extends ASTFunctionSet {
   final ASTFunctionDeclaration f;
 
-  ASTCodeFunctionSetSingle(this.f);
+  ASTFunctionSetSingle(this.f);
 
   @override
   ASTFunctionDeclaration get firstFunction => f;
@@ -190,19 +276,19 @@ class ASTCodeFunctionSetSingle extends ASTCodeFunctionSet {
     }
 
     throw StateError(
-        'Function \'${f.name}\' parameters signature not compatible: $parametersSignature != ${f.parameters}');
+        'Function \'${f.name}\' parameters signature not compatible: sign:$parametersSignature != f:${f.parameters}');
   }
 
   @override
-  ASTCodeFunctionSet add(ASTFunctionDeclaration f) {
-    var set = ASTCodeFunctionSetMultiple();
+  ASTFunctionSet add(ASTFunctionDeclaration f) {
+    var set = ASTFunctionSetMultiple();
     set.add(this.f);
     set.add(f);
     return set;
   }
 }
 
-class ASTCodeFunctionSetMultiple extends ASTCodeFunctionSet {
+class ASTFunctionSetMultiple extends ASTFunctionSet {
   final List<ASTFunctionDeclaration> _functions = <ASTFunctionDeclaration>[];
 
   @override
@@ -235,7 +321,7 @@ class ASTCodeFunctionSetMultiple extends ASTCodeFunctionSet {
   }
 
   @override
-  ASTCodeFunctionSet add(ASTFunctionDeclaration f) {
+  ASTFunctionSet add(ASTFunctionDeclaration f) {
     _functions.add(f);
 
     _functions.sort((a, b) {
@@ -311,7 +397,7 @@ class ASTParametersDeclaration {
     var parametersSize = size;
     var paramsSignSize = parametersSignature.size;
 
-    if (paramsSignSize == 0 && parametersSize == 0) return false;
+    if (paramsSignSize == 0 && parametersSize == 0) return true;
     if (paramsSignSize > parametersSize) return false;
 
     var paramsSignPositionalTypes = parametersSignature.positionalTypes;
@@ -390,7 +476,7 @@ class ASTParametersDeclaration {
   }
 }
 
-class ASTFunctionDeclaration<T> extends ASTCodeBlock {
+class ASTFunctionDeclaration<T> extends ASTBlock {
   final String name;
 
   final ASTParametersDeclaration _parameters;
@@ -398,7 +484,7 @@ class ASTFunctionDeclaration<T> extends ASTCodeBlock {
   final ASTType<T> returnType;
 
   ASTFunctionDeclaration(this.name, this._parameters, this.returnType,
-      [ASTCodeBlock? block])
+      [ASTBlock? block])
       : super(null) {
     set(block);
   }
@@ -413,46 +499,48 @@ class ASTFunctionDeclaration<T> extends ASTCodeBlock {
   ASTFunctionParameterDeclaration? getParameterByName(String name) =>
       _parameters.getParameterByName(name);
 
-  ASTValue? getParameterValueByIndex(VMContext context, int index) {
+  FutureOr<ASTValue?> getParameterValueByIndex(VMContext context, int index) {
     var p = getParameterByIndex(index);
     if (p == null) return null;
     var variable = context.getVariable(p.name, false);
-    return variable!.getValue(context);
+    return variable?.getValue(context);
   }
 
-  ASTValue? getParameterValueByName(VMContext context, String name) {
+  FutureOr<ASTValue?> getParameterValueByName(VMContext context, String name) {
     var p = getParameterByName(name);
     if (p == null) return null;
-    return context.getVariable(p.name, false)?.getValue(context);
+    var variable = context.getVariable(p.name, false);
+    return variable?.getValue(context);
   }
 
   bool matchesParametersTypes(
           ASTFunctionSignature signature, bool exactTypes) =>
       _parameters.matchesParametersTypes(signature, exactTypes);
 
-  ASTValue<T> call(VMContext parent,
-      {List? positionalParameters, Map? namedParameters}) {
+  FutureOr<ASTValue<T>> call(VMContext parent,
+      {List? positionalParameters, Map? namedParameters}) async {
     var context = VMContext(this, parent: parent);
 
     var prevContext = VMContext.setCurrent(context);
     try {
-      initializeVariables(context, positionalParameters, namedParameters);
+      await initializeVariables(context, positionalParameters, namedParameters);
 
-      var result = super.run(context, ASTRunStatus.DUMMY);
-      return resolveReturnValue(context, result);
+      var result = await super.run(context, ASTRunStatus.DUMMY);
+      return await resolveReturnValue(context, result);
     } finally {
       VMContext.setCurrent(prevContext);
     }
   }
 
-  ASTValue<T> resolveReturnValue(VMContext context, Object? returnValue) {
-    var resolved = returnType.toValue(context, returnValue) ??
-        (ASTValueVoid.INSTANCE as ASTValue<T>);
+  FutureOr<ASTValue<T>> resolveReturnValue(
+      VMContext context, Object? returnValue) async {
+    var resolved = await returnType.toValue(context, returnValue);
+    resolved ??= ASTValueVoid.INSTANCE as ASTValue<T>;
     return resolved;
   }
 
-  void initializeVariables(
-      VMContext context, List? positionalParameters, Map? namedParameters) {
+  Future<void> initializeVariables(VMContext context,
+      List? positionalParameters, Map? namedParameters) async {
     var i = 0;
 
     if (positionalParameters != null) {
@@ -462,7 +550,8 @@ class ASTFunctionDeclaration<T> extends ASTCodeBlock {
         if (fParam == null) {
           throw StateError("Can't find parameter at index: $i");
         }
-        var value = fParam.toValue(context, paramVal) ?? ASTValueNull.INSTANCE;
+        var value =
+            await fParam.toValue(context, paramVal) ?? ASTValueNull.INSTANCE;
         context.declareVariableWithValue(fParam.type, fParam.name, value);
       }
     }
@@ -498,30 +587,66 @@ class ASTExternalFunction<T> extends ASTFunctionDeclaration<T> {
       : super(name, parameters, returnType);
 
   @override
-  ASTValue<T> call(VMContext parent,
-      {List? positionalParameters, Map? namedParameters}) {
+  FutureOr<ASTValue<T>> call(VMContext parent,
+      {List? positionalParameters, Map? namedParameters}) async {
     var context = VMContext(this, parent: parent);
 
     var prevContext = VMContext.setCurrent(context);
     try {
-      initializeVariables(context, positionalParameters, namedParameters);
+      await initializeVariables(context, positionalParameters, namedParameters);
+
+      var parametersSize = this.parametersSize;
 
       var result;
-      if (externalFunction is Function(dynamic a)) {
-        var a0 = getParameterValueByIndex(context, 0)?.getValue(context);
-        result = externalFunction(a0);
-      } else if (externalFunction is Function(dynamic a0, dynamic a1)) {
-        var a0 = getParameterValueByIndex(context, 0)?.getValue(context);
-        var a1 = getParameterValueByIndex(context, 1)?.getValue(context);
-        result = externalFunction(a0, a1);
-      } else {
+      if (externalFunction.isParametersSize0 || parametersSize == 0) {
         result = externalFunction();
+      } else if (externalFunction.isParametersSize1 || parametersSize == 1) {
+        var paramVal = await getParameterValueByIndex(context, 0);
+        var a0 = paramVal?.getValue(context);
+        result = externalFunction(a0);
+      } else if (this.parametersSize == 2) {
+        var paramVal0 = await getParameterValueByIndex(context, 0);
+        var paramVal1 = await getParameterValueByIndex(context, 1);
+        var a0 = paramVal0?.getValue(context);
+        var a1 = paramVal1?.getValue(context);
+        result = externalFunction(a0, a1);
+      } else if (this.parametersSize == 3) {
+        var paramVal0 = await getParameterValueByIndex(context, 0);
+        var paramVal1 = await getParameterValueByIndex(context, 1);
+        var paramVal2 = await getParameterValueByIndex(context, 2);
+        var a0 = paramVal0?.getValue(context);
+        var a1 = paramVal1?.getValue(context);
+        var a2 = paramVal2?.getValue(context);
+        result = externalFunction(a0, a1, a2);
+      } else {
+        result = externalFunction.call();
       }
 
-      return resolveReturnValue(context, result);
+      if (result is Future) {
+        var r = await result;
+        return await resolveReturnValue(context, r);
+      } else {
+        return await resolveReturnValue(context, result);
+      }
     } finally {
       VMContext.setCurrent(prevContext);
     }
+  }
+}
+
+extension _FExtension on Function {
+  bool get isParametersSize0 {
+    return this is Function();
+  }
+
+  bool get isParametersSize1 {
+    return this is Function(dynamic a) ||
+        this is Function(Object a) ||
+        this is Function(String a) ||
+        this is Function(int a) ||
+        this is Function(double a) ||
+        this is Function(List a) ||
+        this is Function(Map a);
   }
 }
 

@@ -48,7 +48,7 @@ class ApolloVM {
 
     var codeNamespace = langNamespaces.get(root.namespace);
 
-    codeUnit.codeRoot = root;
+    codeUnit.root = root;
 
     codeNamespace.addCodeUnit(codeUnit);
 
@@ -146,18 +146,18 @@ class CodeNamespace {
 
   CodeUnit? getCodeUnitWithClass(String className) {
     for (var cu in _codeUnits) {
-      var clazz = cu.codeRoot!.getClass(className);
+      var clazz = cu.root!.getClass(className);
       if (clazz != null) return cu;
     }
     return null;
   }
 
   List<String> get classesNames =>
-      _codeUnits.expand((e) => e.codeRoot!.classesNames).toList();
+      _codeUnits.expand((e) => e.root!.classesNames).toList();
 
-  ASTCodeClass? getClass(String className) {
+  ASTClass? getClass(String className) {
     for (var cu in _codeUnits) {
-      var clazz = cu.codeRoot!.getClass(className);
+      var clazz = cu.root!.getClass(className);
       if (clazz != null) return clazz;
     }
     return null;
@@ -165,7 +165,7 @@ class CodeNamespace {
 
   CodeUnit? getCodeUnitWithFunction(String fName) {
     for (var cu in _codeUnits) {
-      if (cu.codeRoot!.containsFunctionWithName(fName)) return cu;
+      if (cu.root!.containsFunctionWithName(fName)) return cu;
     }
     return null;
   }
@@ -173,7 +173,7 @@ class CodeNamespace {
   ASTFunctionDeclaration? getFunction(String fName,
       ASTFunctionSignature parametersSignature, VMContext context) {
     for (var cu in _codeUnits) {
-      var f = cu.codeRoot!.getFunction(fName, parametersSignature, context);
+      var f = cu.root!.getFunction(fName, parametersSignature, context);
       if (f != null) return f;
     }
     return null;
@@ -195,7 +195,7 @@ class CodeUnit {
 
   CodeUnit(this.language, this.source, [this.id = '']);
 
-  ASTCodeRoot? codeRoot;
+  ASTRoot? root;
 
   @override
   String toString() {
@@ -203,16 +203,16 @@ class CodeUnit {
   }
 
   StringBuffer generateCode(ApolloCodeGenerator codeGenerator) {
-    if (codeRoot == null) {
+    if (root == null) {
       throw StateError(
-          'No ASTCodeRoot! Ensure that this CodeUnit is loaded by ApolloVM!');
+          'No ASTRoot! Ensure that this CodeUnit is loaded by ApolloVM!');
     }
-    return codeGenerator.generateASTCodeRoot(codeRoot!);
+    return codeGenerator.generateASTRoot(root!);
   }
 }
 
 class ApolloExternalFunctionMapper {
-  final Map<String, ASTCodeFunctionSet> _functions = {};
+  final Map<String, ASTFunctionSet> _functions = {};
 
   ASTExternalFunction<R>? getMappedFunction<R>(VMContext context, String fName,
       [ASTFunctionSignature? parametersSignature]) {
@@ -231,7 +231,7 @@ class ApolloExternalFunctionMapper {
     var fSet = _functions[fName];
 
     if (fSet == null) {
-      _functions[fName] = ASTCodeFunctionSetSingle(fExternal);
+      _functions[fName] = ASTFunctionSetSingle(fExternal);
     } else {
       _functions[fName] = fSet.add(fExternal);
     }
@@ -334,7 +334,7 @@ class VMContext {
   static VMContext? getCurrent() => _current;
 
   final VMContext? parent;
-  final ASTCodeBlock block;
+  final ASTBlock block;
   final ASTObjectInstance? objectInstance;
 
   final ExternalFunctionSet? externalFunctionSet;
@@ -431,6 +431,8 @@ class VMContext {
     if (parent != null) {
       return parent!.getMappedExternalFunction(fName, parametersSignature);
     }
+
+    return null;
   }
 }
 
