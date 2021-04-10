@@ -50,3 +50,44 @@ abstract class ASTCodeRunner {
 
   FutureOr<ASTValue> run(VMContext parentContext, ASTRunStatus runStatus);
 }
+
+class ASTModifiers {
+  static final ASTModifiers modifiersNone = ASTModifiers();
+  static final ASTModifiers modifierStatic = ASTModifiers(isStatic: true);
+  static final ASTModifiers modifierFinal = ASTModifiers(isFinal: true);
+  static final ASTModifiers modifiersStaticFinal =
+      ASTModifiers(isStatic: true, isFinal: true);
+
+  final bool isStatic;
+
+  final bool isFinal;
+
+  final bool isPrivate;
+
+  final bool isPublic;
+
+  ASTModifiers(
+      {this.isStatic = false,
+      this.isFinal = false,
+      this.isPrivate = false,
+      this.isPublic = false}) {
+    if (isPrivate && isPublic) {
+      throw StateError("Can't be private and public at the same time!");
+    }
+  }
+
+  ASTModifiers copyWith(
+      {bool? isStatic, bool? isFinal, bool? isPrivate, bool? isPublic}) {
+    return ASTModifiers(
+      isStatic: isStatic ?? this.isStatic,
+      isFinal: isFinal ?? this.isFinal,
+      isPrivate: isPrivate ?? this.isPrivate,
+      isPublic: isPublic ?? this.isPublic,
+    );
+  }
+
+  @override
+  String toString() {
+    return 'ASTModifier{isStatic: $isStatic, isFinal: $isFinal, isPrivate: $isPrivate, isPublic: $isPublic}';
+  }
+}

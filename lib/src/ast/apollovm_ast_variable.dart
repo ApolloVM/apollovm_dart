@@ -94,7 +94,7 @@ class ASTScopeVariable<T> extends ASTVariable {
   ASTVariable resolveVariable(VMContext context) {
     var variable = context.getVariable(name, true);
     if (variable == null) {
-      throw StateError("Can't find variable: $name");
+      throw StateError("Can't find variable: '$name'");
     }
     return variable;
   }
@@ -105,30 +105,10 @@ class ASTThisVariable<T> extends ASTVariable {
 
   @override
   ASTVariable resolveVariable(VMContext context) {
-    var astObjectInstance = context.getASTObjectInstance();
-    if (astObjectInstance == null) {
+    var obj = context.getObjectInstance();
+    if (obj == null) {
       throw StateError("Can't determine 'this'! No ASTObjectInstance defined!");
     }
-    return astObjectInstance;
-  }
-}
-
-class ASTObjectInstance extends ASTVariable {
-  ASTType type;
-
-  final ASTObjectValue _value;
-
-  ASTObjectInstance(this.type)
-      : _value = ASTObjectValue(type),
-        super(type.name);
-
-  ASTValue? getField(String name) => _value.getField(name);
-
-  ASTValue? setField(String name, ASTValue value) =>
-      _value.setField(name, value);
-
-  @override
-  ASTVariable resolveVariable(VMContext context) {
-    return this;
+    return ASTRuntimeVariable(obj.type, 'this', obj);
   }
 }

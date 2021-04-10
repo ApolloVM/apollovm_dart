@@ -30,6 +30,13 @@ class ASTEntryPointBlock extends ASTBlock {
         throw StateError("Can't find entry function: $entryFunctionName");
       }
 
+      if (!f.modifiers.isStatic) {
+        if (this is ASTClass) {
+          var obj = (this as ASTClass).createInstance();
+          (rootContext as VMClassContext).setObjectInstance(obj);
+        }
+      }
+
       return await f.call(rootContext,
           positionalParameters: positionalParameters,
           namedParameters: namedParameters);
@@ -77,7 +84,7 @@ class ASTEntryPointBlock extends ASTBlock {
 
   Future<VMContext> _initializeEntryPointBlock() async {
     if (_rootContext == null) {
-      var rootContext = VMContext(this);
+      var rootContext = _createContext();
       var rootStatus = ASTRunStatus();
       _rootContext = rootContext;
 
@@ -90,17 +97,29 @@ class ASTEntryPointBlock extends ASTBlock {
     }
     return _rootContext!;
   }
+
+  VMContext _createContext() => VMContext(this);
 }
 
 class ASTClass extends ASTEntryPointBlock {
   final String name;
+  final ASTType<VMObject> type;
+  ASTClass(this.name, ASTBlock? parent)
+      : type = ASTType<VMObject>(name),
+        super(parent);
 
-  ASTClass(this.name, ASTBlock? parent) : super(parent);
+  @override
+  VMContext _createContext() => VMClassContext(this);
 
   final Map<String, ASTClassField> _fields = <String, ASTClassField>{};
 
   @override
   ASTClassField? getField(String name) => _fields[name];
+
+  ASTObjectInstance createInstance() {
+    var obj = ASTObjectInstance(this);
+    return obj;
+  }
 }
 
 class ASTRoot extends ASTEntryPointBlock {
@@ -483,9 +502,12 @@ class ASTFunctionDeclaration<T> extends ASTBlock {
 
   final ASTType<T> returnType;
 
+  final ASTModifiers modifiers;
+
   ASTFunctionDeclaration(this.name, this._parameters, this.returnType,
-      [ASTBlock? block])
-      : super(null) {
+      {ASTBlock? block, ASTModifiers? modifiers})
+      : modifiers = modifiers ?? ASTModifiers.modifiersNone,
+        super(null) {
     set(block);
   }
 

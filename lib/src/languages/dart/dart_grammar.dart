@@ -52,6 +52,16 @@ class DartGrammarDefinition extends DartGrammarLexer {
   Parser topLevelDefinition() =>
       (functionDeclaration() | classDeclaration()).plus();
 
+  Parser<ASTFunctionDeclaration> functionDeclaration() =>
+      (type() & identifier() & parametersDeclaration() & codeBlock()).map((v) {
+        var returnType = v[0];
+        var parameters = v[2];
+        var name = v[1];
+        var block = v[3];
+        return ASTFunctionDeclaration(name, parameters, returnType,
+            block: block);
+      });
+
   Parser<ASTClass> classDeclaration() =>
       (string('class').trim() & identifier() & classCodeBlock()).map((v) {
         var block = v[2];
@@ -60,16 +70,42 @@ class DartGrammarDefinition extends DartGrammarLexer {
         return clazz;
       });
 
-  Parser<ASTBlock> classCodeBlock() =>
-      (char('{').trim() & ref0(functionDeclaration).star() & char('}').trim())
+  Parser<ASTBlock> classCodeBlock() => (char('{').trim() &
+              ref0(classFunctionDeclaration).star() &
+              char('}').trim())
           .map((v) {
         var functions = (v[1] as List).cast<ASTFunctionDeclaration>().toList();
         return ASTBlock(null)..addAllFunctions(functions);
       });
 
-  Parser<ASTFunctionDeclaration> functionDeclaration() =>
-      (type() & identifier() & parametersDeclaration() & codeBlock()).map((v) {
-        return ASTFunctionDeclaration(v[1], v[2], v[0], v[3]);
+  Parser<ASTFunctionDeclaration> classFunctionDeclaration() =>
+      (functionModifiers().optional() &
+              type() &
+              identifier() &
+              parametersDeclaration() &
+              codeBlock())
+          .map((v) {
+        var modifiers = v[0];
+        var returnType = v[1];
+        var name = v[2];
+        var parameters = v[3];
+        var block = v[4];
+        return ASTFunctionDeclaration(name, parameters, returnType,
+            block: block, modifiers: modifiers);
+      });
+
+  Parser<ASTModifiers> functionModifiers() =>
+      ((string('static') | string('final')).trim().flatten().plus())
+          .map((List v) {
+        v = v.map((e) => e.toString().trim()).toList();
+        if (v.length > 1) {
+          if (v.toSet().length != v.length) {
+            throw SyntaxError('Duplicated function modifiers: $v');
+          }
+        }
+        var isStatic = v.contains('static');
+        var isFinal = v.contains('final');
+        return ASTModifiers(isStatic: isStatic, isFinal: isFinal);
       });
 
   Parser<ASTBlock> codeBlock() =>

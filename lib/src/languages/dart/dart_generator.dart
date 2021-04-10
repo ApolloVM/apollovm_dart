@@ -30,6 +30,15 @@ class ApolloCodeGeneratorDart extends ApolloCodeGenerator {
     var blockCode = generateASTBlock(f, indent, null, false);
 
     s.write(indent);
+
+    if (f.modifiers.isStatic) {
+      s.write('static ');
+    }
+
+    if (f.modifiers.isFinal) {
+      s.write('final ');
+    }
+
     s.write(typeCode);
     s.write(' ');
     s.write(f.name);

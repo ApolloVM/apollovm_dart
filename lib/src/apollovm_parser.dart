@@ -49,6 +49,16 @@ class ParseResult {
   ParseResult({this.root, this.errorMessage});
 }
 
+class SyntaxError extends Error {
+  String message;
+  SyntaxError(this.message);
+
+  @override
+  String toString() {
+    return '[SyntaxError] $message';
+  }
+}
+
 class UnsupportedTypeError extends UnsupportedError {
   UnsupportedTypeError(String message) : super('[Unsupported Type] $message');
 }

@@ -64,16 +64,33 @@ class Java11GrammarDefinition extends Java11GrammarLexer {
               identifier() &
               parametersDeclaration() &
               codeBlock())
-          .map((v) {
-        //var modifier = v[0];
+          .map((List v) {
+        var modifiers = v[0];
         var returnType = v[1];
         var name = v[2];
         var parameters = v[3];
         var block = v[4];
-        return ASTFunctionDeclaration(name, parameters, returnType, block);
+        return ASTFunctionDeclaration(name, parameters, returnType,
+            block: block, modifiers: modifiers);
       });
 
-  Parser<List<String>> modifiers() => (modifier().plus());
+  Parser<ASTModifiers> modifiers() => (modifier().plus()).map((v) {
+        v = v.map((e) => e.toString().trim()).toList();
+        if (v.length > 1) {
+          if (v.toSet().length != v.length) {
+            throw SyntaxError('Duplicated function modifiers: $v');
+          }
+        }
+        var isStatic = v.contains('static');
+        var isFinal = v.contains('final');
+        var isPrivate = v.contains('private');
+        var isPublic = v.contains('private');
+        return ASTModifiers(
+            isStatic: isStatic,
+            isFinal: isFinal,
+            isPrivate: isPrivate,
+            isPublic: isPublic);
+      });
 
   Parser<String> modifier() => (string('public') |
           string('private') |

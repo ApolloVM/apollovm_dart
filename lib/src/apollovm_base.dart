@@ -1,4 +1,5 @@
 import 'package:apollovm/apollovm.dart';
+import 'package:collection/collection.dart' show MapEquality;
 
 import 'apollovm_code_generator.dart';
 import 'apollovm_code_storage.dart';
@@ -322,6 +323,26 @@ class ApolloExternalFunctionMapper {
   }
 }
 
+class VMClassContext extends VMContext {
+  ASTClass clazz;
+
+  VMClassContext(this.clazz,
+      {VMContext? parent, ExternalFunctionSet? externalFunctionSet})
+      : super(clazz, parent: parent, externalFunctionSet: externalFunctionSet);
+
+  ASTObjectInstance? _objectInstance;
+
+  @override
+  ASTObjectInstance? getObjectInstance() => _objectInstance;
+
+  void setObjectInstance(ASTObjectInstance obj) {
+    if (_objectInstance != null && !identical(_objectInstance, obj)) {
+      throw StateError('ASTObjectInstance already set!');
+    }
+    _objectInstance = obj;
+  }
+}
+
 class VMContext {
   static VMContext? _current;
 
@@ -335,16 +356,21 @@ class VMContext {
 
   final VMContext? parent;
   final ASTBlock block;
-  final ASTObjectInstance? objectInstance;
 
   final ExternalFunctionSet? externalFunctionSet;
 
-  VMContext(this.block,
-      {this.parent, this.objectInstance, this.externalFunctionSet});
+  VMContext(this.block, {this.parent, this.externalFunctionSet});
 
   final Map<String, ASTTypedVariable> _variables = {};
 
   ASTVariable? getVariable(String name, bool allowField) {
+    if (name == 'this') {
+      var obj = getObjectInstance();
+      if (obj != null) {
+        return ASTRuntimeVariable(obj.type, name, obj);
+      }
+    }
+
     var variable = _variables[name];
     if (variable != null) return variable;
     if (allowField) {
@@ -389,12 +415,7 @@ class VMContext {
     return block.getField(name);
   }
 
-  ASTObjectInstance? getASTObjectInstance() {
-    if (objectInstance != null) {
-      return objectInstance!;
-    }
-    return parent?.getASTObjectInstance();
-  }
+  ASTObjectInstance? getObjectInstance() => parent?.getObjectInstance();
 
   ExternalFunctionSet? getExternalFunctionSet() {
     if (externalFunctionSet != null) {
@@ -444,5 +465,40 @@ class ApolloVMNullPointerException implements Exception {
   @override
   String toString() {
     return 'ApolloVMNullPointerException: $message';
+  }
+}
+
+class VMObject {
+  final ASTType type;
+
+  VMObject(this.type);
+
+  final Map<String, ASTValue> _fieldsValues = <String, ASTValue>{};
+
+  dynamic operator [](Object? field) => _fieldsValues[field];
+
+  void operator []=(String field, ASTValue? value) {
+    if (value == null) {
+      _fieldsValues.remove(field);
+    } else {
+      _fieldsValues[field] = value;
+    }
+  }
+
+  static final MapEquality _mapEquality = MapEquality();
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is VMObject &&
+          runtimeType == other.runtimeType &&
+          _mapEquality.equals(_fieldsValues, other._fieldsValues);
+
+  @override
+  int get hashCode => _mapEquality.hash(_fieldsValues);
+
+  @override
+  String toString() {
+    return '${type.name}$_fieldsValues';
   }
 }

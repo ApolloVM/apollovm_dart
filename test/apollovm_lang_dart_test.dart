@@ -400,7 +400,7 @@ line3
           'dart',
           r"""
             class Foo {
-              void main(List<String> args) {
+              static void main(List<String> args) {
                 var a = 123 ;
                 var b = 123 * 2 ;
                 var sv1 = 'a: <$a>;\t\$b->a*2: $b ;\ta*3: ${ a * 3 }!' ;
@@ -437,7 +437,7 @@ line3
 <<<< NAMESPACE="" >>>>
 <<<< CODE_UNIT_START="/test" >>>>
 class Foo {
-  void main(List<String> args) {
+  static void main(List<String> args) {
     var a = 123;
     var b = 123 * 2;
     var sv1 = 'a: <$a>;\t\$b->a*2: $b ;\ta*3: ${a * 3}!';
@@ -458,7 +458,7 @@ class Foo {
 <<<< NAMESPACE="" >>>>
 <<<< CODE_UNIT_START="/test" >>>>
 class Foo {
-  void main(String[] args) {
+  static void main(String[] args) {
     var a = 123;
     var b = 123 * 2;
     var sv1 = "a: <" + String.valueOf( a ) + ">;\t$b->a*2: " + String.valueOf( b ) + " ;\ta*3: " + String.valueOf( a * 3 ) + "!";
@@ -477,7 +477,7 @@ class Foo {
           'dart',
           r'''
           class Bar {
-            void main(List<Object> args) {
+            static void main(List<Object> args) {
               var a = args[0] ;
               var b = args[1] ;
               var eq = a == b ;
@@ -526,7 +526,7 @@ class Foo {
 <<<< NAMESPACE="" >>>>
 <<<< CODE_UNIT_START="/test" >>>>
 class Bar {
-  void main(List<Object> args) {
+  static void main(List<Object> args) {
     var a = args[0];
     var b = args[1];
     var eq = a == b;
@@ -557,7 +557,7 @@ class Bar {
 <<<< NAMESPACE="" >>>>
 <<<< CODE_UNIT_START="/test" >>>>
 class Bar {
-  void main(Object[] args) {
+  static void main(Object[] args) {
     var a = args[0];
     var b = args[1];
     var eq = a == b;
@@ -586,7 +586,7 @@ class Bar {
           'dart',
           r'''
           class Bar {
-            void main(List<Object> args) {
+            static void main(List<Object> args) {
               var a = args[0] ;
               var b = args[1] ;
               var eq = a == b ;
@@ -663,7 +663,7 @@ class Bar {
 <<<< NAMESPACE="" >>>>
 <<<< CODE_UNIT_START="/test" >>>>
 class Bar {
-  void main(List<Object> args) {
+  static void main(List<Object> args) {
     var a = args[0];
     var b = args[1];
     var eq = a == b;
@@ -701,7 +701,7 @@ class Bar {
 <<<< NAMESPACE="" >>>>
 <<<< CODE_UNIT_START="/test" >>>>
 class Bar {
-  void main(Object[] args) {
+  static void main(Object[] args) {
     var a = args[0];
     var b = args[1];
     var eq = a == b;
@@ -723,6 +723,77 @@ class Bar {
         print("else: a==b");
     }
 
+  }
+}
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+'''));
+    });
+
+    test('Basic Class function', () async {
+      var vm = ApolloVM();
+
+      var codeUnit = CodeUnit(
+          'dart',
+          r"""
+            class Foo {
+              void test(int a) {
+                var s = '$this > a: $a' ;
+                print(s);
+              }
+            }
+          """,
+          'test');
+
+      var loadOK = await vm.loadCodeUnit(codeUnit);
+
+      expect(loadOK, isTrue, reason: 'Error loading Dart code!');
+
+      var dartRunner = vm.createRunner('dart')!;
+
+      var output = [];
+      dartRunner.externalPrintFunction = (o) => output.add(o);
+
+      await dartRunner.executeClassMethod('', 'Foo', 'test', [123]);
+
+      expect(output, equals(['Foo{} > a: 123']));
+
+      print('---------------------------------------');
+      print('OUTPUT:');
+      output.forEach((o) => print('>> $o'));
+
+      print('---------------------------------------');
+      // Regenerate code:
+      var codeStorageDart = vm.generateAllCodeIn('dart');
+      var allSourcesDart = codeStorageDart.writeAllSources().toString();
+      print(allSourcesDart);
+
+      expect(allSourcesDart, equals(r'''<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+class Foo {
+  void test(int a) {
+    var s = '$this > a: $a';
+    print(s);
+  }
+}
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+'''));
+
+      print('---------------------------------------');
+      // Regenerate code:
+      var codeStorageJava = vm.generateAllCodeIn('java11');
+      var allSourcesJava = codeStorageJava.writeAllSources().toString();
+      print(allSourcesJava);
+
+      expect(allSourcesJava, equals(r'''<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+class Foo {
+  void test(int a) {
+    var s = String.valueOf( this ) + " > a: " + String.valueOf( a );
+    print(s);
   }
 }
 <<<< CODE_UNIT_END="/test" >>>>

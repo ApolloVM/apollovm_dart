@@ -464,27 +464,54 @@ class ASTExpressionLocalFunctionInvocation extends ASTExpression {
           'Can\'t find function "$name" with parameters signature: $fSignature');
     }
 
-    var argumentsFuture = arguments.map((e) async {
-      return await e.run(parentContext, runStatus);
-    }).toList();
-
-    var argumentsValues = await Future.wait(argumentsFuture);
+    var argumentsValues =
+        await _resolveArgumentsValues(parentContext, runStatus, arguments);
 
     return f.call(parentContext, positionalParameters: argumentsValues);
   }
 }
 
+Future<List<ASTValue>> _resolveArgumentsValues(VMContext parentContext,
+    ASTRunStatus runStatus, List<ASTExpression> arguments) async {
+  var argumentsFuture = arguments.map((e) async {
+    return await e.run(parentContext, runStatus);
+  }).toList();
+
+  var argumentsValues = await Future.wait(argumentsFuture);
+  return argumentsValues;
+}
+
 class ASTExpressionObjectFunctionInvocation extends ASTExpression {
   ASTVariable variable;
   String name;
-  List arguments;
+  List<ASTExpression> arguments;
 
   ASTExpressionObjectFunctionInvocation(
       this.variable, this.name, this.arguments);
 
   @override
-  ASTValue run(VMContext parentContext, ASTRunStatus runStatus) {
-    // TODO: implement run
-    throw UnimplementedError();
+  FutureOr<ASTValue> run(
+      VMContext parentContext, ASTRunStatus runStatus) async {
+    var obj = await variable.getValue(parentContext);
+
+    if (obj is! ASTObjectInstance) {
+      throw StateError(
+          'Variable $variable not pointing to an object instance: $obj');
+    }
+
+    var clazz = obj.clazz;
+
+    var fSignature = ASTFunctionSignature.from(arguments, null);
+
+    var f = clazz.getFunction(name, fSignature, parentContext);
+    if (f == null) {
+      throw StateError(
+          "Can't find class[${clazz.name}] function[$name( $fSignature )] for object: $obj");
+    }
+
+    var argumentsValues =
+        await _resolveArgumentsValues(parentContext, runStatus, arguments);
+
+    return f.call(parentContext, positionalParameters: argumentsValues);
   }
 }

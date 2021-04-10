@@ -850,28 +850,40 @@ class ASTValueReadKey<T> extends ASTValue<T> {
   }
 }
 
-class ASTObjectValue<T> extends ASTValue<T> {
-  final Map<String, ASTValue> _o = {};
+class ASTObjectInstance extends ASTValue<VMObject> {
+  final ASTClass clazz;
+  final VMObject _object;
 
-  ASTObjectValue(ASTType<T> type) : super(type);
+  ASTObjectInstance(this.clazz)
+      : _object = VMObject(clazz.type),
+        super(clazz.type) {
+    if (type.name != clazz.name) {
+      throw StateError('Incompatible class with type: $clazz != $type');
+    }
+  }
 
   @override
-  T getValue(VMContext context) => _o as T;
+  VMObject getValue(VMContext context) => _object;
 
   @override
-  T getValueNoContext() => _o as T;
+  VMObject getValueNoContext() => _object;
 
   @override
-  ASTValue<T> resolve(VMContext context) {
+  ASTValue<VMObject> resolve(VMContext context) {
     return this;
   }
 
-  ASTValue? getField(String name) => _o[name];
+  ASTValue? getField(String name) => _object[name];
 
   ASTValue? setField(String name, ASTValue value) {
-    var prev = _o[name];
-    _o[name] = value;
+    var prev = _object[name];
+    _object[name] = value;
     return prev;
+  }
+
+  @override
+  String toString() {
+    return '$type$_object';
   }
 }
 

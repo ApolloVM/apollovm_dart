@@ -60,7 +60,7 @@ void main() {
           allSourcesDart,
           matches(RegExp(r'\s*'
               r'class\s+Foo\s*\{'
-              r'\s*void\s+main\(List<Object> args\)\s*\{'
+              r'\s*static\s+void\s+main\(List<Object> args\)\s*\{'
               r'\s*var\s+title\s+=\s+args\[0\]\s*;'
               r'\s*var\s+a\s+=\s+args\[1\]\s*;'
               r'\s*var\s+b\s+=\s+args\[2\]\s*;'
@@ -133,7 +133,7 @@ void main() {
           allSourcesDart,
           matches(RegExp(r'\s*'
               r'class\s+Foo\s*\{'
-              r'\s*void\s+main\(List<String> args\)\s*\{'
+              r'\s*static\s+void\s+main\(List<String> args\)\s*\{'
               r'\s*var\s+title\s+=\s+args\[0\]\s*;'
               r'\s*var\s+a\s+=\s+args\[1\]\s*;'
               r'\s*var\s+b\s+=\s+args\[2\]\s*;'
@@ -208,7 +208,7 @@ void main() {
 <<<< NAMESPACE="" >>>>
 <<<< CODE_UNIT_START="/test" >>>>
 class Foo {
-  void main(Object[] args) {
+  static void main(Object[] args) {
     var title = args[0];
     var a = args[1];
     var b = args[2];
@@ -311,7 +311,7 @@ class Foo {
 <<<< NAMESPACE="" >>>>
 <<<< CODE_UNIT_START="/test" >>>>
 class Bar {
-  void main(List<Object> args) {
+  static void main(List<Object> args) {
     var a = args[0];
     var b = args[1];
     var eq = a == b;
@@ -349,7 +349,7 @@ class Bar {
 <<<< NAMESPACE="" >>>>
 <<<< CODE_UNIT_START="/test" >>>>
 class Bar {
-  void main(Object[] args) {
+  static void main(Object[] args) {
     var a = args[0];
     var b = args[1];
     var eq = a == b;

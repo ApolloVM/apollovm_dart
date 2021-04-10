@@ -1,3 +1,10 @@
+## 0.0.12
+
+- Grammars & Code Generators & Runner:
+  - Dart & Java11:
+    - Better definition of static methods.
+    - Class object instance.
+
 ## 0.0.11
 
 - Renamed:
