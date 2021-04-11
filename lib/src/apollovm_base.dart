@@ -373,10 +373,17 @@ class VMContext {
 
     var variable = _variables[name];
     if (variable != null) return variable;
+
     if (allowField) {
-      var field = block.getField(name);
-      return field;
+      var obj = getObjectInstance();
+      if (obj != null) {
+        var fieldValue = obj.getField(name);
+        if (fieldValue != null) {
+          return fieldValue;
+        }
+      }
     }
+
     return parent?.getVariable(name, allowField);
   }
 
@@ -473,11 +480,12 @@ class VMObject {
 
   VMObject(this.type);
 
-  final Map<String, ASTValue> _fieldsValues = <String, ASTValue>{};
+  final Map<String, ASTRuntimeVariable> _fieldsValues =
+      <String, ASTRuntimeVariable>{};
 
-  dynamic operator [](Object? field) => _fieldsValues[field];
+  ASTRuntimeVariable? operator [](Object? field) => _fieldsValues[field];
 
-  void operator []=(String field, ASTValue? value) {
+  void operator []=(String field, ASTRuntimeVariable? value) {
     if (value == null) {
       _fieldsValues.remove(field);
     } else {

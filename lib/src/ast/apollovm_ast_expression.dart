@@ -195,6 +195,16 @@ class ASTExpressionOperation extends ASTExpression {
     }
   }
 
+  void throwOperationError(String op, ASTType t1, ASTType t2) {
+    var message = "Can't perform '$op' operation with types: $t1 $op $t2";
+
+    if (t1 is ASTTypeNull || t2 is ASTTypeNull) {
+      throw ApolloVMNullPointerException(message);
+    }
+
+    throw UnsupportedError(message);
+  }
+
   ASTValue operatorAdd(VMContext context, ASTValue val1, ASTValue val2) {
     var t1 = val1.type;
     var t2 = val2.type;
@@ -229,7 +239,8 @@ class ASTExpressionOperation extends ASTExpression {
       }
     }
 
-    throw UnsupportedError("Can't perform '+' operation in types: $t1 + $t2");
+    throwOperationError('+', t1, t2);
+    return ASTValueNull.INSTANCE;
   }
 
   ASTValue operatorSubtract(VMContext context, ASTValue val1, ASTValue val2) {
@@ -259,7 +270,8 @@ class ASTExpressionOperation extends ASTExpression {
       }
     }
 
-    throw UnsupportedError("Can't perform '-' operation in types: $t1 - $t2");
+    throwOperationError('-', t1, t2);
+    return ASTValueNull.INSTANCE;
   }
 
   ASTValue operatorMultiply(VMContext context, ASTValue val1, ASTValue val2) {
@@ -289,7 +301,8 @@ class ASTExpressionOperation extends ASTExpression {
       }
     }
 
-    throw UnsupportedError("Can't perform '*' operation in types: $t1 * $t2");
+    throwOperationError('*', t1, t2);
+    return ASTValueNull.INSTANCE;
   }
 
   ASTValue operatorDivide(VMContext context, ASTValue val1, ASTValue val2) {
@@ -319,7 +332,8 @@ class ASTExpressionOperation extends ASTExpression {
       }
     }
 
-    throw UnsupportedError("Can't perform '/' operation in types: $t1 / $t2");
+    throwOperationError('/', t1, t2);
+    return ASTValueNull.INSTANCE;
   }
 
   ASTValue operatorDivideAsInt(
@@ -336,7 +350,8 @@ class ASTExpressionOperation extends ASTExpression {
       }
     }
 
-    throw UnsupportedError("Can't perform '/' operation in types: $t1 / $t2");
+    throwOperationError('/', t1, t2);
+    return ASTValueNull.INSTANCE;
   }
 
   ASTValue operatorDivideAsDouble(
@@ -353,7 +368,8 @@ class ASTExpressionOperation extends ASTExpression {
       }
     }
 
-    throw UnsupportedError("Can't perform '/' operation in types: $t1 / $t2");
+    throwOperationError('/', t1, t2);
+    return ASTValueNull.INSTANCE;
   }
 
   FutureOr<ASTValueBool> operatorEquals(
@@ -458,7 +474,7 @@ class ASTExpressionLocalFunctionInvocation extends ASTExpression {
   FutureOr<ASTValue> run(
       VMContext parentContext, ASTRunStatus runStatus) async {
     var fSignature = ASTFunctionSignature.from(arguments, null);
-    var f = parentContext.block.getFunction(name, fSignature, parentContext);
+    var f = parentContext.getFunction(name, fSignature, parentContext);
     if (f == null) {
       throw StateError(
           'Can\'t find function "$name" with parameters signature: $fSignature');

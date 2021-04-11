@@ -377,6 +377,96 @@ class Bar {
 <<<< [SOURCES_END] >>>>
 '''));
     });
+
+    test('Basic Class field', () async {
+      var vm = ApolloVM();
+
+      var codeUnit = CodeUnit(
+          'dart',
+          r"""
+            class Foo {
+              int x ;
+              int y = 10 ;
+              
+              int getZ() {
+                return y * 2 ;
+              }
+              
+              void test(int a) {
+                var z = getZ();
+                var s = '$this > a: $a ; x: $x ; y: $y ; z: $z' ;
+                print(s);
+              }
+            }
+          """,
+          'test');
+
+      var loadOK = await vm.loadCodeUnit(codeUnit);
+
+      expect(loadOK, isTrue, reason: 'Error loading Dart code!');
+
+      var dartRunner = vm.createRunner('dart')!;
+
+      var output = [];
+      dartRunner.externalPrintFunction = (o) => output.add(o);
+
+      await dartRunner.executeClassMethod('', 'Foo', 'test', [123]);
+
+      expect(
+          output,
+          equals(
+              ['Foo{x: int x, y: int y} > a: 123 ; x: null ; y: 10 ; z: 20']));
+
+      print('---------------------------------------');
+      print('OUTPUT:');
+      output.forEach((o) => print('>> $o'));
+
+      print('---------------------------------------');
+      // Regenerate code:
+      var codeStorageDart = vm.generateAllCodeIn('dart');
+      var allSourcesDart = codeStorageDart.writeAllSources().toString();
+      print(allSourcesDart);
+
+      expect(allSourcesDart, equals(r'''<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+class Foo {
+  int getZ() {
+    return y * 2;
+  }
+  void test(int a) {
+    var z = getZ();
+    var s = '$this > a: $a ; x: $x ; y: $y ; z: $z';
+    print(s);
+  }
+}
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+'''));
+
+      print('---------------------------------------');
+      // Regenerate code:
+      var codeStorageJava = vm.generateAllCodeIn('java11');
+      var allSourcesJava = codeStorageJava.writeAllSources().toString();
+      print(allSourcesJava);
+
+      expect(allSourcesJava, equals(r'''<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+class Foo {
+  int getZ() {
+    return y * 2;
+  }
+  void test(int a) {
+    var z = getZ();
+    var s = String.valueOf( this ) + " > a: " + a + " ; x: " + x + " ; y: " + y + " ; z: " + z;
+    print(s);
+  }
+}
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+'''));
+    });
   });
 }
 

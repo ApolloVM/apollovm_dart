@@ -189,7 +189,7 @@ class ApolloCodeGeneratorDart extends ApolloCodeGenerator {
 
     for (var v in value.values) {
       if (v is ASTValueStringVariable) {
-        var s2 = generateASTValueStringVariable(v, '');
+        var s2 = generateASTValueStringVariable(v, '', null, list.isNotEmpty);
         list.add(s2);
       } else if (v is ASTValueStringExpresion) {
         var s2 = generateASTValueStringExpresion(v, '');
@@ -265,7 +265,7 @@ class ApolloCodeGeneratorDart extends ApolloCodeGenerator {
 
   @override
   StringBuffer generateASTValueStringVariable(ASTValueStringVariable value,
-      [String indent = '', StringBuffer? s]) {
+      [String indent = '', StringBuffer? s, bool precededByString = false]) {
     s ??= StringBuffer();
     s.write("'");
     s.write(r'$');

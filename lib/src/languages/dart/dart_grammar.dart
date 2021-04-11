@@ -71,11 +71,41 @@ class DartGrammarDefinition extends DartGrammarLexer {
       });
 
   Parser<ASTBlock> classCodeBlock() => (char('{').trim() &
-              ref0(classFunctionDeclaration).star() &
+              (ref0(classFunctionDeclaration) |
+                      ref0(classFieldDeclaration) |
+                      ref0(classFieldDeclarationWithValue))
+                  .star() &
               char('}').trim())
           .map((v) {
-        var functions = (v[1] as List).cast<ASTFunctionDeclaration>().toList();
-        return ASTBlock(null)..addAllFunctions(functions);
+        var list = v[1] as List;
+        var fields = list.whereType<ASTClassField>().toList();
+        var functions = list.whereType<ASTFunctionDeclaration>().toList();
+
+        var block = ASTClass('?', null);
+
+        block.addAllFields(fields);
+        block.addAllFunctions(functions);
+
+        return block;
+      });
+
+  Parser<ASTClassField> classFieldDeclaration() =>
+      (type() & identifier() & char(';').trim()).map((v) {
+        var type = v[0];
+        var name = v[1];
+        return ASTClassField(type, name, false);
+      });
+
+  Parser<ASTClassField> classFieldDeclarationWithValue() => (type() &
+              identifier() &
+              char('=').trim() &
+              ref0(expression) &
+              char(';').trim())
+          .map((v) {
+        var type = v[0];
+        var name = v[1];
+        var expression = v[3];
+        return ASTClassFieldWithInitialValue(type, name, expression, false);
       });
 
   Parser<ASTFunctionDeclaration> classFunctionDeclaration() =>
@@ -114,9 +144,35 @@ class DartGrammarDefinition extends DartGrammarLexer {
         return ASTBlock(null)..addAllStatements(statements);
       });
 
-  Parser<ASTStatement> statement() =>
-      (branch() | statementVariableDeclaration() | statementExpression())
-          .cast<ASTStatement>();
+  Parser<ASTStatement> statement() => (branch() |
+          statementReturn() |
+          statementVariableDeclaration() |
+          statementExpression())
+      .cast<ASTStatement>();
+
+  Parser<ASTStatementReturn> statementReturn() =>
+      (string('return').trim() & expression().optional() & char(';').trim())
+          .map((v) {
+        var value = v[1];
+
+        if (value == null) {
+          return ASTStatementReturn();
+        } else if (value is ASTExpression) {
+          if (value is ASTExpressionVariableAccess) {
+            if (value.variable.name == 'null') {
+              return ASTStatementReturnNull();
+            } else {
+              return ASTStatementReturnVariable(value.variable);
+            }
+          } else if (value is ASTExpressionLiteral) {
+            return ASTStatementReturnValue(value.value);
+          } else {
+            return ASTStatementReturnWithExpression(value);
+          }
+        }
+
+        throw UnsupportedError("Can't handle return value: $value");
+      });
 
   Parser<ASTStatementExpression> statementExpression() =>
       (expression() & char(';').trim()).map((v) {

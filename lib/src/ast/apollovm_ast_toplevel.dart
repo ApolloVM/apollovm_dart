@@ -32,8 +32,11 @@ class ASTEntryPointBlock extends ASTBlock {
 
       if (!f.modifiers.isStatic) {
         if (this is ASTClass) {
-          var obj = (this as ASTClass).createInstance();
-          (rootContext as VMClassContext).setObjectInstance(obj);
+          var clazz = this as ASTClass;
+          var classContext = rootContext as VMClassContext;
+          var obj =
+              await clazz.createInstance(classContext, ASTRunStatus.DUMMY);
+          classContext.setObjectInstance(obj);
         }
       }
 
@@ -109,16 +112,52 @@ class ASTClass extends ASTEntryPointBlock {
         super(parent);
 
   @override
+  void set(ASTBlock? other) {
+    if (other == null) return;
+
+    if (other is ASTClass) {
+      _fields.clear();
+      addAllFields(other._fields.values);
+    }
+
+    super.set(other);
+  }
+
+  @override
   VMContext _createContext() => VMClassContext(this);
 
   final Map<String, ASTClassField> _fields = <String, ASTClassField>{};
 
+  void addField(ASTClassField field) {
+    _fields[field.name] = field;
+  }
+
+  void addAllFields(Iterable<ASTClassField> fields) {
+    for (var field in fields) {
+      addField(field);
+    }
+  }
+
   @override
   ASTClassField? getField(String name) => _fields[name];
 
-  ASTObjectInstance createInstance() {
+  Future<ASTObjectInstance> createInstance(
+      VMClassContext context, ASTRunStatus runStatus) async {
     var obj = ASTObjectInstance(this);
+    await initializeInstance(context, runStatus, obj);
     return obj;
+  }
+
+  Future<void> initializeInstance(VMClassContext context,
+      ASTRunStatus runStatus, ASTObjectInstance instance) async {
+    for (var field in _fields.values) {
+      if (field is ASTClassFieldWithInitialValue) {
+        var value = await field.getInitialValue(context, runStatus);
+        instance.setField(field.name, value);
+      } else {
+        instance.setField(field.name, ASTValueNull.INSTANCE);
+      }
+    }
   }
 }
 
@@ -196,6 +235,9 @@ class ASTFunctionSignature implements ASTNode {
         ? toASTTypeList(positionalParameters)
         : null;
     var named = namedParameters != null ? toASTTypeList(namedParameters) : null;
+
+    if (pos != null && pos.isEmpty) pos = null;
+    if (named != null && named.isEmpty) named = null;
 
     return ASTFunctionSignature(pos, named);
   }
@@ -547,7 +589,7 @@ class ASTFunctionDeclaration<T> extends ASTBlock {
     try {
       await initializeVariables(context, positionalParameters, namedParameters);
 
-      var result = await super.run(context, ASTRunStatus.DUMMY);
+      var result = await super.run(context, ASTRunStatus());
       return await resolveReturnValue(context, result);
     } finally {
       VMContext.setCurrent(prevContext);

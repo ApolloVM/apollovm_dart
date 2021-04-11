@@ -146,8 +146,6 @@ abstract class ApolloCodeGenerator {
       return generateASTStatementVariableDeclaration(statement, indent, s);
     } else if (statement is ASTBranch) {
       return generateASTBranch(statement, indent, s);
-    } else if (statement is ASTStatementReturn) {
-      return generateASTStatementReturn(statement, indent, s);
     } else if (statement is ASTStatementReturnNull) {
       return generateASTStatementReturnNull(statement, indent, s);
     } else if (statement is ASTStatementReturnValue) {
@@ -156,6 +154,8 @@ abstract class ApolloCodeGenerator {
       return generateASTStatementReturnVariable(statement, indent, s);
     } else if (statement is ASTStatementReturnWithExpression) {
       return generateASTStatementReturnWithExpression(statement, indent, s);
+    } else if (statement is ASTStatementReturn) {
+      return generateASTStatementReturn(statement, indent, s);
     }
 
     throw UnsupportedError("Can't handle statement: $statement");
@@ -286,6 +286,7 @@ abstract class ApolloCodeGenerator {
   StringBuffer generateASTStatementReturn(ASTStatementReturn statement,
       [String indent = '', StringBuffer? s]) {
     s ??= StringBuffer();
+    s.write(indent);
     s.write('return;');
     return s;
   }
@@ -293,6 +294,7 @@ abstract class ApolloCodeGenerator {
   StringBuffer generateASTStatementReturnNull(ASTStatementReturnNull statement,
       [String indent = '', StringBuffer? s]) {
     s ??= StringBuffer();
+    s.write(indent);
     s.write('return null;');
     return s;
   }
@@ -493,7 +495,7 @@ abstract class ApolloCodeGenerator {
       StringBuffer? s]);
 
   StringBuffer generateASTValueStringVariable(ASTValueStringVariable value,
-      [String indent = '', StringBuffer? s]);
+      [String indent = '', StringBuffer? s, bool precededByString = false]);
 
   StringBuffer generateASTValueStringExpresion(ASTValueStringExpresion value,
       [String indent = '', StringBuffer? s]);

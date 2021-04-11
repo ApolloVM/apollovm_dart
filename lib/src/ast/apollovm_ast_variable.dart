@@ -64,6 +64,18 @@ class ASTClassField<T> extends ASTTypedVariable<T> {
   }
 }
 
+class ASTClassFieldWithInitialValue<T> extends ASTClassField<T> {
+  final ASTExpression _initialValue;
+  ASTClassFieldWithInitialValue(
+      ASTType<T> type, String name, this._initialValue, bool finalValue)
+      : super(type, name, finalValue);
+
+  FutureOr<ASTValue> getInitialValue(
+      VMClassContext context, ASTRunStatus runStatus) {
+    return _initialValue.run(context, runStatus);
+  }
+}
+
 class ASTRuntimeVariable<T> extends ASTTypedVariable<T> {
   ASTValue _value;
 

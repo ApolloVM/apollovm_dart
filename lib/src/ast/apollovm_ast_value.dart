@@ -166,6 +166,9 @@ abstract class ASTValue<T> implements ASTNode {
     }
     return false;
   }
+
+  @override
+  String toString();
 }
 
 class ASTValueStatic<T> extends ASTValue<T> {
@@ -253,6 +256,11 @@ class ASTValueStatic<T> extends ASTValue<T> {
     }
 
     return super == (other);
+  }
+
+  @override
+  String toString() {
+    return '{type: $type, value: $value}';
   }
 }
 
@@ -479,6 +487,11 @@ class ASTValueInt extends ASTValueNum<int> {
           "Can't do '*' operation with: $other");
     }
   }
+
+  @override
+  String toString() {
+    return '(int) $value';
+  }
 }
 
 class ASTValueDouble extends ASTValueNum<double> {
@@ -533,6 +546,11 @@ class ASTValueDouble extends ASTValueNum<double> {
           "Can't do '*' operation with: $other");
     }
   }
+
+  @override
+  String toString() {
+    return '(double) $value';
+  }
 }
 
 class ASTValueString extends ASTValuePrimitive<String> {
@@ -561,6 +579,11 @@ class ASTValueString extends ASTValuePrimitive<String> {
     throw UnsupportedError(
         "Can't perform operation '<=' in non number values: $this > $other");
   }
+
+  @override
+  String toString() {
+    return '(String) $value';
+  }
 }
 
 class ASTValueObject extends ASTValueStatic<Object> {
@@ -581,6 +604,11 @@ class ASTValueNull extends ASTValueStatic<Null> {
   FutureOr<bool> equals(Object other) {
     return other is ASTValueNull;
   }
+
+  @override
+  String toString() {
+    return 'null';
+  }
 }
 
 class ASTValueVoid extends ASTValueStatic<void> {
@@ -596,6 +624,11 @@ class ASTValueVoid extends ASTValueStatic<void> {
   @override
   FutureOr<bool> equals(Object other) {
     return other is ASTValueVoid;
+  }
+
+  @override
+  String toString() {
+    return 'void';
   }
 }
 
@@ -817,6 +850,11 @@ class ASTValueReadIndex<T> extends ASTValue<T> {
     var v = await getValue(context);
     return ASTValue.from(type, v);
   }
+
+  @override
+  String toString() {
+    return '{type: $type, value: $variable[$_index]}';
+  }
 }
 
 class ASTValueReadKey<T> extends ASTValue<T> {
@@ -848,6 +886,11 @@ class ASTValueReadKey<T> extends ASTValue<T> {
     var v = await getValue(context);
     return ASTValue.from(type, v);
   }
+
+  @override
+  String toString() {
+    return '{type: $type, value: $variable[$_key]}';
+  }
 }
 
 class ASTObjectInstance extends ASTValue<VMObject> {
@@ -873,11 +916,14 @@ class ASTObjectInstance extends ASTValue<VMObject> {
     return this;
   }
 
-  ASTValue? getField(String name) => _object[name];
+  ASTRuntimeVariable? getField(String name) => _object[name];
 
-  ASTValue? setField(String name, ASTValue value) {
+  ASTRuntimeVariable? setField(String name, ASTValue value) {
+    var field = clazz.getField(name);
+    if (field == null) throw StateError("No field '$name' in class $clazz");
+
     var prev = _object[name];
-    _object[name] = value;
+    _object[name] = ASTRuntimeVariable(field.type, name, value);
     return prev;
   }
 

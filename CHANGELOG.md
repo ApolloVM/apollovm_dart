@@ -1,3 +1,15 @@
+## 0.0.13
+
+- Grammar & Runner:
+  - Dart & Java: 
+    - Class fields.
+    - Class object instance fields at runtime.
+- Code Generator:
+  - Dart & Java: 
+    - Fix return statement with value/expression ;
+  - Java:
+    - Better/shorter code for String concatenation.
+
 ## 0.0.12
 
 - Grammars & Code Generators & Runner:
