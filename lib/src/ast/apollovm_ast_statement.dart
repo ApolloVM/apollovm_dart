@@ -24,6 +24,8 @@ class ASTBlock extends ASTStatement {
 
   List<ASTFunctionSet> get functions => _functions.values.toList();
 
+  List<String> get functionsNames => _functions.keys.toList();
+
   void addFunction(ASTFunctionDeclaration f) {
     var name = f.name;
     f.parentBlock = this;

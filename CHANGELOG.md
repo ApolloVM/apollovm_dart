@@ -1,3 +1,9 @@
+## 0.0.15
+
+- `ASTBlock`: added `functionsNames`.
+- `ASTClass`: added `fields` and `fieldsNames`.
+- `ApolloLanguageRunner`: added `getClass`.
+
 ## 0.0.14
 
 - AST:

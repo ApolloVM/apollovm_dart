@@ -152,6 +152,10 @@ class ASTClass extends ASTEntryPointBlock {
 
   final Map<String, ASTClassField> _fields = <String, ASTClassField>{};
 
+  List<ASTClassField> get fields => _fields.values.toList();
+
+  List<String> get fieldsNames => _fields.keys.toList();
+
   void addField(ASTClassField field) {
     _fields[field.name] = field;
   }

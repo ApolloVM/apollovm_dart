@@ -54,15 +54,20 @@ abstract class ApolloLanguageRunner {
     return result;
   }
 
-  FutureOr<ASTFunctionDeclaration?> getClassMethod(
-      String namespace, String className, String methodName,
-      [dynamic? positionalParameters, dynamic? namedParameters]) async {
+  FutureOr<ASTClass?> getClass(String namespace, String className) async {
     var codeNamespace = _languageNamespaces.get(namespace);
 
     var codeUnit = codeNamespace.getCodeUnitWithClass(className);
     if (codeUnit == null) return null;
 
     var clazz = codeUnit.root!.getClass(className);
+    return clazz;
+  }
+
+  FutureOr<ASTFunctionDeclaration?> getClassMethod(
+      String namespace, String className, String methodName,
+      [dynamic? positionalParameters, dynamic? namedParameters]) async {
+    var clazz = await getClass(namespace, className);
     if (clazz == null) return null;
 
     return clazz.getFunctionWithParameters(
