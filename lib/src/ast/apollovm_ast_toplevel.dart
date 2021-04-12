@@ -14,14 +14,16 @@ class ASTEntryPointBlock extends ASTBlock {
   FutureOr<ASTValue> execute(String entryFunctionName,
       dynamic? positionalParameters, dynamic? namedParameters,
       {ApolloExternalFunctionMapper? externalFunctionMapper}) async {
-    var rootContext = await _initializeEntryPointBlock();
+    var rootContext = await _initializeEntryPointBlock(externalFunctionMapper);
+
+    ApolloExternalFunctionMapper? prevExternalFunctionMapper;
+    if (externalFunctionMapper != null) {
+      prevExternalFunctionMapper = rootContext.externalFunctionMapper;
+      rootContext.externalFunctionMapper = externalFunctionMapper;
+    }
 
     var prevContext = VMContext.setCurrent(rootContext);
     try {
-      if (externalFunctionMapper != null) {
-        rootContext.externalFunctionMapper = externalFunctionMapper;
-      }
-
       var fSignature =
           ASTFunctionSignature.from(positionalParameters, namedParameters);
 
@@ -30,24 +32,30 @@ class ASTEntryPointBlock extends ASTBlock {
         throw StateError("Can't find entry function: $entryFunctionName");
       }
 
+      var context = rootContext;
+
       if (!f.modifiers.isStatic) {
         if (this is ASTClass) {
           var clazz = this as ASTClass;
-          var classContext = rootContext as VMClassContext;
+          var classContext = clazz._createContext(rootContext);
           var obj =
               await clazz.createInstance(classContext, ASTRunStatus.DUMMY);
           classContext.setObjectInstance(obj);
+          context = classContext;
+        } else {
+          throw StateError(
+              "Can't call non-static function without a class context: $this");
         }
       }
 
-      return await f.call(rootContext,
+      return await f.call(context,
           positionalParameters: positionalParameters,
           namedParameters: namedParameters);
     } finally {
       VMContext.setCurrent(prevContext);
       if (identical(
           rootContext.externalFunctionMapper, externalFunctionMapper)) {
-        rootContext.externalFunctionMapper = null;
+        rootContext.externalFunctionMapper = prevExternalFunctionMapper;
       }
     }
   }
@@ -57,14 +65,16 @@ class ASTEntryPointBlock extends ASTBlock {
       dynamic? positionalParameters,
       dynamic? namedParameters,
       {ApolloExternalFunctionMapper? externalFunctionMapper}) async {
-    var rootContext = await _initializeEntryPointBlock();
+    var rootContext = await _initializeEntryPointBlock(externalFunctionMapper);
+
+    ApolloExternalFunctionMapper? prevExternalFunctionMapper;
+    if (externalFunctionMapper != null) {
+      prevExternalFunctionMapper = rootContext.externalFunctionMapper;
+      rootContext.externalFunctionMapper = externalFunctionMapper;
+    }
 
     var prevContext = VMContext.setCurrent(rootContext);
     try {
-      if (externalFunctionMapper != null) {
-        rootContext.externalFunctionMapper = externalFunctionMapper;
-      }
-
       var fSignature =
           ASTFunctionSignature.from(positionalParameters, namedParameters);
 
@@ -78,24 +88,36 @@ class ASTEntryPointBlock extends ASTBlock {
       VMContext.setCurrent(prevContext);
       if (identical(
           rootContext.externalFunctionMapper, externalFunctionMapper)) {
-        rootContext.externalFunctionMapper = null;
+        rootContext.externalFunctionMapper = prevExternalFunctionMapper;
       }
     }
   }
 
   VMContext? _rootContext;
 
-  Future<VMContext> _initializeEntryPointBlock() async {
+  Future<VMContext> _initializeEntryPointBlock(
+      ApolloExternalFunctionMapper? externalFunctionMapper) async {
     if (_rootContext == null) {
       var rootContext = _createContext();
       var rootStatus = ASTRunStatus();
       _rootContext = rootContext;
+
+      ApolloExternalFunctionMapper? prevExternalFunctionMapper;
+      if (externalFunctionMapper != null) {
+        prevExternalFunctionMapper = rootContext.externalFunctionMapper;
+        rootContext.externalFunctionMapper = externalFunctionMapper;
+      }
 
       var prevContext = VMContext.setCurrent(rootContext);
       try {
         await run(rootContext, rootStatus);
       } finally {
         VMContext.setCurrent(prevContext);
+
+        if (identical(
+            rootContext.externalFunctionMapper, externalFunctionMapper)) {
+          rootContext.externalFunctionMapper = prevExternalFunctionMapper;
+        }
       }
     }
     return _rootContext!;
@@ -107,6 +129,7 @@ class ASTEntryPointBlock extends ASTBlock {
 class ASTClass extends ASTEntryPointBlock {
   final String name;
   final ASTType<VMObject> type;
+
   ASTClass(this.name, ASTBlock? parent)
       : type = ASTType<VMObject>(name),
         super(parent);
@@ -124,7 +147,8 @@ class ASTClass extends ASTEntryPointBlock {
   }
 
   @override
-  VMContext _createContext() => VMClassContext(this);
+  VMClassContext _createContext([VMContext? parentContext]) =>
+      VMClassContext(this, parent: parentContext);
 
   final Map<String, ASTClassField> _fields = <String, ASTClassField>{};
 
@@ -135,6 +159,16 @@ class ASTClass extends ASTEntryPointBlock {
   void addAllFields(Iterable<ASTClassField> fields) {
     for (var field in fields) {
       addField(field);
+    }
+  }
+
+  @override
+  void addFunction(ASTFunctionDeclaration f) {
+    if (f is ASTClassFunctionDeclaration) {
+      f.classType = type;
+      super.addFunction(f);
+    } else {
+      throw StateError('Only accepting class functions: $f');
     }
   }
 
@@ -535,6 +569,15 @@ class ASTParametersDeclaration {
 
     return s.toString();
   }
+}
+
+class ASTClassFunctionDeclaration<T> extends ASTFunctionDeclaration<T> {
+  ASTType? classType;
+
+  ASTClassFunctionDeclaration(this.classType, String name,
+      ASTParametersDeclaration parameters, ASTType<T> returnType,
+      {ASTBlock? block, ASTModifiers? modifiers})
+      : super(name, parameters, returnType, block: block, modifiers: modifiers);
 }
 
 class ASTFunctionDeclaration<T> extends ASTBlock {

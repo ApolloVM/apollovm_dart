@@ -21,6 +21,8 @@ abstract class ApolloCodeGenerator {
       return generateASTBlock(node, indent, s);
     } else if (node is ASTStatement) {
       return generateASTStatement(node, indent, s);
+    } else if (node is ASTClassFunctionDeclaration) {
+      return generateASTClassFunctionDeclaration(node, indent, s);
     } else if (node is ASTFunctionDeclaration) {
       return generateASTFunctionDeclaration(node, indent, s);
     }
@@ -51,7 +53,11 @@ abstract class ApolloCodeGenerator {
 
     for (var set in block.functions) {
       for (var f in set.functions) {
-        generateASTFunctionDeclaration(f, indent2, s);
+        if (f is ASTClassFunctionDeclaration) {
+          generateASTClassFunctionDeclaration(f, indent2, s);
+        } else {
+          generateASTFunctionDeclaration(f, indent2, s);
+        }
       }
     }
 
@@ -67,6 +73,11 @@ abstract class ApolloCodeGenerator {
 
   StringBuffer generateASTClass(ASTClass clazz,
       [String indent = '', StringBuffer? s]);
+
+  StringBuffer generateASTClassFunctionDeclaration(
+      ASTClassFunctionDeclaration f,
+      [String indent = '',
+      StringBuffer? s]);
 
   StringBuffer generateASTFunctionDeclaration(ASTFunctionDeclaration f,
       [String indent = '', StringBuffer? s]);

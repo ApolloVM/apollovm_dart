@@ -70,7 +70,7 @@ class Java11GrammarDefinition extends Java11GrammarLexer {
         var name = v[2];
         var parameters = v[3];
         var block = v[4];
-        return ASTFunctionDeclaration(name, parameters, returnType,
+        return ASTClassFunctionDeclaration(null, name, parameters, returnType,
             block: block, modifiers: modifiers);
       });
 

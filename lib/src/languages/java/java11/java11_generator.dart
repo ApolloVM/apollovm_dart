@@ -24,6 +24,14 @@ class ApolloCodeGeneratorJava11 extends ApolloCodeGenerator {
   @override
   StringBuffer generateASTFunctionDeclaration(ASTFunctionDeclaration f,
       [String indent = '', StringBuffer? s]) {
+    throw UnsupportedSyntaxError('All functions in Java are from a class: $f');
+  }
+
+  @override
+  StringBuffer generateASTClassFunctionDeclaration(
+      ASTClassFunctionDeclaration f,
+      [String indent = '',
+      StringBuffer? s]) {
     s ??= StringBuffer();
 
     var typeCode = generateASTType(f.returnType);

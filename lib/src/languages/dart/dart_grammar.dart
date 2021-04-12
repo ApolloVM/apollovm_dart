@@ -59,7 +59,7 @@ class DartGrammarDefinition extends DartGrammarLexer {
         var name = v[1];
         var block = v[3];
         return ASTFunctionDeclaration(name, parameters, returnType,
-            block: block);
+            block: block, modifiers: ASTModifiers.modifierStatic);
       });
 
   Parser<ASTClass> classDeclaration() =>
@@ -120,7 +120,7 @@ class DartGrammarDefinition extends DartGrammarLexer {
         var name = v[2];
         var parameters = v[3];
         var block = v[4];
-        return ASTFunctionDeclaration(name, parameters, returnType,
+        return ASTClassFunctionDeclaration(null, name, parameters, returnType,
             block: block, modifiers: modifiers);
       });
 

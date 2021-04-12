@@ -477,7 +477,7 @@ class ASTExpressionLocalFunctionInvocation extends ASTExpression {
     var f = parentContext.getFunction(name, fSignature, parentContext);
     if (f == null) {
       throw StateError(
-          'Can\'t find function "$name" with parameters signature: $fSignature');
+          'Can\'t find function "$name" with parameters signature: $fSignature > $arguments');
     }
 
     var argumentsValues =

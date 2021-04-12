@@ -21,7 +21,20 @@ class ApolloCodeGeneratorDart extends ApolloCodeGenerator {
   }
 
   @override
+  StringBuffer generateASTClassFunctionDeclaration(
+      ASTClassFunctionDeclaration f,
+      [String indent = '',
+      StringBuffer? s]) {
+    return _generateASTFunctionDeclarationImpl(f, indent, s);
+  }
+
+  @override
   StringBuffer generateASTFunctionDeclaration(ASTFunctionDeclaration f,
+      [String indent = '', StringBuffer? s]) {
+    return _generateASTFunctionDeclarationImpl(f, indent, s);
+  }
+
+  StringBuffer _generateASTFunctionDeclarationImpl(ASTFunctionDeclaration f,
       [String indent = '', StringBuffer? s]) {
     s ??= StringBuffer();
 
@@ -31,12 +44,10 @@ class ApolloCodeGeneratorDart extends ApolloCodeGenerator {
 
     s.write(indent);
 
-    if (f.modifiers.isStatic) {
-      s.write('static ');
-    }
-
-    if (f.modifiers.isFinal) {
-      s.write('final ');
+    if (f is ASTClassFunctionDeclaration) {
+      if (f.modifiers.isStatic) {
+        s.write('static ');
+      }
     }
 
     s.write(typeCode);

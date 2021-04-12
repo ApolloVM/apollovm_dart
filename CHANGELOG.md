@@ -1,3 +1,18 @@
+## 0.0.14
+
+- AST:
+  - `ASTClassFunctionDeclaration`:
+    To ensure that any class function is parsed from a class block
+    and also ensure that is running from a class block.
+- Generator:
+  - Dart:
+    - Fix non class function: due static modifier.
+  - Java:
+    - Will throw an exception if the generation of a function without
+      a class is attempted.
+- Runner:
+  - Fix class object instance context.
+
 ## 0.0.13
 
 - Grammar & Runner:
