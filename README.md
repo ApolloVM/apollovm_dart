@@ -17,7 +17,7 @@ ApolloVM is a portable VM (native, JS/Web, Flutter) that can parse, translate an
 
 ## Usage
 
-The ApolloVM is still in alpha stage. Below, we can see simple usage examples in Dart and Java.
+The ApolloVM is still in alpha stage. Below, we can see a simple usage examples in Dart and Java.
 
 ### Language: Dart
 
@@ -67,7 +67,7 @@ void main() async {
 
 *Note: the parsed function `print` was mapped as an external function.*
 
-### Language: Java8
+### Language: Java11
 
 ```dart
 import 'package:apollovm/apollovm.dart';
@@ -77,7 +77,7 @@ void main() async {
   var vm = ApolloVM();
 
   var codeUnit = CodeUnit(
-          'java8',
+          'java11',
           r'''
             class Foo {
                static public void main(String[] args) {
@@ -98,12 +98,12 @@ void main() async {
   var loadOK = await vm.loadCodeUnit(codeUnit);
 
   if (!loadOK) {
-    throw StateError('Error parsing Java8 code!');
+    throw StateError('Error parsing Java11 code!');
   }
 
-  var java8Runner = vm.getRunner('java8')!;
+  var javaRunner = vm.getRunner('java11')!;
   
-  java8Runner.executeClassMethod('', 'Foo', 'main', [
+  javaRunner.executeClassMethod('', 'Foo', 'main', [
     ['Sums:', 10, 20, 30]
   ]);
 
@@ -115,9 +115,9 @@ void main() async {
 
   print('---------------------------------------');
   // Regenerate code:
-  var codeStorageJava8 = vm.generateAllCodeIn('java8');
-  var allSourcesJava8 = codeStorageJava8.writeAllSources().toString();
-  print(allSourcesJava8);
+  var codeStorageJava = vm.generateAllCodeIn('java11');
+  var allSourcesJava = codeStorageJava.writeAllSources().toString();
+  print(allSourcesJava);
   
 }
 ```
