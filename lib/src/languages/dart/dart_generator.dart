@@ -332,4 +332,83 @@ class ApolloCodeGeneratorDart extends ApolloCodeGenerator {
     s.write(value.value);
     return s;
   }
+
+  @override
+  StringBuffer generateASTExpressionOperation(ASTExpressionOperation expression,
+      [String indent = '', StringBuffer? s]) {
+    s ??= StringBuffer();
+    s.write(indent);
+
+    // Merge into string template:
+    if (expression.operator == ASTExpressionOperator.add) {
+      if (expression.expression1.isVariableAccess) {
+        var s1 = generateASTExpression(expression.expression1, '').toString();
+        var s2 = generateASTExpression(expression.expression2, '').toString();
+
+        if (_isVariable(s1) &&
+            (_isSingleQuoteString(s2) || _isDoubleQuoteString(s2))) {
+          var sMerge = s2.substring(0, 1) + '\$$s1' + s2.substring(1);
+          s.write(sMerge);
+          return s;
+        }
+      } else if (expression.expression1.isLiteralString) {
+        var s1 = generateASTExpression(expression.expression1, '').toString();
+        var s2 = generateASTExpression(expression.expression2, '').toString();
+
+        if ((_isSingleQuoteString(s1) && _isSingleQuoteString(s2)) ||
+            (_isDoubleQuoteString(s1) && _isDoubleQuoteString(s2))) {
+          var sMerge = s1.substring(0, s1.length - 1) + s2.substring(1);
+          s.write(sMerge);
+          return s;
+        } else if ((_isSingleQuoteString(s1) || _isDoubleQuoteString(s1)) &&
+            _isVariable(s2)) {
+          var sMerge = s1.substring(0, s1.length - 1) +
+              '\$$s2' +
+              s1.substring(s1.length - 1);
+          s.write(sMerge);
+          return s;
+        }
+      }
+    }
+
+    generateASTExpression(expression.expression1, '', s);
+    s.write(' ');
+    s.write(resolveASTExpressionOperatorText(expression.operator));
+    s.write(' ');
+    generateASTExpression(expression.expression2, '', s);
+
+    return s;
+  }
+
+  static final RegExp _REGEXP_WORD = RegExp(r'^[a-zA-Z]\w*$');
+
+  static bool _isVariable(String s) {
+    return _REGEXP_WORD.hasMatch(s);
+  }
+
+  static bool _isSingleQuoteString(String s) {
+    var quoted = s.startsWith("'") &&
+        !s.startsWith("'''") &&
+        s.endsWith("'") &&
+        !s.endsWith("'''");
+
+    if (!quoted) return false;
+    var idx = s.indexOf("'", 1);
+    if (idx < s.length - 1) return false;
+
+    return true;
+  }
+
+  static bool _isDoubleQuoteString(String s) {
+    var quoted = s.startsWith('"') &&
+        !s.startsWith('"""') &&
+        s.endsWith('"') &&
+        !s.endsWith('"""');
+
+    if (!quoted) return false;
+    var idx = s.indexOf('"', 1);
+    if (idx < s.length - 1) return false;
+
+    return true;
+  }
 }

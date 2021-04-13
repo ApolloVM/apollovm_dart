@@ -13,6 +13,34 @@ abstract class ASTExpression implements ASTCodeRunner, ASTNode {
   VMContext defineRunContext(VMContext parentContext) {
     return parentContext;
   }
+
+  bool get isVariableAccess {
+    return this is ASTExpressionVariableAccess;
+  }
+
+  bool get isLiteral {
+    return this is ASTExpressionLiteral;
+  }
+
+  bool get isLiteralString {
+    if (isLiteral) {
+      var expLiteral = this as ASTExpressionLiteral;
+      if (expLiteral.value.type is ASTTypeString) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  bool get isLiteralNum {
+    if (isLiteral) {
+      var expLiteral = this as ASTExpressionLiteral;
+      if (expLiteral.value.type is ASTTypeNum) {
+        return true;
+      }
+    }
+    return false;
+  }
 }
 
 class ASTExpressionVariableAccess extends ASTExpression {
@@ -231,7 +259,7 @@ class ASTExpressionOperation extends ASTExpression {
     }
 
     if (t1 is ASTTypeDouble) {
-      if (t2 is ASTTypeInt || t2 is ASTTypeDouble) {
+      if (t2 is ASTTypeNum) {
         var v1 = val1.getValue(context) as double;
         var v2 = val2.getValue(context) as num;
         var r = v1 + v2;
@@ -262,7 +290,7 @@ class ASTExpressionOperation extends ASTExpression {
     }
 
     if (t1 is ASTTypeDouble) {
-      if (t2 is ASTTypeInt || t2 is ASTTypeDouble) {
+      if (t2 is ASTTypeNum) {
         var v1 = val1.getValue(context) as double;
         var v2 = val2.getValue(context) as num;
         var r = v1 - v2;
@@ -293,7 +321,7 @@ class ASTExpressionOperation extends ASTExpression {
     }
 
     if (t1 is ASTTypeDouble) {
-      if (t2 is ASTTypeInt || t2 is ASTTypeDouble) {
+      if (t2 is ASTTypeNum) {
         var v1 = val1.getValue(context) as double;
         var v2 = val2.getValue(context) as num;
         var r = v1 * v2;
@@ -324,7 +352,7 @@ class ASTExpressionOperation extends ASTExpression {
     }
 
     if (t1 is ASTTypeDouble) {
-      if (t2 is ASTTypeInt || t2 is ASTTypeDouble) {
+      if (t2 is ASTTypeNum) {
         var v1 = val1.getValue(context) as double;
         var v2 = val2.getValue(context) as num;
         var r = v1 / v2;
@@ -341,9 +369,9 @@ class ASTExpressionOperation extends ASTExpression {
     var t1 = val1.type;
     var t2 = val2.type;
 
-    if (t1 is ASTTypeInt || t1 is ASTTypeDouble) {
-      if (t2 is ASTTypeInt || t2 is ASTTypeDouble) {
-        var v1 = val1.getValue(context) as double;
+    if (t1 is ASTTypeNum) {
+      if (t2 is ASTTypeNum) {
+        var v1 = val1.getValue(context) as num;
         var v2 = val2.getValue(context) as num;
         var r = v1 / v2;
         return ASTValueInt(r.toInt());
@@ -359,9 +387,9 @@ class ASTExpressionOperation extends ASTExpression {
     var t1 = val1.type;
     var t2 = val2.type;
 
-    if (t1 is ASTTypeInt || t1 is ASTTypeDouble) {
-      if (t2 is ASTTypeInt || t2 is ASTTypeDouble) {
-        var v1 = val1.getValue(context) as double;
+    if (t1 is ASTTypeNum) {
+      if (t2 is ASTTypeNum) {
+        var v1 = val1.getValue(context) as num;
         var v2 = val2.getValue(context) as num;
         var r = v1 / v2;
         return ASTValueDouble(r);

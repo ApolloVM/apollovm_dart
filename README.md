@@ -30,17 +30,27 @@ void main() async {
   var codeUnit = CodeUnit(
           'dart',
           r'''
-            void main(List<String> args) {
-              var title = args[0];
-              var a = args[1];
-              var b = args[2];
-              var c = args[3];
-              var sumAB = a + b ;
-              var sumABC = a + b + c;
-              print(title);
-              print(sumAB);
-              print(sumABC);
+          
+          void main(List<Object> args) {
+            var title = args[0];
+            var a = args[1];
+            var b = args[2] ~/ 2;
+            var c = args[3] * 3;
+            
+            if (c > 120) {
+              c = 120 ;
             }
+            
+            var str = 'variables> a: $a ; b: $b ; c: $c' ;
+            var sumAB = a + b ;
+            var sumABC = a + b + c;
+            
+            print(str);
+            print(title);
+            print(sumAB);
+            print(sumABC);
+          }
+            
           ''',
           'test');
 
@@ -53,7 +63,7 @@ void main() async {
   var dartRunner = vm.getRunner('dart')!;
   
   dartRunner.executeFunction('', 'main', [
-    ['Sums:', 10, 20, 30]
+    ['Sums:', 10, 30, 50]
   ]);
 
   print('---------------------------------------');
@@ -66,6 +76,15 @@ void main() async {
 ```
 
 *Note: the parsed function `print` was mapped as an external function.*
+
+
+Output:
+```text
+variables> a: 10 ; b: 15 ; c: 120
+Sums:
+25
+145 
+```
 
 ### Language: Java11
 

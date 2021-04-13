@@ -64,6 +64,87 @@ void main() {
               r'\s*\}\s*')));
     });
 
+    test('Basic main(List<Object>) with division', () async {
+      var vm = ApolloVM();
+
+      var codeUnit = CodeUnit(
+          'dart',
+          r'''
+          
+          void main(List<Object> args) {
+            var title = args[0];
+            var a = args[1];
+            var b = args[2] ~/ 2;
+            var c = args[3] * 3;
+            
+            if (c > 120) {
+              c = 120 ;
+            }
+            
+            var str = 'variables> a: $a ; b: $b ; c: $c' ;
+            var sumAB = a + b ;
+            var sumABC = a + b + c;
+            
+            print(str);
+            print(title);
+            print(sumAB);
+            print(sumABC);
+          }
+          
+          ''',
+          'test');
+
+      var loadOK = await vm.loadCodeUnit(codeUnit);
+
+      expect(loadOK, isTrue, reason: 'Error loading Dart code!');
+
+      var dartRunner = vm.createRunner('dart')!;
+
+      var output = [];
+      dartRunner.externalPrintFunction = (o) => output.add(o);
+
+      await dartRunner.executeFunction('', 'main', [
+        ['Sums:', 10, 30, 50]
+      ]);
+
+      expect(output,
+          equals(['variables> a: 10 ; b: 15 ; c: 120', 'Sums:', 25, 145]));
+
+      print('---------------------------------------');
+      print('OUTPUT:');
+      output.forEach((o) => print('>> $o'));
+
+      print('---------------------------------------');
+      // Regenerate code:
+      var codeStorageDart = vm.generateAllCodeIn('dart');
+      var allSourcesDart = codeStorageDart.writeAllSources().toString();
+      print(allSourcesDart);
+
+      expect(allSourcesDart, equals(r'''<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+  void main(List<Object> args) {
+    var title = args[0];
+    var a = args[1];
+    var b = args[2] ~/ 2;
+    var c = args[3] * 3;
+    if (c > 120) {
+        c = 120;
+    }
+
+    var str = 'variables> a: $a ; b: $b ; c: $c';
+    var sumAB = a + b;
+    var sumABC = a + b + c;
+    print(str);
+    print(title);
+    print(sumAB);
+    print(sumABC);
+  }
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+'''));
+    });
+
     test('Basic main(List<String>)', () async {
       var vm = ApolloVM();
 
@@ -181,7 +262,7 @@ void main() {
     var b = args[2];
     var s1 = 'inline';
     var s2 = 'string';
-    var c = s1 + ' \t' + '\t ' + s2;
+    var c = '$s1 \t\t $s2';
     var sumAB = a + b;
     var sumABC = a + b + c;
     print(title);

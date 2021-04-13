@@ -270,7 +270,7 @@ class ASTTypeInt extends ASTTypeNum<int> {
   }
 }
 
-class ASTTypeDouble extends ASTType<double> {
+class ASTTypeDouble extends ASTTypeNum<double> {
   static final ASTTypeDouble INSTANCE = ASTTypeDouble();
 
   ASTTypeDouble() : super('double');

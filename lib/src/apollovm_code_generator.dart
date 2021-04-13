@@ -286,10 +286,10 @@ abstract class ApolloCodeGenerator {
 
     generateASTVariable(expression.variable, '', s);
     var op = getASTAssignmentOperatorText(expression.operator);
+    s.write(' ');
     s.write(op);
+    s.write(' ');
     generateASTExpression(expression.expression, '', s);
-
-    s.write(';');
 
     return s;
   }
@@ -372,11 +372,13 @@ abstract class ApolloCodeGenerator {
       [String indent = '', StringBuffer? s]) {
     s ??= StringBuffer();
     s.write(indent);
+
     generateASTExpression(expression.expression1, '', s);
     s.write(' ');
     s.write(resolveASTExpressionOperatorText(expression.operator));
     s.write(' ');
     generateASTExpression(expression.expression2, '', s);
+
     return s;
   }
 

@@ -1,3 +1,18 @@
+## 0.0.16
+
+- Grammars:
+  - Dart & Java11:
+    - Fix parsing of multiple parameters.
+- Runner:
+  - Fix division with double and int.
+- Code Generator:
+  - Dart & Java11:
+    - Fix variable assigment duplicated ';'.
+  - Dart:
+    - Improve string template regeneration, specially when
+    parsed code comes from Java.
+- Improved example.
+
 ## 0.0.15
 
 - `ASTBlock`: added `functionsNames`.

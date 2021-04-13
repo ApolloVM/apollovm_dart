@@ -265,7 +265,7 @@ class DartGrammarDefinition extends DartGrammarLexer {
           return exp1;
         }
 
-        var extra = rest.expand((e) => e is List ? e : [e]).toList();
+        var extra = _expandListDeeply(rest);
 
         var all = <dynamic>[exp1, ...extra];
 
@@ -375,10 +375,8 @@ class DartGrammarDefinition extends DartGrammarLexer {
   Parser<List<ASTFunctionParameterDeclaration>> parametersList() =>
       (parameterDeclaration() & (char(',') & parameterDeclaration()).star())
           .map((v) {
-        return v
-            .expand((e) => e is List ? e : [e])
-            .cast<ASTFunctionParameterDeclaration>()
-            .toList();
+        var params = _expandListDeeply(v);
+        return params.whereType<ASTFunctionParameterDeclaration>().toList();
       });
 
   Parser<ASTFunctionParameterDeclaration> parameterDeclaration() =>
@@ -462,4 +460,11 @@ class DartGrammarDefinition extends DartGrammarLexer {
 
   Parser<ASTValue<String>> literalString() =>
       (stringLexicalToken()).map((v) => v.asValue());
+
+  static List _expandListDeeply(List l) {
+    if (l.isEmpty) return l;
+    if (l.length == 1 && l[0] is! List) return l;
+
+    return l.expand((e) => e is List ? _expandListDeeply(e) : [e]).toList();
+  }
 }
