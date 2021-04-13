@@ -162,7 +162,7 @@ Please file feature requests and bugs at the [issue tracker][tracker].
 Any help from open-source community is always welcome and needed:
 - Found an issue?
   - Fill a bug with details.
-- Which a feature?
+- Wish a feature?
   - Open a feature request.
 - Are you using and liking the project?
   - Promote the project: create an article, post or make a donation.
