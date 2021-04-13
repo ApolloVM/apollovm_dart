@@ -140,6 +140,7 @@ void main() {
     print(sumAB);
     print(sumABC);
   }
+
 <<<< CODE_UNIT_END="/test" >>>>
 <<<< [SOURCES_END] >>>>
 '''));
@@ -269,6 +270,7 @@ void main() {
     print(sumAB);
     print(sumABC);
   }
+
 <<<< CODE_UNIT_END="/test" >>>>
 <<<< [SOURCES_END] >>>>
 '''));
@@ -334,6 +336,7 @@ line3
     print(title);
     print(s);
   }
+
 <<<< CODE_UNIT_END="/test" >>>>
 <<<< [SOURCES_END] >>>>
 '''));
@@ -401,6 +404,7 @@ line3
     print(r1);
     print(r2);
   }
+
 <<<< CODE_UNIT_END="/test" >>>>
 <<<< [SOURCES_END] >>>>
 '''));
@@ -469,6 +473,7 @@ line3
     print(rm1);
     print(rm2);
   }
+
 <<<< CODE_UNIT_END="/test" >>>>
 <<<< [SOURCES_END] >>>>
 '''));
@@ -518,12 +523,14 @@ line3
 <<<< NAMESPACE="" >>>>
 <<<< CODE_UNIT_START="/test" >>>>
 class Foo {
+
   static void main(List<String> args) {
     var a = 123;
     var b = 123 * 2;
     var sv1 = 'a: <$a>;\t\$b->a*2: $b ;\ta*3: ${a * 3}!';
     print(sv1);
   }
+
 }
 <<<< CODE_UNIT_END="/test" >>>>
 <<<< [SOURCES_END] >>>>
@@ -539,12 +546,14 @@ class Foo {
 <<<< NAMESPACE="" >>>>
 <<<< CODE_UNIT_START="/test" >>>>
 class Foo {
+
   static void main(String[] args) {
     var a = 123;
     var b = 123 * 2;
     var sv1 = "a: <" + a + ">;\t$b->a*2: " + b + " ;\ta*3: " + String.valueOf( a * 3 ) + "!";
     print(sv1);
   }
+
 }
 <<<< CODE_UNIT_END="/test" >>>>
 <<<< [SOURCES_END] >>>>
@@ -607,6 +616,7 @@ class Foo {
 <<<< NAMESPACE="" >>>>
 <<<< CODE_UNIT_START="/test" >>>>
 class Bar {
+
   static void main(List<Object> args) {
     var a = args[0];
     var b = args[1];
@@ -623,6 +633,7 @@ class Bar {
     print(greaterOrEq);
     print(lowerOrEq);
   }
+
 }
 <<<< CODE_UNIT_END="/test" >>>>
 <<<< [SOURCES_END] >>>>
@@ -638,6 +649,7 @@ class Bar {
 <<<< NAMESPACE="" >>>>
 <<<< CODE_UNIT_START="/test" >>>>
 class Bar {
+
   static void main(Object[] args) {
     var a = args[0];
     var b = args[1];
@@ -654,6 +666,7 @@ class Bar {
     print(greaterOrEq);
     print(lowerOrEq);
   }
+
 }
 <<<< CODE_UNIT_END="/test" >>>>
 <<<< [SOURCES_END] >>>>
@@ -744,6 +757,7 @@ class Bar {
 <<<< NAMESPACE="" >>>>
 <<<< CODE_UNIT_START="/test" >>>>
 class Bar {
+
   static void main(List<Object> args) {
     var a = args[0];
     var b = args[1];
@@ -767,6 +781,7 @@ class Bar {
     }
 
   }
+
 }
 <<<< CODE_UNIT_END="/test" >>>>
 <<<< [SOURCES_END] >>>>
@@ -782,6 +797,7 @@ class Bar {
 <<<< NAMESPACE="" >>>>
 <<<< CODE_UNIT_START="/test" >>>>
 class Bar {
+
   static void main(Object[] args) {
     var a = args[0];
     var b = args[1];
@@ -805,6 +821,7 @@ class Bar {
     }
 
   }
+
 }
 <<<< CODE_UNIT_END="/test" >>>>
 <<<< [SOURCES_END] >>>>
@@ -853,10 +870,12 @@ class Bar {
 <<<< NAMESPACE="" >>>>
 <<<< CODE_UNIT_START="/test" >>>>
 class Foo {
+
   void test(int a) {
     var s = '$this > a: $a';
     print(s);
   }
+
 }
 <<<< CODE_UNIT_END="/test" >>>>
 <<<< [SOURCES_END] >>>>
@@ -872,10 +891,12 @@ class Foo {
 <<<< NAMESPACE="" >>>>
 <<<< CODE_UNIT_START="/test" >>>>
 class Foo {
+
   void test(int a) {
     var s = String.valueOf( this ) + " > a: " + a;
     print(s);
   }
+
 }
 <<<< CODE_UNIT_END="/test" >>>>
 <<<< [SOURCES_END] >>>>
@@ -935,14 +956,17 @@ class Foo {
 <<<< NAMESPACE="" >>>>
 <<<< CODE_UNIT_START="/test" >>>>
 class Foo {
+
   int getZ() {
     return y * 2;
   }
+
   void test(int a) {
     var z = getZ();
     var s = '$this > a: $a ; x: $x ; y: $y ; z: $z';
     print(s);
   }
+
 }
 <<<< CODE_UNIT_END="/test" >>>>
 <<<< [SOURCES_END] >>>>
@@ -958,14 +982,129 @@ class Foo {
 <<<< NAMESPACE="" >>>>
 <<<< CODE_UNIT_START="/test" >>>>
 class Foo {
+
   int getZ() {
     return y * 2;
   }
+
   void test(int a) {
     var z = getZ();
     var s = String.valueOf( this ) + " > a: " + a + " ; x: " + x + " ; y: " + y + " ; z: " + z;
     print(s);
   }
+
+}
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+'''));
+    });
+
+    test('Basic Class function call with multiple parameters', () async {
+      var vm = ApolloVM();
+
+      var codeUnit = CodeUnit(
+          'dart',
+          r"""
+            class Foo {
+              int x = 0 ;
+              int y = 10 ;
+              
+              int getZ() {
+                return y * 2 ;
+              }
+              
+              int calcB(int b1 , int b2) {
+                return y * b1 * b2 ;
+              }
+              
+              void test(int a) {
+                var z = getZ();
+                var b = calcB(z , 3);
+                var s = '$this > a: $a ; x: $x ; y: $y ; z: $z ; b: $b' ;
+                print(s);
+              }
+            }
+          """,
+          'test');
+
+      var loadOK = await vm.loadCodeUnit(codeUnit);
+
+      expect(loadOK, isTrue, reason: 'Error loading Dart code!');
+
+      var dartRunner = vm.createRunner('dart')!;
+
+      var output = [];
+      dartRunner.externalPrintFunction = (o) => output.add(o);
+
+      await dartRunner.executeClassMethod('', 'Foo', 'test', [123]);
+
+      expect(
+          output,
+          equals([
+            'Foo{x: int x, y: int y} > a: 123 ; x: 0 ; y: 10 ; z: 20 ; b: 600'
+          ]));
+
+      print('---------------------------------------');
+      print('OUTPUT:');
+      output.forEach((o) => print('>> $o'));
+
+      print('---------------------------------------');
+      // Regenerate code:
+      var codeStorageDart = vm.generateAllCodeIn('dart');
+      var allSourcesDart = codeStorageDart.writeAllSources().toString();
+      print(allSourcesDart);
+
+      expect(allSourcesDart, equals(r'''<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+class Foo {
+
+  int getZ() {
+    return y * 2;
+  }
+
+  int calcB(int b1, int b2) {
+    return y * b1 * b2;
+  }
+
+  void test(int a) {
+    var z = getZ();
+    var b = calcB(z, 3);
+    var s = '$this > a: $a ; x: $x ; y: $y ; z: $z ; b: $b';
+    print(s);
+  }
+
+}
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+'''));
+
+      print('---------------------------------------');
+      // Regenerate code:
+      var codeStorageJava = vm.generateAllCodeIn('java11');
+      var allSourcesJava = codeStorageJava.writeAllSources().toString();
+      print(allSourcesJava);
+
+      expect(allSourcesJava, equals(r'''<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+class Foo {
+
+  int getZ() {
+    return y * 2;
+  }
+
+  int calcB(int b1, int b2) {
+    return y * b1 * b2;
+  }
+
+  void test(int a) {
+    var z = getZ();
+    var b = calcB(z, 3);
+    var s = String.valueOf( this ) + " > a: " + a + " ; x: " + x + " ; y: " + y + " ; z: " + z + " ; b: " + b;
+    print(s);
+  }
+
 }
 <<<< CODE_UNIT_END="/test" >>>>
 <<<< [SOURCES_END] >>>>

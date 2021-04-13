@@ -540,7 +540,7 @@ class ASTParametersDeclaration {
 
     if (exactType) {
       if (param.type != type) return false;
-    } else if (!param.type.isInstance(type)) {
+    } else if (type is! ASTTypeDynamic && !param.type.isInstance(type)) {
       return false;
     }
 

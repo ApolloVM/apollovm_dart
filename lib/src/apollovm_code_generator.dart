@@ -44,12 +44,17 @@ abstract class ApolloCodeGenerator {
   }
 
   StringBuffer generateASTBlock(ASTBlock block,
-      [String indent = '', StringBuffer? s, bool withBrackets = true]) {
+      [String indent = '',
+      StringBuffer? s,
+      bool withBrackets = true,
+      bool withBlankHeadLine = false]) {
     s ??= StringBuffer();
 
     var indent2 = indent + '  ';
 
     if (withBrackets) s.write('$indent{\n');
+
+    if (withBlankHeadLine) s.write('\n');
 
     for (var set in block.functions) {
       for (var f in set.functions) {

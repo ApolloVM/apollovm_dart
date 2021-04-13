@@ -10,7 +10,7 @@ class ApolloCodeGeneratorDart extends ApolloCodeGenerator {
       [String indent = '', StringBuffer? s]) {
     s ??= StringBuffer();
 
-    var code = generateASTBlock(clazz);
+    var code = generateASTBlock(clazz, '', null, true, true);
 
     s.write('class ');
     s.write(clazz.name);
@@ -62,7 +62,7 @@ class ApolloCodeGeneratorDart extends ApolloCodeGenerator {
     s.write(') {\n');
     s.write(blockCode);
     s.write(indent);
-    s.write('}\n');
+    s.write('}\n\n');
 
     return blockCode;
   }

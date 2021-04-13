@@ -51,14 +51,51 @@ class Java11GrammarDefinition extends Java11GrammarLexer {
         return clazz;
       });
 
-  Parser<ASTBlock> classCodeBlock() =>
-      (char('{').trim() & ref0(functionDeclaration).star() & char('}').trim())
+  Parser<ASTBlock> classCodeBlock() => (char('{').trim() &
+              (ref0(classFunctionDeclaration) |
+                      ref0(classFieldDeclaration) |
+                      ref0(classFieldDeclarationWithValue))
+                  .star() &
+              char('}').trim())
           .map((v) {
-        var functions = (v[1] as List).cast<ASTFunctionDeclaration>().toList();
-        return ASTBlock(null)..addAllFunctions(functions);
+        var list = v[1] as List;
+        var fields = list.whereType<ASTClassField>().toList();
+        var functions = list.whereType<ASTFunctionDeclaration>().toList();
+
+        var block = ASTClass('?', null);
+
+        block.addAllFields(fields);
+        block.addAllFunctions(functions);
+
+        return block;
       });
 
-  Parser<ASTFunctionDeclaration> functionDeclaration() =>
+  Parser<ASTClassField> classFieldDeclaration() =>
+      (modifiers().optional() & type() & identifier() & char(';').trim())
+          .map((v) {
+        var modifiers = (v[0] as ASTModifiers?) ?? ASTModifiers.modifiersNone;
+        var type = v[1];
+        var name = v[2];
+        return ASTClassField(type, name, modifiers.isFinal);
+      });
+
+  Parser<ASTClassField> classFieldDeclarationWithValue() =>
+      (modifiers().optional() &
+              type() &
+              identifier() &
+              char('=').trim() &
+              ref0(expression) &
+              char(';').trim())
+          .map((v) {
+        var modifiers = (v[0] as ASTModifiers?) ?? ASTModifiers.modifiersNone;
+        var type = v[1];
+        var name = v[2];
+        var expression = v[4];
+        return ASTClassFieldWithInitialValue(
+            type, name, expression, modifiers.isFinal);
+      });
+
+  Parser<ASTFunctionDeclaration> classFunctionDeclaration() =>
       (modifiers().optional() &
               type() &
               identifier() &
@@ -105,9 +142,35 @@ class Java11GrammarDefinition extends Java11GrammarLexer {
         return ASTBlock(null)..addAllStatements(statements);
       });
 
-  Parser<ASTStatement> statement() =>
-      (branch() | statementVariableDeclaration() | statementExpression())
-          .cast<ASTStatement>();
+  Parser<ASTStatement> statement() => (branch() |
+          statementReturn() |
+          statementVariableDeclaration() |
+          statementExpression())
+      .cast<ASTStatement>();
+
+  Parser<ASTStatementReturn> statementReturn() =>
+      (string('return').trim() & expression().optional() & char(';').trim())
+          .map((v) {
+        var value = v[1];
+
+        if (value == null) {
+          return ASTStatementReturn();
+        } else if (value is ASTExpression) {
+          if (value is ASTExpressionVariableAccess) {
+            if (value.variable.name == 'null') {
+              return ASTStatementReturnNull();
+            } else {
+              return ASTStatementReturnVariable(value.variable);
+            }
+          } else if (value is ASTExpressionLiteral) {
+            return ASTStatementReturnValue(value.value);
+          } else {
+            return ASTStatementReturnWithExpression(value);
+          }
+        }
+
+        throw UnsupportedError("Can't handle return value: $value");
+      });
 
   Parser<ASTStatementExpression> statementExpression() =>
       (expression() & char(';').trim()).map((v) {
@@ -239,14 +302,22 @@ class Java11GrammarDefinition extends Java11GrammarLexer {
       expressionLocalFunctionInvocation() => (string('this').optional() &
                   identifier() &
                   char('(') &
-                  ref0(expression).star() &
+                  ref0(expressionSequence).optional() &
                   char(')'))
               .map((v) {
             var name = v[1];
-            var args = v[3] as List;
-            return ASTExpressionLocalFunctionInvocation(
-                name, args.cast<ASTExpression>().toList());
+            var args = v[3] as List<ASTExpression>?;
+            args ??= <ASTExpression>[];
+            return ASTExpressionLocalFunctionInvocation(name, args);
           });
+
+  Parser<List<ASTExpression>> expressionSequence() =>
+      (ref0(expression) & (char(',').trim() & ref0(expression)).star())
+          .map((v) {
+        var list = _expandListDeeply(v);
+        var expressions = list.whereType<ASTExpression>().toList();
+        return expressions;
+      });
 
   Parser<ASTExpressionVariableAccess> expressionVariableAccess() =>
       (variable()).map((v) {

@@ -1,3 +1,16 @@
+## 0.0.17
+
+- Fix call of function using `dynamic` type in parameter value.
+- Code Generator:
+  - Better formatting for classes and methods. 
+- Grammar:
+  - Dart:
+    - Fix parsing of function with multiple parameters.
+  - Java:
+    - Class fields.
+    - Fix parsing of function with multiple parameters.
+    - Return statements ;
+
 ## 0.0.16
 
 - Grammars:
