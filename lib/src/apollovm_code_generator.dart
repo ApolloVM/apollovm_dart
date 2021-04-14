@@ -2,10 +2,18 @@ import 'package:apollovm/apollovm.dart';
 
 import 'apollovm_code_storage.dart';
 
+/// Base class for code generators.
+///
+/// An [ASTRoot] loaded in [ApolloVM] can be converted to a code in a specific language.
 abstract class ApolloCodeGenerator {
+  /// Target programming language of this code generator implementation.
+  final String language;
+
+  /// The code storage for generated code.
   final ApolloCodeStorage codeStorage;
 
-  ApolloCodeGenerator(this.codeStorage);
+  ApolloCodeGenerator(String language, this.codeStorage)
+      : language = language.trim().toLowerCase();
 
   StringBuffer generateASTNode(ASTNode node,
       [String indent = '', StringBuffer? s]) {

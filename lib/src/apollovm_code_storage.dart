@@ -1,8 +1,13 @@
+/// Base class for a code storage.
+///
+/// The implementation can be a local file system, a memory storage or a remote repository.
 abstract class ApolloCodeStorage {
   List<String> getNamespaces();
 
-  List<String>? getNamespaceCodeUnits(String namespace);
+  /// Returns a list of code units IDs of a namespace.
+  List<String>? getNamespaceCodeUnitsIDs(String namespace);
 
+  /// Returns the source code of a [codeUnitID] in [namespace].
   String? getNamespaceCodeUnitSource(String namespace, String codeUnitID);
 
   StringBuffer writeAllSources(
@@ -22,7 +27,7 @@ abstract class ApolloCodeStorage {
       s.write(commentSuffix);
       s.write('\n');
 
-      for (var cu in getNamespaceCodeUnits(ns)!) {
+      for (var cu in getNamespaceCodeUnitsIDs(ns)!) {
         var fullCU = '$nsSeparator$cu';
 
         s.write(commentPrefix);
@@ -48,9 +53,11 @@ abstract class ApolloCodeStorage {
     return s;
   }
 
+  /// Adds a source code to this storage.
   void addSource(String namespace, String codeUnitID, String codeUnitSource);
 }
 
+/// In memory code storage implementation.
 class ApolloCodeStorageMemory extends ApolloCodeStorage {
   final Map<String, Map<String, String>> _namespaces = {};
 
@@ -58,7 +65,7 @@ class ApolloCodeStorageMemory extends ApolloCodeStorage {
   List<String> getNamespaces() => _namespaces.keys.toList();
 
   @override
-  List<String>? getNamespaceCodeUnits(String namespace) {
+  List<String>? getNamespaceCodeUnitsIDs(String namespace) {
     var ns = _namespaces[namespace];
     return ns != null ? ns.keys.toList() : null;
   }

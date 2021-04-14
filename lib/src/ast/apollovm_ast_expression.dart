@@ -502,7 +502,7 @@ class ASTExpressionLocalFunctionInvocation extends ASTExpression {
   FutureOr<ASTValue> run(
       VMContext parentContext, ASTRunStatus runStatus) async {
     var fSignature = ASTFunctionSignature.from(arguments, null);
-    var f = parentContext.getFunction(name, fSignature, parentContext);
+    var f = parentContext.getFunction(name, fSignature);
     if (f == null) {
       throw StateError(
           'Can\'t find function "$name" with parameters signature: $fSignature > $arguments');

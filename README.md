@@ -169,8 +169,8 @@ Any help from open-source community is always welcome and needed:
 - Are you a developer?
   - Fix a bug and send a pull request.
   - Implement a new feature.
-  - Implement/improve a language support.
-  - Added support for another language.
+  - Improve a language support.
+  - Add support for another language.
   - Improve unit tests.
 - Have you already helped in any way?
   - **Many thanks from me, the contributors and everybody that uses this project!**

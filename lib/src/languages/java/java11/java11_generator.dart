@@ -3,8 +3,10 @@ import 'package:apollovm/apollovm.dart';
 import 'package:apollovm/src/apollovm_code_generator.dart';
 import 'package:apollovm/src/apollovm_code_storage.dart';
 
+/// Java11 implementation of an [ApolloCodeGenerator].
 class ApolloCodeGeneratorJava11 extends ApolloCodeGenerator {
-  ApolloCodeGeneratorJava11(ApolloCodeStorage codeStorage) : super(codeStorage);
+  ApolloCodeGeneratorJava11(ApolloCodeStorage codeStorage)
+      : super('java11', codeStorage);
 
   @override
   StringBuffer generateASTClass(ASTClass clazz,

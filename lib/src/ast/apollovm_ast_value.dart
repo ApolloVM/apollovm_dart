@@ -9,6 +9,7 @@ import 'apollovm_ast_expression.dart';
 import 'apollovm_ast_type.dart';
 import 'apollovm_ast_variable.dart';
 
+/// Base class for AST values.
 abstract class ASTValue<T> implements ASTNode {
   factory ASTValue.from(ASTType<T> type, T value) {
     if (type is ASTTypeString) {
@@ -171,6 +172,7 @@ abstract class ASTValue<T> implements ASTNode {
   String toString();
 }
 
+/// Static [ASTValue]. Useful for literals.
 class ASTValueStatic<T> extends ASTValue<T> {
   T value;
 
@@ -264,6 +266,7 @@ class ASTValueStatic<T> extends ASTValue<T> {
   }
 }
 
+/// [ASTValue] for primitive types.
 abstract class ASTValuePrimitive<T> extends ASTValueStatic<T> {
   ASTValuePrimitive(ASTType<T> type, T value) : super(type, value);
 
@@ -301,6 +304,7 @@ abstract class ASTValuePrimitive<T> extends ASTValueStatic<T> {
   }
 }
 
+/// [ASTValue] for booleans ([bool]).
 class ASTValueBool extends ASTValuePrimitive<bool> {
   ASTValueBool(bool value) : super(ASTTypeBool.INSTANCE, value);
 
@@ -312,6 +316,7 @@ class ASTValueBool extends ASTValuePrimitive<bool> {
   }
 }
 
+/// [ASTValue] for numbers ([num]).
 abstract class ASTValueNum<T extends num> extends ASTValuePrimitive<T> {
   ASTValueNum(ASTType<T> type, T value) : super(type, value);
 
@@ -435,6 +440,7 @@ abstract class ASTValueNum<T extends num> extends ASTValuePrimitive<T> {
   }
 }
 
+/// [ASTValue] for integer ([int]).
 class ASTValueInt extends ASTValueNum<int> {
   ASTValueInt(int n) : super(ASTTypeInt.INSTANCE, n);
 
@@ -494,6 +500,7 @@ class ASTValueInt extends ASTValueNum<int> {
   }
 }
 
+/// [ASTValue] for [double].
 class ASTValueDouble extends ASTValueNum<double> {
   ASTValueDouble(double n) : super(ASTTypeDouble.INSTANCE, n);
 
@@ -553,6 +560,7 @@ class ASTValueDouble extends ASTValueNum<double> {
   }
 }
 
+/// [ASTValue] for [String].
 class ASTValueString extends ASTValuePrimitive<String> {
   ASTValueString(String s) : super(ASTTypeString.INSTANCE, s);
 
@@ -586,10 +594,12 @@ class ASTValueString extends ASTValuePrimitive<String> {
   }
 }
 
+/// [ASTValue] for [Object].
 class ASTValueObject extends ASTValueStatic<Object> {
   ASTValueObject(Object o) : super(ASTTypeObject.INSTANCE, o);
 }
 
+/// [ASTValue] for [null].
 class ASTValueNull extends ASTValueStatic<Null> {
   ASTValueNull() : super(ASTTypeNull.INSTANCE, null);
 
@@ -611,6 +621,7 @@ class ASTValueNull extends ASTValueStatic<Null> {
   }
 }
 
+/// [ASTValue] for [void].
 class ASTValueVoid extends ASTValueStatic<void> {
   ASTValueVoid() : super(ASTTypeVoid.INSTANCE, null);
 
@@ -632,6 +643,7 @@ class ASTValueVoid extends ASTValueStatic<void> {
   }
 }
 
+/// [ASTValue] for an array/List.
 class ASTValueArray<T extends ASTType<V>, V> extends ASTValueStatic<List<V>> {
   ASTValueArray(T type, List<V> value) : super(ASTTypeArray<T, V>(type), value);
 
@@ -651,6 +663,7 @@ class ASTValueArray<T extends ASTType<V>, V> extends ASTValueStatic<List<V>> {
   }
 }
 
+/// [ASTValue] for a 2D array/List.
 class ASTValueArray2D<T extends ASTType<V>, V>
     extends ASTValueArray<ASTTypeArray<T, V>, List<V>> {
   ASTValueArray2D(T type, List<List<V>> value)
@@ -673,16 +686,19 @@ class ASTValueArray2D<T extends ASTType<V>, V>
   }
 }
 
+/// [ASTValue] for a 3D array/List.
 class ASTValueArray3D<T extends ASTType<V>, V>
     extends ASTValueArray2D<ASTTypeArray<T, V>, List<V>> {
   ASTValueArray3D(T type, List<List<List<V>>> value)
       : super(ASTTypeArray<T, V>(type), value);
 }
 
+/// [ASTValue] declared with `var`.
 class ASTValueVar extends ASTValueStatic<dynamic> {
   ASTValueVar(Object o) : super(ASTTypeVar.INSTANCE, o);
 }
 
+/// [ASTValue] that should be converted to [String].
 class ASTValueAsString<T> extends ASTValue<String> {
   ASTValue<T> value;
 
@@ -707,6 +723,7 @@ class ASTValueAsString<T> extends ASTValue<String> {
   }
 }
 
+/// [ASTValue] for lists that should be converted to [String].
 class ASTValuesListAsString extends ASTValue<String> {
   List<ASTValue> values;
 
@@ -740,6 +757,7 @@ class ASTValuesListAsString extends ASTValue<String> {
   }
 }
 
+/// [ASTValue] for expressions that should be converted to [String].
 class ASTValueStringExpresion<T> extends ASTValue<String> {
   final ASTExpression expression;
 
@@ -763,6 +781,7 @@ class ASTValueStringExpresion<T> extends ASTValue<String> {
   }
 }
 
+/// [ASTValue] for a variable that should resolved and converted to [String].
 class ASTValueStringVariable<T> extends ASTValue<String> {
   final ASTVariable variable;
 
@@ -786,6 +805,7 @@ class ASTValueStringVariable<T> extends ASTValue<String> {
   }
 }
 
+/// [ASTValue] for a concatenations of other [values].
 class ASTValueStringConcatenation extends ASTValue<String> {
   final List<ASTValue<String>> values;
 
@@ -819,6 +839,7 @@ class ASTValueStringConcatenation extends ASTValue<String> {
   }
 }
 
+/// [ASTValue] for a variable read index: `elem[1]`.
 class ASTValueReadIndex<T> extends ASTValue<T> {
   final ASTVariable variable;
   final Object _index;
@@ -857,6 +878,7 @@ class ASTValueReadIndex<T> extends ASTValue<T> {
   }
 }
 
+/// [ASTValue] for a variable read key: `elem[k]`.
 class ASTValueReadKey<T> extends ASTValue<T> {
   final ASTVariable variable;
   final Object _key;
@@ -893,6 +915,7 @@ class ASTValueReadKey<T> extends ASTValue<T> {
   }
 }
 
+/// [ASTValue] for an object class instance.
 class ASTObjectInstance extends ASTValue<VMObject> {
   final ASTClass clazz;
   final VMObject _object;
@@ -933,6 +956,7 @@ class ASTObjectInstance extends ASTValue<VMObject> {
   }
 }
 
+/// [ASTValue] for a [Future].
 class ASTValueFuture<T extends ASTType<V>, V> extends ASTValue<Future<V>> {
   Future<V> future;
 

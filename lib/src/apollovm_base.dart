@@ -7,7 +7,9 @@ import 'apollovm_runner.dart';
 import 'languages/dart/dart_generator.dart';
 import 'languages/java/java11/java11_generator.dart';
 
+/// The Apollo VM.
 class ApolloVM {
+  /// Returns a parser for a [language].
   ApolloParser? getParser(String language) {
     switch (language) {
       case 'dart':
@@ -23,16 +25,20 @@ class ApolloVM {
   final Map<String, LanguageNamespaces> _languageNamespaces =
       <String, LanguageNamespaces>{};
 
+  /// Returns a [CodeNamespace] for [language] and [namespace].
   CodeNamespace? getNamespace(String language, String namespace) {
     var langNamespaces = getLanguageNamespaces(language);
     return langNamespaces.get(namespace);
   }
 
+  /// Returns a [LanguageNamespaces] for [language].
   LanguageNamespaces getLanguageNamespaces(String language) {
     return _languageNamespaces.putIfAbsent(
         language, () => LanguageNamespaces(language));
   }
 
+  /// Loads [codeUnit], parsing the [CodeUnit.source] to the
+  /// corresponding AST (Abstract Syntax Tree).
   Future<bool> loadCodeUnit(CodeUnit codeUnit) async {
     var language = codeUnit.language;
     var parser = getParser(language);
@@ -56,6 +62,7 @@ class ApolloVM {
     return true;
   }
 
+  /// Creates a runner for the [language].
   ApolloLanguageRunner? createRunner(String language) {
     switch (language) {
       case 'dart':
@@ -68,12 +75,14 @@ class ApolloVM {
     }
   }
 
+  /// Generate all the loaded code with [codeGenerator] implementation.
   void generateAllCode(ApolloCodeGenerator codeGenerator) {
     for (var languageNamespace in _languageNamespaces.values) {
       languageNamespace.generateAllCode(codeGenerator);
     }
   }
 
+  /// Creates a [ApolloCodeGenerator] for the [language] and a [codeStorage].
   ApolloCodeGenerator? createCodeGenerator(
       String language, ApolloCodeStorage codeStorage) {
     switch (language) {
@@ -87,6 +96,8 @@ class ApolloVM {
     }
   }
 
+  /// Generates all the VM loaded code in [language],
+  /// returning a [ApolloCodeStorage].
   ApolloCodeStorage generateAllCodeIn(String language,
       {ApolloCodeStorage? codeStorage}) {
     codeStorage ??= ApolloCodeStorageMemory();
@@ -100,7 +111,11 @@ class ApolloVM {
   }
 }
 
+/// Language specific namespaces.
+///
+/// Each [CodeUnit] have a namespace, and they are stored separated by language.
 class LanguageNamespaces {
+  /// The language of the namespaces.
   final String language;
 
   LanguageNamespaces(this.language);
@@ -122,8 +137,12 @@ class LanguageNamespaces {
       _namespaces.values.expand((e) => e.classesNames).toList();
 }
 
+/// A namespace that can have multiple loaded [CodeUnit] instances.
 class CodeNamespace {
+  /// The language of the stored [CodeUnit].
   final String language;
+
+  /// Name of the namespace.
   final String name;
 
   CodeNamespace(this.language, this.name);
@@ -141,10 +160,12 @@ class CodeNamespace {
 
   final Set<CodeUnit> _codeUnits = {};
 
+  /// Adds a loaded [codeUnit].
   void addCodeUnit(CodeUnit codeUnit) {
     _codeUnits.add(codeUnit);
   }
 
+  /// Returns the 1st [CodeUnit] with a class with [className].
   CodeUnit? getCodeUnitWithClass(String className) {
     for (var cu in _codeUnits) {
       var clazz = cu.root!.getClass(className);
@@ -153,9 +174,11 @@ class CodeNamespace {
     return null;
   }
 
+  /// Returns a list of classes names.
   List<String> get classesNames =>
       _codeUnits.expand((e) => e.root!.classesNames).toList();
 
+  /// Returns an [ASTClass] for [className].
   ASTClass? getClass(String className) {
     for (var cu in _codeUnits) {
       var clazz = cu.root!.getClass(className);
@@ -164,6 +187,7 @@ class CodeNamespace {
     return null;
   }
 
+  /// Returns the 1st [CodeUnit] with a function of name [fName].
   CodeUnit? getCodeUnitWithFunction(String fName) {
     for (var cu in _codeUnits) {
       if (cu.root!.containsFunctionWithName(fName)) return cu;
@@ -171,6 +195,8 @@ class CodeNamespace {
     return null;
   }
 
+  /// Returns a function with [fName] and [parametersSignature]
+  /// (using [context] if needed).
   ASTFunctionDeclaration? getFunction(String fName,
       ASTFunctionSignature parametersSignature, VMContext context) {
     for (var cu in _codeUnits) {
@@ -180,6 +206,7 @@ class CodeNamespace {
     return null;
   }
 
+  /// Generates all the code of this namespace using [codeGenerator].
   void generateAllCode(ApolloCodeGenerator codeGenerator) {
     var codeStorage = codeGenerator.codeStorage;
     for (var cu in _codeUnits) {
@@ -189,13 +216,20 @@ class CodeNamespace {
   }
 }
 
+/// A Code Unit, with a [source] code in a specific [language].
 class CodeUnit {
+  /// Programming language of the [source] code.
   final String language;
+
+  /// Source code.
   final String source;
+
+  /// The ID of this Code Unit, usually a file path.
   final String id;
 
   CodeUnit(this.language, this.source, [this.id = '']);
 
+  /// The [ASTRoot] corresponding to the parsed [source].
   ASTRoot? root;
 
   @override
@@ -203,6 +237,7 @@ class CodeUnit {
     return 'CodeUnit{language: $language, path: $id}';
   }
 
+  /// Generates the code of this [ASTRoot] ([root]), using [codeGenerator].
   StringBuffer generateCode(ApolloCodeGenerator codeGenerator) {
     if (root == null) {
       throw StateError(
@@ -212,9 +247,15 @@ class CodeUnit {
   }
 }
 
+/// A mapper for a function that is external to the [ApolloVM].
+///
+/// Used to map normal Dart functions to the [ApolloVM] instance.
+/// This allows calls to Dart functions, like [print], from a source code
+/// parsed and loaded by [ApolloVM].
 class ApolloExternalFunctionMapper {
   final Map<String, ASTFunctionSet> _functions = {};
 
+  /// Returns a mapped functions with [fName] and optional [parametersSignature].
   ASTExternalFunction<R>? getMappedFunction<R>(VMContext context, String fName,
       [ASTFunctionSignature? parametersSignature]) {
     var fSet = _functions[fName];
@@ -227,6 +268,7 @@ class ApolloExternalFunctionMapper {
     }
   }
 
+  /// Adds an external function ([fExternal]) to this mapping table.
   void addExternalFunction(ASTExternalFunction fExternal) {
     var fName = fExternal.name;
     var fSet = _functions[fName];
@@ -238,6 +280,7 @@ class ApolloExternalFunctionMapper {
     }
   }
 
+  /// Maps an external function with 0 parameters.
   void mapExternalFunction0<T, R>(
       ASTType<R> fReturn, String fName, Function() f) {
     var fParameters = ASTParametersDeclaration(null, null, null);
@@ -247,6 +290,7 @@ class ApolloExternalFunctionMapper {
     addExternalFunction(fExternal);
   }
 
+  /// Maps an external function with 1 parameter.
   void mapExternalFunction1<T, R>(ASTType<R> fReturn, String fName,
       ASTType<T> pType1, String pName1, Function(T p1) f) {
     var fParameters = ASTParametersDeclaration(
@@ -259,6 +303,7 @@ class ApolloExternalFunctionMapper {
     addExternalFunction(fExternal);
   }
 
+  /// Maps an external function with 2 parameters.
   void mapExternalFunction2<A, B, R>(
       ASTType<R> fReturn,
       String fName,
@@ -277,6 +322,7 @@ class ApolloExternalFunctionMapper {
     addExternalFunction(fExternal);
   }
 
+  /// Maps an external function with 3 parameters.
   void mapExternalFunction3<A, B, C, R>(
       ASTType<R> fReturn,
       String fName,
@@ -298,6 +344,7 @@ class ApolloExternalFunctionMapper {
     addExternalFunction(fExternal);
   }
 
+  /// Maps an external function with 4 parameters.
   void mapExternalFunction4<A, B, C, D, R>(
       ASTType<R> fReturn,
       String fName,
@@ -323,18 +370,23 @@ class ApolloExternalFunctionMapper {
   }
 }
 
+/// A runtime context, for classes, of the VM.
+///
+/// Implements the object instance reference of a running class.
 class VMClassContext extends VMContext {
+  /// The class of this context.
   ASTClass clazz;
 
-  VMClassContext(this.clazz,
-      {VMContext? parent, ExternalFunctionSet? externalFunctionSet})
-      : super(clazz, parent: parent, externalFunctionSet: externalFunctionSet);
+  VMClassContext(this.clazz, {VMContext? parent})
+      : super(clazz, parent: parent);
 
   ASTObjectInstance? _objectInstance;
 
+  /// An object instance of [clazz].
   @override
   ASTObjectInstance? getObjectInstance() => _objectInstance;
 
+  /// Defines the current object instance of this context.
   void setObjectInstance(ASTObjectInstance obj) {
     if (_objectInstance != null && !identical(_objectInstance, obj)) {
       throw StateError('ASTObjectInstance already set!');
@@ -343,27 +395,37 @@ class VMClassContext extends VMContext {
   }
 }
 
+/// A runtime context of the VM.
+///
+/// Any code executed inside the VM has a context, that holds blocks
+/// variables, functions and classes instances.
 class VMContext {
   static VMContext? _current;
 
+  /// Static setter for the current [VMContext].
   static VMContext? setCurrent(VMContext? context) {
     var prev = _current;
     _current = context;
     return prev;
   }
 
+  /// Static access for the current [VMContext].
   static VMContext? getCurrent() => _current;
 
+  /// The parent context.
   final VMContext? parent;
+
+  /// The runtime block of this context.
   final ASTBlock block;
 
-  final ExternalFunctionSet? externalFunctionSet;
-
-  VMContext(this.block, {this.parent, this.externalFunctionSet});
+  VMContext(this.block, {this.parent});
 
   final Map<String, ASTTypedVariable> _variables = {};
 
-  ASTVariable? getVariable(String name, bool allowField) {
+  /// Returns an [ASTVariable] of [name] in this context.
+  ///
+  /// - [allowClassFields] if true allows class fields.
+  ASTVariable? getVariable(String name, bool allowClassFields) {
     if (name == 'this') {
       var obj = getObjectInstance();
       if (obj != null) {
@@ -374,7 +436,7 @@ class VMContext {
     var variable = _variables[name];
     if (variable != null) return variable;
 
-    if (allowField) {
+    if (allowClassFields) {
       var obj = getObjectInstance();
       if (obj != null) {
         var fieldValue = obj.getField(name);
@@ -384,9 +446,12 @@ class VMContext {
       }
     }
 
-    return parent?.getVariable(name, allowField);
+    return parent?.getVariable(name, allowClassFields);
   }
 
+  /// Sets an already declared variable of [name] with [value] in this context.
+  ///
+  /// - [allowClassFields] if true allows class fields.
   bool setVariable(String name, ASTValue value, bool allowField) {
     var variable = _variables[name];
     if (variable != null) {
@@ -403,12 +468,14 @@ class VMContext {
     return false;
   }
 
+  /// Declares a variable of [type] and [name] with an optional [value] in this context.
   bool declareVariableWithValue(ASTType type, String name, ASTValue? value) {
     value ??= ASTValueNull.INSTANCE;
     var variable = ASTRuntimeVariable(type, name, value);
     return declareVariable(variable);
   }
 
+  /// Declares a variable of [type] and [name] without a initial value.
   bool declareVariable(ASTTypedVariable variable) {
     var name = variable.name;
     if (_variables.containsKey(name)) {
@@ -418,29 +485,21 @@ class VMContext {
     return false;
   }
 
+  /// Returns an [ASTVariable] of field [name].
   ASTVariable? getField(String name) {
     return block.getField(name);
   }
 
+  /// The visible object class instance from this context.
+  ///
+  /// If [parent] is defined, will also look in the parent context.
   ASTObjectInstance? getObjectInstance() => parent?.getObjectInstance();
 
-  ExternalFunctionSet? getExternalFunctionSet() {
-    if (externalFunctionSet != null) {
-      return externalFunctionSet;
-    }
-
-    if (parent != null) {
-      return parent!.getExternalFunctionSet();
-    }
-
-    return null;
-  }
-
+  /// Returns a function of [name] and [parametersSignature]
+  ///
+  /// If [parent] is defined, will also look in the parent context.
   ASTFunctionDeclaration? getFunction(
-    String name,
-    ASTFunctionSignature parametersSignature, [
-    VMContext? context,
-  ]) {
+      String name, ASTFunctionSignature parametersSignature) {
     var f = block.getFunction(name, parametersSignature, this);
     if (f != null) return f;
     return parent?.getFunction(name, parametersSignature);
@@ -448,6 +507,9 @@ class VMContext {
 
   ApolloExternalFunctionMapper? externalFunctionMapper;
 
+  /// Returns an [ASTExternalFunction] of [fName] and [parametersSignature].
+  ///
+  /// If [parent] is defined, will also look in the parent context.
   ASTExternalFunction<R>? getMappedExternalFunction<R>(String fName,
       [ASTFunctionSignature? parametersSignature]) {
     if (externalFunctionMapper != null) {
@@ -464,6 +526,7 @@ class VMContext {
   }
 }
 
+/// When a NPE happens while executing some code.
 class ApolloVMNullPointerException implements Exception {
   String? message;
 
@@ -475,7 +538,9 @@ class ApolloVMNullPointerException implements Exception {
   }
 }
 
+/// An VM Object instance, with respective fields for class [type].
 class VMObject {
+  /// The class [ASTType] of this object instance.
   final ASTType type;
 
   VMObject(this.type);

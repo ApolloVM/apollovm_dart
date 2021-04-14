@@ -2,8 +2,10 @@ import 'package:apollovm/apollovm.dart';
 import 'package:apollovm/src/apollovm_code_generator.dart';
 import 'package:apollovm/src/apollovm_code_storage.dart';
 
+/// Dart implementation of an [ApolloCodeGenerator].
 class ApolloCodeGeneratorDart extends ApolloCodeGenerator {
-  ApolloCodeGeneratorDart(ApolloCodeStorage codeStorage) : super(codeStorage);
+  ApolloCodeGeneratorDart(ApolloCodeStorage codeStorage)
+      : super('dart', codeStorage);
 
   @override
   StringBuffer generateASTClass(ASTClass clazz,

@@ -8,6 +8,7 @@ import 'apollovm_ast_type.dart';
 import 'apollovm_ast_value.dart';
 import 'apollovm_ast_variable.dart';
 
+/// An [ASTBlock] that can have an entry-point method/function.
 class ASTEntryPointBlock extends ASTBlock {
   ASTEntryPointBlock(ASTBlock? parentBlock) : super(parentBlock);
 
@@ -126,6 +127,7 @@ class ASTEntryPointBlock extends ASTBlock {
   VMContext _createContext() => VMContext(this);
 }
 
+/// AST of a Class.
 class ASTClass extends ASTEntryPointBlock {
   final String name;
   final ASTType<VMObject> type;
@@ -199,6 +201,9 @@ class ASTClass extends ASTEntryPointBlock {
   }
 }
 
+/// An AST Root.
+///
+/// A parse of a [CodeUnit] generates an [ASTRoot].
 class ASTRoot extends ASTEntryPointBlock {
   ASTRoot() : super(null);
 
@@ -225,10 +230,7 @@ class ASTRoot extends ASTEntryPointBlock {
   }
 }
 
-class ExternalFunctionSet {
-  ASTPrintFunction? printFunction;
-}
-
+/// An AST Parameter declaration.
 class ASTParameterDeclaration<T> implements ASTNode {
   final ASTType<T> type;
 
@@ -245,6 +247,7 @@ class ASTParameterDeclaration<T> implements ASTNode {
   }
 }
 
+/// An AST Function Parameter declaration.
 class ASTFunctionParameterDeclaration<T> extends ASTParameterDeclaration<T> {
   final int index;
 
@@ -255,6 +258,7 @@ class ASTFunctionParameterDeclaration<T> extends ASTParameterDeclaration<T> {
       : super(type, name);
 }
 
+/// An AST Function Signature.
 class ASTFunctionSignature implements ASTNode {
   List<ASTType?>? positionalTypes;
 
@@ -345,6 +349,7 @@ class ASTFunctionSignature implements ASTNode {
   }
 }
 
+/// An AST Function Set.
 abstract class ASTFunctionSet implements ASTNode {
   List<ASTFunctionDeclaration> get functions;
 
@@ -356,6 +361,7 @@ abstract class ASTFunctionSet implements ASTNode {
   ASTFunctionSet add(ASTFunctionDeclaration f);
 }
 
+/// [ASTFunctionSet] implementation, with 1 entry.
 class ASTFunctionSetSingle extends ASTFunctionSet {
   final ASTFunctionDeclaration f;
 
@@ -387,6 +393,7 @@ class ASTFunctionSetSingle extends ASTFunctionSet {
   }
 }
 
+/// [ASTFunctionSet] implementation, with multiple entries.
 class ASTFunctionSetMultiple extends ASTFunctionSet {
   final List<ASTFunctionDeclaration> _functions = <ASTFunctionDeclaration>[];
 
@@ -433,6 +440,7 @@ class ASTFunctionSetMultiple extends ASTFunctionSet {
   }
 }
 
+/// An AST Parameters Declaration
 class ASTParametersDeclaration {
   List<ASTFunctionParameterDeclaration>? positionalParameters;
 
@@ -491,6 +499,9 @@ class ASTParametersDeclaration {
     return null;
   }
 
+  /// Returns true if [parametersSignature] matches this parameters declaration.
+  ///
+  /// - [exactTypes] if true the types should be exact, and not only acceptable.
   bool matchesParametersTypes(
       ASTFunctionSignature parametersSignature, bool exactTypes) {
     var parametersSize = size;
@@ -532,6 +543,9 @@ class ASTParametersDeclaration {
     return true;
   }
 
+  /// Returns true if [param] accepts [type].
+  ///
+  /// - [exactType] if true the [param.type] should be exact to [type].
   static bool parameterAcceptsType(
       ASTFunctionParameterDeclaration? param, ASTType? type, bool exactType) {
     if (param == null || type == null) {
@@ -575,7 +589,9 @@ class ASTParametersDeclaration {
   }
 }
 
+/// An AST Class Function Declaration.
 class ASTClassFunctionDeclaration<T> extends ASTFunctionDeclaration<T> {
+  /// The class type of this function.
   ASTType? classType;
 
   ASTClassFunctionDeclaration(this.classType, String name,
@@ -584,13 +600,18 @@ class ASTClassFunctionDeclaration<T> extends ASTFunctionDeclaration<T> {
       : super(name, parameters, returnType, block: block, modifiers: modifiers);
 }
 
+/// An AST Function Declaration.
 class ASTFunctionDeclaration<T> extends ASTBlock {
+  /// Name of this function.
   final String name;
 
+  /// Parameters of this function.
   final ASTParametersDeclaration _parameters;
 
+  /// The return type of this function.
   final ASTType<T> returnType;
 
+  /// Modifiers of this function.
   final ASTModifiers modifiers;
 
   ASTFunctionDeclaration(this.name, this._parameters, this.returnType,
@@ -690,6 +711,7 @@ class ASTFunctionDeclaration<T> extends ASTBlock {
   }
 }
 
+/// An AST External Function.
 class ASTExternalFunction<T> extends ASTFunctionDeclaration<T> {
   final Function externalFunction;
 

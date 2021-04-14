@@ -4,8 +4,14 @@ import 'package:apollovm/apollovm.dart';
 
 import 'apollovm_ast_value.dart';
 
+/// An AST (Abstract Syntax Tree) Node.
 abstract class ASTNode {}
 
+/// The runtime status of execution.
+///
+/// Used to indicate:
+/// - If a function have returned.
+/// - If a loop have continued or broke.
 class ASTRunStatus {
   static final ASTRunStatus DUMMY = ASTRunStatus();
 
@@ -38,11 +44,14 @@ class ASTRunStatus {
     return futureValue;
   }
 
+  /// Returns true if some statement demands continue of loop (next iteration).
   bool continued = false;
 
+  /// Returns true if some statement demands loop interruption (break).
   bool broke = false;
 }
 
+/// An AST that can be [run].
 abstract class ASTCodeRunner {
   VMContext defineRunContext(VMContext parentContext) {
     return parentContext;
@@ -51,6 +60,7 @@ abstract class ASTCodeRunner {
   FutureOr<ASTValue> run(VMContext parentContext, ASTRunStatus runStatus);
 }
 
+/// Modifiers of an [AST] element.
 class ASTModifiers {
   static final ASTModifiers modifiersNone = ASTModifiers();
   static final ASTModifiers modifierStatic = ASTModifiers(isStatic: true);

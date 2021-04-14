@@ -8,6 +8,7 @@ import 'apollovm_ast_type.dart';
 import 'apollovm_ast_value.dart';
 import 'apollovm_ast_variable.dart';
 
+/// An AST Statement.
 abstract class ASTStatement implements ASTCodeRunner, ASTNode {
   @override
   VMContext defineRunContext(VMContext parentContext) {
@@ -15,6 +16,7 @@ abstract class ASTStatement implements ASTCodeRunner, ASTNode {
   }
 }
 
+/// An AST Block of code (statements).
 class ASTBlock extends ASTStatement {
   ASTBlock? parentBlock;
 

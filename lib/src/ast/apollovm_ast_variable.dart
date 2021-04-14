@@ -5,6 +5,7 @@ import 'apollovm_ast_value.dart';
 
 import 'dart:async';
 
+/// Base class for variable reference.
 abstract class ASTVariable implements ASTNode {
   final String name;
 
@@ -38,6 +39,7 @@ abstract class ASTVariable implements ASTNode {
   }
 }
 
+/// [ASTVariable] with [type].
 abstract class ASTTypedVariable<T> extends ASTVariable {
   ASTType<T> type;
   final bool finalValue;
@@ -50,6 +52,7 @@ abstract class ASTTypedVariable<T> extends ASTVariable {
   }
 }
 
+/// [ASTVariable] for class fields.
 class ASTClassField<T> extends ASTTypedVariable<T> {
   ASTClassField(ASTType<T> type, String name, bool finalValue)
       : super(type, name, finalValue);
@@ -64,6 +67,7 @@ class ASTClassField<T> extends ASTTypedVariable<T> {
   }
 }
 
+/// [ASTVariable] for class fields with initial values.
 class ASTClassFieldWithInitialValue<T> extends ASTClassField<T> {
   final ASTExpression _initialValue;
   ASTClassFieldWithInitialValue(
@@ -76,6 +80,9 @@ class ASTClassFieldWithInitialValue<T> extends ASTClassField<T> {
   }
 }
 
+/// [ASTVariable] for a runtime value.
+///
+/// Used to represent a resolved variable at runtime.
 class ASTRuntimeVariable<T> extends ASTTypedVariable<T> {
   ASTValue _value;
 
@@ -99,6 +106,7 @@ class ASTRuntimeVariable<T> extends ASTTypedVariable<T> {
   }
 }
 
+/// [ASTVariable] for a variable visible in a scope context.
 class ASTScopeVariable<T> extends ASTVariable {
   ASTScopeVariable(String name) : super(name);
 
@@ -112,6 +120,7 @@ class ASTScopeVariable<T> extends ASTVariable {
   }
 }
 
+/// [ASTVariable] for `this`/`self` reference.
 class ASTThisVariable<T> extends ASTVariable {
   ASTThisVariable() : super('this');
 

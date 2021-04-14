@@ -1,3 +1,7 @@
+## 0.0.18
+
+- API Documentation.
+
 ## 0.0.17
 
 - Fix call of function using `dynamic` type in parameter value.

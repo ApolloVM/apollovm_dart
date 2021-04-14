@@ -7,6 +7,7 @@ import 'apollovm_ast_annotation.dart';
 import 'apollovm_ast_value.dart';
 import 'apollovm_ast_variable.dart';
 
+/// An AST Type.
 class ASTType<V> implements ASTNode {
   static ASTType from(dynamic o) {
     if (o == null) return ASTTypeNull.INSTANCE;
@@ -184,6 +185,7 @@ class ASTTypeInterface<V> extends ASTType<V> {
             annotations: annotations);
 }
 
+/// Base [ASTType] for primitives.
 abstract class ASTTypePrimitive<T> extends ASTType<T> {
   ASTTypePrimitive(String name) : super(name);
 
@@ -191,6 +193,7 @@ abstract class ASTTypePrimitive<T> extends ASTType<T> {
   bool isInstance(ASTType type);
 }
 
+/// [ASTType] for booleans ([bool]).
 class ASTTypeBool extends ASTTypePrimitive<bool> {
   static final ASTTypeBool INSTANCE = ASTTypeBool();
 
@@ -228,10 +231,12 @@ class ASTTypeBool extends ASTTypePrimitive<bool> {
   }
 }
 
+/// [ASTType] for numbers ([num]).
 abstract class ASTTypeNum<T extends num> extends ASTTypePrimitive<T> {
   ASTTypeNum(String name) : super(name);
 }
 
+/// [ASTType] for integer ([int]).
 class ASTTypeInt extends ASTTypeNum<int> {
   static final ASTTypeInt INSTANCE = ASTTypeInt();
 
@@ -270,6 +275,7 @@ class ASTTypeInt extends ASTTypeNum<int> {
   }
 }
 
+/// [ASTType] for [double].
 class ASTTypeDouble extends ASTTypeNum<double> {
   static final ASTTypeDouble INSTANCE = ASTTypeDouble();
 
@@ -308,6 +314,7 @@ class ASTTypeDouble extends ASTTypeNum<double> {
   }
 }
 
+/// [ASTType] for [String].
 class ASTTypeString extends ASTTypePrimitive<String> {
   static final ASTTypeString INSTANCE = ASTTypeString();
 
@@ -345,6 +352,7 @@ class ASTTypeString extends ASTTypePrimitive<String> {
   }
 }
 
+/// [ASTType] for [Object].
 class ASTTypeObject extends ASTType<Object> {
   static final ASTTypeObject INSTANCE = ASTTypeObject();
 
@@ -391,6 +399,7 @@ class ASTTypeObject extends ASTType<Object> {
   }
 }
 
+/// [ASTType] for [var] declaration.
 class ASTTypeVar extends ASTType<dynamic> {
   static final ASTTypeVar INSTANCE = ASTTypeVar();
 
@@ -424,6 +433,7 @@ class ASTTypeVar extends ASTType<dynamic> {
   }
 }
 
+/// [ASTType] for [dynamic] declaration.
 class ASTTypeDynamic extends ASTType<dynamic> {
   static final ASTTypeDynamic INSTANCE = ASTTypeDynamic();
 
@@ -457,6 +467,7 @@ class ASTTypeDynamic extends ASTType<dynamic> {
   }
 }
 
+/// [ASTType] for [null].
 class ASTTypeNull extends ASTType<Null> {
   static final ASTTypeNull INSTANCE = ASTTypeNull();
 
@@ -488,6 +499,7 @@ class ASTTypeNull extends ASTType<Null> {
   }
 }
 
+/// [ASTType] for [void].
 class ASTTypeVoid extends ASTType<void> {
   static final ASTTypeVoid INSTANCE = ASTTypeVoid();
 
@@ -518,6 +530,7 @@ class ASTTypeVoid extends ASTType<void> {
   }
 }
 
+/// Generic variable of an [ASTType].
 class ASTTypeGenericVariable extends ASTType<Object> {
   String variableName;
 
@@ -534,12 +547,14 @@ class ASTTypeGenericVariable extends ASTType<Object> {
   }
 }
 
+/// Generic wildcard (`?`) of an [ASTType].
 class ASTTypeGenericWildcard extends ASTTypeGenericVariable {
   static final ASTTypeGenericWildcard INSTANCE = ASTTypeGenericWildcard();
 
   ASTTypeGenericWildcard() : super('?');
 }
 
+/// [ASTType] for an array/List.
 class ASTTypeArray<T extends ASTType<V>, V> extends ASTType<List<V>> {
   T componentType;
 
@@ -572,6 +587,7 @@ class ASTTypeArray<T extends ASTType<V>, V> extends ASTType<List<V>> {
   }
 }
 
+/// [ASTType] a for a 2D array/List.
 class ASTTypeArray2D<T extends ASTType<V>, V>
     extends ASTTypeArray<ASTTypeArray<T, V>, List<V>> {
   ASTTypeArray2D(ASTTypeArray<T, V> type) : super(type);
@@ -607,6 +623,7 @@ class ASTTypeArray2D<T extends ASTType<V>, V>
   }
 }
 
+/// [ASTType] a for a 3D array/List.
 class ASTTypeArray3D<T extends ASTType<V>, V>
     extends ASTTypeArray2D<ASTTypeArray<T, V>, List<V>> {
   ASTTypeArray3D(ASTTypeArray2D<T, V> type) : super(type);
@@ -643,6 +660,7 @@ class ASTTypeArray3D<T extends ASTType<V>, V>
   }
 }
 
+/// [ASTType] a for a [Future].
 class ASTTypeFuture<T extends ASTType<V>, V> extends ASTType<Future<V>> {
   ASTTypeFuture(T type) : super('Future', generics: [type]);
 

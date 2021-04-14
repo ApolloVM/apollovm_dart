@@ -4,6 +4,7 @@ import 'package:apollovm/src/apollovm_runner.dart';
 
 import 'java11_grammar.dart';
 
+/// Java11 implementation of an [ApolloParser].
 class ApolloParserJava11 extends ApolloParser {
   static final ApolloParserJava11 INSTANCE = ApolloParserJava11();
 
