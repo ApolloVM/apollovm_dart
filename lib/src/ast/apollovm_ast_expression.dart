@@ -8,6 +8,7 @@ import 'apollovm_ast_type.dart';
 import 'apollovm_ast_value.dart';
 import 'apollovm_ast_variable.dart';
 
+/// Base for AST expressions.
 abstract class ASTExpression implements ASTCodeRunner, ASTNode {
   @override
   VMContext defineRunContext(VMContext parentContext) {
@@ -43,6 +44,7 @@ abstract class ASTExpression implements ASTCodeRunner, ASTNode {
   }
 }
 
+/// [ASTExpression] to access a variable.
 class ASTExpressionVariableAccess extends ASTExpression {
   ASTVariable variable;
 
@@ -55,6 +57,7 @@ class ASTExpressionVariableAccess extends ASTExpression {
   }
 }
 
+/// [ASTExpression] that declares a literal (number, boolean and String).
 class ASTExpressionLiteral extends ASTExpression {
   ASTValue value;
 
@@ -66,6 +69,7 @@ class ASTExpressionLiteral extends ASTExpression {
   }
 }
 
+/// [ASTExpression] to access a variable entry, by index (`foo[1]`) or by key (`foo[k]`).
 class ASTExpressionVariableEntryAccess extends ASTExpression {
   ASTVariable variable;
   ASTExpression expression;
@@ -180,6 +184,7 @@ String getASTExpressionOperatorText(ASTExpressionOperator op) {
   }
 }
 
+/// [ASTExpression] for an operation between 2 expressions.
 class ASTExpressionOperation extends ASTExpression {
   ASTExpression expression1;
   ASTExpressionOperator operator;
@@ -437,6 +442,7 @@ class ASTExpressionOperation extends ASTExpression {
   }
 }
 
+/// [ASTExpression] to assign the value of a variable.
 class ASTExpressionVariableAssignment extends ASTExpression {
   ASTVariable variable;
 
@@ -492,6 +498,7 @@ class ASTExpressionVariableAssignment extends ASTExpression {
   }
 }
 
+/// [ASTExpression] to call a local context function.
 class ASTExpressionLocalFunctionInvocation extends ASTExpression {
   String name;
   List<ASTExpression> arguments;
@@ -525,6 +532,7 @@ Future<List<ASTValue>> _resolveArgumentsValues(VMContext parentContext,
   return argumentsValues;
 }
 
+/// [ASTExpression] to call a class object function.
 class ASTExpressionObjectFunctionInvocation extends ASTExpression {
   ASTVariable variable;
   String name;

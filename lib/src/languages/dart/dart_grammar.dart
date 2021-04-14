@@ -460,7 +460,12 @@ class DartGrammarDefinition extends DartGrammarLexer {
       });
 
   Parser<ASTValue> literal() =>
-      (literalNum() | literalString()).cast<ASTValue>();
+      (literalBool() | literalNum() | literalString()).cast<ASTValue>();
+
+  Parser<ASTValueBool> literalBool() =>
+      ((string('true') | string('false')).trim()).map((v) {
+        return ASTValueBool(v == 'true');
+      });
 
   Parser<ASTValueNum> literalNum() => (numberLexicalToken().trim()).map((v) {
         return ASTValueNum.from(v);

@@ -16,9 +16,14 @@ void main() {
               var c = args[3];
               var sumAB = a + b ;
               var sumABC = a + b + c;
+              var greater = sumABC > sumAB ;
               print(title);
               print(sumAB);
               print(sumABC);
+              if ( greater ) {
+                var eq = greater == true ;
+                print('sumABC > sumAB = $eq');
+              }
             }
           ''',
           'test');
@@ -36,7 +41,7 @@ void main() {
         ['Sums:', 10, 20, 50]
       ]);
 
-      expect(output, equals(['Sums:', 30, 80]));
+      expect(output, equals(['Sums:', 30, 80, 'sumABC > sumAB = true']));
 
       print('---------------------------------------');
       print('OUTPUT:');
@@ -48,20 +53,30 @@ void main() {
       var allSourcesDart = codeStorageDart.writeAllSources().toString();
       print(allSourcesDart);
 
-      expect(
-          allSourcesDart,
-          matches(RegExp(r'\s*'
-              r'void\s+main\(List<Object> args\)\s*\{'
-              r'\s*var\s+title\s+=\s+args\[0\]\s*;'
-              r'\s*var\s+a\s+=\s+args\[1\]\s*;'
-              r'\s*var\s+b\s+=\s+args\[2\]\s*;'
-              r'\s*var\s+c\s+=\s+args\[3\]\s*;'
-              r'\s*var\s+sumAB\s+=\s+a\s*\+\s*b\s*;'
-              r'\s*var\s+sumABC\s+=\s+a\s*\+\s*b\s*\+\s*c\s*;'
-              r'\s*print\(title\)\s*;'
-              r'\s*print\(sumAB\)\s*;'
-              r'\s*print\(sumABC\)\s*;'
-              r'\s*\}\s*')));
+      expect(allSourcesDart, equals(r'''<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+  void main(List<Object> args) {
+    var title = args[0];
+    var a = args[1];
+    var b = args[2];
+    var c = args[3];
+    var sumAB = a + b;
+    var sumABC = a + b + c;
+    var greater = sumABC > sumAB;
+    print(title);
+    print(sumAB);
+    print(sumABC);
+    if (greater) {
+        var eq = greater == true;
+        print('sumABC > sumAB = $eq');
+    }
+
+  }
+
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+'''));
     });
 
     test('Basic main(List<Object>) with division', () async {

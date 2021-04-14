@@ -306,6 +306,9 @@ abstract class ASTValuePrimitive<T> extends ASTValueStatic<T> {
 
 /// [ASTValue] for booleans ([bool]).
 class ASTValueBool extends ASTValuePrimitive<bool> {
+  static final ASTValueBool TRUE = ASTValueBool(true);
+  static final ASTValueBool FALSE = ASTValueBool(false);
+
   ASTValueBool(bool value) : super(ASTTypeBool.INSTANCE, value);
 
   static ASTValueBool from(dynamic o) {

@@ -191,6 +191,7 @@ class ASTStatementExpression extends ASTStatement {
   }
 }
 
+/// [ASTStatement] to return void.
 class ASTStatementReturn extends ASTStatement {
   @override
   FutureOr<ASTValue> run(VMContext parentContext, ASTRunStatus runStatus) {
@@ -198,6 +199,7 @@ class ASTStatementReturn extends ASTStatement {
   }
 }
 
+/// [ASTStatement] to return null.
 class ASTStatementReturnNull extends ASTStatementReturn {
   @override
   ASTValue run(VMContext parentContext, ASTRunStatus runStatus) {
@@ -205,6 +207,7 @@ class ASTStatementReturnNull extends ASTStatementReturn {
   }
 }
 
+/// [ASTStatement] to return a [value].
 class ASTStatementReturnValue extends ASTStatementReturn {
   ASTValue value;
 
@@ -216,6 +219,7 @@ class ASTStatementReturnValue extends ASTStatementReturn {
   }
 }
 
+/// [ASTStatement] to return a [variable].
 class ASTStatementReturnVariable extends ASTStatementReturn {
   ASTVariable variable;
 
@@ -228,6 +232,7 @@ class ASTStatementReturnVariable extends ASTStatementReturn {
   }
 }
 
+/// [ASTStatement] to return an [expression].
 class ASTStatementReturnWithExpression extends ASTStatementReturn {
   ASTExpression expression;
 
@@ -240,6 +245,7 @@ class ASTStatementReturnWithExpression extends ASTStatementReturn {
   }
 }
 
+/// [ASTStatement] that declares a scope variable.
 class ASTStatementVariableDeclaration<V> extends ASTStatement {
   ASTType<V> type;
 
@@ -259,6 +265,7 @@ class ASTStatementVariableDeclaration<V> extends ASTStatement {
   }
 }
 
+/// [ASTStatement] base for branches.
 abstract class ASTBranch extends ASTStatement {
   FutureOr<bool> evaluateCondition(VMContext parentContext,
       ASTRunStatus runStatus, ASTExpression condition) async {
@@ -274,6 +281,7 @@ abstract class ASTBranch extends ASTStatement {
   }
 }
 
+/// [ASTBranch] simple IF: `if (exp) {}`
 class ASTBranchIfBlock extends ASTBranch {
   ASTExpression condition;
   ASTBlock block;
@@ -294,6 +302,7 @@ class ASTBranchIfBlock extends ASTBranch {
   }
 }
 
+/// [ASTBranch] IF,ELSE: `if (exp) {} else {}`
 class ASTBranchIfElseBlock extends ASTBranch {
   ASTExpression condition;
   ASTBlock blockIf;
@@ -317,6 +326,7 @@ class ASTBranchIfElseBlock extends ASTBranch {
   }
 }
 
+/// [ASTBranch] IF,ELSE IF,ELSE: `if (exp) {} else if (exp) {}* else {}`
 class ASTBranchIfElseIfsElseBlock extends ASTBranch {
   ASTExpression condition;
   ASTBlock blockIf;

@@ -290,13 +290,12 @@ class Java11GrammarDefinition extends Java11GrammarLexer {
         return getASTExpressionOperator(v);
       });
 
-  Parser<ASTExpression> expressionNoOperation() =>
-      (expressionVariableAssigment() |
-              expressionLocalFunctionInvocation() |
-              expressionVariableEntryAccess() |
-              expressionVariableAccess() |
-              expressionLiteral())
-          .cast<ASTExpression>();
+  Parser<ASTExpression> expressionNoOperation() => (expressionLiteral() |
+          expressionVariableAssigment() |
+          expressionLocalFunctionInvocation() |
+          expressionVariableEntryAccess() |
+          expressionVariableAccess())
+      .cast<ASTExpression>();
 
   Parser<ASTExpressionLocalFunctionInvocation>
       expressionLocalFunctionInvocation() => (string('this').optional() &
@@ -406,7 +405,12 @@ class Java11GrammarDefinition extends Java11GrammarLexer {
       });
 
   Parser<ASTValue> literal() =>
-      (literalNum() | literalString()).cast<ASTValue>();
+      (literalBool() | literalNum() | literalString()).cast<ASTValue>();
+
+  Parser<ASTValueBool> literalBool() =>
+      ((string('true') | string('false')).trim()).map((v) {
+        return ASTValueBool(v == 'true');
+      });
 
   Parser<ASTValueNum> literalNum() => (numberLexicalToken()).map((v) {
         return ASTValueNum.from(v);
