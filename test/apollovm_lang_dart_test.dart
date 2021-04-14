@@ -1069,6 +1069,17 @@ class Foo {
       print('OUTPUT:');
       output.forEach((o) => print('>> $o'));
 
+      output.clear();
+      var ret = await dartRunner.executeClassMethod('', 'Foo', 'calcB',
+          positionalParameters: [30, 70]);
+
+      print('---------------------------------------');
+      print('OUTPUT 2:');
+      output.forEach((o) => print('>> $o'));
+
+      expect(ret.getValueNoContext(), equals(21000));
+      expect(output, equals([]));
+
       print('---------------------------------------');
       // Regenerate code:
       var codeStorageDart = vm.generateAllCodeIn('dart');

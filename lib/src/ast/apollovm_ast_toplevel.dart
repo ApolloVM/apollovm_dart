@@ -14,8 +14,8 @@ class ASTEntryPointBlock extends ASTBlock {
 
   FutureOr<ASTValue> execute(
     String entryFunctionName,
-    dynamic? positionalParameters,
-    dynamic? namedParameters, {
+    List? positionalParameters,
+    Map? namedParameters, {
     ApolloExternalFunctionMapper? externalFunctionMapper,
     VMObject? classInstanceObject,
     Map<String, ASTValue>? classInstanceFields,
@@ -78,8 +78,8 @@ class ASTEntryPointBlock extends ASTBlock {
 
   FutureOr<ASTFunctionDeclaration?> getFunctionWithParameters(
       String entryFunctionName,
-      dynamic? positionalParameters,
-      dynamic? namedParameters,
+      List? positionalParameters,
+      Map? namedParameters,
       {ApolloExternalFunctionMapper? externalFunctionMapper}) async {
     var rootContext = await _initializeEntryPointBlock(externalFunctionMapper);
 
@@ -312,12 +312,12 @@ class ASTFunctionParameterDeclaration<T> extends ASTParameterDeclaration<T> {
 class ASTFunctionSignature implements ASTNode {
   List<ASTType?>? positionalTypes;
 
-  List<ASTType?>? namedTypes;
+  Map<String, ASTType?>? namedTypes;
 
   ASTFunctionSignature(this.positionalTypes, this.namedTypes);
 
   static ASTFunctionSignature from(
-      dynamic? positionalParameters, dynamic? namedParameters) {
+      List? positionalParameters, Map? namedParameters) {
     if ((positionalParameters == null || positionalParameters.isEmpty) &&
         (namedParameters == null || namedParameters.isEmpty)) {
       return ASTFunctionSignature(null, null);
@@ -326,7 +326,8 @@ class ASTFunctionSignature implements ASTNode {
     var pos = positionalParameters != null
         ? toASTTypeList(positionalParameters)
         : null;
-    var named = namedParameters != null ? toASTTypeList(namedParameters) : null;
+
+    var named = namedParameters != null ? toASTTypeMap(namedParameters) : null;
 
     if (pos != null && pos.isEmpty) pos = null;
     if (named != null && named.isEmpty) named = null;
@@ -334,24 +335,30 @@ class ASTFunctionSignature implements ASTNode {
     return ASTFunctionSignature(pos, named);
   }
 
-  static List<ASTType?> toASTTypeList(dynamic o) {
-    if (o == null) return [null];
-    if (o is ASTType) return [o];
+  static List<ASTType?>? toASTTypeList(List? params, [VMContext? context]) {
+    if (params == null || params.isEmpty) return null;
+    return params.map((e) => toASTType(e, context)).toList();
+  }
 
-    if (o is ASTValue) return [o.type];
+  static Map<String, ASTType?>? toASTTypeMap(Map? params,
+      [VMContext? context]) {
+    if (params == null || params.isEmpty) return null;
+    return params.map((k, v) => MapEntry('$k', toASTType(v, context)));
+  }
 
-    if (o is Map) {
-      o = o.values.toList();
-    }
+  static ASTType? toASTType(dynamic o, [VMContext? context]) {
+    if (o == null) return null;
+    if (o is ASTType) return o;
 
-    if (o is List) {
-      var typesList = o.map((e) => ASTType.from(e)).toList();
-      return typesList;
+    if (o is ASTValue) {
+      if (context != null) {
+        o = o.resolve(context);
+      }
+      return o.type;
     }
 
     var t = ASTType.from(o);
-
-    return [t];
+    return t;
   }
 
   int get size {
@@ -390,7 +397,11 @@ class ASTFunctionSignature implements ASTNode {
     if (namedTypes != null && namedTypes!.isNotEmpty) {
       if (s.length > 1) s.write(', ');
       s.write('namedTypes: ');
-      s.write(namedTypes!.map((e) => e != null ? '$e' : '?').toList());
+      s.write(namedTypes!.entries.map((e) {
+        var k = e.key;
+        var v = e.value;
+        return v != null ? '$k: $v' : '$k: ?';
+      }).toList());
     }
 
     s.write('}');
@@ -580,9 +591,12 @@ class ASTParametersDeclaration {
 
     var namedTypes = parametersSignature.namedTypes;
     if (namedTypes != null) {
-      for (var signParamType in namedTypes) {
+      for (var entry in namedTypes.entries) {
+        var singParamName = entry.key;
+        var signParamType = entry.value;
         if (signParamType == null) continue;
-        var param = getParameterByName(signParamType.name);
+
+        var param = getParameterByName(singParamName);
 
         if (!parameterAcceptsType(param, signParamType, exactTypes)) {
           return false;

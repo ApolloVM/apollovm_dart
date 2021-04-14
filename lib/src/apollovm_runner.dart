@@ -54,8 +54,8 @@ abstract class ApolloLanguageRunner {
   /// - [namedParameters] Named parameters to pass to the method.
   FutureOr<ASTValue> executeClassMethod(
       String namespace, String className, String methodName,
-      {dynamic? positionalParameters,
-      dynamic? namedParameters,
+      {List? positionalParameters,
+      Map? namedParameters,
       VMObject? classInstanceObject,
       Map<String, ASTValue>? classInstanceFields}) async {
     var codeNamespace = _languageNamespaces.get(namespace);
@@ -110,7 +110,7 @@ abstract class ApolloLanguageRunner {
   /// - [positionalParameters] Positional parameters to pass to the function.
   /// - [namedParameters] Named parameters to pass to the function.
   FutureOr<ASTValue> executeFunction(String namespace, String functionName,
-      {dynamic? positionalParameters, dynamic? namedParameters}) async {
+      {List? positionalParameters, Map? namedParameters}) async {
     var codeNamespace = _languageNamespaces.get(namespace);
 
     var codeUnit = codeNamespace.getCodeUnitWithFunction(functionName);
