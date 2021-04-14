@@ -39,7 +39,8 @@ void main() {
       var output = [];
       javaRunner.externalPrintFunction = (o) => output.add(o);
 
-      await javaRunner.executeClassMethod('', 'Foo', 'main', [
+      await javaRunner
+          .executeClassMethod('', 'Foo', 'main', positionalParameters: [
         ['Sums:', 10, 20, 50]
       ]);
 
@@ -131,7 +132,8 @@ class Foo {
       var output = [];
       dartRunner.externalPrintFunction = (o) => output.add(o);
 
-      await dartRunner.executeClassMethod('', 'Foo', 'main', [
+      await dartRunner
+          .executeClassMethod('', 'Foo', 'main', positionalParameters: [
         ['Sums:', 10, 30, 50]
       ]);
 
@@ -248,7 +250,8 @@ class Foo {
       var output = [];
       javaRunner.externalPrintFunction = (o) => output.add(o);
 
-      await javaRunner.executeClassMethod('', 'Foo', 'main', [
+      await javaRunner
+          .executeClassMethod('', 'Foo', 'main', positionalParameters: [
         ['Strings:', 'A', 'B', 'C']
       ]);
 
@@ -323,7 +326,8 @@ class Foo {
       var output = [];
       javaRunner.externalPrintFunction = (o) => output.add(o);
 
-      await javaRunner.executeClassMethod('', 'Foo', 'main', [
+      await javaRunner
+          .executeClassMethod('', 'Foo', 'main', positionalParameters: [
         ['Operations:', 10, 20]
       ]);
 
@@ -418,7 +422,8 @@ class Foo {
         var output = [];
         javaRunner.externalPrintFunction = (o) => output.add(o);
 
-        await javaRunner.executeClassMethod('', 'Bar', 'main', [
+        await javaRunner
+            .executeClassMethod('', 'Bar', 'main', positionalParameters: [
           [10, 20]
         ]);
 
@@ -433,7 +438,8 @@ class Foo {
         var output = [];
         javaRunner.externalPrintFunction = (o) => output.add(o);
 
-        await javaRunner.executeClassMethod('', 'Bar', 'main', [
+        await javaRunner
+            .executeClassMethod('', 'Bar', 'main', positionalParameters: [
           [20, 20]
         ]);
 
@@ -557,7 +563,8 @@ class Bar {
       var output = [];
       dartRunner.externalPrintFunction = (o) => output.add(o);
 
-      await dartRunner.executeClassMethod('', 'Foo', 'test', [123]);
+      await dartRunner
+          .executeClassMethod('', 'Foo', 'test', positionalParameters: [123]);
 
       expect(
           output,
@@ -658,7 +665,8 @@ class Foo {
       var output = [];
       dartRunner.externalPrintFunction = (o) => output.add(o);
 
-      await dartRunner.executeClassMethod('', 'Foo', 'test', [123]);
+      await dartRunner
+          .executeClassMethod('', 'Foo', 'test', positionalParameters: [123]);
 
       expect(
           output,

@@ -12,9 +12,14 @@ import 'apollovm_ast_variable.dart';
 class ASTEntryPointBlock extends ASTBlock {
   ASTEntryPointBlock(ASTBlock? parentBlock) : super(parentBlock);
 
-  FutureOr<ASTValue> execute(String entryFunctionName,
-      dynamic? positionalParameters, dynamic? namedParameters,
-      {ApolloExternalFunctionMapper? externalFunctionMapper}) async {
+  FutureOr<ASTValue> execute(
+    String entryFunctionName,
+    dynamic? positionalParameters,
+    dynamic? namedParameters, {
+    ApolloExternalFunctionMapper? externalFunctionMapper,
+    VMObject? classInstanceObject,
+    Map<String, ASTValue>? classInstanceFields,
+  }) async {
     var rootContext = await _initializeEntryPointBlock(externalFunctionMapper);
 
     ApolloExternalFunctionMapper? prevExternalFunctionMapper;
@@ -41,6 +46,16 @@ class ASTEntryPointBlock extends ASTBlock {
           var classContext = clazz._createContext(rootContext);
           var obj =
               await clazz.createInstance(classContext, ASTRunStatus.DUMMY);
+
+          if (classInstanceObject != null) {
+            obj.vmObject.setFieldsValues(
+                classInstanceObject.getFieldsValues(classContext));
+          }
+
+          if (classInstanceFields != null) {
+            obj.setFields(classInstanceFields);
+          }
+
           classContext.setObjectInstance(obj);
           context = classContext;
         } else {
@@ -166,6 +181,41 @@ class ASTClass extends ASTEntryPointBlock {
     for (var field in fields) {
       addField(field);
     }
+  }
+
+  /// Returns a [Map<String,Object>] with the fields names and values.
+  Future<Map<String, Object>> getFieldsMap(
+      {VMContext? context, Map<String, ASTValue>? fieldOverwrite}) async {
+    var astRunStatus = ASTRunStatus();
+
+    var fieldsEntriesFuture = _fields.values.map((f) async {
+      if (f is ASTClassFieldWithInitialValue) {
+        var initialValueFuture = context != null
+            ? f.getInitialValue(context, astRunStatus)
+            : f.getInitialValueNoContext();
+
+        var initialValue = await initialValueFuture;
+
+        var value = (await initialValue.getValueNoContext()) as Object?;
+        return MapEntry(f.name, value ?? Null);
+      } else {
+        return MapEntry(f.name, f.type);
+      }
+    }).toList();
+
+    var fieldsEntries = await Future.wait(fieldsEntriesFuture);
+
+    var map = Map<String, Object>.fromEntries(fieldsEntries);
+
+    if (fieldOverwrite != null && fieldOverwrite.isNotEmpty) {
+      context ??= VMContext(ASTBlock(null));
+      for (var entry in fieldOverwrite.entries) {
+        var value = await entry.value.getValue(context);
+        map[entry.key] = value ?? Null;
+      }
+    }
+
+    return map;
   }
 
   @override

@@ -54,7 +54,10 @@ abstract class ApolloLanguageRunner {
   /// - [namedParameters] Named parameters to pass to the method.
   FutureOr<ASTValue> executeClassMethod(
       String namespace, String className, String methodName,
-      [dynamic? positionalParameters, dynamic? namedParameters]) async {
+      {dynamic? positionalParameters,
+      dynamic? namedParameters,
+      VMObject? classInstanceObject,
+      Map<String, ASTValue>? classInstanceFields}) async {
     var codeNamespace = _languageNamespaces.get(namespace);
 
     var codeUnit = codeNamespace.getCodeUnitWithClass(className);
@@ -70,6 +73,8 @@ abstract class ApolloLanguageRunner {
 
     var result = await clazz.execute(
         methodName, positionalParameters, namedParameters,
+        classInstanceObject: classInstanceObject,
+        classInstanceFields: classInstanceFields,
         externalFunctionMapper: externalFunctionMapper);
     return result;
   }
@@ -105,7 +110,7 @@ abstract class ApolloLanguageRunner {
   /// - [positionalParameters] Positional parameters to pass to the function.
   /// - [namedParameters] Named parameters to pass to the function.
   FutureOr<ASTValue> executeFunction(String namespace, String functionName,
-      [dynamic? positionalParameters, dynamic? namedParameters]) async {
+      {dynamic? positionalParameters, dynamic? namedParameters}) async {
     var codeNamespace = _languageNamespaces.get(namespace);
 
     var codeUnit = codeNamespace.getCodeUnitWithFunction(functionName);

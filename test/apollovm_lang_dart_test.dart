@@ -37,7 +37,7 @@ void main() {
       var output = [];
       dartRunner.externalPrintFunction = (o) => output.add(o);
 
-      await dartRunner.executeFunction('', 'main', [
+      await dartRunner.executeFunction('', 'main', positionalParameters: [
         ['Sums:', 10, 20, 50]
       ]);
 
@@ -118,7 +118,7 @@ void main() {
       var output = [];
       dartRunner.externalPrintFunction = (o) => output.add(o);
 
-      await dartRunner.executeFunction('', 'main', [
+      await dartRunner.executeFunction('', 'main', positionalParameters: [
         ['Sums:', 10, 30, 50]
       ]);
 
@@ -190,7 +190,7 @@ void main() {
       var output = [];
       dartRunner.externalPrintFunction = (o) => output.add(o);
 
-      await dartRunner.executeFunction('', 'main', [
+      await dartRunner.executeFunction('', 'main', positionalParameters: [
         ['Strings:', 'A', 'B', 'C']
       ]);
 
@@ -253,7 +253,7 @@ void main() {
       var output = [];
       dartRunner.externalPrintFunction = (o) => output.add(o);
 
-      await dartRunner.executeFunction('', 'main', [
+      await dartRunner.executeFunction('', 'main', positionalParameters: [
         ['Operations:', 10, 20]
       ]);
 
@@ -323,7 +323,7 @@ line3
       var output = [];
       dartRunner.externalPrintFunction = (o) => output.add(o);
 
-      await dartRunner.executeFunction('', 'main', [
+      await dartRunner.executeFunction('', 'main', positionalParameters: [
         ['Multiline:', 10, 20]
       ]);
 
@@ -385,7 +385,7 @@ line3
       var output = [];
       dartRunner.externalPrintFunction = (o) => output.add(o);
 
-      await dartRunner.executeFunction('', 'main', []);
+      await dartRunner.executeFunction('', 'main');
 
       expect(
           output,
@@ -454,7 +454,7 @@ line3
       var output = [];
       dartRunner.externalPrintFunction = (o) => output.add(o);
 
-      await dartRunner.executeFunction('', 'main', []);
+      await dartRunner.executeFunction('', 'main');
 
       expect(
           output,
@@ -520,7 +520,7 @@ line3
       var output = [];
       dartRunner.externalPrintFunction = (o) => output.add(o);
 
-      await dartRunner.executeClassMethod('', 'Foo', 'main', []);
+      await dartRunner.executeClassMethod('', 'Foo', 'main');
 
       expect(output, equals(['a: <123>;\t\$b->a*2: 246 ;\ta*3: 369!']));
 
@@ -611,7 +611,8 @@ class Foo {
       var output = [];
       dartRunner.externalPrintFunction = (o) => output.add(o);
 
-      await dartRunner.executeClassMethod('', 'Bar', 'main', [
+      await dartRunner
+          .executeClassMethod('', 'Bar', 'main', positionalParameters: [
         [10, 20]
       ]);
 
@@ -736,7 +737,8 @@ class Bar {
         var output = [];
         dartRunner.externalPrintFunction = (o) => output.add(o);
 
-        await dartRunner.executeClassMethod('', 'Bar', 'main', [
+        await dartRunner
+            .executeClassMethod('', 'Bar', 'main', positionalParameters: [
           [10, 20]
         ]);
 
@@ -751,7 +753,8 @@ class Bar {
         var output = [];
         dartRunner.externalPrintFunction = (o) => output.add(o);
 
-        await dartRunner.executeClassMethod('', 'Bar', 'main', [
+        await dartRunner
+            .executeClassMethod('', 'Bar', 'main', positionalParameters: [
           [20, 20]
         ]);
 
@@ -867,7 +870,8 @@ class Bar {
       var output = [];
       dartRunner.externalPrintFunction = (o) => output.add(o);
 
-      await dartRunner.executeClassMethod('', 'Foo', 'test', [123]);
+      await dartRunner
+          .executeClassMethod('', 'Foo', 'test', positionalParameters: [123]);
 
       expect(output, equals(['Foo{} > a: 123']));
 
@@ -950,7 +954,8 @@ class Foo {
       var output = [];
       dartRunner.externalPrintFunction = (o) => output.add(o);
 
-      await dartRunner.executeClassMethod('', 'Foo', 'test', [123]);
+      await dartRunner
+          .executeClassMethod('', 'Foo', 'test', positionalParameters: [123]);
 
       expect(
           output,
@@ -1051,7 +1056,8 @@ class Foo {
       var output = [];
       dartRunner.externalPrintFunction = (o) => output.add(o);
 
-      await dartRunner.executeClassMethod('', 'Foo', 'test', [123]);
+      await dartRunner
+          .executeClassMethod('', 'Foo', 'test', positionalParameters: [123]);
 
       expect(
           output,

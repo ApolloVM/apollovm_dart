@@ -42,7 +42,7 @@ void main() async {
   print('---------------------------------------');
 
   var dartRunner = vm.createRunner('dart')!;
-  await dartRunner.executeClassMethod('', 'Foo', 'main', [
+  await dartRunner.executeClassMethod('', 'Foo', 'main', positionalParameters: [
     ['Sums:', 10, 30, 50]
   ]);
 

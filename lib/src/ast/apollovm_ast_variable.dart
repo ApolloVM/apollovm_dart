@@ -69,14 +69,22 @@ class ASTClassField<T> extends ASTTypedVariable<T> {
 
 /// [ASTVariable] for class fields with initial values.
 class ASTClassFieldWithInitialValue<T> extends ASTClassField<T> {
-  final ASTExpression _initialValue;
-  ASTClassFieldWithInitialValue(
-      ASTType<T> type, String name, this._initialValue, bool finalValue)
+  final ASTExpression _initialValueExpression;
+  ASTClassFieldWithInitialValue(ASTType<T> type, String name,
+      this._initialValueExpression, bool finalValue)
       : super(type, name, finalValue);
 
+  ASTExpression get initialValue => _initialValueExpression;
+
   FutureOr<ASTValue> getInitialValue(
-      VMClassContext context, ASTRunStatus runStatus) {
-    return _initialValue.run(context, runStatus);
+      VMContext context, ASTRunStatus runStatus) {
+    return _initialValueExpression.run(context, runStatus);
+  }
+
+  FutureOr<ASTValue> getInitialValueNoContext() {
+    var context = VMContext(ASTBlock(null));
+    var runStatus = ASTRunStatus();
+    return _initialValueExpression.run(context, runStatus);
   }
 }
 

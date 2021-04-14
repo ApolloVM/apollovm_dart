@@ -931,6 +931,9 @@ class ASTObjectInstance extends ASTValue<VMObject> {
     }
   }
 
+  /// The internal [VMObject] of this instance.
+  VMObject get vmObject => _object;
+
   @override
   VMObject getValue(VMContext context) => _object;
 
@@ -951,6 +954,18 @@ class ASTObjectInstance extends ASTValue<VMObject> {
     var prev = _object[name];
     _object[name] = ASTRuntimeVariable(field.type, name, value);
     return prev;
+  }
+
+  ASTRuntimeVariable? removeField(String name) {
+    var field = clazz.getField(name);
+    if (field == null) throw StateError("No field '$name' in class $clazz");
+    return _object.removeField(name);
+  }
+
+  void setFields(Map<String, ASTValue> fieldsValues) {
+    for (var entry in fieldsValues.entries) {
+      setField(entry.key, entry.value);
+    }
   }
 
   @override

@@ -1,3 +1,10 @@
+## 0.0.20
+
+- Added `ASTClass.getFieldsMap`.
+- `ASTEntryPointBlock.execute` with extra parameters `classInstanceObject` and `classInstanceFields`.
+- Change signature of`dartRunner.executeFunction` and `javaRunner.executeClassMethod`.
+  - Now they use named parameters for `positionalParameters` and `namedParameters`.
+
 ## 0.0.19
 
 - Grammar:

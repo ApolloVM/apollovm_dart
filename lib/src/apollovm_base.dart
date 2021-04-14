@@ -548,6 +548,57 @@ class VMObject {
   final Map<String, ASTRuntimeVariable> _fieldsValues =
       <String, ASTRuntimeVariable>{};
 
+  /// Returns a [Map] with fields names and values.
+  Map<String, ASTValue> getFieldsValues([VMContext? context]) {
+    context ??= VMContext(ASTBlock(null));
+
+    var fieldsValues = <String, ASTValue>{};
+
+    for (var key in _fieldsValues.keys) {
+      var value = getFieldValue(key, context);
+      fieldsValues[key] = value ?? ASTValueNull.INSTANCE;
+    }
+
+    return fieldsValues;
+  }
+
+  /// Sets a field [value].
+  ASTRuntimeVariable? setFieldValue(String fieldName, ASTValue value) {
+    var prev = _fieldsValues[fieldName];
+    _fieldsValues[fieldName] = ASTRuntimeVariable(value.type, fieldName, value);
+    return prev;
+  }
+
+  /// Returns a field value.
+  ASTValue? getFieldValue(String fieldName, [VMContext? context]) {
+    var prev = _fieldsValues[fieldName];
+    if (prev == null) return null;
+    context ??= VMContext(ASTBlock(null));
+    var value = prev.getValue(context);
+    return value;
+  }
+
+  /// Removes a field and resolves previous value.
+  ASTValue? removeFieldValue(String fieldName, [VMContext? context]) {
+    var prev = _fieldsValues.remove(fieldName);
+    if (prev == null) return null;
+    context ??= VMContext(ASTBlock(null));
+    var value = prev.getValue(context);
+    return value;
+  }
+
+  /// Removes a field.
+  ASTRuntimeVariable? removeField(String fieldName, [VMContext? context]) {
+    return _fieldsValues.remove(fieldName);
+  }
+
+  /// Set fields values from a [Map] [fieldsValues].
+  void setFieldsValues(Map<String, ASTValue> fieldsValues) {
+    for (var entry in fieldsValues.entries) {
+      setFieldValue(entry.key, entry.value);
+    }
+  }
+
   ASTRuntimeVariable? operator [](Object? field) => _fieldsValues[field];
 
   void operator []=(String field, ASTRuntimeVariable? value) {
