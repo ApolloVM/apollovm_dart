@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:apollovm/apollovm.dart';
+import 'package:collection/collection.dart' show equalsIgnoreAsciiCase;
 
 import 'apollovm_ast_expression.dart';
 import 'apollovm_ast_toplevel.dart';
@@ -49,23 +50,39 @@ class ASTBlock extends ASTStatement {
     }
   }
 
-  bool containsFunctionWithName(
-    String name,
-  ) {
-    var set = _functions[name];
+  ASTFunctionSet? getFunctionWithName(String name,
+      {bool caseInsensitive = false}) {
+    var f = _functions[name];
+
+    if (f == null && caseInsensitive) {
+      for (var entry in _functions.entries) {
+        if (equalsIgnoreAsciiCase(entry.key, name)) {
+          f = entry.value;
+          break;
+        }
+      }
+    }
+
+    return f;
+  }
+
+  bool containsFunctionWithName(String name, {bool caseInsensitive = false}) {
+    var set = getFunctionWithName(name, caseInsensitive: caseInsensitive);
     return set != null;
   }
 
   ASTFunctionDeclaration? getFunction(
     String fName,
     ASTFunctionSignature parametersSignature,
-    VMContext context,
-  ) {
-    var set = _functions[fName];
+    VMContext context, {
+    bool caseInsensitive = false,
+  }) {
+    var set = getFunctionWithName(fName, caseInsensitive: caseInsensitive);
     if (set != null) return set.get(parametersSignature, false);
 
     var fExternal =
         context.getMappedExternalFunction(fName, parametersSignature);
+
     return fExternal;
   }
 
@@ -125,8 +142,10 @@ class ASTBlock extends ASTStatement {
     return returnValue;
   }
 
-  ASTClassField? getField(String name) =>
-      parentBlock != null ? parentBlock!.getField(name) : null;
+  ASTClassField? getField(String name, {bool caseInsensitive = false}) =>
+      parentBlock != null
+          ? parentBlock!.getField(name, caseInsensitive: caseInsensitive)
+          : null;
 }
 
 class ASTStatementValue extends ASTStatement {

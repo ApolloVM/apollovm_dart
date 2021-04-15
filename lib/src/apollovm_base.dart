@@ -166,9 +166,11 @@ class CodeNamespace {
   }
 
   /// Returns the 1st [CodeUnit] with a class with [className].
-  CodeUnit? getCodeUnitWithClass(String className) {
+  CodeUnit? getCodeUnitWithClass(String className,
+      {bool caseInsensitive = false}) {
     for (var cu in _codeUnits) {
-      var clazz = cu.root!.getClass(className);
+      var clazz =
+          cu.root!.getClass(className, caseInsensitive: caseInsensitive);
       if (clazz != null) return cu;
     }
     return null;
@@ -179,28 +181,33 @@ class CodeNamespace {
       _codeUnits.expand((e) => e.root!.classesNames).toList();
 
   /// Returns an [ASTClass] for [className].
-  ASTClass? getClass(String className) {
+  ASTClass? getClass(String className, {bool caseInsensitive = false}) {
     for (var cu in _codeUnits) {
-      var clazz = cu.root!.getClass(className);
+      var clazz =
+          cu.root!.getClass(className, caseInsensitive: caseInsensitive);
       if (clazz != null) return clazz;
     }
     return null;
   }
 
   /// Returns the 1st [CodeUnit] with a function of name [fName].
-  CodeUnit? getCodeUnitWithFunction(String fName) {
+  CodeUnit? getCodeUnitWithFunction(String fName,
+      {bool caseInsensitive = false}) {
     for (var cu in _codeUnits) {
-      if (cu.root!.containsFunctionWithName(fName)) return cu;
+      if (cu.root!.containsFunctionWithName(fName,
+          caseInsensitive: caseInsensitive)) return cu;
     }
     return null;
   }
 
   /// Returns a function with [fName] and [parametersSignature]
   /// (using [context] if needed).
-  ASTFunctionDeclaration? getFunction(String fName,
-      ASTFunctionSignature parametersSignature, VMContext context) {
+  ASTFunctionDeclaration? getFunction(
+      String fName, ASTFunctionSignature parametersSignature, VMContext context,
+      {bool caseInsensitive = false}) {
     for (var cu in _codeUnits) {
-      var f = cu.root!.getFunction(fName, parametersSignature, context);
+      var f = cu.root!.getFunction(fName, parametersSignature, context,
+          caseInsensitive: caseInsensitive);
       if (f != null) return f;
     }
     return null;
@@ -598,6 +605,8 @@ class VMObject {
       setFieldValue(entry.key, entry.value);
     }
   }
+
+  Iterable<String> get fieldsKeys => _fieldsValues.keys;
 
   ASTRuntimeVariable? operator [](Object? field) => _fieldsValues[field];
 

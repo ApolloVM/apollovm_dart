@@ -1,7 +1,8 @@
 import 'dart:async';
 
 import 'package:apollovm/apollovm.dart';
-import 'package:collection/collection.dart' show IterableExtension;
+import 'package:collection/collection.dart'
+    show IterableExtension, equalsIgnoreAsciiCase;
 
 import 'apollovm_ast_statement.dart';
 import 'apollovm_ast_type.dart';
@@ -33,7 +34,8 @@ class ASTEntryPointBlock extends ASTBlock {
       var fSignature =
           ASTFunctionSignature.from(positionalParameters, namedParameters);
 
-      var f = getFunction(entryFunctionName, fSignature, rootContext);
+      var f = getFunction(entryFunctionName, fSignature, rootContext,
+          caseInsensitive: true);
       if (f == null) {
         throw StateError("Can't find entry function: $entryFunctionName");
       }
@@ -53,7 +55,7 @@ class ASTEntryPointBlock extends ASTBlock {
           }
 
           if (classInstanceFields != null) {
-            obj.setFields(classInstanceFields);
+            obj.setFields(classInstanceFields, caseInsensitive: true);
           }
 
           classContext.setObjectInstance(obj);
@@ -229,7 +231,20 @@ class ASTClass extends ASTEntryPointBlock {
   }
 
   @override
-  ASTClassField? getField(String name) => _fields[name];
+  ASTClassField? getField(String name, {bool caseInsensitive = false}) {
+    var field = _fields[name];
+
+    if (field == null && caseInsensitive) {
+      for (var entry in _fields.entries) {
+        if (equalsIgnoreAsciiCase(entry.key, name)) {
+          field = entry.value;
+          break;
+        }
+      }
+    }
+
+    return field;
+  }
 
   Future<ASTObjectInstance> createInstance(
       VMClassContext context, ASTRunStatus runStatus) async {
@@ -269,8 +284,19 @@ class ASTRoot extends ASTEntryPointBlock {
     _classes[clazz.name] = clazz;
   }
 
-  ASTClass? getClass(String className) {
-    return _classes[className];
+  ASTClass? getClass(String className, {bool caseInsensitive = false}) {
+    var clazz = _classes[className];
+
+    if (clazz == null && caseInsensitive) {
+      for (var entry in _classes.entries) {
+        if (equalsIgnoreAsciiCase(entry.key, className)) {
+          clazz = entry.value;
+          break;
+        }
+      }
+    }
+
+    return clazz;
   }
 
   void addAllClasses(List<ASTClass> classes) {

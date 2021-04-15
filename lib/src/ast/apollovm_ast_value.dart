@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:apollovm/apollovm.dart';
 import 'package:collection/collection.dart'
-    show ListEquality, DeepCollectionEquality;
+    show DeepCollectionEquality, ListEquality, equalsIgnoreAsciiCase;
 import 'package:swiss_knife/swiss_knife.dart';
 
 import 'apollovm_ast_expression.dart';
@@ -945,26 +945,42 @@ class ASTObjectInstance extends ASTValue<VMObject> {
     return this;
   }
 
-  ASTRuntimeVariable? getField(String name) => _object[name];
+  ASTRuntimeVariable? getField(String name, {bool caseInsensitive = false}) {
+    var field = _object[name];
 
-  ASTRuntimeVariable? setField(String name, ASTValue value) {
-    var field = clazz.getField(name);
+    if (field == null && caseInsensitive) {
+      for (var key in _object.fieldsKeys) {
+        if (equalsIgnoreAsciiCase(key, name)) {
+          field = _object[key];
+          break;
+        }
+      }
+    }
+
+    return field;
+  }
+
+  ASTRuntimeVariable? setField(String name, ASTValue value,
+      {bool caseInsensitive = false}) {
+    var field = clazz.getField(name, caseInsensitive: caseInsensitive);
     if (field == null) throw StateError("No field '$name' in class $clazz");
 
-    var prev = _object[name];
-    _object[name] = ASTRuntimeVariable(field.type, name, value);
+    var fieldName = field.name;
+    var prev = _object[fieldName];
+    _object[fieldName] = ASTRuntimeVariable(field.type, fieldName, value);
     return prev;
   }
 
-  ASTRuntimeVariable? removeField(String name) {
-    var field = clazz.getField(name);
+  ASTRuntimeVariable? removeField(String name, {bool caseInsensitive = false}) {
+    var field = clazz.getField(name, caseInsensitive: caseInsensitive);
     if (field == null) throw StateError("No field '$name' in class $clazz");
-    return _object.removeField(name);
+    return _object.removeField(field.name);
   }
 
-  void setFields(Map<String, ASTValue> fieldsValues) {
+  void setFields(Map<String, ASTValue> fieldsValues,
+      {bool caseInsensitive = false}) {
     for (var entry in fieldsValues.entries) {
-      setField(entry.key, entry.value);
+      setField(entry.key, entry.value, caseInsensitive: caseInsensitive);
     }
   }
 

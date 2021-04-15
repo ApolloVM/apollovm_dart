@@ -1,3 +1,8 @@
+## 0.0.22
+
+- `caseInsensitive` option for:
+  - setField, getField, getFunctionWithName, getFunction,getClass 
+
 ## 0.0.21
 
 - Better handling of function signature and how to pass positional and named parameters.
