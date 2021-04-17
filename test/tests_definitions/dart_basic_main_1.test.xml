@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="Basic main(List<Object>) 1">
+    <source language="dart">
+        <![CDATA[
+        void main(List<Object> args) {
+          var title = args[0];
+          var a = args[1];
+          var b = args[2];
+          var c = args[3];
+          var sumAB = a + b ;
+          var sumABC = a + b + c;
+          var greater = sumABC > sumAB ;
+          print(title);
+          print(sumAB);
+          print(sumABC);
+          if ( greater ) {
+            var eq = greater == true ;
+            print('sumABC > sumAB = $eq');
+          }
+        }
+        ]]>
+    </source>
+    <call function="main">
+        [
+        ["Sums:", 10, 20, 50]
+        ]
+    </call>
+    <output>
+        ["Sums:", 30, 80, "sumABC > sumAB = true"]
+    </output>
+    <source-generated language="dart"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+  void main(List<Object> args) {
+    var title = args[0];
+    var a = args[1];
+    var b = args[2];
+    var c = args[3];
+    var sumAB = a + b;
+    var sumABC = a + b + c;
+    var greater = sumABC > sumAB;
+    print(title);
+    print(sumAB);
+    print(sumABC);
+    if (greater) {
+        var eq = greater == true;
+        print('sumABC > sumAB = $eq');
+    }
+
+  }
+
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+</test>

@@ -1,3 +1,7 @@
+## 0.0.23
+
+- Improve tests, to tests definitions directory of XML files.
+
 ## 0.0.22
 
 - `caseInsensitive` option for:

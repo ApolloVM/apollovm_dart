@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="Basic main(List<Object>)">
+    <source language="dart">
+        <![CDATA[
+
+            void main(List<String> args) {
+              var m1 = '''single \'quote\'''';
+              var rm1 = r'''double \"quote\"''';
+              var m2 = """double \"quote\"""";
+              var rm2 = r"""single \'quote\'""";
+              print(m1);
+              print(m2);
+              print(rm1);
+              print(rm2);
+            }
+
+        ]]>
+    </source>
+    <call function="main">
+        [ ]
+    </call>
+    <output>
+        [
+        "single 'quote'",
+        "double \"quote\"",
+        "double \\\"quote\\\"",
+        "single \\'quote\\'"
+        ]
+    </output>
+    <source-generated language="dart"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+  void main(List<String> args) {
+    var m1 = "single 'quote'";
+    var rm1 = r'double \"quote\"';
+    var m2 = 'double "quote"';
+    var rm2 = r"single \'quote\'";
+    print(m1);
+    print(m2);
+    print(rm1);
+    print(rm2);
+  }
+
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+</test>

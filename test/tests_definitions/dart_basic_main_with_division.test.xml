@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="Basic main(List<Object>) with division">
+    <source language="dart">
+        <![CDATA[
+
+          void main(List<Object> args) {
+            var title = args[0];
+            var a = args[1];
+            var b = args[2] ~/ 2;
+            var c = args[3] * 3;
+
+            if (c > 120) {
+              c = 120 ;
+            }
+
+            var str = 'variables> a: $a ; b: $b ; c: $c' ;
+            var sumAB = a + b ;
+            var sumABC = a + b + c;
+
+            print(str);
+            print(title);
+            print(sumAB);
+            print(sumABC);
+          }
+
+        ]]>
+    </source>
+    <call function="main">
+        [
+          ["Sums:", 10, 30, 50]
+        ]
+    </call>
+    <output>
+        ["variables> a: 10 ; b: 15 ; c: 120", "Sums:", 25, 145]
+    </output>
+    <source-generated language="dart"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+  void main(List<Object> args) {
+    var title = args[0];
+    var a = args[1];
+    var b = args[2] ~/ 2;
+    var c = args[3] * 3;
+    if (c > 120) {
+        c = 120;
+    }
+
+    var str = 'variables> a: $a ; b: $b ; c: $c';
+    var sumAB = a + b;
+    var sumABC = a + b + c;
+    print(str);
+    print(title);
+    print(sumAB);
+    print(sumABC);
+  }
+
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+</test>

@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="Basic main(List<Object>) with comparisons">
+    <source language="dart">
+        <![CDATA[
+
+            class Bar {
+                static void main(List<Object> args) {
+                    var a = args[0] ;
+                    var b = args[1] ;
+                    var eq = a == b ;
+                    var notEq = a != b ;
+                    var greater = a > b ;
+                    var lower = a < b ;
+                    var greaterOrEq = a >= b ;
+                    var lowerOrEq = a <= b ;
+                    print(eq);
+                    print(notEq);
+                    print(greater);
+                    print(lower);
+                    print(greaterOrEq);
+                    print(lowerOrEq);
+                }
+            }
+
+        ]]>
+    </source>
+    <call class="Bar" function="main">
+        [
+          [10, 20]
+        ]
+    </call>
+    <output>
+        [false, true, false, true, false, true]
+    </output>
+
+    <source-generated language="dart"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+class Bar {
+
+  static void main(List<Object> args) {
+    var a = args[0];
+    var b = args[1];
+    var eq = a == b;
+    var notEq = a != b;
+    var greater = a > b;
+    var lower = a < b;
+    var greaterOrEq = a >= b;
+    var lowerOrEq = a <= b;
+    print(eq);
+    print(notEq);
+    print(greater);
+    print(lower);
+    print(greaterOrEq);
+    print(lowerOrEq);
+  }
+
+}
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+
+    <source-generated language="java11"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+class Bar {
+
+  static void main(Object[] args) {
+    var a = args[0];
+    var b = args[1];
+    var eq = a == b;
+    var notEq = a != b;
+    var greater = a > b;
+    var lower = a < b;
+    var greaterOrEq = a >= b;
+    var lowerOrEq = a <= b;
+    print(eq);
+    print(notEq);
+    print(greater);
+    print(lower);
+    print(greaterOrEq);
+    print(lowerOrEq);
+  }
+
+}
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+</test>

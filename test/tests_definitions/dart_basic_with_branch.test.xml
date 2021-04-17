@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="Basic main(List<String>) with branches">
+    <source language="dart">
+        <![CDATA[
+
+        class Bar {
+            static void main(List<Object> args) {
+                var a = args[0] ;
+                var b = args[1] ;
+                var eq = a == b ;
+
+                if (a == b) {
+                    print('if: a==b');
+                }
+
+                if (a != b) {
+                    print('if: a!=b');
+                }
+                else {
+                    print('else: a!=b');
+                }
+
+                if (a < b) {
+                    print('if: a<b');
+                }
+                else if (a > b) {
+                    print('else: a>b');
+                }
+                else {
+                    print('else: a==b');
+                }
+            }
+        }
+
+        ]]>
+    </source>
+    <call class="Bar" function="main">
+        [
+          [10, 20]
+        ]
+    </call>
+    <output>
+        ["if: a!=b", "if: a&lt;b"]
+    </output>
+    <source-generated language="dart"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+class Bar {
+
+  static void main(List<Object> args) {
+    var a = args[0];
+    var b = args[1];
+    var eq = a == b;
+    if (a == b) {
+        print('if: a==b');
+    }
+
+    if (a != b) {
+        print('if: a!=b');
+    } else {
+        print('else: a!=b');
+    }
+
+    if (a < b) {
+        print('if: a<b');
+    } else if (      a > b) {
+        print('else: a>b');
+    } else {
+        print('else: a==b');
+    }
+
+  }
+
+}
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+</test>

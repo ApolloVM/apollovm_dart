@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="Basic main(List<String>) with raw strings">
+    <source language="dart">
+        <![CDATA[
+
+            void main(List<String> args) {
+              var s1 = 'single \'quote\'';
+              var s2 = "double \"quote\"";
+              var r1 = r"single \'quote\'";
+              var r2 = r'double \"quote\"';
+              print(s1);
+              print(s2);
+              print(r1);
+              print(r2);
+            }
+
+        ]]>
+    </source>
+    <call function="main">
+        [ ]
+    </call>
+    <output>
+        [
+        "single 'quote'",
+        "double \"quote\"",
+        "single \\'quote\\'",
+        "double \\\"quote\\\""
+        ]
+    </output>
+    <source-generated language="dart"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+  void main(List<String> args) {
+    var s1 = "single 'quote'";
+    var s2 = 'double "quote"';
+    var r1 = r"single \'quote\'";
+    var r2 = r'double \"quote\"';
+    print(s1);
+    print(s2);
+    print(r1);
+    print(r2);
+  }
+
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+</test>

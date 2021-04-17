@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="Basic main(Object[]) 2">
+    <source language="java11">
+        <![CDATA[
+
+            class Foo {
+               static public void main(Object[] args) {
+                 var title = args[0];
+                 var a = args[1];
+                 var b = args[2];
+                 var s1 = "inline";
+                 var s2 = "string";
+                 var c = s1 + " \t\t " + s2;
+                 var sumAB = a + b ;
+                 var sumABC = a + b + c;
+                 print(title);
+                 print(sumAB);
+                 print(sumABC);
+               }
+            }
+
+        ]]>
+    </source>
+    <call class="Foo" function="main">
+        [
+            ["Operations:", 10, 20]
+        ]
+    </call>
+    <output>
+        ["Operations:", 30, "1020inline \t\t string"]
+    </output>
+    <source-generated language="dart"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+class Foo {
+
+  static void main(List<Object> args) {
+    var title = args[0];
+    var a = args[1];
+    var b = args[2];
+    var s1 = 'inline';
+    var s2 = 'string';
+    var c = '$s1 \t\t $s2';
+    var sumAB = a + b;
+    var sumABC = a + b + c;
+    print(title);
+    print(sumAB);
+    print(sumABC);
+  }
+
+}
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+
+    <source-generated language="java11"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+class Foo {
+
+  static void main(Object[] args) {
+    var title = args[0];
+    var a = args[1];
+    var b = args[2];
+    var s1 = "inline";
+    var s2 = "string";
+    var c = s1 + " \t\t " + s2;
+    var sumAB = a + b;
+    var sumABC = a + b + c;
+    print(title);
+    print(sumAB);
+    print(sumABC);
+  }
+
+}
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+</test>

@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="Basic main(Object[]) 1">
+    <source language="java11">
+        <![CDATA[
+
+            class Foo {
+                static public void main(Object[] args) {
+                    var title = args[0];
+                    var a = args[1];
+                    var b = args[2];
+                    var c = args[3];
+                    var sumAB = a + b ;
+                    var sumABC = a + b + c;
+                    var greater = sumABC > sumAB;
+                    print(title);
+                    print(sumAB);
+                    print(sumABC);
+                    if (greater) {
+                        var eq = greater == true;
+                        print("sumABC > sumAB = "+ eq);
+                    }
+                }
+            }
+
+        ]]>
+    </source>
+    <call class="Foo" function="main">
+        [
+          ["Sums:", 10, 20, 50]
+        ]
+    </call>
+    <output>
+        ["Sums:", 30, 80, "sumABC > sumAB = true"]
+    </output>
+    <source-generated language="dart"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+class Foo {
+
+  static void main(List<Object> args) {
+    var title = args[0];
+    var a = args[1];
+    var b = args[2];
+    var c = args[3];
+    var sumAB = a + b;
+    var sumABC = a + b + c;
+    var greater = sumABC > sumAB;
+    print(title);
+    print(sumAB);
+    print(sumABC);
+    if (greater) {
+        var eq = greater == true;
+        print('sumABC > sumAB = $eq');
+    }
+
+  }
+
+}
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+
+    <source-generated language="java11"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+class Foo {
+
+  static void main(Object[] args) {
+    var title = args[0];
+    var a = args[1];
+    var b = args[2];
+    var c = args[3];
+    var sumAB = a + b;
+    var sumABC = a + b + c;
+    var greater = sumABC > sumAB;
+    print(title);
+    print(sumAB);
+    print(sumABC);
+    if (greater) {
+        var eq = greater == true;
+        print("sumABC > sumAB = " + eq);
+    }
+
+  }
+
+}
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+</test>

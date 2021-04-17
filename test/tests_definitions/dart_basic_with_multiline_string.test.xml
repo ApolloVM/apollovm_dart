@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="Basic main(List<Object>) with multiline String">
+    <source language="dart">
+        <![CDATA[
+
+            void main(List<Object> args) {
+              var title = args[0];
+              var a = args[1];
+              var b = args[2];
+              var l = '''line1
+line2
+line3
+''';
+              var s = a + '\\::' + l + b;
+              print(title);
+              print(s);
+            }
+
+        ]]>
+    </source>
+    <call function="main">
+        [
+          ["Multiline:", 10, 20]
+        ]
+    </call>
+    <output>
+        ["Multiline:", "10\\::line1\nline2\nline3\n20"]
+    </output>
+    <source-generated language="dart"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+  void main(List<Object> args) {
+    var title = args[0];
+    var a = args[1];
+    var b = args[2];
+    var l = 'line1\nline2\nline3\n';
+    var s = a + r'\::' + l + b;
+    print(title);
+    print(s);
+  }
+
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+</test>

@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="Basic main(List<String>) with string variable">
+    <source language="dart">
+        <![CDATA[
+
+        class Foo {
+          static void main(List<String> args) {
+            var a = 123 ;
+            var b = 123 * 2 ;
+            var sv1 = 'a: <$a>;\t\$b->a*2: $b ;\ta*3: ${ a * 3 }!' ;
+            print(sv1);
+          }
+        }
+
+        ]]>
+    </source>
+    <call class="Foo" function="main">
+        [ ]
+    </call>
+    <output>
+        ["a: &lt;123>;\t$b->a*2: 246 ;\ta*3: 369!"]
+    </output>
+    <source-generated language="dart"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+class Foo {
+
+  static void main(List<String> args) {
+    var a = 123;
+    var b = 123 * 2;
+    var sv1 = 'a: <$a>;\t\$b->a*2: $b ;\ta*3: ${a * 3}!';
+    print(sv1);
+  }
+
+}
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+
+    <source-generated language="java11"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+class Foo {
+
+  static void main(String[] args) {
+    var a = 123;
+    var b = 123 * 2;
+    var sv1 = "a: <" + a + ">;\t$b->a*2: " + b + " ;\ta*3: " + String.valueOf( a * 3 ) + "!";
+    print(sv1);
+  }
+
+}
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+</test>
