@@ -1,5 +1,6 @@
 import 'package:apollovm/apollovm.dart';
 import 'package:collection/collection.dart' show MapEquality;
+import 'package:swiss_knife/swiss_knife.dart';
 
 import 'apollovm_code_generator.dart';
 import 'apollovm_code_storage.dart';
@@ -9,6 +10,8 @@ import 'languages/java/java11/java11_generator.dart';
 
 /// The Apollo VM.
 class ApolloVM {
+  static final String VERSION = '0.0.24';
+
   /// Returns a parser for a [language].
   ApolloParser? getParser(String language) {
     switch (language) {
@@ -109,6 +112,45 @@ class ApolloVM {
     generateAllCode(codeGenerator);
     return codeStorage;
   }
+
+  /// Returns the language associated with [fileOrExtension].
+  static String parseLanguageFromFilePathExtension(String fileOrExtension) {
+    String extension;
+    if (fileOrExtension.contains(RegExp(r'\.\w+$'))) {
+      extension = (getPathExtension(fileOrExtension) ?? fileOrExtension)
+          .toLowerCase()
+          .trim();
+    } else {
+      extension = fileOrExtension.toLowerCase().trim();
+    }
+
+    switch (extension) {
+      case 'dart':
+        return 'dart';
+      case 'java':
+        return 'java11';
+      case 'js':
+        return 'javascript';
+      case 'py':
+        return 'python';
+      case 'rb':
+        return 'ruby';
+      case 'cs':
+        return 'csharp';
+      case 'kt':
+        return 'kotlin';
+      case 'cpp':
+      case 'c++':
+        return 'cpp';
+      case 'swift':
+        return 'swift';
+      case 'pl':
+      case 'perl':
+        return 'perl';
+      default:
+        return 'dart';
+    }
+  }
 }
 
 /// Language specific namespaces.
@@ -135,6 +177,9 @@ class LanguageNamespaces {
 
   List<String> get classesNames =>
       _namespaces.values.expand((e) => e.classesNames).toList();
+
+  List<String> get functions =>
+      _namespaces.values.expand((e) => e.functions).toList();
 }
 
 /// A namespace that can have multiple loaded [CodeUnit] instances.
@@ -189,6 +234,10 @@ class CodeNamespace {
     }
     return null;
   }
+
+  /// Returns a list of functions names.
+  List<String> get functions =>
+      _codeUnits.expand((e) => e.root!.functions).map((f) => f.name).toList();
 
   /// Returns the 1st [CodeUnit] with a function of name [fName].
   CodeUnit? getCodeUnitWithFunction(String fName,

@@ -1,3 +1,15 @@
+## 0.0.24
+
+- `ApolloVM`:
+  - `parseLanguageFromFilePathExtension`
+- `ApolloLanguageRunner`:
+  - `tryExecuteFunction`
+  - `tryExecuteClassFunction`
+- Executable:
+    - `apollovm`
+- args: ^2.0.0
+- pubspec: ^2.0.1
+
 ## 0.0.23
 
 - Improve tests, to tests definitions directory of XML files.

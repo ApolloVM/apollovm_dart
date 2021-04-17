@@ -438,6 +438,8 @@ class ASTFunctionSignature implements ASTNode {
 
 /// An AST Function Set.
 abstract class ASTFunctionSet implements ASTNode {
+  String get name => firstFunction.name;
+
   List<ASTFunctionDeclaration> get functions;
 
   ASTFunctionDeclaration get firstFunction;

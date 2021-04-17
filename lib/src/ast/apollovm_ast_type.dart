@@ -107,7 +107,7 @@ class ASTType<V> implements ASTNode {
 
     if (type == ASTTypeGenericWildcard.INSTANCE) return true;
 
-    if (type.name != type.name) {
+    if (name != type.name) {
       var typeSuperType = type.superType;
       if (typeSuperType == null) return false;
 

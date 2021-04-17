@@ -131,7 +131,7 @@ abstract class ApolloLanguageRunner {
   /// determine the function parameters signature.
   FutureOr<ASTFunctionDeclaration?> getFunction(
       String namespace, String functionName,
-      [dynamic? positionalParameters, dynamic? namedParameters]) async {
+      [List? positionalParameters, Map? namedParameters]) async {
     var codeNamespace = _languageNamespaces.get(namespace);
 
     var codeUnit = codeNamespace.getCodeUnitWithFunction(functionName);
@@ -140,6 +140,69 @@ abstract class ApolloLanguageRunner {
     return await codeUnit.root!.getFunctionWithParameters(
         functionName, positionalParameters, namedParameters,
         externalFunctionMapper: externalFunctionMapper);
+  }
+
+  /// Tries to execute a function with variations of [positionalParameters].
+  Future<ASTValue?> tryExecuteFunction(String namespace, String functionName,
+      [List? positionalParameters]) async {
+    positionalParameters ??= [];
+
+    if (await getFunction(namespace, functionName, positionalParameters) !=
+        null) {
+      return await executeFunction(namespace, functionName,
+          positionalParameters: positionalParameters);
+    } else if (await getFunction(
+            namespace, functionName, [positionalParameters]) !=
+        null) {
+      return await executeFunction(namespace, functionName,
+          positionalParameters: [positionalParameters]);
+    } else if (await getFunction(
+            namespace, functionName, [ASTTypeArray(ASTTypeString.INSTANCE)]) !=
+        null) {
+      return await executeFunction(namespace, functionName,
+          positionalParameters: [
+            positionalParameters.map((e) => '$e').toList()
+          ]);
+    } else if (await getFunction(
+            namespace, functionName, [ASTTypeArray(ASTTypeDynamic.INSTANCE)]) !=
+        null) {
+      return await executeFunction(namespace, functionName,
+          positionalParameters: [positionalParameters]);
+    }
+    return null;
+  }
+
+  /// Tries to execute a class function with variations of [positionalParameters].
+  Future<ASTValue?> tryExecuteClassFunction(
+      String namespace, String className, String functionName,
+      [List? positionalParameters]) async {
+    positionalParameters ??= [];
+
+    if (await getClassMethod(
+            namespace, className, functionName, positionalParameters) !=
+        null) {
+      return await executeClassMethod(namespace, className, functionName,
+          positionalParameters: positionalParameters);
+    }
+    if (await getClassMethod(
+            namespace, className, functionName, [positionalParameters]) !=
+        null) {
+      return await executeClassMethod(namespace, className, functionName,
+          positionalParameters: [positionalParameters]);
+    } else if (await getClassMethod(namespace, className, functionName,
+            [ASTTypeArray(ASTTypeString.INSTANCE)]) !=
+        null) {
+      return await executeClassMethod(namespace, className, functionName,
+          positionalParameters: [
+            positionalParameters.map((e) => '$e').toList()
+          ]);
+    } else if (await getClassMethod(namespace, className, functionName,
+            [ASTTypeArray(ASTTypeDynamic.INSTANCE)]) !=
+        null) {
+      return await executeClassMethod(namespace, className, functionName,
+          positionalParameters: [positionalParameters]);
+    }
+    return null;
   }
 
   void reset() {
