@@ -14,8 +14,94 @@
 
 ApolloVM is a portable VM (native, JS/Web, Flutter) that can parse, translate and run multiple languages, like Dart, Java, Kotlin and JavaScript.
 
+## Command Line Usage
 
-## Usage
+You can use the executable `apollovm` to `run` or `translate` source codes. 
+
+First you should activate the package globally:
+
+```shell
+$> dart pub global activate apollovm
+```
+
+Now you can use the `apollovm` Dart executable:
+```shell
+$> apollovm help
+
+ApolloVM - a compact VM for Dart and Java.
+
+Usage: apollovm <command> [arguments]
+
+Global options:
+-h, --help       Print this usage information.
+-v, --version    Show ApolloVM version.
+
+Available commands:
+  run         Run a source file.
+  translate   Translate a source file.
+
+Run "apollovm help <command>" for more information about a command.
+
+```
+
+To `run` a Java file: 
+```shell
+$> apollovm run -v test/hello-world.java foo
+## [RUN]        File: 'test/hello-world.java' ; language: java11 > main( [foo] )
+Hello World!
+- args: [foo]
+- a0: foo
+```
+
+To `translate` a Java file to Dart:
+
+```shell
+## [TRANSLATE]  File: 'test/hello-world.java' ; language: java11 > targetLanguage: dart
+<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test/hello-world.java" >>>>
+class Hello {
+
+  static void main(List<String> args) {
+    var a0 = args[0];
+    print('Hello World!');
+    print('- args: $args');
+    print('- a0: $a0');
+  }
+
+}
+<<<< CODE_UNIT_END="/test/hello-world.java" >>>>
+<<<< [SOURCES_END] >>>>
+```
+
+### Compiling ApolloVM executable.
+
+Dart supports compilation to native self-contained executables.
+
+To have a fast and small executable of `ApolloVM`, just clone the project and compile it:
+
+```shell
+
+## Go to a directory to clone the project (usually a workspace):
+$> cd ./some-workspace/
+
+## Git clone the project:
+$> git clone https://github.com/ApolloVM/apollovm_dart.git
+
+## Enter the project:
+$> cd ./apollovm_dart
+
+## Compile ApolloVM executable:
+$> dart compile exe bin/apollovm.dart
+
+## Copy the binary to your preferred PATH:
+$> cp bin/apollovm.exe /usr/bin/apollovm
+```
+
+Now tou can use `apollovm` as a self-executable,
+even if you don't have Dart installed.
+
+## Package Usage
 
 The ApolloVM is still in alpha stage. Below, we can see a simple usage examples in Dart and Java.
 
