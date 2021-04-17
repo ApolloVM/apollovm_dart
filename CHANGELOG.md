@@ -9,6 +9,7 @@
     - `apollovm`
 - args: ^2.0.0
 - pubspec: ^2.0.1
+- path: ^1.8.0
 
 ## 0.0.23
 
