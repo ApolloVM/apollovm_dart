@@ -1,3 +1,10 @@
+## 0.0.25
+
+- Grammar:
+  - Dart & Java:
+    - Added `for` loop statement: `ASTStatementForLoop`.
+- Adjust `README.md`.
+
 ## 0.0.24
 
 - `ApolloVM`:

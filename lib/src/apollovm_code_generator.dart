@@ -170,6 +170,8 @@ abstract class ApolloCodeGenerator {
       return generateASTStatementVariableDeclaration(statement, indent, s);
     } else if (statement is ASTBranch) {
       return generateASTBranch(statement, indent, s);
+    } else if (statement is ASTStatementForLoop) {
+      return generateASTStatementForLoop(statement, indent, s);
     } else if (statement is ASTStatementReturnNull) {
       return generateASTStatementReturnNull(statement, indent, s);
     } else if (statement is ASTStatementReturnValue) {
@@ -196,6 +198,30 @@ abstract class ApolloCodeGenerator {
     }
 
     throw UnsupportedError("Can't handle branch: $branch");
+  }
+
+  StringBuffer generateASTStatementForLoop(ASTStatementForLoop forLoop,
+      [String indent = '', StringBuffer? s]) {
+    s ??= StringBuffer();
+
+    s.write(indent);
+    s.write('for (');
+
+    generateASTStatement(forLoop.initStatement, '', s);
+    s.write(' ');
+    generateASTExpression(forLoop.conditionExpression, '', s);
+    s.write(' ; ');
+    generateASTExpression(forLoop.continueExpression, '', s);
+
+    s.write(') {\n');
+
+    var blockCode = generateASTBlock(forLoop.loopBlock, indent, null, false);
+
+    s.write(blockCode);
+    s.write(indent);
+    s.write('}');
+
+    return s;
   }
 
   StringBuffer generateASTBranchIfBlock(ASTBranchIfBlock branch,

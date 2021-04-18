@@ -379,3 +379,54 @@ class ASTBranchIfElseIfsElseBlock extends ASTBranch {
     }
   }
 }
+
+class ASTStatementForLoop extends ASTStatement {
+  final ASTStatement initStatement;
+
+  final ASTExpression conditionExpression;
+
+  final ASTExpression continueExpression;
+
+  final ASTBlock loopBlock;
+
+  ASTStatementForLoop(this.initStatement, this.conditionExpression,
+      this.continueExpression, this.loopBlock);
+
+  @override
+  VMContext defineRunContext(VMContext parentContext) {
+    return parentContext;
+  }
+
+  @override
+  FutureOr<ASTValue> run(
+      VMContext parentContext, ASTRunStatus runStatus) async {
+    var context = VMContext(parentContext.block, parent: parentContext);
+    var runStatus = ASTRunStatus();
+
+    await initStatement.run(context, runStatus);
+
+    while (true) {
+      var cond = await conditionExpression.run(context, runStatus);
+
+      if (cond is ASTValueBool) {
+        if (!cond.value) break;
+      } else {
+        var condOK = await cond.getValue(context);
+
+        if (condOK is bool) {
+          if (!condOK) break;
+        } else {
+          throw StateError('Condition not returning a boolean: $condOK');
+        }
+      }
+
+      var loopContext = VMContext(parentContext.block, parent: context);
+
+      await loopBlock.run(loopContext, runStatus);
+
+      await continueExpression.run(context, runStatus);
+    }
+
+    return ASTValueVoid.INSTANCE;
+  }
+}

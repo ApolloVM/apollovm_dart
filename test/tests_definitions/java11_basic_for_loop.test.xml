@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="Basic main(List<String>) 2">
+    <source language="java11">
+        <![CDATA[
+          class Foo {
+            static public void main(Object[] args) {
+              var title = args[0];
+              var init = args[1];
+              var end = args[2];
+              var increment = args[3];
+
+              print(title);
+
+              for (var i = init ; i <= end; i += increment) {
+                print(i);
+              }
+            }
+          }
+        ]]>
+    </source>
+    <call class="Foo" function="main">
+        [
+          ["For loop:", 10, 20, 1]
+        ]
+    </call>
+    <output>
+        ["For loop:", 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
+    </output>
+    <call class="Foo" function="main">
+        [
+        ["For loop:", 10, 20, 2]
+        ]
+    </call>
+    <output>
+        ["For loop:", 10, 12, 14, 16, 18, 20]
+    </output>
+    <source-generated language="dart"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+class Foo {
+
+  static void main(List<Object> args) {
+    var title = args[0];
+    var init = args[1];
+    var end = args[2];
+    var increment = args[3];
+    print(title);
+    for (var i = init; i <= end ; i += increment) {
+      print(i);
+    }
+  }
+
+}
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+    <source-generated language="java11"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+class Foo {
+
+  static void main(Object[] args) {
+    var title = args[0];
+    var init = args[1];
+    var end = args[2];
+    var increment = args[3];
+    print(title);
+    for (var i = init; i <= end ; i += increment) {
+      print(i);
+    }
+  }
+
+}
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+</test>

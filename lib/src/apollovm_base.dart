@@ -10,7 +10,7 @@ import 'languages/java/java11/java11_generator.dart';
 
 /// The Apollo VM.
 class ApolloVM {
-  static final String VERSION = '0.0.24';
+  static final String VERSION = '0.0.25';
 
   /// Returns a parser for a [language].
   ApolloParser? getParser(String language) {

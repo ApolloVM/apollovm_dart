@@ -144,9 +144,30 @@ class Java11GrammarDefinition extends Java11GrammarLexer {
 
   Parser<ASTStatement> statement() => (branch() |
           statementReturn() |
+          statementLoop() |
           statementVariableDeclaration() |
           statementExpression())
       .cast<ASTStatement>();
+
+  Parser<ASTStatement> statementSimple() =>
+      (statementVariableDeclaration() | statementExpression())
+          .cast<ASTStatement>();
+
+  Parser<ASTStatementForLoop> statementLoop() => (string('for').trim() &
+              char('(').trim() &
+              ref0(statementSimple) &
+              ref0(expression) &
+              char(';').trim() &
+              ref0(expression) &
+              char(')').trim() &
+              codeBlock())
+          .map((v) {
+        var initExp = v[2];
+        var condExp = v[3];
+        var contExp = v[5];
+        var block = v[7];
+        return ASTStatementForLoop(initExp, condExp, contExp, block);
+      });
 
   Parser<ASTStatementReturn> statementReturn() =>
       (string('return').trim() & expression().optional() & char(';').trim())

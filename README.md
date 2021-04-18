@@ -56,6 +56,7 @@ Hello World!
 To `translate` a Java file to Dart:
 
 ```shell
+$> apollovm translate -v --target dart test/hello-world.java
 ## [TRANSLATE]  File: 'test/hello-world.java' ; language: java11 > targetLanguage: dart
 <<<< [SOURCES_BEGIN] >>>>
 <<<< NAMESPACE="" >>>>
