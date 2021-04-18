@@ -99,7 +99,7 @@ $> dart compile exe bin/apollovm.dart
 $> cp bin/apollovm.exe /usr/bin/apollovm
 ```
 
-Now tou can use `apollovm` as a self-executable,
+Now you can use `apollovm` as a self-executable,
 even if you don't have Dart installed.
 
 ## Package Usage

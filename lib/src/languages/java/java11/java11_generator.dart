@@ -180,19 +180,25 @@ class ApolloCodeGeneratorJava11 extends ApolloCodeGenerator {
       StringBuffer? s]) {
     var list = <dynamic>[];
 
+    var prevIsString = false;
     for (var v in value.values) {
       if (v is ASTValueStringVariable) {
-        var s2 = generateASTValueStringVariable(v, '', null, list.isNotEmpty);
+        var s2 = generateASTValueStringVariable(v, '', null, prevIsString);
         list.add(s2);
+        prevIsString = !prevIsString;
       } else if (v is ASTValueStringExpresion) {
         var s2 = generateASTValueStringExpresion(v, '');
         list.add(s2);
+        prevIsString = true;
       } else if (v is ASTValueStringConcatenation) {
         var s2 = generateASTValueStringConcatenation(v, '');
-        list.add(s2.toString());
+        var string = s2.toString();
+        list.add(string);
+        prevIsString = string.endsWith('"');
       } else if (v is ASTValueString) {
         var s2 = generateASTValueString(v, '');
         list.add(s2.toString());
+        prevIsString = true;
       }
     }
 

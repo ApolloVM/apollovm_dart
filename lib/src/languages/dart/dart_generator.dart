@@ -200,19 +200,22 @@ class ApolloCodeGeneratorDart extends ApolloCodeGenerator {
       StringBuffer? s]) {
     var list = <dynamic>[];
 
+    var prevString = '';
     for (var v in value.values) {
       if (v is ASTValueStringVariable) {
-        var s2 = generateASTValueStringVariable(v, '', null, list.isNotEmpty);
-        list.add(s2);
+        var prevDoubleQuote = prevString.endsWith('"');
+        var s2 =
+            generateASTValueStringVariable(v, '', null, false, prevDoubleQuote);
+        list.add(prevString = s2.toString());
       } else if (v is ASTValueStringExpresion) {
         var s2 = generateASTValueStringExpresion(v, '');
-        list.add(s2.toString());
+        list.add(prevString = s2.toString());
       } else if (v is ASTValueStringConcatenation) {
         var s2 = generateASTValueStringConcatenation(v, '');
-        list.add(s2.toString());
+        list.add(prevString = s2.toString());
       } else if (v is ASTValueString) {
         var s2 = generateASTValueString(v, '');
-        list.add(s2.toString());
+        list.add(prevString = s2.toString());
       }
     }
 
@@ -278,12 +281,22 @@ class ApolloCodeGeneratorDart extends ApolloCodeGenerator {
 
   @override
   StringBuffer generateASTValueStringVariable(ASTValueStringVariable value,
-      [String indent = '', StringBuffer? s, bool precededByString = false]) {
+      [String indent = '',
+      StringBuffer? s,
+      bool precededByString = false,
+      bool prevDoubleQuote = false]) {
     s ??= StringBuffer();
-    s.write("'");
-    s.write(r'$');
-    s.write(value.variable.name);
-    s.write("'");
+
+    if (prevDoubleQuote) {
+      s.write(r'"$');
+      s.write(value.variable.name);
+      s.write('"');
+    } else {
+      s.write(r"'$");
+      s.write(value.variable.name);
+      s.write("'");
+    }
+
     return s;
   }
 

@@ -9,6 +9,8 @@
             var b = 123 * 2 ;
             var sv1 = 'a: <$a>;\t\$b->a*2: $b ;\ta*3: ${ a * 3 }!' ;
             print(sv1);
+            var sv2 = '$a$a';
+            print(sv2);
           }
         }
 
@@ -18,7 +20,7 @@
         [ ]
     </call>
     <output>
-        ["a: &lt;123>;\t$b->a*2: 246 ;\ta*3: 369!"]
+        ["a: &lt;123>;\t$b->a*2: 246 ;\ta*3: 369!", "123123"]
     </output>
     <source-generated language="dart"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
 <<<< NAMESPACE="" >>>>
@@ -30,6 +32,8 @@ class Foo {
     var b = 123 * 2;
     var sv1 = 'a: <$a>;\t\$b->a*2: $b ;\ta*3: ${a * 3}!';
     print(sv1);
+    var sv2 = '$a$a';
+    print(sv2);
   }
 
 }
@@ -47,6 +51,8 @@ class Foo {
     var b = 123 * 2;
     var sv1 = "a: <" + a + ">;\t$b->a*2: " + b + " ;\ta*3: " + String.valueOf( a * 3 ) + "!";
     print(sv1);
+    var sv2 = String.valueOf( a ) + a;
+    print(sv2);
   }
 
 }
