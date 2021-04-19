@@ -378,7 +378,10 @@ class ASTFunctionSignature implements ASTNode {
 
     if (o is ASTValue) {
       if (context != null) {
-        o = o.resolve(context);
+        var resolved = o.resolve(context);
+        if (resolved is ASTValue) {
+          return resolved.type;
+        }
       }
       return o.type;
     }
@@ -646,7 +649,7 @@ class ASTParametersDeclaration {
 
     if (exactType) {
       if (param.type != type) return false;
-    } else if (type is! ASTTypeDynamic && !param.type.isInstance(type)) {
+    } else if (type is! ASTTypeDynamic && !param.type.acceptsType(type)) {
       return false;
     }
 
@@ -801,6 +804,9 @@ class ASTFunctionDeclaration<T> extends ASTBlock {
     throw UnsupportedError(
         "Can't run this block directly! Should use call(...), since this block needs parameters initialization!");
   }
+
+  @override
+  ASTType resolveType(VMContext? context) => returnType;
 }
 
 /// An AST External Function.

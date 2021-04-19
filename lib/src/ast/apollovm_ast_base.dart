@@ -51,8 +51,14 @@ class ASTRunStatus {
   bool broke = false;
 }
 
+abstract class ASTTypedNode {
+  FutureOr<ASTType> resolveType(VMContext? context);
+
+  void associateToType(ASTTypedNode node) {}
+}
+
 /// An AST that can be [run].
-abstract class ASTCodeRunner {
+abstract class ASTCodeRunner extends ASTTypedNode {
   VMContext defineRunContext(VMContext parentContext) {
     return parentContext;
   }

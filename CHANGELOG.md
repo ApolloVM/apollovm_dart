@@ -1,3 +1,15 @@
+## 0.0.27
+
+- Runner:
+  - Strong types.
+    - `var` types can be resolved.
+    - `ASTTypedNode`: nodes can be typed,
+      and resolution is performed and cached while running.
+  - Optimize resolution of functions.
+- Grammar:
+  - Dart & Java:
+    - `var` types to be resolved at runtime.
+
 ## 0.0.26
 
 - Generator:

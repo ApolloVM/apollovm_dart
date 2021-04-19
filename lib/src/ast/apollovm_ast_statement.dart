@@ -15,6 +15,9 @@ abstract class ASTStatement implements ASTCodeRunner, ASTNode {
   VMContext defineRunContext(VMContext parentContext) {
     return parentContext;
   }
+
+  @override
+  void associateToType(ASTTypedNode node) {}
 }
 
 /// An AST Block of code (statements).
@@ -142,6 +145,9 @@ class ASTBlock extends ASTStatement {
     return returnValue;
   }
 
+  @override
+  ASTType resolveType(VMContext? context) => ASTTypeDynamic.INSTANCE;
+
   ASTClassField? getField(String name, {bool caseInsensitive = false}) =>
       parentBlock != null
           ? parentBlock!.getField(name, caseInsensitive: caseInsensitive)
@@ -158,6 +164,10 @@ class ASTStatementValue extends ASTStatement {
     var context = defineRunContext(parentContext);
     return value.getValue(context) as FutureOr<ASTValue>;
   }
+
+  @override
+  FutureOr<ASTType> resolveType(VMContext? context) =>
+      value.resolveType(context);
 }
 
 enum ASTAssignmentOperator { set, multiply, divide, sum, subtract }
@@ -208,6 +218,10 @@ class ASTStatementExpression extends ASTStatement {
     var context = defineRunContext(parentContext);
     return expression.run(context, runStatus);
   }
+
+  @override
+  FutureOr<ASTType> resolveType(VMContext? context) =>
+      expression.resolveType(context);
 }
 
 /// [ASTStatement] to return void.
@@ -216,6 +230,9 @@ class ASTStatementReturn extends ASTStatement {
   FutureOr<ASTValue> run(VMContext parentContext, ASTRunStatus runStatus) {
     return runStatus.returnVoid();
   }
+
+  @override
+  FutureOr<ASTType> resolveType(VMContext? context) => ASTTypeVoid.INSTANCE;
 }
 
 /// [ASTStatement] to return null.
@@ -224,6 +241,9 @@ class ASTStatementReturnNull extends ASTStatementReturn {
   ASTValue run(VMContext parentContext, ASTRunStatus runStatus) {
     return runStatus.returnNull();
   }
+
+  @override
+  ASTType resolveType(VMContext? context) => ASTTypeNull.INSTANCE;
 }
 
 /// [ASTStatement] to return a [value].
@@ -236,6 +256,10 @@ class ASTStatementReturnValue extends ASTStatementReturn {
   ASTValue run(VMContext parentContext, ASTRunStatus runStatus) {
     return runStatus.returnValue(value);
   }
+
+  @override
+  FutureOr<ASTType> resolveType(VMContext? context) =>
+      value.resolveType(context);
 }
 
 /// [ASTStatement] to return a [variable].
@@ -249,6 +273,10 @@ class ASTStatementReturnVariable extends ASTStatementReturn {
     var value = variable.getValue(parentContext);
     return runStatus.returnFutureOrValue(value);
   }
+
+  @override
+  FutureOr<ASTType> resolveType(VMContext? context) =>
+      variable.resolveType(context);
 }
 
 /// [ASTStatement] to return an [expression].
@@ -262,6 +290,10 @@ class ASTStatementReturnWithExpression extends ASTStatementReturn {
     var value = expression.run(parentContext, runStatus);
     return runStatus.returnFutureOrValue(value);
   }
+
+  @override
+  FutureOr<ASTType> resolveType(VMContext? context) =>
+      expression.resolveType(context);
 }
 
 /// [ASTStatement] that declares a scope variable.
@@ -277,11 +309,35 @@ class ASTStatementVariableDeclaration<V> extends ASTStatement {
   @override
   FutureOr<ASTValue> run(
       VMContext parentContext, ASTRunStatus runStatus) async {
-    var result = await value?.run(parentContext, runStatus);
-    result ??= ASTValueNull.INSTANCE;
-    parentContext.declareVariableWithValue(type, name, result);
-    return ASTValueVoid.INSTANCE;
+    var value = this.value;
+    if (value != null) {
+      var valueResolvedType = await value.resolveType(parentContext);
+      var variableResolvedType = await type.resolveType(parentContext);
+
+      if (!valueResolvedType.canCastToType(variableResolvedType)) {
+        throw StateError(
+            "Can't cast variable type ($variableResolvedType) to type: $type");
+      }
+
+      var initValue = await value.run(parentContext, runStatus);
+
+      if (!(await initValue.isInstanceOfAsync(variableResolvedType))) {
+        throw StateError(
+            "Can't cast initial ($initValue) value to type: $type");
+      }
+
+      parentContext.declareVariableWithValue(type, name, initValue);
+      return initValue;
+    } else {
+      var initValue = ASTValueNull.INSTANCE;
+      parentContext.declareVariableWithValue(type, name, initValue);
+      return initValue;
+    }
   }
+
+  @override
+  FutureOr<ASTType> resolveType(VMContext? context) =>
+      type.resolveType(context);
 }
 
 /// [ASTStatement] base for branches.
@@ -298,6 +354,9 @@ abstract class ASTBranch extends ASTStatement {
 
     return evalValue;
   }
+
+  @override
+  ASTType resolveType(VMContext? context) => ASTTypeVoid.INSTANCE;
 }
 
 /// [ASTBranch] simple IF: `if (exp) {}`
@@ -403,30 +462,42 @@ class ASTStatementForLoop extends ASTStatement {
     var context = VMContext(parentContext.block, parent: parentContext);
     var runStatus = ASTRunStatus();
 
-    await initStatement.run(context, runStatus);
+    var prevContext = VMContext.setCurrent(context);
+    try {
+      await initStatement.run(context, runStatus);
 
-    while (true) {
-      var cond = await conditionExpression.run(context, runStatus);
+      while (true) {
+        var cond = await conditionExpression.run(context, runStatus);
 
-      if (cond is ASTValueBool) {
-        if (!cond.value) break;
-      } else {
-        var condOK = await cond.getValue(context);
-
-        if (condOK is bool) {
-          if (!condOK) break;
+        if (cond is ASTValueBool) {
+          if (!cond.value) break;
         } else {
-          throw StateError('Condition not returning a boolean: $condOK');
+          var condOK = await cond.getValue(context);
+
+          if (condOK is bool) {
+            if (!condOK) break;
+          } else {
+            throw StateError('Condition not returning a boolean: $condOK');
+          }
         }
+
+        var loopContext = VMContext(parentContext.block, parent: context);
+
+        VMContext.setCurrent(loopContext);
+
+        await loopBlock.run(loopContext, runStatus);
+
+        await continueExpression.run(context, runStatus);
+
+        VMContext.setCurrent(context);
       }
-
-      var loopContext = VMContext(parentContext.block, parent: context);
-
-      await loopBlock.run(loopContext, runStatus);
-
-      await continueExpression.run(context, runStatus);
+    } finally {
+      VMContext.setCurrent(prevContext);
     }
 
     return ASTValueVoid.INSTANCE;
   }
+
+  @override
+  ASTType resolveType(VMContext? context) => ASTTypeVoid.INSTANCE;
 }

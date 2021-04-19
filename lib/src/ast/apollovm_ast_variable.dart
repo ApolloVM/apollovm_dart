@@ -1,15 +1,18 @@
+import 'dart:async';
+
 import 'package:apollovm/apollovm.dart';
 
 import 'apollovm_ast_type.dart';
 import 'apollovm_ast_value.dart';
 
-import 'dart:async';
-
 /// Base class for variable reference.
-abstract class ASTVariable implements ASTNode {
+abstract class ASTVariable implements ASTNode, ASTTypedNode {
   final String name;
 
   ASTVariable(this.name);
+
+  @override
+  void associateToType(ASTTypedNode node) {}
 
   FutureOr<ASTVariable> resolveVariable(VMContext context);
 
@@ -47,6 +50,9 @@ abstract class ASTTypedVariable<T> extends ASTVariable {
   ASTTypedVariable(this.type, String name, this.finalValue) : super(name);
 
   @override
+  ASTType resolveType(VMContext? context) => type;
+
+  @override
   String toString() {
     return '$type $name';
   }
@@ -70,6 +76,7 @@ class ASTClassField<T> extends ASTTypedVariable<T> {
 /// [ASTVariable] for class fields with initial values.
 class ASTClassFieldWithInitialValue<T> extends ASTClassField<T> {
   final ASTExpression _initialValueExpression;
+
   ASTClassFieldWithInitialValue(ASTType<T> type, String name,
       this._initialValueExpression, bool finalValue)
       : super(type, name, finalValue);
@@ -119,6 +126,17 @@ class ASTScopeVariable<T> extends ASTVariable {
   ASTScopeVariable(String name) : super(name);
 
   @override
+  FutureOr<ASTType> resolveType(VMContext? context) async =>
+      _associatedNode != null
+          ? await _associatedNode!.resolveType(context)
+          : ASTTypeDynamic.INSTANCE;
+
+  ASTTypedNode? _associatedNode;
+
+  @override
+  void associateToType(ASTTypedNode node) => _associatedNode = node;
+
+  @override
   ASTVariable resolveVariable(VMContext context) {
     var variable = context.getVariable(name, true);
     if (variable == null) {
@@ -131,6 +149,22 @@ class ASTScopeVariable<T> extends ASTVariable {
 /// [ASTVariable] for `this`/`self` reference.
 class ASTThisVariable<T> extends ASTVariable {
   ASTThisVariable() : super('this');
+
+  @override
+  FutureOr<ASTType> resolveType(VMContext? context) async {
+    if (context is VMClassContext) {
+      return context.clazz.type;
+    }
+
+    return _associatedNode != null
+        ? await _associatedNode!.resolveType(context)
+        : ASTTypeDynamic.INSTANCE;
+  }
+
+  ASTTypedNode? _associatedNode;
+
+  @override
+  void associateToType(ASTTypedNode node) => _associatedNode = node;
 
   @override
   ASTVariable resolveVariable(VMContext context) {

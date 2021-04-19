@@ -10,13 +10,17 @@ class Java11GrammarDefinition extends Java11GrammarLexer {
       case 'Object':
         return ASTTypeObject.INSTANCE;
       case 'int':
+      case 'Integer':
         return ASTTypeInt.INSTANCE;
       case 'double':
+      case 'Double':
         return ASTTypeDouble.INSTANCE;
       case 'String':
         return ASTTypeString.INSTANCE;
       case 'List':
         return ASTTypeArray(ASTTypeDynamic.INSTANCE);
+      case 'var':
+        return ASTTypeVar();
       default:
         return ASTType(name);
     }
@@ -313,23 +317,31 @@ class Java11GrammarDefinition extends Java11GrammarLexer {
 
   Parser<ASTExpression> expressionNoOperation() => (expressionLiteral() |
           expressionVariableAssigment() |
-          expressionLocalFunctionInvocation() |
+          expressionFunctionInvocation() |
           expressionVariableEntryAccess() |
           expressionVariableAccess())
       .cast<ASTExpression>();
 
-  Parser<ASTExpressionLocalFunctionInvocation>
-      expressionLocalFunctionInvocation() => (string('this').optional() &
-                  identifier() &
-                  char('(') &
-                  ref0(expressionSequence).optional() &
-                  char(')'))
-              .map((v) {
-            var name = v[1];
-            var args = v[3] as List<ASTExpression>?;
-            args ??= <ASTExpression>[];
-            return ASTExpressionLocalFunctionInvocation(name, args);
-          });
+  Parser<ASTExpressionFunctionInvocation> expressionFunctionInvocation() =>
+      ((identifier() & char('.')).optional() &
+              identifier() &
+              char('(') &
+              ref0(expressionSequence).optional() &
+              char(')'))
+          .map((v) {
+        var objOpt = v[0] as List?;
+        var obj = objOpt != null ? objOpt[0] as String : null;
+        var name = v[1] as String;
+        var args = v[3] as List<ASTExpression>?;
+        args ??= <ASTExpression>[];
+
+        if (obj != null && obj != 'this') {
+          var variable = ASTScopeVariable(obj);
+          return ASTExpressionObjectFunctionInvocation(variable, name, args);
+        } else {
+          return ASTExpressionLocalFunctionInvocation(name, args);
+        }
+      });
 
   Parser<List<ASTExpression>> expressionSequence() =>
       (ref0(expression) & (char(',').trim() & ref0(expression)).star())

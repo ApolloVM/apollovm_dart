@@ -8,7 +8,7 @@ import 'apollovm_ast_value.dart';
 import 'apollovm_ast_variable.dart';
 
 /// An AST Type.
-class ASTType<V> implements ASTNode {
+class ASTType<V> implements ASTNode, ASTTypedNode {
   static ASTType from(dynamic o) {
     if (o == null) return ASTTypeNull.INSTANCE;
 
@@ -27,6 +27,47 @@ class ASTType<V> implements ASTNode {
     if (o is ASTExpressionLiteral) {
       return ASTType.from(o.value);
     }
+
+    if (o is ASTTypedNode) {
+      var resolved = o.resolveType(VMContext.getCurrent());
+      if (resolved is ASTType) {
+        return resolved;
+      } else {
+        return ASTTypeDynamic.INSTANCE;
+      }
+    }
+
+    return fromNativeValue(o);
+  }
+
+  static FutureOr<ASTType> fromAsync(dynamic o) async {
+    if (o == null) return ASTTypeNull.INSTANCE;
+
+    if (o is ASTType) {
+      return o;
+    }
+
+    if (o is ASTValue) {
+      return o.type;
+    }
+
+    if (o is ASTTypedVariable) {
+      return o.type;
+    }
+
+    if (o is ASTExpressionLiteral) {
+      return ASTType.from(o.value);
+    }
+
+    if (o is ASTTypedNode) {
+      return o.resolveType(VMContext.getCurrent());
+    }
+
+    return fromNativeValue(o);
+  }
+
+  static ASTType fromNativeValue(dynamic o) {
+    if (o == null) return ASTTypeNull.INSTANCE;
 
     if (o is String) return ASTTypeString.INSTANCE;
     if (o is int) return ASTTypeInt.INSTANCE;
@@ -100,9 +141,24 @@ class ASTType<V> implements ASTNode {
 
   ASTType(this.name, {this.generics, this.superType, this.annotations});
 
+  @override
+  FutureOr<ASTType> resolveType(VMContext? context) => this;
+
+  @override
+  void associateToType(ASTTypedNode node) {}
+
+  /// Returns true if this type has generics.
+  bool get hasGenerics => generics != null && generics!.isNotEmpty;
+
+  /// Returns true if this type has a super type.
+  bool get hasSuperType => superType != null;
+
+  /// Return true if [this] can be cast to [type];
+  bool canCastToType(ASTType type) => type.acceptsType(this);
+
   /// Will return true if [type] can be cast to [this] type.
   /// Note: This is similar to Java `isInstance` and `isAssignableFrom`.
-  bool isInstance(ASTType type) {
+  bool acceptsType(ASTType type) {
     if (type == this) return true;
 
     if (type == ASTTypeGenericWildcard.INSTANCE) return true;
@@ -111,7 +167,7 @@ class ASTType<V> implements ASTNode {
       var typeSuperType = type.superType;
       if (typeSuperType == null) return false;
 
-      if (!typeSuperType.isInstance(this)) return false;
+      if (!typeSuperType.acceptsType(this)) return false;
     }
 
     var generics = this.generics;
@@ -133,7 +189,7 @@ class ASTType<V> implements ASTNode {
       var g = generics[i];
       var tg = typeGenerics[i];
 
-      if (!g.isInstance(tg)) {
+      if (!g.acceptsType(tg)) {
         return false;
       }
     }
@@ -190,7 +246,7 @@ abstract class ASTTypePrimitive<T> extends ASTType<T> {
   ASTTypePrimitive(String name) : super(name);
 
   @override
-  bool isInstance(ASTType type);
+  bool acceptsType(ASTType type);
 }
 
 /// [ASTType] for booleans ([bool]).
@@ -200,7 +256,7 @@ class ASTTypeBool extends ASTTypePrimitive<bool> {
   ASTTypeBool() : super('bool');
 
   @override
-  bool isInstance(ASTType type) {
+  bool acceptsType(ASTType type) {
     if (type == this) return true;
     return false;
   }
@@ -232,18 +288,63 @@ class ASTTypeBool extends ASTTypePrimitive<bool> {
 }
 
 /// [ASTType] for numbers ([num]).
-abstract class ASTTypeNum<T extends num> extends ASTTypePrimitive<T> {
-  ASTTypeNum(String name) : super(name);
+class ASTTypeNum<T extends num> extends ASTTypePrimitive<T> {
+  static final ASTTypeNum INSTANCE = ASTTypeNum();
+
+  ASTTypeNum._(String name) : super(name);
+
+  ASTTypeNum() : this._('num');
+
+  @override
+  bool acceptsType(ASTType type) {
+    if (type == this ||
+        type == ASTTypeDouble.INSTANCE ||
+        type == ASTTypeInt.INSTANCE) return true;
+    return false;
+  }
+
+  @override
+  FutureOr<ASTValueNum<T>?> toValue(VMContext context, Object? v) async {
+    if (v is ASTTypeNum) return v as ASTValueNum<T>;
+    if (v is ASTValueInt) return v as ASTValueNum<T>;
+    if (v is ASTValueDouble) return v as ASTValueNum<T>;
+
+    if (v is ASTValue) {
+      v = await (v).getValue(context);
+    }
+
+    var n = parseNum(v);
+    if (n == null) return null;
+
+    if (n is int) {
+      return ASTValueInt(n) as ASTValueNum<T>;
+    } else {
+      return ASTValueDouble(n.toDouble()) as ASTValueNum<T>;
+    }
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      super == other && other is ASTTypeInt && runtimeType == other.runtimeType;
+
+  @override
+  int get hashCode => name.hashCode;
+
+  @override
+  String toString() {
+    return 'double';
+  }
 }
 
 /// [ASTType] for integer ([int]).
 class ASTTypeInt extends ASTTypeNum<int> {
   static final ASTTypeInt INSTANCE = ASTTypeInt();
 
-  ASTTypeInt() : super('int');
+  ASTTypeInt() : super._('int');
 
   @override
-  bool isInstance(ASTType type) {
+  bool acceptsType(ASTType type) {
     if (type == this) return true;
     return false;
   }
@@ -279,10 +380,10 @@ class ASTTypeInt extends ASTTypeNum<int> {
 class ASTTypeDouble extends ASTTypeNum<double> {
   static final ASTTypeDouble INSTANCE = ASTTypeDouble();
 
-  ASTTypeDouble() : super('double');
+  ASTTypeDouble() : super._('double');
 
   @override
-  bool isInstance(ASTType type) {
+  bool acceptsType(ASTType type) {
     if (type == this) return true;
     return false;
   }
@@ -321,7 +422,7 @@ class ASTTypeString extends ASTTypePrimitive<String> {
   ASTTypeString() : super('String');
 
   @override
-  bool isInstance(ASTType type) {
+  bool acceptsType(ASTType type) {
     if (type == this) return true;
     return false;
   }
@@ -359,7 +460,7 @@ class ASTTypeObject extends ASTType<Object> {
   ASTTypeObject() : super('Object');
 
   @override
-  bool isInstance(ASTType type) => true;
+  bool acceptsType(ASTType type) => true;
 
   @override
   FutureOr<ASTValue<Object>?> toValue(VMContext context, Object? v) async {
@@ -406,7 +507,32 @@ class ASTTypeVar extends ASTType<dynamic> {
   ASTTypeVar() : super('var');
 
   @override
-  bool isInstance(ASTType type) => true;
+  bool acceptsType(ASTType type) => true;
+
+  ASTType? _resolvedType;
+  @override
+  FutureOr<ASTType> resolveType(VMContext? context) async {
+    if (_resolvedType == null) {
+      if (context != null) {
+        _resolvedType = await _resolveTypeImpl(context);
+        return _resolvedType!;
+      } else {
+        return _resolveTypeImpl(null);
+      }
+    } else {
+      return _resolvedType!;
+    }
+  }
+
+  Future<ASTType> _resolveTypeImpl(VMContext? context) async =>
+      _associatedNode != null
+          ? await _associatedNode!.resolveType(context)
+          : this;
+
+  ASTTypedNode? _associatedNode;
+
+  @override
+  void associateToType(ASTTypedNode node) => _associatedNode = node;
 
   @override
   FutureOr<ASTValue<dynamic>> toValue(VMContext context, Object? v) async {
@@ -440,7 +566,7 @@ class ASTTypeDynamic extends ASTType<dynamic> {
   ASTTypeDynamic() : super('dynamic');
 
   @override
-  bool isInstance(ASTType type) => true;
+  bool acceptsType(ASTType type) => true;
 
   @override
   FutureOr<ASTValue<dynamic>> toValue(VMContext context, Object? v) async {
@@ -474,7 +600,7 @@ class ASTTypeNull extends ASTType<Null> {
   ASTTypeNull() : super('Null');
 
   @override
-  bool isInstance(ASTType type) {
+  bool acceptsType(ASTType type) {
     if (type == this) return true;
     return false;
   }
@@ -506,7 +632,7 @@ class ASTTypeVoid extends ASTType<void> {
   ASTTypeVoid() : super('void');
 
   @override
-  bool isInstance(ASTType type) {
+  bool acceptsType(ASTType type) {
     if (type == this) return true;
     return false;
   }
@@ -538,12 +664,13 @@ class ASTTypeGenericVariable extends ASTType<Object> {
 
   ASTTypeGenericVariable(this.variableName, [this.type]) : super(variableName);
 
-  ASTType<Object> get resolveType =>
+  @override
+  ASTType<Object> resolveType(VMContext? context) =>
       (type as ASTType<Object>?) ?? ASTTypeObject.INSTANCE;
 
   @override
   FutureOr<ASTValue<Object>?> toValue(VMContext context, Object? v) {
-    return resolveType.toValue(context, v);
+    return resolveType(context).toValue(context, v);
   }
 }
 
@@ -552,6 +679,9 @@ class ASTTypeGenericWildcard extends ASTTypeGenericVariable {
   static final ASTTypeGenericWildcard INSTANCE = ASTTypeGenericWildcard();
 
   ASTTypeGenericWildcard() : super('?');
+
+  @override
+  ASTType<Object> resolveType(VMContext? context) => ASTTypeObject.INSTANCE;
 }
 
 /// [ASTType] for an array/List.

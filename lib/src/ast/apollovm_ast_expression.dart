@@ -15,6 +15,9 @@ abstract class ASTExpression implements ASTCodeRunner, ASTNode {
     return parentContext;
   }
 
+  @override
+  void associateToType(ASTTypedNode node) {}
+
   bool get isVariableAccess {
     return this is ASTExpressionVariableAccess;
   }
@@ -51,6 +54,10 @@ class ASTExpressionVariableAccess extends ASTExpression {
   ASTExpressionVariableAccess(this.variable);
 
   @override
+  FutureOr<ASTType> resolveType(VMContext? context) =>
+      variable.resolveType(context);
+
+  @override
   FutureOr<ASTValue> run(VMContext parentContext, ASTRunStatus runStatus) {
     var context = defineRunContext(parentContext);
     return variable.getValue(context);
@@ -64,6 +71,10 @@ class ASTExpressionLiteral extends ASTExpression {
   ASTExpressionLiteral(this.value);
 
   @override
+  FutureOr<ASTType> resolveType(VMContext? context) =>
+      value.resolveType(context);
+
+  @override
   FutureOr<ASTValue> run(VMContext parentContext, ASTRunStatus runStatus) {
     return value.resolve(parentContext);
   }
@@ -75,6 +86,10 @@ class ASTExpressionVariableEntryAccess extends ASTExpression {
   ASTExpression expression;
 
   ASTExpressionVariableEntryAccess(this.variable, this.expression);
+
+  @override
+  FutureOr<ASTType> resolveType(VMContext? context) =>
+      variable.resolveType(context);
 
   @override
   FutureOr<ASTValue> run(
@@ -104,8 +119,7 @@ class ASTExpressionVariableEntryAccess extends ASTExpression {
       }
     }
 
-    var readType = ASTType.from(readValue);
-    return ASTValue.from(readType, readValue);
+    return ASTValue.fromValue(readValue);
   }
 }
 
@@ -191,6 +205,48 @@ class ASTExpressionOperation extends ASTExpression {
   ASTExpression expression2;
 
   ASTExpressionOperation(this.expression1, this.operator, this.expression2);
+
+  @override
+  FutureOr<ASTType> resolveType(VMContext? context) async {
+    switch (operator) {
+      case ASTExpressionOperator.add:
+      case ASTExpressionOperator.subtract:
+      case ASTExpressionOperator.multiply:
+      case ASTExpressionOperator.divide:
+        {
+          var t1 = await expression1.resolveType(context);
+          var t2 = await expression1.resolveType(context);
+          if (_isOneOfType(t1, t2, ASTTypeDouble.INSTANCE)) {
+            return ASTTypeDouble.INSTANCE;
+          }
+          if (_isOneOfType(t1, t2, ASTTypeInt.INSTANCE)) {
+            return ASTTypeInt.INSTANCE;
+          }
+          if (_isOneOfType(t1, t2, ASTTypeString.INSTANCE)) {
+            return ASTTypeString.INSTANCE;
+          }
+          if (_isOneOfType(t1, t2, ASTTypeNum.INSTANCE)) {
+            return ASTTypeInt.INSTANCE;
+          }
+          return ASTTypeDynamic.INSTANCE;
+        }
+      case ASTExpressionOperator.divideAsInt:
+        return ASTTypeInt.INSTANCE;
+      case ASTExpressionOperator.divideAsDouble:
+        return ASTTypeDouble.INSTANCE;
+      case ASTExpressionOperator.equals:
+      case ASTExpressionOperator.notEquals:
+      case ASTExpressionOperator.greater:
+      case ASTExpressionOperator.greaterOrEq:
+      case ASTExpressionOperator.lower:
+      case ASTExpressionOperator.lowerOrEq:
+        return ASTTypeBool.INSTANCE;
+    }
+  }
+
+  static bool _isOneOfType(ASTType t1, ASTType t2, ASTType target) {
+    return t1 == target || t2 == target;
+  }
 
   @override
   FutureOr<ASTValue> run(
@@ -454,6 +510,10 @@ class ASTExpressionVariableAssignment extends ASTExpression {
       this.variable, this.operator, this.expression);
 
   @override
+  FutureOr<ASTType> resolveType(VMContext? context) =>
+      expression.resolveType(context);
+
+  @override
   FutureOr<ASTValue> run(
       VMContext parentContext, ASTRunStatus runStatus) async {
     var context = defineRunContext(parentContext);
@@ -498,22 +558,43 @@ class ASTExpressionVariableAssignment extends ASTExpression {
   }
 }
 
-/// [ASTExpression] to call a local context function.
-class ASTExpressionLocalFunctionInvocation extends ASTExpression {
+/// [ASTExpression] base class to call a function.
+abstract class ASTExpressionFunctionInvocation extends ASTExpression {
   String name;
   List<ASTExpression> arguments;
 
-  ASTExpressionLocalFunctionInvocation(this.name, this.arguments);
+  ASTExpressionFunctionInvocation(this.name, this.arguments);
+
+  @override
+  FutureOr<ASTType> resolveType(VMContext? context) async {
+    if (context != null) {
+      var f = await _getFunction(context);
+      return f.resolveType(context);
+    }
+
+    return _associatedNode != null
+        ? await _associatedNode!.resolveType(context)
+        : ASTTypeDynamic.INSTANCE;
+  }
+
+  ASTTypedNode? _associatedNode;
+
+  @override
+  void associateToType(ASTTypedNode node) => _associatedNode = node;
+
+  ASTFunctionSignature? _functionSignature;
+
+  ASTFunctionSignature _getASTFunctionSignature() {
+    _functionSignature ??= ASTFunctionSignature.from(arguments, null);
+    return _functionSignature!;
+  }
+
+  FutureOr<ASTFunctionDeclaration> _getFunction(VMContext parentContext);
 
   @override
   FutureOr<ASTValue> run(
       VMContext parentContext, ASTRunStatus runStatus) async {
-    var fSignature = ASTFunctionSignature.from(arguments, null);
-    var f = parentContext.getFunction(name, fSignature);
-    if (f == null) {
-      throw StateError(
-          'Can\'t find function "$name" with parameters signature: $fSignature > $arguments');
-    }
+    var f = await _getFunction(parentContext);
 
     var argumentsValues =
         await _resolveArgumentsValues(parentContext, runStatus, arguments);
@@ -532,18 +613,38 @@ Future<List<ASTValue>> _resolveArgumentsValues(VMContext parentContext,
   return argumentsValues;
 }
 
-/// [ASTExpression] to call a class object function.
-class ASTExpressionObjectFunctionInvocation extends ASTExpression {
-  ASTVariable variable;
-  String name;
-  List<ASTExpression> arguments;
-
-  ASTExpressionObjectFunctionInvocation(
-      this.variable, this.name, this.arguments);
+/// [ASTExpression] to call a local context function.
+class ASTExpressionLocalFunctionInvocation
+    extends ASTExpressionFunctionInvocation {
+  ASTExpressionLocalFunctionInvocation(
+      String name, List<ASTExpression> arguments)
+      : super(name, arguments);
 
   @override
-  FutureOr<ASTValue> run(
-      VMContext parentContext, ASTRunStatus runStatus) async {
+  ASTFunctionDeclaration _getFunction(VMContext parentContext) {
+    var fSignature = _getASTFunctionSignature();
+    var f = parentContext.getFunction(name, fSignature);
+
+    if (f == null) {
+      throw StateError(
+          'Can\'t find function "$name" with parameters signature: $fSignature > $arguments');
+    }
+
+    return f;
+  }
+}
+
+/// [ASTExpression] to call a class object function.
+class ASTExpressionObjectFunctionInvocation
+    extends ASTExpressionFunctionInvocation {
+  ASTVariable variable;
+
+  ASTExpressionObjectFunctionInvocation(
+      this.variable, String name, List<ASTExpression> arguments)
+      : super(name, arguments);
+
+  FutureOr<ASTObjectInstance> _getObjectInstance(
+      VMContext parentContext) async {
     var obj = await variable.getValue(parentContext);
 
     if (obj is! ASTObjectInstance) {
@@ -551,19 +652,33 @@ class ASTExpressionObjectFunctionInvocation extends ASTExpression {
           'Variable $variable not pointing to an object instance: $obj');
     }
 
-    var clazz = obj.clazz;
+    return obj;
+  }
 
-    var fSignature = ASTFunctionSignature.from(arguments, null);
+  ASTClass? _functionClass;
+
+  FutureOr<ASTClass> _getFunctionClass(VMContext parentContext) async {
+    if (_functionClass == null) {
+      var obj = await _getObjectInstance(parentContext);
+      var clazz = obj.clazz;
+      _functionClass = clazz;
+    }
+    return _functionClass!;
+  }
+
+  @override
+  FutureOr<ASTFunctionDeclaration> _getFunction(VMContext parentContext) async {
+    var clazz = await _getFunctionClass(parentContext);
+    var fSignature = _getASTFunctionSignature();
 
     var f = clazz.getFunction(name, fSignature, parentContext);
+
     if (f == null) {
+      var obj = await _getObjectInstance(parentContext);
       throw StateError(
           "Can't find class[${clazz.name}] function[$name( $fSignature )] for object: $obj");
     }
 
-    var argumentsValues =
-        await _resolveArgumentsValues(parentContext, runStatus, arguments);
-
-    return f.call(parentContext, positionalParameters: argumentsValues);
+    return f;
   }
 }

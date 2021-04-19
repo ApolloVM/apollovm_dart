@@ -2,22 +2,74 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:apollovm/apollovm.dart';
+import 'package:collection/collection.dart';
 import 'package:test/test.dart';
 import 'package:xml/xml.dart';
+
+class TestDefinition implements Comparable<TestDefinition> {
+  String fileName;
+
+  String fileContent;
+
+  late final XmlDocument xml;
+
+  TestDefinition(this.fileName, this.fileContent) {
+    xml = XmlDocument.parse(fileContent);
+  }
+
+  XmlElement get rootElement => xml.rootElement;
+
+  String get title => rootElement.getAttribute('title')!;
+
+  XmlElement get source => rootElement.findElements('source').first;
+
+  String get language => source.getAttribute('language')!;
+
+  String get sourceCode => source.text;
+
+  List<XmlElement> get calls => rootElement.findElements('call').toList();
+
+  List<XmlElement> get outputs => rootElement.findElements('output').toList();
+
+  List<XmlElement> get sourcesGenerated =>
+      rootElement.findElements('source-generated').toList();
+
+  @override
+  int compareTo(TestDefinition other) {
+    return fileName.compareTo(other.fileName);
+  }
+}
 
 Future<void> main() async {
   var definitionsDirectory = Directory('./test/tests_definitions');
 
   print('TESTS DEFINITIONS DIRECTORY: $definitionsDirectory');
 
-  var definitionsFiles = await definitionsDirectory
+  var envVars = Platform.environment;
+  var singleTest = envVars['SINGLE_TEST'];
+
+  if (singleTest != null) {
+    print('SINGLE_TEST: $singleTest');
+  }
+
+  var definitions = await definitionsDirectory
       .list()
       .where((f) => f.path.endsWith('.xml'))
+      .where((f) => singleTest == null || f.path.endsWith('/$singleTest'))
       .map((f) => File(f.path))
-      .map((f) => [f.path, f.readAsStringSync()])
+      .map((f) => TestDefinition(f.path, f.readAsStringSync()))
       .toList();
 
-  print('FOUND TESTS DEFINITIONS: ${definitionsFiles.length}');
+  definitions.sort();
+
+  var definitionsByGroup =
+      groupBy<TestDefinition, String>(definitions, (e) => e.language);
+
+  print('FOUND TESTS DEFINITIONS: ${definitions.length}');
+
+  for (var f in definitions) {
+    print('- ${f.fileName}');
+  }
 
   group('Pre Test', () {
     test('_parseJsonList', () async {
@@ -43,101 +95,97 @@ Future<void> main() async {
     });
   });
 
-  group('Dart', () {
-    for (var fileEntry in definitionsFiles) {
-      var fileName = fileEntry[0];
-      var fileContent = fileEntry[1];
+  for (var lang in definitionsByGroup.keys) {
+    var langDefinitions = definitionsByGroup[lang]!;
 
-      final xml = XmlDocument.parse(fileContent);
+    group(lang, () {
+      for (var testDefinition in langDefinitions) {
+        test(testDefinition.title, () async {
+          print(
+              '\n======================================================================\n');
 
-      var rootElement = xml.rootElement;
+          var language = testDefinition.language;
+          var sourcesGenerated = testDefinition.sourcesGenerated;
 
-      var title = rootElement.getAttribute('title')!;
-
-      test(title, () async {
-        print(
-            '\n======================================================================\n');
-        print('FILE: $fileName');
-        print('');
-
-        var source = rootElement.findElements('source').first;
-        var language = source.getAttribute('language')!;
-        var sourceCode = source.text;
-
-        var calls = rootElement.findElements('call').toList();
-        var outputs = rootElement.findElements('output').toList();
-
-        var sourcesGenerated = rootElement.findElements('source-generated');
-
-        print('TEST: $title');
-        print('  - language: $language');
-        print('  - sourcesGenerated: ${sourcesGenerated.length}');
-        print('');
-        print('SOURCE:');
-        print(sourceCode);
-        print('');
-
-        var vm = ApolloVM();
-
-        var codeUnit = CodeUnit(language, sourceCode, 'test');
-
-        print('-- Loading source code');
-        var loadOK = await vm.loadCodeUnit(codeUnit);
-
-        expect(loadOK, isTrue, reason: "Error loading '$language' code!");
-
-        var runner = vm.createRunner(language)!;
-
-        for (var i = 0; i < calls.length; ++i) {
-          var call = calls[i];
-          var outputJson = outputs[i].text;
-
-          var callClass = call.getAttribute('class');
-          var callFunction = call.getAttribute('function')!;
-          var callParametersJson = call.text;
-          var callParameters = _parseJsonList(callParametersJson);
-
-          var output = _parseJsonList(outputJson);
-
-          var outputList = [];
-          runner.externalPrintFunction = (o) => outputList.add(o);
-
-          print('---------------------------------------');
-          print('EXPECTED OUTPUT[$i]');
-          print(output);
+          print('FILE: ${testDefinition.fileName}');
           print('');
 
-          if (callClass != null) {
-            print('EXECUTING[$i]: $callClass.$callFunction( $callParameters )');
-            await runner.executeClassMethod('', callClass, callFunction,
-                positionalParameters: callParameters);
-          } else {
-            print('EXECUTING[$i]: $callFunction( $callParameters )');
-            await runner.executeFunction('', callFunction,
-                positionalParameters: callParameters);
+          print('TEST: ${testDefinition.title}');
+
+          print('  - language: $language ');
+          print('  - sourcesGenerated: ${sourcesGenerated.length}');
+          print('');
+          print('SOURCE:');
+          print(testDefinition.sourceCode);
+          print('');
+
+          var vm = ApolloVM();
+
+          var codeUnit = CodeUnit(language, testDefinition.sourceCode, 'test');
+
+          print('-- Loading source code');
+          var loadOK = await vm.loadCodeUnit(codeUnit);
+
+          expect(loadOK, isTrue, reason: "Error loading '$language ' code!");
+
+          var runner = vm.createRunner(language)!;
+
+          var calls = testDefinition.calls;
+          var outputs = testDefinition.outputs;
+
+          for (var i = 0; i < calls.length; ++i) {
+            var call = calls[i];
+            var outputJson = outputs[i].text;
+
+            var callClass = call.getAttribute('class');
+            var callFunction = call.getAttribute('function')!;
+            var callParametersJson = call.text;
+            var callParameters = _parseJsonList(callParametersJson);
+
+            var output = _parseJsonList(outputJson);
+
+            var outputList = [];
+            runner.externalPrintFunction = (o) => outputList.add(o);
+
+            print('---------------------------------------');
+            print('EXPECTED OUTPUT[$i]');
+            print(output);
+            print('');
+
+            if (callClass != null) {
+              print(
+                  'EXECUTING[$i]: $callClass.$callFunction( $callParameters )');
+              await runner.executeClassMethod('', callClass, callFunction,
+                  positionalParameters: callParameters);
+            } else {
+              print('EXECUTING[$i]: $callFunction( $callParameters )');
+              await runner.executeFunction('', callFunction,
+                  positionalParameters: callParameters);
+            }
+
+            expect(outputList, equals(output));
+
+            print('OUTPUT[$i]:');
+            outputList.forEach((o) => print('>> $o'));
           }
 
-          expect(outputList, equals(output));
+          for (var sourceGen in sourcesGenerated) {
+            print('---------------------------------------');
+            var sourceGenLanguage = sourceGen.getAttribute('language')!;
 
-          print('OUTPUT[$i]:');
-          outputList.forEach((o) => print('>> $o'));
-        }
+            print(
+                '-- Checking code generation for language: $sourceGenLanguage');
 
-        for (var sourceGen in sourcesGenerated) {
-          print('---------------------------------------');
-          var sourceGenLanguage = sourceGen.getAttribute('language')!;
+            var codeStorage = vm.generateAllCodeIn(sourceGenLanguage);
+            var allSources = codeStorage.writeAllSources().toString();
+            print(allSources);
 
-          print('-- Checking code generation for language: $sourceGenLanguage');
-
-          var codeStorage = vm.generateAllCodeIn(sourceGenLanguage);
-          var allSources = codeStorage.writeAllSources().toString();
-          print(allSources);
-
-          expect(allSources, equals(sourceGen.text));
-        }
-      });
-    }
-  });
+            expect(allSources, equals(sourceGen.text));
+          }
+        });
+      }
+    });
+  }
 }
 
 List _parseJsonList(String callParametersJson) {

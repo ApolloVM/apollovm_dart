@@ -10,7 +10,7 @@ import 'apollovm_ast_type.dart';
 import 'apollovm_ast_variable.dart';
 
 /// Base class for AST values.
-abstract class ASTValue<T> implements ASTNode {
+abstract class ASTValue<T> implements ASTNode, ASTTypedNode {
   factory ASTValue.from(ASTType<T> type, T value) {
     if (type is ASTTypeString) {
       return ASTValueString(value as String) as ASTValue<T>;
@@ -41,12 +41,34 @@ abstract class ASTValue<T> implements ASTNode {
     if (o is String) return ASTValueString(o);
     if (o is int) return ASTValueInt(o);
     if (o is double) return ASTValueDouble(o);
+    if (o is bool) return ASTValueBool(o);
 
     var t = ASTType.from(o);
-    return ASTValueStatic(t, o);
+    return ASTValue.from(t, o);
   }
 
   ASTType<T> type;
+
+  ASTValue(this.type);
+
+  bool isInstanceOf(ASTType type) {
+    var context = VMContext.getCurrent();
+
+    var valueType = resolveType(context);
+    if (valueType is ASTType) {
+      return type.acceptsType(valueType);
+    } else {
+      var value = context != null ? getValue(context) : getValueNoContext();
+      var actualValueType = ASTType.from(value);
+      return type.acceptsType(actualValueType);
+    }
+  }
+
+  FutureOr<bool> isInstanceOfAsync(ASTType type) async {
+    var context = VMContext.getCurrent();
+    var valueType = await resolveType(context);
+    return type.acceptsType(valueType);
+  }
 
   FutureOr<T> getValue(VMContext context);
 
@@ -54,7 +76,11 @@ abstract class ASTValue<T> implements ASTNode {
 
   FutureOr<ASTValue<T>> resolve(VMContext context);
 
-  ASTValue(this.type);
+  @override
+  FutureOr<ASTType> resolveType(VMContext? context) => type;
+
+  @override
+  void associateToType(ASTTypedNode node) {}
 
   FutureOr<V> readIndex<V>(VMContext context, int index) {
     throw UnsupportedError("Can't read index for type: $type");
@@ -849,6 +875,19 @@ class ASTValueReadIndex<T> extends ASTValue<T> {
 
   ASTValueReadIndex(ASTType<T> type, this.variable, this._index) : super(type);
 
+  @override
+  FutureOr<ASTType> resolveType(VMContext? context) async {
+    var type = await variable.resolveType(context);
+
+    if (type.hasGenerics) {
+      var generics = type.generics!;
+      var generic = generics[0];
+      return generic;
+    }
+
+    return ASTTypeDynamic.INSTANCE;
+  }
+
   int getIndex(VMContext context) {
     if (_index is int) {
       return _index as int;
@@ -887,6 +926,20 @@ class ASTValueReadKey<T> extends ASTValue<T> {
   final Object _key;
 
   ASTValueReadKey(ASTType<T> type, this.variable, this._key) : super(type);
+
+  @override
+  FutureOr<ASTType> resolveType(VMContext? context) async {
+    var type = await variable.resolveType(context);
+
+    if (type.hasGenerics) {
+      var generics = type.generics!;
+      var generic = generics[Math.min(1, generics.length - 1)];
+
+      return generic;
+    }
+
+    return ASTTypeDynamic.INSTANCE;
+  }
 
   FutureOr<Object> getKey(VMContext context) async {
     if (_key is ASTValue) {
@@ -930,6 +983,9 @@ class ASTObjectInstance extends ASTValue<VMObject> {
       throw StateError('Incompatible class with type: $clazz != $type');
     }
   }
+
+  @override
+  ASTType resolveType(VMContext? context) => clazz.type;
 
   /// The internal [VMObject] of this instance.
   VMObject get vmObject => _object;
