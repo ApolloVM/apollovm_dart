@@ -4,6 +4,7 @@ export 'src/apollovm_base.dart';
 export 'src/apollovm_parser.dart';
 export 'src/ast/apollovm_ast_base.dart';
 export 'src/apollovm_runner.dart';
+export 'src/apollovm_extension.dart';
 
 export 'src/ast/apollovm_ast_annotation.dart';
 export 'src/ast/apollovm_ast_expression.dart';

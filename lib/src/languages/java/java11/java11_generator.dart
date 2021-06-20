@@ -9,7 +9,7 @@ class ApolloCodeGeneratorJava11 extends ApolloCodeGenerator {
       : super('java11', codeStorage);
 
   @override
-  StringBuffer generateASTClass(ASTClass clazz,
+  StringBuffer generateASTClass(ASTClassNormal clazz,
       [String indent = '', StringBuffer? s]) {
     s ??= StringBuffer();
 
@@ -19,6 +19,34 @@ class ApolloCodeGeneratorJava11 extends ApolloCodeGenerator {
     s.write(clazz.name);
     s.write(' ');
     s.write(code);
+
+    return s;
+  }
+
+  @override
+  StringBuffer generateASTClassField(ASTClassField field,
+      [String indent = '', StringBuffer? s]) {
+    s ??= StringBuffer();
+
+    var typeCode = generateASTType(field.type);
+
+    s.write(indent);
+
+    if (field.finalValue) {
+      s.write('final ');
+    }
+
+    s.write(typeCode);
+    s.write(' ');
+    s.write(field.name);
+
+    if (field is ASTClassFieldWithInitialValue) {
+      var initialValueCode = generateASTExpression(field.initialValue);
+      s.write(' = ');
+      s.write(initialValueCode);
+    }
+
+    s.write(';\n');
 
     return s;
   }
@@ -64,7 +92,7 @@ class ApolloCodeGeneratorJava11 extends ApolloCodeGenerator {
     s.write(indent);
     s.write('}\n\n');
 
-    return blockCode;
+    return s;
   }
 
   @override
@@ -113,7 +141,8 @@ class ApolloCodeGeneratorJava11 extends ApolloCodeGenerator {
   }
 
   @override
-  String resolveASTExpressionOperatorText(ASTExpressionOperator operator) {
+  String resolveASTExpressionOperatorText(ASTExpressionOperator operator,
+      ASTNumType aNumType, ASTNumType bNumType) {
     if (operator == ASTExpressionOperator.divideAsInt) {
       return getASTExpressionOperatorText(ASTExpressionOperator.divide);
     }
@@ -186,7 +215,7 @@ class ApolloCodeGeneratorJava11 extends ApolloCodeGenerator {
         var s2 = generateASTValueStringVariable(v, '', null, prevIsString);
         list.add(s2);
         prevIsString = !prevIsString;
-      } else if (v is ASTValueStringExpresion) {
+      } else if (v is ASTValueStringExpression) {
         var s2 = generateASTValueStringExpresion(v, '');
         list.add(s2);
         prevIsString = true;
@@ -241,7 +270,7 @@ class ApolloCodeGeneratorJava11 extends ApolloCodeGenerator {
   }
 
   @override
-  StringBuffer generateASTValueStringExpresion(ASTValueStringExpresion value,
+  StringBuffer generateASTValueStringExpresion(ASTValueStringExpression value,
       [String indent = '', StringBuffer? s]) {
     s ??= StringBuffer();
 

@@ -9,6 +9,8 @@ import 'apollovm_ast_type.dart';
 import 'apollovm_ast_value.dart';
 import 'apollovm_ast_variable.dart';
 
+import 'package:apollovm/src/apollovm_extension.dart';
+
 /// An [ASTBlock] that can have an entry-point method/function.
 class ASTEntryPointBlock extends ASTBlock {
   ASTEntryPointBlock(ASTBlock? parentBlock) : super(parentBlock);
@@ -20,8 +22,10 @@ class ASTEntryPointBlock extends ASTBlock {
     ApolloExternalFunctionMapper? externalFunctionMapper,
     VMObject? classInstanceObject,
     Map<String, ASTValue>? classInstanceFields,
+    VMTypeResolver? typeResolver,
   }) async {
-    var rootContext = await _initializeEntryPointBlock(externalFunctionMapper);
+    var rootContext =
+        await _initializeEntryPointBlock(externalFunctionMapper, typeResolver);
 
     ApolloExternalFunctionMapper? prevExternalFunctionMapper;
     if (externalFunctionMapper != null) {
@@ -45,20 +49,21 @@ class ASTEntryPointBlock extends ASTBlock {
       if (!f.modifiers.isStatic) {
         if (this is ASTClass) {
           var clazz = this as ASTClass;
-          var classContext = clazz._createContext(rootContext);
+          var classContext = clazz._createContext(typeResolver, rootContext);
           var obj =
-              await clazz.createInstance(classContext, ASTRunStatus.DUMMY);
+              (await clazz.createInstance(classContext, ASTRunStatus.DUMMY))!;
 
           if (classInstanceObject != null) {
-            obj.vmObject.setFieldsValues(
-                classInstanceObject.getFieldsValues(classContext));
+            await clazz.setInstanceByVMObject(
+                classContext, ASTRunStatus.DUMMY, obj, classInstanceObject);
           }
 
           if (classInstanceFields != null) {
-            obj.setFields(classInstanceFields, caseInsensitive: true);
+            await clazz.setInstanceByMap(
+                classContext, ASTRunStatus.DUMMY, obj, classInstanceFields);
           }
 
-          classContext.setObjectInstance(obj);
+          classContext.setClassInstance(obj);
           context = classContext;
         } else {
           throw StateError(
@@ -82,8 +87,10 @@ class ASTEntryPointBlock extends ASTBlock {
       String entryFunctionName,
       List? positionalParameters,
       Map? namedParameters,
-      {ApolloExternalFunctionMapper? externalFunctionMapper}) async {
-    var rootContext = await _initializeEntryPointBlock(externalFunctionMapper);
+      {ApolloExternalFunctionMapper? externalFunctionMapper,
+      VMTypeResolver? typeResolver}) async {
+    var rootContext =
+        await _initializeEntryPointBlock(externalFunctionMapper, typeResolver);
 
     ApolloExternalFunctionMapper? prevExternalFunctionMapper;
     if (externalFunctionMapper != null) {
@@ -114,9 +121,10 @@ class ASTEntryPointBlock extends ASTBlock {
   VMContext? _rootContext;
 
   Future<VMContext> _initializeEntryPointBlock(
-      ApolloExternalFunctionMapper? externalFunctionMapper) async {
+      ApolloExternalFunctionMapper? externalFunctionMapper,
+      VMTypeResolver? typeResolver) async {
     if (_rootContext == null) {
-      var rootContext = _createContext();
+      var rootContext = _createContext(typeResolver);
       var rootStatus = ASTRunStatus();
       _rootContext = rootContext;
 
@@ -141,56 +149,43 @@ class ASTEntryPointBlock extends ASTBlock {
     return _rootContext!;
   }
 
-  VMContext _createContext() => VMContext(this);
+  VMContext _createContext(VMTypeResolver? typeResolver) =>
+      VMContext(this, typeResolver: typeResolver);
 }
 
-/// AST of a Class.
-class ASTClass extends ASTEntryPointBlock {
+/// AST base of a Class.
+abstract class ASTClass<T> extends ASTEntryPointBlock {
   final String name;
-  final ASTType<VMObject> type;
+  final ASTType<T> type;
 
-  ASTClass(this.name, ASTBlock? parent)
-      : type = ASTType<VMObject>(name),
-        super(parent);
+  late final ASTClassStaticAccessor<ASTClass<T>, T> staticAccessor;
 
-  @override
-  void set(ASTBlock? other) {
-    if (other == null) return;
-
-    if (other is ASTClass) {
-      _fields.clear();
-      addAllFields(other._fields.values);
-    }
-
-    super.set(other);
+  ASTClass(this.name, this.type, ASTBlock? parentBlock) : super(parentBlock) {
+    type.setClass(this);
+    staticAccessor = ASTClassStaticAccessor(this);
   }
 
   @override
-  VMClassContext _createContext([VMContext? parentContext]) =>
-      VMClassContext(this, parent: parentContext);
+  VMClassContext _createContext(VMTypeResolver? typeResolver,
+          [VMContext? parentContext]) =>
+      VMClassContext(this, parent: parentContext, typeResolver: typeResolver);
 
-  final Map<String, ASTClassField> _fields = <String, ASTClassField>{};
+  List<ASTClassField> get fields;
 
-  List<ASTClassField> get fields => _fields.values.toList();
-
-  List<String> get fieldsNames => _fields.keys.toList();
-
-  void addField(ASTClassField field) {
-    _fields[field.name] = field;
-  }
-
-  void addAllFields(Iterable<ASTClassField> fields) {
-    for (var field in fields) {
-      addField(field);
-    }
-  }
+  List<String> get fieldsNames;
 
   /// Returns a [Map<String,Object>] with the fields names and values.
-  Future<Map<String, Object>> getFieldsMap(
-      {VMContext? context, Map<String, ASTValue>? fieldOverwrite}) async {
+  FutureOr<Map<String, Object>> getFieldsMap(
+      {VMContext? context, Map<String, ASTValue>? fieldOverwrite});
+
+  /// Builds a [Map<String,Object>] with the fields names and values.
+  static FutureOr<Map<String, Object>> buildFieldsMap(
+      Map<String, ASTClassField> fields,
+      {VMContext? context,
+      Map<String, ASTValue>? fieldOverwrite}) async {
     var astRunStatus = ASTRunStatus();
 
-    var fieldsEntriesFuture = _fields.values.map((f) async {
+    var fieldsEntriesFuture = fields.values.map((f) async {
       if (f is ASTClassFieldWithInitialValue) {
         var initialValueFuture = context != null
             ? f.getInitialValue(context, astRunStatus)
@@ -221,9 +216,162 @@ class ASTClass extends ASTEntryPointBlock {
   }
 
   @override
+  ASTClassField? getField(String name, {bool caseInsensitive = false});
+
+  FutureOr<ASTValue<T>?> createInstance(
+      VMClassContext context, ASTRunStatus runStatus);
+
+  FutureOr<void> initializeInstance(
+      VMClassContext context, ASTRunStatus runStatus, ASTValue<T> instance);
+
+  FutureOr<void> setInstanceByValue(VMClassContext context,
+      ASTRunStatus runStatus, ASTValue<T> instance, ASTValue<T> value);
+
+  FutureOr<void> setInstanceByVMObject(VMClassContext context,
+      ASTRunStatus runStatus, ASTValue<T> instance, VMObject value);
+
+  FutureOr<void> setInstanceByMap(VMClassContext context,
+      ASTRunStatus runStatus, ASTValue<T> instance, Map<String, ASTValue> value,
+      {bool caseInsensitive = false});
+
+  FutureOr<ASTValue?> getInstanceFieldValue(VMContext context,
+      ASTRunStatus runStatus, ASTValue<T> instance, String fieldName,
+      {bool caseInsensitive = false});
+
+  FutureOr<ASTValue?> setInstanceFieldValue(
+      VMContext context,
+      ASTRunStatus runStatus,
+      ASTValue<T> instance,
+      String fieldName,
+      ASTValue value,
+      {bool caseInsensitive = false});
+
+  FutureOr<ASTValue?> removeInstanceFieldValue(VMContext context,
+      ASTRunStatus runStatus, ASTValue<T> instance, String fieldName,
+      {bool caseInsensitive = false});
+}
+
+/// AST of a primitive type VM Class.
+class ASTClassPrimitive<T> extends ASTClass<T> {
+  ASTClassPrimitive(ASTTypePrimitive<T> type) : super(type.name, type, null);
+
+  @override
+  void set(ASTBlock? other) {}
+
+  @override
+  List<ASTClassField> get fields => <ASTClassField>[];
+
+  @override
+  List<String> get fieldsNames => <String>[];
+
+  @override
+  FutureOr<Map<String, Object>> getFieldsMap(
+          {VMContext? context, Map<String, ASTValue>? fieldOverwrite}) =>
+      <String, Object>{};
+
+  @override
+  void addFunction(ASTFunctionDeclaration f) {}
+
+  @override
+  ASTClassField? getField(String name, {bool caseInsensitive = false}) {
+    return null;
+  }
+
+  @override
+  FutureOr<ASTValue<T>?> createInstance(
+      VMClassContext context, ASTRunStatus runStatus) async {
+    var instance = await type.toDefaultValue(context);
+    return instance;
+  }
+
+  @override
+  FutureOr<void> initializeInstance(VMClassContext context,
+      ASTRunStatus runStatus, ASTValue<T> instance) async {}
+
+  @override
+  FutureOr<void> setInstanceByVMObject(VMClassContext context,
+      ASTRunStatus runStatus, ASTValue<T> instance, VMObject obj) async {}
+
+  @override
+  FutureOr<void> setInstanceByValue(VMClassContext context,
+      ASTRunStatus runStatus, ASTValue<T> instance, ASTValue<T> value) async {}
+
+  @override
+  FutureOr<void> setInstanceByMap(VMClassContext context,
+      ASTRunStatus runStatus, ASTValue<T> instance, Map<String, ASTValue> value,
+      {bool caseInsensitive = false}) async {}
+
+  @override
+  FutureOr<ASTValue?> getInstanceFieldValue(VMContext context,
+      ASTRunStatus runStatus, ASTValue<T> instance, String fieldName,
+      {bool caseInsensitive = false}) async {
+    return null;
+  }
+
+  @override
+  FutureOr<ASTValue?> setInstanceFieldValue(
+      VMContext context,
+      ASTRunStatus runStatus,
+      ASTValue<T> instance,
+      String fieldName,
+      ASTValue value,
+      {bool caseInsensitive = false}) async {
+    return null;
+  }
+
+  @override
+  FutureOr<ASTValue?> removeInstanceFieldValue(VMContext context,
+      ASTRunStatus runStatus, ASTValue<T> instance, String fieldName,
+      {bool caseInsensitive = false}) async {
+    return null;
+  }
+}
+
+/// AST of a normal VM Class.
+class ASTClassNormal extends ASTClass<VMObject> {
+  ASTClassNormal(String name, ASTType<VMObject> type, ASTBlock? parentBlock)
+      : super(name, type, parentBlock);
+
+  @override
+  void set(ASTBlock? other) {
+    if (other == null) return;
+
+    if (other is ASTClassNormal) {
+      _fields.clear();
+      addAllFields(other._fields.values);
+    }
+
+    super.set(other);
+  }
+
+  final Map<String, ASTClassField> _fields = <String, ASTClassField>{};
+
+  @override
+  List<ASTClassField> get fields => _fields.values.toList();
+
+  @override
+  List<String> get fieldsNames => _fields.keys.toList();
+
+  void addField(ASTClassField field) {
+    _fields[field.name] = field;
+  }
+
+  void addAllFields(Iterable<ASTClassField> fields) {
+    for (var field in fields) {
+      addField(field);
+    }
+  }
+
+  @override
+  FutureOr<Map<String, Object>> getFieldsMap(
+          {VMContext? context, Map<String, ASTValue>? fieldOverwrite}) =>
+      ASTClass.buildFieldsMap(_fields,
+          context: context, fieldOverwrite: fieldOverwrite);
+
+  @override
   void addFunction(ASTFunctionDeclaration f) {
     if (f is ASTClassFunctionDeclaration) {
-      f.classType = type;
+      f.clazz = this;
       super.addFunction(f);
     } else {
       throw StateError('Only accepting class functions: $f');
@@ -246,23 +394,152 @@ class ASTClass extends ASTEntryPointBlock {
     return field;
   }
 
-  Future<ASTObjectInstance> createInstance(
+  @override
+  FutureOr<ASTClassInstance<VMObject>?> createInstance(
       VMClassContext context, ASTRunStatus runStatus) async {
-    var obj = ASTObjectInstance(this);
+    var obj = ASTClassInstance<VMObject>(
+        this, VMObject.createInstance(context, type));
     await initializeInstance(context, runStatus, obj);
     return obj;
   }
 
-  Future<void> initializeInstance(VMClassContext context,
-      ASTRunStatus runStatus, ASTObjectInstance instance) async {
+  @override
+  FutureOr<void> initializeInstance(VMClassContext context,
+      ASTRunStatus runStatus, ASTValue<VMObject> instance) async {
+    if (instance is! ASTClassInstance<VMObject>) {
+      throw _ExceptionNotClassInstance(instance);
+    }
+
     for (var field in _fields.values) {
       if (field is ASTClassFieldWithInitialValue) {
         var value = await field.getInitialValue(context, runStatus);
-        instance.setField(field.name, value);
+        instance.vmObject.setFieldValue(field.name, value);
       } else {
-        instance.setField(field.name, ASTValueNull.INSTANCE);
+        instance.vmObject.setFieldValue(field.name, ASTValueNull.INSTANCE);
       }
     }
+  }
+
+  @override
+  FutureOr<void> setInstanceByVMObject(VMClassContext context,
+      ASTRunStatus runStatus, ASTValue<VMObject> instance, VMObject obj) async {
+    if (instance is! ASTClassInstance<VMObject>) {
+      throw _ExceptionNotClassInstance(instance);
+    }
+
+    for (var field in _fields.values) {
+      var fieldValue = obj.getFieldValue(field.name, context);
+      if (fieldValue != null) {
+        instance.vmObject.setFieldValue(field.name, fieldValue);
+      }
+    }
+  }
+
+  @override
+  FutureOr<void> setInstanceByValue(
+      VMClassContext context,
+      ASTRunStatus runStatus,
+      ASTValue<VMObject> instance,
+      ASTValue<VMObject> value) async {
+    if (instance is! ASTClassInstance<VMObject>) {
+      throw _ExceptionNotClassInstance(instance);
+    }
+
+    for (var field in _fields.values) {
+      var fieldValue = await value.readKey(context, field.name);
+      if (fieldValue != null) {
+        instance.vmObject.setFieldValue(field.name, fieldValue);
+      }
+    }
+  }
+
+  ApolloVMCastException _ExceptionNotClassInstance(
+          ASTValue<VMObject> instance) =>
+      ApolloVMCastException(
+          "Can't cast $instance to ASTClassInstance<VMObject>");
+
+  @override
+  FutureOr<void> setInstanceByMap(
+      VMClassContext context,
+      ASTRunStatus runStatus,
+      ASTValue<VMObject> instance,
+      Map<String, ASTValue> value,
+      {bool caseInsensitive = false}) async {
+    if (instance is! ASTClassInstance<VMObject>) {
+      throw _ExceptionNotClassInstance(instance);
+    }
+
+    var vmObject = instance.vmObject;
+
+    for (var field in _fields.values) {
+      var fieldName = field.name;
+      var fieldValue = value[fieldName];
+
+      if (fieldValue != null) {
+        if (caseInsensitive) {
+          fieldName = vmObject.getFieldNameIgnoreCase(fieldName) ?? fieldName;
+        }
+        vmObject.setFieldValue(fieldName, fieldValue);
+      }
+    }
+  }
+
+  @override
+  FutureOr<ASTValue?> getInstanceFieldValue(VMContext context,
+      ASTRunStatus runStatus, ASTValue<VMObject> instance, String fieldName,
+      {bool caseInsensitive = false}) {
+    if (instance is! ASTClassInstance<VMObject>) {
+      throw _ExceptionNotClassInstance(instance);
+    }
+
+    var vmObject = instance.vmObject;
+
+    if (caseInsensitive) {
+      fieldName = vmObject.getFieldNameIgnoreCase(fieldName) ?? fieldName;
+    }
+
+    var fieldValue = vmObject.getFieldValue(fieldName, context);
+    return fieldValue;
+  }
+
+  @override
+  FutureOr<ASTValue?> setInstanceFieldValue(
+      VMContext context,
+      ASTRunStatus runStatus,
+      ASTValue<VMObject> instance,
+      String fieldName,
+      ASTValue value,
+      {bool caseInsensitive = false}) async {
+    if (instance is! ASTClassInstance<VMObject>) {
+      throw _ExceptionNotClassInstance(instance);
+    }
+
+    var vmObject = instance.vmObject;
+
+    if (caseInsensitive) {
+      fieldName = vmObject.getFieldNameIgnoreCase(fieldName) ?? fieldName;
+    }
+
+    var prevValue = vmObject.setFieldValue(name, value, context);
+    return prevValue?.getValue(context);
+  }
+
+  @override
+  FutureOr<ASTValue?> removeInstanceFieldValue(VMContext context,
+      ASTRunStatus runStatus, ASTValue<VMObject> instance, String fieldName,
+      {bool caseInsensitive = false}) async {
+    if (instance is! ASTClassInstance<VMObject>) {
+      throw _ExceptionNotClassInstance(instance);
+    }
+
+    var vmObject = instance.vmObject;
+
+    if (caseInsensitive) {
+      fieldName = vmObject.getFieldNameIgnoreCase(fieldName) ?? fieldName;
+    }
+
+    var fieldValue = vmObject.removeFieldValue(fieldName, context);
+    return fieldValue;
   }
 }
 
@@ -274,32 +551,53 @@ class ASTRoot extends ASTEntryPointBlock {
 
   String namespace = '';
 
-  final Map<String, ASTClass> _classes = <String, ASTClass>{};
+  final Map<String, ASTClassNormal> _classes = <String, ASTClassNormal>{};
 
-  List<ASTClass> get classes => _classes.values.toList();
+  List<ASTClassNormal> get classes => _classes.values.toList();
 
   List<String> get classesNames => _classes.values.map((e) => e.name).toList();
 
-  void addClass(ASTClass clazz) {
+  void addClass(ASTClassNormal clazz) {
     _classes[clazz.name] = clazz;
   }
 
-  ASTClass? getClass(String className, {bool caseInsensitive = false}) {
+  ASTClassNormal? getClass(String className, {bool caseInsensitive = false}) {
     var clazz = _classes[className];
 
-    if (clazz == null && caseInsensitive) {
+    if (clazz != null) {
+      return clazz;
+    }
+
+    if (caseInsensitive) {
       for (var entry in _classes.entries) {
         if (equalsIgnoreAsciiCase(entry.key, className)) {
-          clazz = entry.value;
-          break;
+          return entry.value;
         }
       }
     }
 
-    return clazz;
+    return null;
   }
 
-  void addAllClasses(List<ASTClass> classes) {
+  bool containsClass(String className, {bool caseInsensitive = false}) {
+    var clazz = _classes[className];
+
+    if (clazz != null) {
+      return true;
+    }
+
+    if (caseInsensitive) {
+      for (var entry in _classes.entries) {
+        if (equalsIgnoreAsciiCase(entry.key, className)) {
+          return true;
+        }
+      }
+    }
+
+    return false;
+  }
+
+  void addAllClasses(List<ASTClassNormal> classes) {
     for (var clazz in classes) {
       addClass(clazz);
     }
@@ -687,12 +985,23 @@ class ASTParametersDeclaration {
 /// An AST Class Function Declaration.
 class ASTClassFunctionDeclaration<T> extends ASTFunctionDeclaration<T> {
   /// The class type of this function.
-  ASTType? classType;
+  ASTClass? clazz;
 
-  ASTClassFunctionDeclaration(this.classType, String name,
+  ASTType? get classType => clazz?.type;
+
+  ASTClassFunctionDeclaration(this.clazz, String name,
       ASTParametersDeclaration parameters, ASTType<T> returnType,
       {ASTBlock? block, ASTModifiers? modifiers})
       : super(name, parameters, returnType, block: block, modifiers: modifiers);
+
+  FutureOr<ASTValue<T>> objectCall(VMContext parent, ASTValue classInstance,
+      {List? positionalParameters, Map? namedParameters}) {
+    var objContext = VMClassContext(clazz!, parent: parent);
+    objContext.setClassInstance(classInstance);
+    return call(objContext,
+        positionalParameters: positionalParameters,
+        namedParameters: namedParameters);
+  }
 }
 
 /// An AST Function Declaration.
@@ -730,13 +1039,16 @@ class ASTFunctionDeclaration<T> extends ASTBlock {
     var p = getParameterByIndex(index);
     if (p == null) return null;
     var variable = context.getVariable(p.name, false);
-    return variable?.getValue(context);
+    if (variable == null) return null;
+
+    return variable.resolveMapped((v) => v?.getValue(context));
   }
 
-  FutureOr<ASTValue?> getParameterValueByName(VMContext context, String name) {
+  FutureOr<ASTValue?> getParameterValueByName(
+      VMContext context, String name) async {
     var p = getParameterByName(name);
     if (p == null) return null;
-    var variable = context.getVariable(p.name, false);
+    var variable = await context.getVariable(p.name, false);
     return variable?.getValue(context);
   }
 
@@ -851,6 +1163,69 @@ class ASTExternalFunction<T> extends ASTFunctionDeclaration<T> {
         result = externalFunction(a0, a1, a2);
       } else {
         result = externalFunction.call();
+      }
+
+      if (result is Future) {
+        var r = await result;
+        return await resolveReturnValue(context, r);
+      } else {
+        return await resolveReturnValue(context, result);
+      }
+    } finally {
+      VMContext.setCurrent(prevContext);
+    }
+  }
+}
+
+/// An AST External Function.
+class ASTExternalClassFunction<T> extends ASTClassFunctionDeclaration<T> {
+  final Function externalFunction;
+
+  ASTExternalClassFunction(
+      ASTClass clazz,
+      String name,
+      ASTParametersDeclaration parameters,
+      ASTType<T> returnType,
+      this.externalFunction)
+      : super(clazz, name, parameters, returnType);
+
+  @override
+  FutureOr<ASTValue<T>> call(VMContext parent,
+      {List? positionalParameters, Map? namedParameters}) async {
+    var classInstance = parent.getClassInstance();
+    var obj = await classInstance!.getValue(parent);
+
+    var context = VMContext(this, parent: parent);
+
+    var prevContext = VMContext.setCurrent(context);
+    try {
+      await initializeVariables(context, positionalParameters, namedParameters);
+
+      var parametersSize = this.parametersSize;
+
+      var result;
+      if (externalFunction.isParametersSize0 || parametersSize == 0) {
+        result = externalFunction(obj);
+      } else if (externalFunction.isParametersSize1 || parametersSize == 1) {
+        var paramVal = await getParameterValueByIndex(context, 0);
+        var a0 = paramVal?.getValue(context);
+        result = externalFunction(obj, a0);
+      } else if (this.parametersSize == 2) {
+        var paramVal0 = await getParameterValueByIndex(context, 0);
+        var paramVal1 = await getParameterValueByIndex(context, 1);
+        var a0 = paramVal0?.getValue(context);
+        var a1 = paramVal1?.getValue(context);
+        result = externalFunction(obj, a0, a1);
+      } else if (this.parametersSize == 3) {
+        var paramVal0 = await getParameterValueByIndex(context, 0);
+        var paramVal1 = await getParameterValueByIndex(context, 1);
+        var paramVal2 = await getParameterValueByIndex(context, 2);
+        var a0 = paramVal0?.getValue(context);
+        var a1 = paramVal1?.getValue(context);
+        var a2 = paramVal2?.getValue(context);
+        result = externalFunction(a0, a1, a2);
+      } else {
+        result = externalFunction.call(obj);
       }
 
       if (result is Future) {

@@ -408,7 +408,7 @@ class ParsedString {
         return ASTValueStringConcatenation(values);
       }
     } else if (expression != null) {
-      return ASTValueStringExpresion(expression!);
+      return ASTValueStringExpression(expression!);
     }
 
     throw StateError("Can't resolve value!");

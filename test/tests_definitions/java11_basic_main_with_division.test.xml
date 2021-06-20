@@ -33,12 +33,22 @@
         ]
     </call>
     <output>
-        [
-        "function's \"variables\"> a: 10 ; b: 15 ; c: 120",
-        "Sums:",
-        25,
-        145
-        ]
+        <output>
+            [
+            "function's \"variables\"> a: 10 ; b: 15 ; c: 120",
+            "Sums:",
+            25,
+            145
+            ]
+        </output>
+        <output language="dart">
+            [
+            "function's \"variables\"> a: 10 ; b: 15.0 ; c: 120",
+            "Sums:",
+            25.0,
+            145.0
+            ]
+        </output>
     </output>
     <source-generated language="dart"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
 <<<< NAMESPACE="" >>>>

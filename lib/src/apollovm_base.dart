@@ -1,16 +1,24 @@
+import 'dart:async';
+
 import 'package:apollovm/apollovm.dart';
-import 'package:collection/collection.dart' show MapEquality;
+import 'package:collection/collection.dart'
+    show MapEquality, equalsIgnoreAsciiCase;
 import 'package:swiss_knife/swiss_knife.dart';
 
 import 'apollovm_code_generator.dart';
 import 'apollovm_code_storage.dart';
 import 'apollovm_runner.dart';
+import 'core/apollovm_core_base.dart';
 import 'languages/dart/dart_generator.dart';
 import 'languages/java/java11/java11_generator.dart';
 
 /// The Apollo VM.
-class ApolloVM {
-  static final String VERSION = '0.0.27';
+class ApolloVM implements VMTypeResolver {
+  static final String VERSION = '0.0.28';
+
+  static int _idCount = 0;
+
+  final int id = ++_idCount;
 
   /// Returns a parser for a [language].
   ApolloParser? getParser(String language) {
@@ -28,10 +36,47 @@ class ApolloVM {
   final Map<String, LanguageNamespaces> _languageNamespaces =
       <String, LanguageNamespaces>{};
 
+  List<String> get loadedCodeLanguages => _languageNamespaces.keys.toList();
+
   /// Returns a [CodeNamespace] for [language] and [namespace].
   CodeNamespace? getNamespace(String language, String namespace) {
     var langNamespaces = getLanguageNamespaces(language);
     return langNamespaces.get(namespace);
+  }
+
+  /// Returns a [List] of [CodeNamespace] with name [namespace].
+  List<CodeNamespace> getNamespaceWithName(String namespace) {
+    return _languageNamespaces.values
+        .map((langNs) => langNs.getIfLoaded(namespace))
+        .whereType<CodeNamespace>()
+        .toList();
+  }
+
+  /// Returns a [List] of [CodeNamespace] with name [namespace] and with class [className].
+  List<CodeNamespace> getNamespaceWithNameAndClass(
+      String namespace, String className,
+      {bool caseInsensitive = false}) {
+    return getNamespaceWithName(namespace)
+        .where(
+            (e) => e.containsClass(className, caseInsensitive: caseInsensitive))
+        .toList();
+  }
+
+  /// Returns a [CodeNamespace] with class [className] for [language] (optional).
+  List<CodeNamespace> getNamespaceWithClass(String className,
+      {String? language, bool caseInsensitive = false}) {
+    if (language != null) {
+      var ns = _languageNamespaces[language];
+      if (ns == null) return [];
+      return ns.getNamespaceWithClass(className,
+          caseInsensitive: caseInsensitive);
+    } else {
+      return _languageNamespaces.values.expand((ns) {
+        var namespaces = ns.getNamespaceWithClass(className,
+            caseInsensitive: caseInsensitive);
+        return namespaces;
+      }).toList();
+    }
   }
 
   /// Returns a [LanguageNamespaces] for [language].
@@ -151,6 +196,52 @@ class ApolloVM {
         return 'dart';
     }
   }
+
+  @override
+  ASTType? resolveType(String typeName,
+      {String? namespace, String? language, bool caseInsensitive = false}) {
+    if (language != null && namespace != null) {
+      var ns = getNamespace(language, namespace);
+      if (ns == null) {
+        return resolveCoreType(typeName,
+            namespace: namespace,
+            language: language,
+            caseInsensitive: caseInsensitive);
+      }
+      var clazz = ns.getClass(typeName);
+      return clazz?.type;
+    }
+
+    List<CodeNamespace> ns;
+    if (namespace != null) {
+      ns = getNamespaceWithNameAndClass(namespace, typeName,
+          caseInsensitive: caseInsensitive);
+    } else {
+      ns = getNamespaceWithClass(typeName,
+          language: language, caseInsensitive: caseInsensitive);
+    }
+
+    if (ns.isEmpty) {
+      return resolveCoreType(typeName,
+          namespace: namespace,
+          language: language,
+          caseInsensitive: caseInsensitive);
+    }
+
+    var clazz = ns.first.getClass(typeName, caseInsensitive: caseInsensitive);
+    return clazz!.type;
+  }
+
+  ASTType? resolveCoreType(String typeName,
+      {String? namespace, String? language, bool caseInsensitive = false}) {
+    var clazz = ApolloVMCore.getClass(typeName);
+    return clazz?.type;
+  }
+
+  @override
+  String toString() {
+    return 'ApolloVM{ id: $id, loadedCodeLanguages: $loadedCodeLanguages }';
+  }
 }
 
 /// Language specific namespaces.
@@ -169,15 +260,45 @@ class LanguageNamespaces {
   CodeNamespace get(String namespace) => _namespaces.putIfAbsent(
       namespace, () => CodeNamespace(language, namespace));
 
+  CodeNamespace? getIfLoaded(String namespace) => _namespaces[namespace];
+
+  /// Lookup for the first class [className] in [namespace] (optional).
+  ASTClassNormal? getClass(String className,
+      {String? namespace, bool caseInsensitive = false}) {
+    if (namespace != null) {
+      var ns = _namespaces[namespace];
+      return ns?.getClass(className, caseInsensitive: caseInsensitive);
+    } else {
+      for (var ns in _namespaces.values) {
+        var clazz = ns.getClass(className, caseInsensitive: caseInsensitive);
+        if (clazz != null) {
+          return clazz;
+        }
+      }
+      return null;
+    }
+  }
+
+  /// Returns a [List] of [CodeNamespace] with class [className].
+  List<CodeNamespace> getNamespaceWithClass(String className,
+      {bool caseInsensitive = false}) {
+    return _namespaces.values
+        .where((ns) =>
+            ns.containsClass(className, caseInsensitive: caseInsensitive))
+        .toList();
+  }
+
   void generateAllCode(ApolloCodeGenerator codeGenerator) {
     for (var namespace in _namespaces.values) {
       namespace.generateAllCode(codeGenerator);
     }
   }
 
+  /// returns a [List] of classes names.
   List<String> get classesNames =>
       _namespaces.values.expand((e) => e.classesNames).toList();
 
+  /// returns a [List] of functions names.
   List<String> get functions =>
       _namespaces.values.expand((e) => e.functions).toList();
 }
@@ -225,14 +346,24 @@ class CodeNamespace {
   List<String> get classesNames =>
       _codeUnits.expand((e) => e.root!.classesNames).toList();
 
-  /// Returns an [ASTClass] for [className].
-  ASTClass? getClass(String className, {bool caseInsensitive = false}) {
+  /// Returns an [ASTClassNormal] for [className].
+  ASTClassNormal? getClass(String className, {bool caseInsensitive = false}) {
     for (var cu in _codeUnits) {
       var clazz =
           cu.root!.getClass(className, caseInsensitive: caseInsensitive);
       if (clazz != null) return clazz;
     }
     return null;
+  }
+
+  /// Returns `true` if contains class with [className].
+  bool containsClass(String className, {bool caseInsensitive = false}) {
+    for (var cu in _codeUnits) {
+      if (cu.root!.containsClass(className, caseInsensitive: caseInsensitive)) {
+        return true;
+      }
+    }
+    return false;
   }
 
   /// Returns a list of functions names.
@@ -290,7 +421,7 @@ class CodeUnit {
 
   @override
   String toString() {
-    return 'CodeUnit{language: $language, path: $id}';
+    return 'CodeUnit{language: $language, id: $id}';
   }
 
   /// Generates the code of this [ASTRoot] ([root]), using [codeGenerator].
@@ -429,26 +560,32 @@ class ApolloExternalFunctionMapper {
 /// A runtime context, for classes, of the VM.
 ///
 /// Implements the object instance reference of a running class.
-class VMClassContext extends VMContext {
+class VMClassContext<T> extends VMContext {
   /// The class of this context.
-  ASTClass clazz;
+  ASTClass<T> clazz;
 
-  VMClassContext(this.clazz, {VMContext? parent})
-      : super(clazz, parent: parent);
+  VMClassContext(this.clazz, {VMContext? parent, VMTypeResolver? typeResolver})
+      : super(clazz, parent: parent, typeResolver: typeResolver);
 
-  ASTObjectInstance? _objectInstance;
+  ASTValue<T>? _classInstance;
 
   /// An object instance of [clazz].
   @override
-  ASTObjectInstance? getObjectInstance() => _objectInstance;
+  ASTValue<T>? getClassInstance() => _classInstance;
 
   /// Defines the current object instance of this context.
-  void setObjectInstance(ASTObjectInstance obj) {
-    if (_objectInstance != null && !identical(_objectInstance, obj)) {
+  void setClassInstance(ASTValue<T> obj) {
+    if (_classInstance != null && !identical(_classInstance, obj)) {
       throw StateError('ASTObjectInstance already set!');
     }
-    _objectInstance = obj;
+    _classInstance = obj;
   }
+}
+
+abstract class VMTypeResolver {
+  /// Resolves an [ASTType] with [typeName].
+  FutureOr<ASTType?> resolveType(String typeName,
+      {String? namespace, String? language, bool caseInsensitive = false});
 }
 
 /// A runtime context of the VM.
@@ -471,19 +608,32 @@ class VMContext {
   /// The parent context.
   final VMContext? parent;
 
+  VMContext? _root;
+
+  /// The root context.
+  VMContext? get root => _root ??= parent!.root;
+
+  VMTypeResolver? _typeResolver;
+
+  /// The type resolver. If not defined for this instance will get from [parent].
+  ///
+  /// The [root] should have a defined [typeResolver].
+  VMTypeResolver get typeResolver => _typeResolver ??= parent!.typeResolver;
+
   /// The runtime block of this context.
   final ASTBlock block;
 
-  VMContext(this.block, {this.parent});
+  VMContext(this.block, {this.parent, VMTypeResolver? typeResolver})
+      : _typeResolver = typeResolver;
 
   final Map<String, ASTTypedVariable> _variables = {};
 
   /// Returns an [ASTVariable] of [name] in this context.
   ///
   /// - [allowClassFields] if true allows class fields.
-  ASTVariable? getVariable(String name, bool allowClassFields) {
+  FutureOr<ASTVariable?> getVariable(String name, bool allowClassFields) {
     if (name == 'this') {
-      var obj = getObjectInstance();
+      var obj = getClassInstance();
       if (obj != null) {
         return ASTRuntimeVariable(obj.type, name, obj);
       }
@@ -493,11 +643,17 @@ class VMContext {
     if (variable != null) return variable;
 
     if (allowClassFields) {
-      var obj = getObjectInstance();
+      var obj = getClassInstance();
       if (obj != null) {
-        var fieldValue = obj.getField(name);
-        if (fieldValue != null) {
-          return fieldValue;
+        if (obj is ASTClassInstance) {
+          var fieldValue = obj.clazz
+              .getInstanceFieldValue(this, ASTRunStatus.DUMMY, obj, name);
+          return fieldValue.resolveMapped((v) {
+            if (v != null) {
+              return ASTRuntimeVariable(v.type, name, v);
+            }
+            return parent?.getVariable(name, allowClassFields);
+          });
         }
       }
     }
@@ -549,7 +705,7 @@ class VMContext {
   /// The visible object class instance from this context.
   ///
   /// If [parent] is defined, will also look in the parent context.
-  ASTObjectInstance? getObjectInstance() => parent?.getObjectInstance();
+  ASTValue? getClassInstance() => parent?.getClassInstance();
 
   /// Returns a function of [name] and [parametersSignature]
   ///
@@ -582,6 +738,18 @@ class VMContext {
   }
 }
 
+/// When a cast error happens while executing some code.
+class ApolloVMCastException implements Exception {
+  String? message;
+
+  ApolloVMCastException([this.message]);
+
+  @override
+  String toString() {
+    return 'ApolloVMCastException: $message';
+  }
+}
+
 /// When a NPE happens while executing some code.
 class ApolloVMNullPointerException implements Exception {
   String? message;
@@ -595,11 +763,16 @@ class ApolloVMNullPointerException implements Exception {
 }
 
 /// An VM Object instance, with respective fields for class [type].
-class VMObject {
-  /// The class [ASTType] of this object instance.
-  final ASTType type;
+class VMObject extends ASTValue<dynamic> {
+  static int _idCount = 0;
 
-  VMObject(this.type);
+  final int id = ++_idCount;
+
+  VMObject._(ASTType type) : super(type);
+
+  static VMObject createInstance(VMContext context, ASTType type) {
+    return VMObject._(type);
+  }
 
   final Map<String, ASTRuntimeVariable> _fieldsValues =
       <String, ASTRuntimeVariable>{};
@@ -619,7 +792,8 @@ class VMObject {
   }
 
   /// Sets a field [value].
-  ASTRuntimeVariable? setFieldValue(String fieldName, ASTValue value) {
+  ASTRuntimeVariable? setFieldValue(String fieldName, ASTValue value,
+      [VMContext? context]) {
     var prev = _fieldsValues[fieldName];
     _fieldsValues[fieldName] = ASTRuntimeVariable(value.type, fieldName, value);
     return prev;
@@ -649,13 +823,31 @@ class VMObject {
   }
 
   /// Set fields values from a [Map] [fieldsValues].
-  void setFieldsValues(Map<String, ASTValue> fieldsValues) {
+  void setFieldsValues(Map<String, ASTValue> fieldsValues,
+      [VMContext? context]) {
     for (var entry in fieldsValues.entries) {
-      setFieldValue(entry.key, entry.value);
+      setFieldValue(entry.key, entry.value, context);
     }
   }
 
   Iterable<String> get fieldsKeys => _fieldsValues.keys;
+
+  Map<String, ASTType> get fieldsTypes =>
+      _fieldsValues.map((key, value) => MapEntry(key, value.type));
+
+  String? getFieldNameIgnoreCase(String fieldName) {
+    if (_fieldsValues.containsKey(fieldName)) {
+      return fieldName;
+    }
+
+    for (var k in _fieldsValues.keys) {
+      if (equalsIgnoreAsciiCase(k, fieldName)) {
+        return k;
+      }
+    }
+
+    return null;
+  }
 
   ASTRuntimeVariable? operator [](Object? field) => _fieldsValues[field];
 
@@ -681,6 +873,21 @@ class VMObject {
 
   @override
   String toString() {
-    return '${type.name}$_fieldsValues';
+    return '${type.name}$fieldsTypes';
+  }
+
+  @override
+  FutureOr getValue(VMContext context) {
+    return _fieldsValues;
+  }
+
+  @override
+  FutureOr getValueNoContext() {
+    return _fieldsValues;
+  }
+
+  @override
+  FutureOr<ASTValue> resolve(VMContext context) {
+    return this;
   }
 }

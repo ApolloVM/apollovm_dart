@@ -23,7 +23,7 @@ abstract class ApolloCodeGenerator {
       return generateASTExpression(node, indent, s);
     } else if (node is ASTRoot) {
       return generateASTRoot(node, indent, s);
-    } else if (node is ASTClass) {
+    } else if (node is ASTClassNormal) {
       return generateASTClass(node, indent, s);
     } else if (node is ASTBlock) {
       return generateASTBlock(node, indent, s);
@@ -64,6 +64,16 @@ abstract class ApolloCodeGenerator {
 
     if (withBlankHeadLine) s.write('\n');
 
+    if (block is ASTClassNormal) {
+      for (var field in block.fields) {
+        generateASTClassField(field, indent2, s);
+      }
+
+      if (block.fields.isNotEmpty) {
+        s.write('\n');
+      }
+    }
+
     for (var set in block.functions) {
       for (var f in set.functions) {
         if (f is ASTClassFunctionDeclaration) {
@@ -84,7 +94,10 @@ abstract class ApolloCodeGenerator {
     return s;
   }
 
-  StringBuffer generateASTClass(ASTClass clazz,
+  StringBuffer generateASTClass(ASTClassNormal clazz,
+      [String indent = '', StringBuffer? s]);
+
+  StringBuffer generateASTClassField(ASTClassField field,
       [String indent = '', StringBuffer? s]);
 
   StringBuffer generateASTClassFunctionDeclaration(
@@ -412,16 +425,26 @@ abstract class ApolloCodeGenerator {
     s ??= StringBuffer();
     s.write(indent);
 
-    generateASTExpression(expression.expression1, '', s);
+    var expression1 = expression.expression1;
+    var expression2 = expression.expression2;
+
+    var op = resolveASTExpressionOperatorText(
+      expression.operator,
+      expression1.literalNumType,
+      expression2.literalNumType,
+    );
+
+    generateASTExpression(expression1, '', s);
     s.write(' ');
-    s.write(resolveASTExpressionOperatorText(expression.operator));
+    s.write(op);
     s.write(' ');
-    generateASTExpression(expression.expression2, '', s);
+    generateASTExpression(expression2, '', s);
 
     return s;
   }
 
-  String resolveASTExpressionOperatorText(ASTExpressionOperator operator);
+  String resolveASTExpressionOperatorText(
+      ASTExpressionOperator operator, ASTNumType aNumType, ASTNumType bNumType);
 
   StringBuffer generateASTExpressionLiteral(ASTExpressionLiteral expression,
       [String indent = '', StringBuffer? s]) {
@@ -528,7 +551,7 @@ abstract class ApolloCodeGenerator {
       return generateASTValueStringVariable(value, indent, s);
     } else if (value is ASTValueStringConcatenation) {
       return generateASTValueStringConcatenation(value, indent, s);
-    } else if (value is ASTValueStringExpresion) {
+    } else if (value is ASTValueStringExpression) {
       return generateASTValueStringExpresion(value, indent, s);
     } else if (value is ASTValueArray) {
       return generateASTValueArray(value, indent, s);
@@ -549,7 +572,7 @@ abstract class ApolloCodeGenerator {
   StringBuffer generateASTValueStringVariable(ASTValueStringVariable value,
       [String indent = '', StringBuffer? s, bool precededByString = false]);
 
-  StringBuffer generateASTValueStringExpresion(ASTValueStringExpresion value,
+  StringBuffer generateASTValueStringExpresion(ASTValueStringExpression value,
       [String indent = '', StringBuffer? s]);
 
   StringBuffer generateASTValueString(ASTValueString value,

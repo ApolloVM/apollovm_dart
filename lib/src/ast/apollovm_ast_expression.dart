@@ -36,10 +36,47 @@ abstract class ASTExpression implements ASTCodeRunner, ASTNode {
     return false;
   }
 
+  ASTNumType get literalNumType {
+    if (isLiteral) {
+      var expLiteral = this as ASTExpressionLiteral;
+      var valueType = expLiteral.value.type;
+
+      if (valueType is ASTTypeInt) {
+        return ASTNumType.int;
+      } else if (valueType is ASTTypeDouble) {
+        return ASTNumType.int;
+      } else if (valueType is ASTTypeNum) {
+        return ASTNumType.num;
+      }
+    }
+
+    return ASTNumType.nan;
+  }
+
   bool get isLiteralNum {
     if (isLiteral) {
       var expLiteral = this as ASTExpressionLiteral;
       if (expLiteral.value.type is ASTTypeNum) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  bool get isLiteralInt {
+    if (isLiteral) {
+      var expLiteral = this as ASTExpressionLiteral;
+      if (expLiteral.value.type is ASTTypeInt) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  bool get isLiteralDouble {
+    if (isLiteral) {
+      var expLiteral = this as ASTExpressionLiteral;
+      if (expLiteral.value.type is ASTTypeDouble) {
         return true;
       }
     }
@@ -294,15 +331,22 @@ class ASTExpressionOperation extends ASTExpression {
     throw UnsupportedError(message);
   }
 
-  ASTValue operatorAdd(VMContext context, ASTValue val1, ASTValue val2) {
+  FutureOr<ASTValue> operatorAdd(
+      VMContext context, ASTValue val1, ASTValue val2) {
     var t1 = val1.type;
     var t2 = val2.type;
 
     if (t1 is ASTTypeString || t2 is ASTTypeString) {
       var v1 = val1.getValue(context);
       var v2 = val2.getValue(context);
-      var r = '$v1$v2';
-      return ASTValueString(r);
+      if (v1.isResolved && v2.isResolved) {
+        var r = '$v1$v2';
+        return ASTValueString(r);
+      } else {
+        return <FutureOr>[v1, v2].resolveAllMapped((l) {
+          return ASTValueString(l.join());
+        });
+      }
     }
 
     if (t1 is ASTTypeInt) {
@@ -332,7 +376,8 @@ class ASTExpressionOperation extends ASTExpression {
     return ASTValueNull.INSTANCE;
   }
 
-  ASTValue operatorSubtract(VMContext context, ASTValue val1, ASTValue val2) {
+  FutureOr<ASTValue> operatorSubtract(
+      VMContext context, ASTValue val1, ASTValue val2) {
     var t1 = val1.type;
     var t2 = val2.type;
 
@@ -363,7 +408,8 @@ class ASTExpressionOperation extends ASTExpression {
     return ASTValueNull.INSTANCE;
   }
 
-  ASTValue operatorMultiply(VMContext context, ASTValue val1, ASTValue val2) {
+  FutureOr<ASTValue> operatorMultiply(
+      VMContext context, ASTValue val1, ASTValue val2) {
     var t1 = val1.type;
     var t2 = val2.type;
 
@@ -394,7 +440,8 @@ class ASTExpressionOperation extends ASTExpression {
     return ASTValueNull.INSTANCE;
   }
 
-  ASTValue operatorDivide(VMContext context, ASTValue val1, ASTValue val2) {
+  FutureOr<ASTValue> operatorDivide(
+      VMContext context, ASTValue val1, ASTValue val2) {
     var t1 = val1.type;
     var t2 = val2.type;
 
@@ -425,7 +472,7 @@ class ASTExpressionOperation extends ASTExpression {
     return ASTValueNull.INSTANCE;
   }
 
-  ASTValue operatorDivideAsInt(
+  FutureOr<ASTValue> operatorDivideAsInt(
       VMContext context, ASTValue val1, ASTValue val2) {
     var t1 = val1.type;
     var t2 = val2.type;
@@ -443,7 +490,7 @@ class ASTExpressionOperation extends ASTExpression {
     return ASTValueNull.INSTANCE;
   }
 
-  ASTValue operatorDivideAsDouble(
+  FutureOr<ASTValue> operatorDivideAsDouble(
       VMContext context, ASTValue val1, ASTValue val2) {
     var t1 = val1.type;
     var t2 = val2.type;
@@ -643,24 +690,27 @@ class ASTExpressionObjectFunctionInvocation
       this.variable, String name, List<ASTExpression> arguments)
       : super(name, arguments);
 
-  FutureOr<ASTObjectInstance> _getObjectInstance(
-      VMContext parentContext) async {
+  FutureOr<ASTValue> _getVariableValue(VMContext parentContext) async {
     var obj = await variable.getValue(parentContext);
+    return obj;
+  }
 
-    if (obj is! ASTObjectInstance) {
-      throw StateError(
-          'Variable $variable not pointing to an object instance: $obj');
+  FutureOr<ASTClass> _getObjectClass(VMContext parentContext) async {
+    var obj = await _getVariableValue(parentContext);
+
+    if (obj is ASTClassInstance) {
+      return obj.clazz;
     }
 
-    return obj;
+    var clazz = obj.type.getClass();
+    return clazz;
   }
 
   ASTClass? _functionClass;
 
   FutureOr<ASTClass> _getFunctionClass(VMContext parentContext) async {
     if (_functionClass == null) {
-      var obj = await _getObjectInstance(parentContext);
-      var clazz = obj.clazz;
+      var clazz = await _getObjectClass(parentContext);
       _functionClass = clazz;
     }
     return _functionClass!;
@@ -674,11 +724,30 @@ class ASTExpressionObjectFunctionInvocation
     var f = clazz.getFunction(name, fSignature, parentContext);
 
     if (f == null) {
-      var obj = await _getObjectInstance(parentContext);
+      var obj = await _getVariableValue(parentContext);
       throw StateError(
           "Can't find class[${clazz.name}] function[$name( $fSignature )] for object: $obj");
     }
 
     return f;
+  }
+
+  @override
+  FutureOr<ASTValue> run(
+      VMContext parentContext, ASTRunStatus runStatus) async {
+    var f = await _getFunction(parentContext);
+
+    var argumentsValues =
+        await _resolveArgumentsValues(parentContext, runStatus, arguments);
+
+    var obj = await _getVariableValue(parentContext);
+
+    if (f is ASTClassFunctionDeclaration) {
+      return f.objectCall(parentContext, obj,
+          positionalParameters: argumentsValues);
+    } else {
+      // Static function call:
+      return f.call(parentContext, positionalParameters: argumentsValues);
+    }
   }
 }

@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:apollovm/apollovm.dart';
 import 'package:collection/collection.dart'
-    show DeepCollectionEquality, ListEquality, equalsIgnoreAsciiCase;
+    show DeepCollectionEquality, ListEquality;
 import 'package:swiss_knife/swiss_knife.dart';
 
 import 'apollovm_ast_expression.dart';
@@ -759,44 +759,41 @@ class ASTValuesListAsString extends ASTValue<String> {
   ASTValuesListAsString(this.values) : super(ASTTypeString.INSTANCE);
 
   @override
-  FutureOr<String> getValue(VMContext context) async {
-    var vsFuture = values.map((e) async {
-      var resolved = await e.resolve(context);
-      var v = await resolved.getValue(context);
-      return '$v';
-    });
-    var vs = await Future.wait(vsFuture);
-    return vs.join();
+  FutureOr<String> getValue(VMContext context) {
+    var vsFuture = values.map((e) {
+      var val = e.resolve(context).resolveMapped((v) => v.getValue(context));
+      return val.resolveMapped((v) => '$v');
+    }).toList();
+    return vsFuture.resolveAll().resolveMapped((v) => v.join());
   }
 
   @override
-  FutureOr<String> getValueNoContext() async {
-    var vsFuture = values.map((e) async {
-      var v = await e.getValueNoContext();
-      return '$v';
-    });
-    var vs = await Future.wait(vsFuture);
-    return vs.join();
+  FutureOr<String> getValueNoContext() {
+    var vsFuture = values.map((e) => e.resolveMapped((v) => '$v')).toList();
+    var vs = vsFuture.resolveAll();
+    return vs.resolveMapped((l) => l.join());
   }
 
   @override
-  FutureOr<ASTValueString> resolve(VMContext context) async {
-    var value = await getValue(context);
-    return ASTValueString(value);
+  FutureOr<ASTValueString> resolve(VMContext context) {
+    var value = getValue(context).resolve();
+    return value.resolveMapped((v) => ASTValueString(v));
   }
 }
 
 /// [ASTValue] for expressions that should be converted to [String].
-class ASTValueStringExpresion<T> extends ASTValue<String> {
+class ASTValueStringExpression<T> extends ASTValue<String> {
   final ASTExpression expression;
 
-  ASTValueStringExpresion(this.expression) : super(ASTTypeString.INSTANCE);
+  ASTValueStringExpression(this.expression) : super(ASTTypeString.INSTANCE);
 
   @override
-  FutureOr<String> getValue(VMContext context) async {
-    var result = await expression.run(context, ASTRunStatus());
-    var res = await result.getValue(context);
-    return '$res';
+  FutureOr<String> getValue(VMContext context) {
+    var res = expression
+        .run(context, ASTRunStatus())
+        .resolveMapped((result) => result.getValue(context))
+        .resolveMapped((res) => '$res');
+    return res;
   }
 
   @override
@@ -860,10 +857,11 @@ class ASTValueStringConcatenation extends ASTValue<String> {
 
   @override
   FutureOr<ASTValue<String>> resolve(VMContext context) async {
-    var vsFuture = values.map((e) async {
-      return await e.resolve(context);
+    var vsFuture = values.map((e) {
+      return e.resolve(context).resolve();
     }).toList();
-    var vs = await Future.wait(vsFuture);
+
+    var vs = await vsFuture.resolveAll();
     return ASTValuesListAsString(vs);
   }
 }
@@ -972,13 +970,11 @@ class ASTValueReadKey<T> extends ASTValue<T> {
 }
 
 /// [ASTValue] for an object class instance.
-class ASTObjectInstance extends ASTValue<VMObject> {
-  final ASTClass clazz;
-  final VMObject _object;
+class ASTClassInstance<V extends ASTValue> extends ASTValue<V> {
+  final ASTClass<V> clazz;
+  final V _object;
 
-  ASTObjectInstance(this.clazz)
-      : _object = VMObject(clazz.type),
-        super(clazz.type) {
+  ASTClassInstance(this.clazz, this._object) : super(clazz.type) {
     if (type.name != clazz.name) {
       throw StateError('Incompatible class with type: $clazz != $type');
     }
@@ -988,61 +984,106 @@ class ASTObjectInstance extends ASTValue<VMObject> {
   ASTType resolveType(VMContext? context) => clazz.type;
 
   /// The internal [VMObject] of this instance.
-  VMObject get vmObject => _object;
+  V get vmObject => _object;
 
   @override
-  VMObject getValue(VMContext context) => _object;
+  V getValue(VMContext context) => _object;
 
   @override
-  VMObject getValueNoContext() => _object;
+  V getValueNoContext() => _object;
 
   @override
-  ASTValue<VMObject> resolve(VMContext context) {
+  ASTClassInstance<V> resolve(VMContext context) {
     return this;
   }
 
-  ASTRuntimeVariable? getField(String name, {bool caseInsensitive = false}) {
-    var field = _object[name];
+  FutureOr<ASTValue?> getField(VMClassContext context, String name,
+          {bool caseInsensitive = false}) =>
+      clazz.getInstanceFieldValue(context, ASTRunStatus(), this, name,
+          caseInsensitive: caseInsensitive);
 
-    if (field == null && caseInsensitive) {
-      for (var key in _object.fieldsKeys) {
-        if (equalsIgnoreAsciiCase(key, name)) {
-          field = _object[key];
-          break;
-        }
-      }
-    }
+  FutureOr<ASTValue?> setField(
+          VMClassContext context, String name, ASTValue value,
+          {bool caseInsensitive = false}) =>
+      clazz.setInstanceFieldValue(context, ASTRunStatus(), this, name, value,
+          caseInsensitive: caseInsensitive);
 
-    return field;
-  }
+  FutureOr<ASTValue?> removeField(VMClassContext context, String name,
+          {bool caseInsensitive = false}) =>
+      clazz.removeInstanceFieldValue(context, ASTRunStatus(), this, name,
+          caseInsensitive: caseInsensitive);
 
-  ASTRuntimeVariable? setField(String name, ASTValue value,
-      {bool caseInsensitive = false}) {
-    var field = clazz.getField(name, caseInsensitive: caseInsensitive);
-    if (field == null) throw StateError("No field '$name' in class $clazz");
-
-    var fieldName = field.name;
-    var prev = _object[fieldName];
-    _object[fieldName] = ASTRuntimeVariable(field.type, fieldName, value);
-    return prev;
-  }
-
-  ASTRuntimeVariable? removeField(String name, {bool caseInsensitive = false}) {
-    var field = clazz.getField(name, caseInsensitive: caseInsensitive);
-    if (field == null) throw StateError("No field '$name' in class $clazz");
-    return _object.removeField(field.name);
-  }
-
-  void setFields(Map<String, ASTValue> fieldsValues,
+  void setFields(VMClassContext context, Map<String, ASTValue> fieldsValues,
       {bool caseInsensitive = false}) {
     for (var entry in fieldsValues.entries) {
-      setField(entry.key, entry.value, caseInsensitive: caseInsensitive);
+      setField(context, entry.key, entry.value,
+          caseInsensitive: caseInsensitive);
     }
   }
 
   @override
   String toString() {
     return '$type$_object';
+  }
+}
+
+/// [ASTValue] for static access of class methods and fields.
+class ASTClassStaticAccessor<C extends ASTClass<V>, V> extends ASTValue<V> {
+  final C clazz;
+
+  final ASTStaticClassAccessorVariable<V> staticClassAccessorVariable;
+
+  ASTClassStaticAccessor(this.clazz)
+      : staticClassAccessorVariable = ASTStaticClassAccessorVariable(clazz),
+        super(clazz.type) {
+    if (type.name != clazz.name) {
+      throw StateError('Incompatible class with type: $clazz != $type');
+    }
+    staticClassAccessorVariable.setAccessor(this);
+  }
+
+  @override
+  ASTType resolveType(VMContext? context) => clazz.type;
+
+  @override
+  V getValue(VMContext context) => getValueNoContext();
+
+  @override
+  V getValueNoContext() =>
+      throw UnsupportedError('Static accessor for class $clazz');
+
+  @override
+  ASTClassStaticAccessor<C, V> resolve(VMContext context) {
+    return this;
+  }
+
+  FutureOr<ASTValue?> getField(VMClassContext context, String name,
+          {bool caseInsensitive = false}) =>
+      clazz.getInstanceFieldValue(context, ASTRunStatus(), this, name,
+          caseInsensitive: caseInsensitive);
+
+  FutureOr<ASTValue?> setField(
+          VMClassContext context, String name, ASTValue value,
+          {bool caseInsensitive = false}) =>
+      clazz.setInstanceFieldValue(context, ASTRunStatus(), this, name, value,
+          caseInsensitive: caseInsensitive);
+
+  FutureOr<ASTValue?> removeField(VMClassContext context, String name,
+          {bool caseInsensitive = false}) =>
+      clazz.removeInstanceFieldValue(context, ASTRunStatus(), this, name,
+          caseInsensitive: caseInsensitive);
+
+  void setFields(VMClassContext context, Map<String, ASTValue> fieldsValues,
+      {bool caseInsensitive = false}) {
+    for (var entry in fieldsValues.entries) {
+      setField(context, entry.key, entry.value,
+          caseInsensitive: caseInsensitive);
+    }
+  }
+
+  @override
+  String toString() {
+    return '$clazz';
   }
 }
 

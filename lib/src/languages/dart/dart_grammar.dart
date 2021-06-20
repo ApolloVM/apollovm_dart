@@ -44,7 +44,7 @@ class DartGrammarDefinition extends DartGrammarLexer {
           for (var def in defList) {
             if (def is ASTFunctionDeclaration) {
               root.addFunction(def);
-            } else if (def is ASTClass) {
+            } else if (def is ASTClassNormal) {
               root.addClass(def);
             }
           }
@@ -66,10 +66,11 @@ class DartGrammarDefinition extends DartGrammarLexer {
             block: block, modifiers: ASTModifiers.modifierStatic);
       });
 
-  Parser<ASTClass> classDeclaration() =>
+  Parser<ASTClassNormal> classDeclaration() =>
       (string('class').trim() & identifier() & classCodeBlock()).map((v) {
+        var name = v[1] as String;
         var block = v[2];
-        var clazz = ASTClass(v[1], null);
+        var clazz = ASTClassNormal(name, ASTType<VMObject>(name), null);
         clazz.set(block);
         return clazz;
       });
@@ -85,7 +86,7 @@ class DartGrammarDefinition extends DartGrammarLexer {
         var fields = list.whereType<ASTClassField>().toList();
         var functions = list.whereType<ASTFunctionDeclaration>().toList();
 
-        var block = ASTClass('?', null);
+        var block = ASTClassNormal('?', ASTType<VMObject>('?'), null);
 
         block.addAllFields(fields);
         block.addAllFunctions(functions);
@@ -208,7 +209,7 @@ class DartGrammarDefinition extends DartGrammarLexer {
   Parser<ASTStatementVariableDeclaration> statementVariableDeclaration() =>
       (type() &
               identifier() &
-              (char('=') & ref0(expression)).optional() &
+              (char('=').trim() & ref0(expression)).optional() &
               char(';').trim())
           .map((v) {
         var type = v[0] as ASTType;
@@ -340,9 +341,9 @@ class DartGrammarDefinition extends DartGrammarLexer {
   Parser<ASTExpressionFunctionInvocation> expressionFunctionInvocation() =>
       ((identifier() & char('.')).optional() &
               identifier() &
-              char('(') &
+              char('(').trim() &
               ref0(expressionSequence).optional() &
-              char(')'))
+              char(')').trim())
           .map((v) {
         var objOpt = v[0] as List?;
         var obj = objOpt != null ? objOpt[0] as String : null;

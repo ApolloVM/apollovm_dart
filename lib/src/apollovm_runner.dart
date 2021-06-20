@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'apollovm_base.dart';
+import 'apollovm_extension.dart';
 import 'ast/apollovm_ast_toplevel.dart';
 import 'ast/apollovm_ast_type.dart';
 import 'ast/apollovm_ast_value.dart';
@@ -9,7 +10,7 @@ import 'ast/apollovm_ast_value.dart';
 ///
 /// Implementations of this class allows the execution of an [ASTRoot]
 /// in a specific [language].
-abstract class ApolloLanguageRunner {
+abstract class ApolloLanguageRunner implements VMTypeResolver {
   /// The [ApolloVM] of this runner.
   final ApolloVM apolloVM;
 
@@ -75,19 +76,16 @@ abstract class ApolloLanguageRunner {
         methodName, positionalParameters, namedParameters,
         classInstanceObject: classInstanceObject,
         classInstanceFields: classInstanceFields,
-        externalFunctionMapper: externalFunctionMapper);
+        externalFunctionMapper: externalFunctionMapper,
+        typeResolver: this);
     return result;
   }
 
-  /// Returns an [ASTClass] in [namespace] and with name [className].
-  FutureOr<ASTClass?> getClass(String namespace, String className) async {
-    var codeNamespace = _languageNamespaces.get(namespace);
-
-    var codeUnit = codeNamespace.getCodeUnitWithClass(className);
-    if (codeUnit == null) return null;
-
-    var clazz = codeUnit.root!.getClass(className);
-    return clazz;
+  /// Returns an [ASTClassNormal] for [className] in [namespace] (optional).
+  FutureOr<ASTClassNormal?> getClass(String className,
+      {String? namespace, bool caseInsensitive = false}) {
+    return _languageNamespaces.getClass(className,
+        namespace: namespace, caseInsensitive: caseInsensitive);
   }
 
   /// Returns a class method.
@@ -96,13 +94,13 @@ abstract class ApolloLanguageRunner {
   /// determine the method parameters signature.
   FutureOr<ASTFunctionDeclaration?> getClassMethod(
       String namespace, String className, String methodName,
-      [dynamic? positionalParameters, dynamic? namedParameters]) async {
-    var clazz = await getClass(namespace, className);
+      [dynamic positionalParameters, dynamic namedParameters]) async {
+    var clazz = await getClass(className, namespace: namespace);
     if (clazz == null) return null;
 
     return clazz.getFunctionWithParameters(
         methodName, positionalParameters, namedParameters,
-        externalFunctionMapper: externalFunctionMapper);
+        externalFunctionMapper: externalFunctionMapper, typeResolver: this);
   }
 
   /// Executes a function in [namespace] and with name [functionName].
@@ -139,7 +137,7 @@ abstract class ApolloLanguageRunner {
 
     return await codeUnit.root!.getFunctionWithParameters(
         functionName, positionalParameters, namedParameters,
-        externalFunctionMapper: externalFunctionMapper);
+        externalFunctionMapper: externalFunctionMapper, typeResolver: this);
   }
 
   /// Tries to execute a function with variations of [positionalParameters].
@@ -205,7 +203,36 @@ abstract class ApolloLanguageRunner {
     return null;
   }
 
+  @override
+  FutureOr<ASTType?> resolveType(String typeName,
+      {String? namespace, String? language, bool caseInsensitive = false}) {
+    if (language != null) {
+      if (this.language == language) {
+        var ret = getClass(typeName,
+            namespace: namespace, caseInsensitive: caseInsensitive);
+
+        return ret.resolveMapped((clazz) {
+          clazz?.type ??
+              apolloVM.resolveCoreType(typeName,
+                  namespace: namespace,
+                  language: language,
+                  caseInsensitive: caseInsensitive);
+        });
+      }
+    }
+
+    return apolloVM.resolveType(typeName,
+        namespace: namespace,
+        language: language,
+        caseInsensitive: caseInsensitive);
+  }
+
   void reset() {
     externalFunctionMapper = createDefaultApolloExternalFunctionMapper();
+  }
+
+  @override
+  String toString() {
+    return 'ApolloLanguageRunner{ language: $language, apolloVM: $apolloVM }';
   }
 }

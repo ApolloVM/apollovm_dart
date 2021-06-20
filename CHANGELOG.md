@@ -1,3 +1,16 @@
+## 0.0.28
+
+- Implement static class accessor, to allow calls to static functions.
+- Initial version of `ApolloVMCore`:
+  - Implementing portable `String` class for `dart` and `java11`:
+    - Mapping: `contains`, `toUpperCase`, `toLowerCase`, `valueOf`.
+- Fixed class field code generation for `dart` and `java11`.
+- `async` optimization:
+  - Avoid instantiation of `Future`, using `FutureOrExtension` and
+    `ListFutureOrExtension`:
+    - `resolve`, `resolveMapped` and `resolveAllMapped`.
+- Improved languages tests, to also executed regenerated code.
+
 ## 0.0.27
 
 - Runner:

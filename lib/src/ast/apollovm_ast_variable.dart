@@ -16,14 +16,14 @@ abstract class ASTVariable implements ASTNode, ASTTypedNode {
 
   FutureOr<ASTVariable> resolveVariable(VMContext context);
 
-  FutureOr<ASTValue> getValue(VMContext context) async {
-    var variable = await resolveVariable(context);
-    return variable.getValue(context);
+  FutureOr<ASTValue> getValue(VMContext context) {
+    var variable = resolveVariable(context);
+    return variable.resolveMapped((v) => v.getValue(context));
   }
 
   FutureOr<void> setValue(VMContext context, ASTValue value) async {
     var variable = await resolveVariable(context);
-    await variable.setValue(context, value);
+    variable.setValue(context, value);
   }
 
   FutureOr<V> readIndex<V>(VMContext context, int index) async {
@@ -137,12 +137,22 @@ class ASTScopeVariable<T> extends ASTVariable {
   void associateToType(ASTTypedNode node) => _associatedNode = node;
 
   @override
-  ASTVariable resolveVariable(VMContext context) {
+  FutureOr<ASTVariable> resolveVariable(VMContext context) {
     var variable = context.getVariable(name, true);
-    if (variable == null) {
-      throw StateError("Can't find variable: '$name'");
-    }
-    return variable;
+
+    return variable.resolveMapped((v) {
+      if (v == null) {
+        var typeResolver = context.typeResolver;
+        var resolveType = typeResolver.resolveType(name);
+        return resolveType.resolveMapped((t) {
+          if (t != null) {
+            return t.getClass().staticAccessor.staticClassAccessorVariable;
+          }
+          throw StateError("Can't find variable: '$name'");
+        });
+      }
+      return v;
+    });
   }
 }
 
@@ -168,10 +178,35 @@ class ASTThisVariable<T> extends ASTVariable {
 
   @override
   ASTVariable resolveVariable(VMContext context) {
-    var obj = context.getObjectInstance();
+    var obj = context.getClassInstance();
     if (obj == null) {
       throw StateError("Can't determine 'this'! No ASTObjectInstance defined!");
     }
     return ASTRuntimeVariable(obj.type, 'this', obj);
+  }
+}
+
+/// [ASTVariable] for `static` reference.
+class ASTStaticClassAccessorVariable<T> extends ASTVariable {
+  final ASTClass<T> clazz;
+  late final ASTClassStaticAccessor<ASTClass<T>, T> staticAccessor;
+
+  ASTStaticClassAccessorVariable(this.clazz) : super(clazz.name);
+
+  void setAccessor(ASTClassStaticAccessor<ASTClass<T>, T> accessor) {
+    staticAccessor = accessor;
+  }
+
+  @override
+  FutureOr<ASTType> resolveType(VMContext? context) {
+    return clazz.type;
+  }
+
+  @override
+  ASTVariable resolveVariable(VMContext context) => this;
+
+  @override
+  FutureOr<ASTValue> getValue(VMContext context) {
+    return staticAccessor;
   }
 }

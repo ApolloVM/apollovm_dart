@@ -246,22 +246,25 @@ Please file feature requests and bugs at the [issue tracker][tracker].
 
 ## Contribution
 
-Any help from open-source community is always welcome and needed:
+Any help from the open-source community is always welcome and needed.
+
 - Found an issue?
   - Fill a bug with details.
 - Wish a feature?
   - Open a feature request.
 - Are you using and liking the project?
-  - Promote the project: create an article, post or make a donation.
+  - Promote the project: create an article, do a post or make a donation.
 - Are you a developer?
   - Fix a bug and send a pull request.
   - Implement a new feature.
   - Improve a language support.
   - Add support for another language.
-  - Improve unit tests.
+  - Improve the Unit Tests.
 - Have you already helped in any way?
   - **Many thanks from me, the contributors and everybody that uses this project!**
 
+*If you donate 1 hour of your time, you can contribute a lot,
+because others will do the same, just be part and start with your 1 hour.*
 
 [tracker]: https://github.com/ApolloVM/apollovm_dart/issues
 

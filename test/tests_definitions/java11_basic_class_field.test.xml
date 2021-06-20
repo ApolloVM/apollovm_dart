@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <test title="Basic Class field">
-    <source language="dart">
+    <source language="java11">
         <![CDATA[
 
             class Foo {
@@ -13,7 +13,7 @@
 
               void test(int a) {
                 var z = getZ();
-                var s = '$this > a: $a ; x: $x ; y: $y ; z: $z' ;
+                var s = this+ " > a: "+ a +" ; x: "+ x +" ; y: "+ y +" ; z: "+ z ;
                 print(s);
               }
             }
@@ -24,12 +24,15 @@
         [ 123 ]
     </call>
     <output>
-        ["Foo{x: int x, y: int y} > a: 123 ; x: null ; y: 10 ; z: 20"]
+        ["Foo{x: Null, y: int} > a: 123 ; x: null ; y: 10 ; z: 20"]
     </output>
     <source-generated language="dart"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
 <<<< NAMESPACE="" >>>>
 <<<< CODE_UNIT_START="/test" >>>>
 class Foo {
+
+  int x;
+  int y = 10;
 
   int getZ() {
     return y * 2;
@@ -51,13 +54,16 @@ class Foo {
 <<<< CODE_UNIT_START="/test" >>>>
 class Foo {
 
+  int x;
+  int y = 10;
+
   int getZ() {
     return y * 2;
   }
 
   void test(int a) {
     var z = getZ();
-    var s = String.valueOf( this ) + " > a: " + a + " ; x: " + x + " ; y: " + y + " ; z: " + z;
+    var s = this + " > a: " + a + " ; x: " + x + " ; y: " + y + " ; z: " + z;
     print(s);
   }
 

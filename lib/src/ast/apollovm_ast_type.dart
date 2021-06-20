@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:apollovm/apollovm.dart';
+import 'package:apollovm/src/core/apollovm_core_base.dart';
 import 'package:swiss_knife/swiss_knife.dart';
 
 import 'apollovm_ast_annotation.dart';
@@ -141,6 +142,26 @@ class ASTType<V> implements ASTNode, ASTTypedNode {
 
   ASTType(this.name, {this.generics, this.superType, this.annotations});
 
+  ASTClass<V>? _class;
+
+  void setClass(ASTClass<V> clazz) {
+    if (_class != null && !identical(_class, clazz)) {
+      throw StateError('Class already set for type: $this');
+    }
+    _class = clazz;
+  }
+
+  ASTClass<V> getClass() {
+    if (_class == null) {
+      var coreClass = ApolloVMCore.getClass<V>(name);
+      if (coreClass == null) {
+        throw StateError('Class not set for type: $this');
+      }
+      _class = coreClass;
+    }
+    return _class!;
+  }
+
   @override
   FutureOr<ASTType> resolveType(VMContext? context) => this;
 
@@ -198,6 +219,8 @@ class ASTType<V> implements ASTNode, ASTTypedNode {
   }
 
   FutureOr<ASTValue<V>?> toValue(VMContext context, Object? v) async {
+    if (v == null) return null;
+
     if (v is ASTValue<V>) return v;
 
     if (v is ASTValue) {
@@ -207,6 +230,8 @@ class ASTType<V> implements ASTNode, ASTTypedNode {
     var t = v as V;
     return ASTValue.from(this, t);
   }
+
+  FutureOr<ASTValue<V>?> toDefaultValue(VMContext context) => null;
 
   @override
   bool operator ==(Object other) =>
@@ -262,15 +287,24 @@ class ASTTypeBool extends ASTTypePrimitive<bool> {
   }
 
   @override
-  FutureOr<ASTValueBool?> toValue(VMContext context, Object? v) async {
+  FutureOr<ASTValueBool?> toValue(VMContext context, Object? v) {
     if (v is ASTValueBool) return v;
 
     if (v is ASTValue) {
-      v = await (v).getValue(context);
+      return v.getValue(context).resolveMapped(_toASTValueBool);
+    } else {
+      return _toASTValueBool(v);
     }
+  }
 
+  ASTValueBool? _toASTValueBool(dynamic v) {
     var b = parseBool(v);
     return b != null ? ASTValueBool(b) : null;
+  }
+
+  @override
+  FutureOr<ASTValueBool?> toDefaultValue(VMContext context) {
+    return ASTValueBool(false);
   }
 
   @override
@@ -285,6 +319,13 @@ class ASTTypeBool extends ASTTypePrimitive<bool> {
   String toString() {
     return 'bool';
   }
+}
+
+enum ASTNumType {
+  nan,
+  num,
+  int,
+  double,
 }
 
 /// [ASTType] for numbers ([num]).
@@ -304,15 +345,19 @@ class ASTTypeNum<T extends num> extends ASTTypePrimitive<T> {
   }
 
   @override
-  FutureOr<ASTValueNum<T>?> toValue(VMContext context, Object? v) async {
+  FutureOr<ASTValueNum<T>?> toValue(VMContext context, Object? v) {
     if (v is ASTTypeNum) return v as ASTValueNum<T>;
     if (v is ASTValueInt) return v as ASTValueNum<T>;
     if (v is ASTValueDouble) return v as ASTValueNum<T>;
 
     if (v is ASTValue) {
-      v = await (v).getValue(context);
+      return v.getValue(context).resolveMapped(_toASTValueNum);
+    } else {
+      return _toASTValueNum(v);
     }
+  }
 
+  ASTValueNum<T>? _toASTValueNum(dynamic v) {
     var n = parseNum(v);
     if (n == null) return null;
 
@@ -350,16 +395,25 @@ class ASTTypeInt extends ASTTypeNum<int> {
   }
 
   @override
-  FutureOr<ASTValueInt?> toValue(VMContext context, Object? v) async {
+  FutureOr<ASTValueInt?> toValue(VMContext context, Object? v) {
     if (v is ASTValueInt) return v;
     if (v is ASTValueDouble) return ASTValueInt(v.value.toInt());
 
     if (v is ASTValue) {
-      v = await (v).getValue(context);
+      return v.getValue(context).resolveMapped(_toASTValueInt);
+    } else {
+      return _toASTValueInt(v);
     }
+  }
 
+  ASTValueInt? _toASTValueInt(dynamic v) {
     var n = parseInt(v);
     return n != null ? ASTValueInt(n) : null;
+  }
+
+  @override
+  ASTValueInt toDefaultValue(VMContext context) {
+    return ASTValueInt(0);
   }
 
   @override
@@ -389,16 +443,25 @@ class ASTTypeDouble extends ASTTypeNum<double> {
   }
 
   @override
-  FutureOr<ASTValueDouble?> toValue(VMContext context, Object? v) async {
+  FutureOr<ASTValueDouble?> toValue(VMContext context, Object? v) {
     if (v is ASTValueDouble) return v;
     if (v is ASTValueInt) return ASTValueDouble(v.value.toDouble());
 
     if (v is ASTValue) {
-      v = await (v).getValue(context);
+      return v.getValue(context).resolveMapped(_toASTValueDouble);
     }
 
+    return _toASTValueDouble(v);
+  }
+
+  ASTValueDouble? _toASTValueDouble(dynamic v) {
     var n = parseDouble(v);
     return n != null ? ASTValueDouble(n) : null;
+  }
+
+  @override
+  FutureOr<ASTValueDouble?> toDefaultValue(VMContext context) {
+    return ASTValueDouble(0.0);
   }
 
   @override
@@ -432,11 +495,20 @@ class ASTTypeString extends ASTTypePrimitive<String> {
     if (v is ASTValueString) return v;
 
     if (v is ASTValue) {
-      v = await (v).getValue(context);
+      return v.getValue(context).resolveMapped(_toASTValueString);
+    } else {
+      return _toASTValueString(v);
     }
+  }
 
+  ASTValueString? _toASTValueString(dynamic v) {
     var n = parseString(v);
     return n != null ? ASTValueString(n) : null;
+  }
+
+  @override
+  FutureOr<ASTValueString?> toDefaultValue(VMContext context) {
+    return null;
   }
 
   @override
@@ -510,6 +582,7 @@ class ASTTypeVar extends ASTType<dynamic> {
   bool acceptsType(ASTType type) => true;
 
   ASTType? _resolvedType;
+
   @override
   FutureOr<ASTType> resolveType(VMContext? context) async {
     if (_resolvedType == null) {

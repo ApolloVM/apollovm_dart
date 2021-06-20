@@ -135,38 +135,9 @@ Future<void> main() async {
 
           for (var i = 0; i < calls.length; ++i) {
             var call = calls[i];
-            var outputJson = outputs[i].text;
-
-            var callClass = call.getAttribute('class');
-            var callFunction = call.getAttribute('function')!;
-            var callParametersJson = call.text;
-            var callParameters = _parseJsonList(callParametersJson);
-
-            var output = _parseJsonList(outputJson);
-
-            var outputList = [];
-            runner.externalPrintFunction = (o) => outputList.add(o);
-
-            print('---------------------------------------');
-            print('EXPECTED OUTPUT[$i]');
-            print(output);
-            print('');
-
-            if (callClass != null) {
-              print(
-                  'EXECUTING[$i]: $callClass.$callFunction( $callParameters )');
-              await runner.executeClassMethod('', callClass, callFunction,
-                  positionalParameters: callParameters);
-            } else {
-              print('EXECUTING[$i]: $callFunction( $callParameters )');
-              await runner.executeFunction('', callFunction,
-                  positionalParameters: callParameters);
-            }
-
-            expect(outputList, equals(output));
-
-            print('OUTPUT[$i]:');
-            outputList.forEach((o) => print('>> $o'));
+            var output = outputs[i];
+            var outputJson = _resolveLanguageOutput(output, language);
+            await _testCall(call, i, outputJson, runner);
           }
 
           for (var sourceGen in sourcesGenerated) {
@@ -181,11 +152,94 @@ Future<void> main() async {
             print(allSources);
 
             expect(allSources, equals(sourceGen.text));
+
+            {
+              print('.......................................');
+
+              var vmCodeGen = ApolloVM();
+              print('-- Testing generated code in VM: $vmCodeGen');
+
+              for (var ns in codeStorage.getNamespaces()) {
+                for (var id in codeStorage.getNamespaceCodeUnitsIDs(ns) ?? []) {
+                  var source = codeStorage.getNamespaceCodeUnitSource(ns, id)!;
+                  var cu = CodeUnit(sourceGenLanguage, source, id);
+
+                  print('-- Loading generated code: $cu');
+                  var ok = await vmCodeGen.loadCodeUnit(cu);
+                  print(cu.source);
+                  expect(ok, isTrue,
+                      reason:
+                          'Error loading generated code: $sourceGenLanguage');
+                }
+              }
+
+              print('-- VM: $vmCodeGen');
+
+              var runnerCodeGen = vmCodeGen.createRunner(sourceGenLanguage)!;
+
+              for (var i = 0; i < calls.length; ++i) {
+                var call = calls[i];
+                var output = outputs[i];
+                var outputJson =
+                    _resolveLanguageOutput(output, sourceGenLanguage);
+
+                await _testCall(call, i, outputJson, runnerCodeGen);
+              }
+            }
           }
         });
       }
     });
   }
+}
+
+String _resolveLanguageOutput(XmlElement output, String language) {
+  String outputJson;
+  if (output.children.isNotEmpty) {
+    var child = output.children
+        .firstWhereOrNull((e) => e.getAttribute('language') == language);
+    child ??= output.children.firstWhereOrNull(
+        (e) => e is XmlElement && e.getAttribute('language') == null);
+    print(child);
+    outputJson = child?.text ?? output.text;
+  } else {
+    outputJson = output.text;
+  }
+  return outputJson;
+}
+
+Future<void> _testCall(XmlElement call, int callIndex, String outputJson,
+    ApolloLanguageRunner runner) async {
+  var callClass = call.getAttribute('class');
+  var callFunction = call.getAttribute('function')!;
+  var callParametersJson = call.text;
+  var callParameters = _parseJsonList(callParametersJson);
+
+  var output = _parseJsonList(outputJson);
+
+  var outputList = [];
+  runner.externalPrintFunction = (o) => outputList.add(o);
+
+  print('---------------------------------------');
+  print(runner);
+  print('EXPECTED OUTPUT[$callIndex]');
+  print(output);
+  print('');
+
+  if (callClass != null) {
+    print('EXECUTING[$callIndex]: $callClass.$callFunction( $callParameters )');
+    await runner.executeClassMethod('', callClass, callFunction,
+        positionalParameters: callParameters);
+  } else {
+    print('EXECUTING[$callIndex]: $callFunction( $callParameters )');
+    await runner.executeFunction('', callFunction,
+        positionalParameters: callParameters);
+  }
+
+  expect(outputList, equals(output), reason: 'Output error');
+
+  print('OUTPUT[$callIndex]:');
+  outputList.forEach((o) => print('>> $o'));
 }
 
 List _parseJsonList(String callParametersJson) {

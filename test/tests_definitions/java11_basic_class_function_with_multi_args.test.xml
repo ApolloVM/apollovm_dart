@@ -29,12 +29,15 @@
         [ 123 ]
     </call>
     <output>
-        ["Foo{x: int x, y: int y} > a: 123 ; x: 0 ; y: 10 ; z: 20 ; b: 600"]
+        ["Foo{x: int, y: int} > a: 123 ; x: 0 ; y: 10 ; z: 20 ; b: 600"]
     </output>
     <source-generated language="dart"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
 <<<< NAMESPACE="" >>>>
 <<<< CODE_UNIT_START="/test" >>>>
 class Foo {
+
+  int x = 0;
+  int y = 10;
 
   int getZ() {
     return y * 2;
@@ -60,6 +63,9 @@ class Foo {
 <<<< NAMESPACE="" >>>>
 <<<< CODE_UNIT_START="/test" >>>>
 class Foo {
+
+  int x = 0;
+  int y = 10;
 
   int getZ() {
     return y * 2;
