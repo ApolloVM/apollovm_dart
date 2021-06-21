@@ -14,7 +14,7 @@ import 'languages/java/java11/java11_generator.dart';
 
 /// The Apollo VM.
 class ApolloVM implements VMTypeResolver {
-  static final String VERSION = '0.0.28';
+  static final String VERSION = '0.0.29';
 
   static int _idCount = 0;
 
