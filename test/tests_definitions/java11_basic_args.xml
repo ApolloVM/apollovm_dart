@@ -1,38 +1,39 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <test title="Basic main(List<String>) with string variable">
-    <source language="dart">
+    <source language="java11">
         <![CDATA[
 
         class Foo {
 
-          void main(List args) {
-            var a = 123;
-            var b = 456 ;
+          void main(Object[] args) {
+            var a = Integer.parseInt( args[0] );
+            var b = args[1];
             var c = a+b;
-            print(c);
-            print('c: $c');
+            print("a: "+ a);
+            print("b: "+ b);
+            print("c: "+ c);
           }
 
         }
-
         ]]>
     </source>
     <call class="Foo" function="main">
-        [ ]
+        [["10", 20]]
     </call>
     <output>
-        [579, "c: 579"]
+        ["a: 10", "b: 20", "c: 30"]
     </output>
     <source-generated language="dart"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
 <<<< NAMESPACE="" >>>>
 <<<< CODE_UNIT_START="/test" >>>>
 class Foo {
 
-  void main(List<dynamic> args) {
-    var a = 123;
-    var b = 456;
+  void main(List<Object> args) {
+    var a = int.parse(args[0]);
+    var b = args[1];
     var c = a + b;
-    print(c);
+    print('a: $a');
+    print('b: $b');
     print('c: $c');
   }
 
@@ -47,10 +48,11 @@ class Foo {
 class Foo {
 
   void main(Object[] args) {
-    var a = 123;
-    var b = 456;
+    var a = Integer.parseInt(args[0]);
+    var b = args[1];
     var c = a + b;
-    print(c);
+    print("a: " + a);
+    print("b: " + b);
     print("c: " + c);
   }
 

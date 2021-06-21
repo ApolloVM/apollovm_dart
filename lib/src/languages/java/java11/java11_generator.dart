@@ -9,6 +9,37 @@ class ApolloCodeGeneratorJava11 extends ApolloCodeGenerator {
       : super('java11', codeStorage);
 
   @override
+  String normalizeTypeName(String typeName, [String? callingFunction]) {
+    switch (typeName) {
+      case 'int':
+        return callingFunction != null ? 'Integer' : typeName;
+      case 'dynamic':
+        return 'Object';
+      default:
+        return typeName;
+    }
+  }
+
+  @override
+  String normalizeTypeFunction(String typeName, String functionName) {
+    switch (typeName) {
+      case 'int':
+      case 'Integer':
+        {
+          switch (functionName) {
+            case 'parse':
+            case 'parseInt':
+              return 'parseInt';
+            default:
+              return functionName;
+          }
+        }
+      default:
+        return functionName;
+    }
+  }
+
+  @override
   StringBuffer generateASTClass(ASTClassNormal clazz,
       [String indent = '', StringBuffer? s]) {
     s ??= StringBuffer();

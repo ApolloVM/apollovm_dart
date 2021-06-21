@@ -5,7 +5,14 @@ import 'package:apollovm/apollovm.dart';
 import 'apollovm_ast_value.dart';
 
 /// An AST (Abstract Syntax Tree) Node.
-abstract class ASTNode {}
+abstract class ASTNode {
+  ASTNode? get parentNode;
+
+  void resolveNode(ASTNode? parentNode);
+
+  ASTNode? getNodeIdentifier(String name) =>
+      parentNode?.getNodeIdentifier(name);
+}
 
 /// The runtime status of execution.
 ///

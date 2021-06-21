@@ -11,6 +11,20 @@ import 'apollovm_ast_variable.dart';
 
 /// An AST Statement.
 abstract class ASTStatement implements ASTCodeRunner, ASTNode {
+  ASTNode? _parentNode;
+
+  @override
+  ASTNode? get parentNode => _parentNode;
+
+  @override
+  void resolveNode(ASTNode? parentNode) {
+    _parentNode = parentNode;
+  }
+
+  @override
+  ASTNode? getNodeIdentifier(String name) =>
+      parentNode?.getNodeIdentifier(name);
+
   @override
   VMContext defineRunContext(VMContext parentContext) {
     return parentContext;
@@ -25,6 +39,27 @@ class ASTBlock extends ASTStatement {
   ASTBlock? parentBlock;
 
   ASTBlock(this.parentBlock);
+
+  @override
+  void resolveNode(ASTNode? parentNode) {
+    super.resolveNode(parentNode);
+
+    for (var e in _statements) {
+      e.resolveNode(this);
+    }
+
+    for (var e in _functions.values) {
+      e.resolveNode(this);
+    }
+  }
+
+  @override
+  ASTNode? getNodeIdentifier(String name) {
+    var f = _functions[name];
+    if (f != null) return f;
+
+    return parentNode?.getNodeIdentifier(name);
+  }
 
   final Map<String, ASTFunctionSet> _functions = {};
 
@@ -160,6 +195,13 @@ class ASTStatementValue extends ASTStatement {
   ASTStatementValue(ASTBlock block, this.value) : super();
 
   @override
+  void resolveNode(ASTNode? parentNode) {
+    super.resolveNode(parentNode);
+
+    value.resolveNode(parentNode);
+  }
+
+  @override
   FutureOr<ASTValue> run(VMContext parentContext, ASTRunStatus runStatus) {
     var context = defineRunContext(parentContext);
     return value.getValue(context) as FutureOr<ASTValue>;
@@ -214,6 +256,13 @@ class ASTStatementExpression extends ASTStatement {
   ASTStatementExpression(this.expression);
 
   @override
+  void resolveNode(ASTNode? parentNode) {
+    super.resolveNode(parentNode);
+
+    expression.resolveNode(parentNode);
+  }
+
+  @override
   FutureOr<ASTValue> run(VMContext parentContext, ASTRunStatus runStatus) {
     var context = defineRunContext(parentContext);
     return expression.run(context, runStatus);
@@ -253,6 +302,13 @@ class ASTStatementReturnValue extends ASTStatementReturn {
   ASTStatementReturnValue(this.value);
 
   @override
+  void resolveNode(ASTNode? parentNode) {
+    super.resolveNode(parentNode);
+
+    value.resolveNode(parentNode);
+  }
+
+  @override
   ASTValue run(VMContext parentContext, ASTRunStatus runStatus) {
     return runStatus.returnValue(value);
   }
@@ -267,6 +323,13 @@ class ASTStatementReturnVariable extends ASTStatementReturn {
   ASTVariable variable;
 
   ASTStatementReturnVariable(this.variable);
+
+  @override
+  void resolveNode(ASTNode? parentNode) {
+    super.resolveNode(parentNode);
+
+    variable.resolveNode(parentNode);
+  }
 
   @override
   FutureOr<ASTValue> run(VMContext parentContext, ASTRunStatus runStatus) {
@@ -284,6 +347,13 @@ class ASTStatementReturnWithExpression extends ASTStatementReturn {
   ASTExpression expression;
 
   ASTStatementReturnWithExpression(this.expression);
+
+  @override
+  void resolveNode(ASTNode? parentNode) {
+    super.resolveNode(parentNode);
+
+    expression.resolveNode(parentNode);
+  }
 
   @override
   FutureOr<ASTValue> run(VMContext parentContext, ASTRunStatus runStatus) {
@@ -305,6 +375,13 @@ class ASTStatementVariableDeclaration<V> extends ASTStatement {
   ASTExpression? value;
 
   ASTStatementVariableDeclaration(this.type, this.name, this.value);
+
+  @override
+  void resolveNode(ASTNode? parentNode) {
+    super.resolveNode(parentNode);
+
+    value?.resolveNode(this);
+  }
 
   @override
   FutureOr<ASTValue> run(
@@ -365,6 +442,13 @@ class ASTBranchIfBlock extends ASTBranch {
   ASTBlock block;
 
   ASTBranchIfBlock(this.condition, this.block);
+  @override
+  void resolveNode(ASTNode? parentNode) {
+    super.resolveNode(parentNode);
+
+    condition.resolveNode(parentNode);
+    block.resolveNode(parentNode);
+  }
 
   @override
   FutureOr<ASTValue> run(
@@ -387,6 +471,15 @@ class ASTBranchIfElseBlock extends ASTBranch {
   ASTBlock blockElse;
 
   ASTBranchIfElseBlock(this.condition, this.blockIf, this.blockElse);
+
+  @override
+  void resolveNode(ASTNode? parentNode) {
+    super.resolveNode(parentNode);
+
+    condition.resolveNode(parentNode);
+    blockIf.resolveNode(parentNode);
+    blockElse.resolveNode(parentNode);
+  }
 
   @override
   FutureOr<ASTValue> run(
@@ -413,6 +506,16 @@ class ASTBranchIfElseIfsElseBlock extends ASTBranch {
 
   ASTBranchIfElseIfsElseBlock(
       this.condition, this.blockIf, this.blocksElseIf, this.blockElse);
+
+  @override
+  void resolveNode(ASTNode? parentNode) {
+    super.resolveNode(parentNode);
+
+    condition.resolveNode(parentNode);
+    blockIf.resolveNode(parentNode);
+    blocksElseIf.forEach((e) => e.resolveNode(parentNode));
+    blockElse.resolveNode(parentNode);
+  }
 
   @override
   FutureOr<ASTValue> run(
@@ -450,6 +553,17 @@ class ASTStatementForLoop extends ASTStatement {
 
   ASTStatementForLoop(this.initStatement, this.conditionExpression,
       this.continueExpression, this.loopBlock);
+
+  @override
+  void resolveNode(ASTNode? parentNode) {
+    super.resolveNode(parentNode);
+
+    initStatement.resolveNode(parentNode);
+    conditionExpression.resolveNode(parentNode);
+    continueExpression.resolveNode(parentNode);
+
+    loopBlock.resolveNode(parentNode);
+  }
 
   @override
   VMContext defineRunContext(VMContext parentContext) {

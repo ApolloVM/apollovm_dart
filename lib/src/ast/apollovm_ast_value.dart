@@ -194,6 +194,20 @@ abstract class ASTValue<T> implements ASTNode, ASTTypedNode {
     return false;
   }
 
+  ASTNode? _parentNode;
+
+  @override
+  ASTNode? get parentNode => _parentNode;
+
+  @override
+  void resolveNode(ASTNode? parentNode) {
+    _parentNode = parentNode;
+  }
+
+  @override
+  ASTNode? getNodeIdentifier(String name) =>
+      parentNode?.getNodeIdentifier(name);
+
   @override
   String toString();
 }

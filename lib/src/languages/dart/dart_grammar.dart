@@ -50,6 +50,8 @@ class DartGrammarDefinition extends DartGrammarLexer {
           }
         }
 
+        root.resolveNode(null);
+
         return root;
       });
 

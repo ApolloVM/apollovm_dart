@@ -1,6 +1,8 @@
 import 'dart:async';
 
 import 'package:apollovm/apollovm.dart';
+import 'package:apollovm/src/apollovm_extension.dart';
+import 'package:apollovm/src/core/apollovm_core_base.dart';
 import 'package:collection/collection.dart'
     show IterableExtension, equalsIgnoreAsciiCase;
 
@@ -8,8 +10,6 @@ import 'apollovm_ast_statement.dart';
 import 'apollovm_ast_type.dart';
 import 'apollovm_ast_value.dart';
 import 'apollovm_ast_variable.dart';
-
-import 'package:apollovm/src/apollovm_extension.dart';
 
 /// An [ASTBlock] that can have an entry-point method/function.
 class ASTEntryPointBlock extends ASTBlock {
@@ -249,6 +249,14 @@ abstract class ASTClass<T> extends ASTEntryPointBlock {
   FutureOr<ASTValue?> removeInstanceFieldValue(VMContext context,
       ASTRunStatus runStatus, ASTValue<T> instance, String fieldName,
       {bool caseInsensitive = false});
+
+  @override
+  void resolveNode(ASTNode? parentNode) {
+    super.resolveNode(parentNode);
+    resolveNodeFields(parentNode);
+  }
+
+  void resolveNodeFields(ASTNode? parentNode);
 }
 
 /// AST of a primitive type VM Class.
@@ -260,6 +268,20 @@ class ASTClassPrimitive<T> extends ASTClass<T> {
 
   @override
   List<ASTClassField> get fields => <ASTClassField>[];
+
+  @override
+  void resolveNodeFields(ASTNode? parentNode) {
+    for (var f in fields) {
+      f.resolveNode(this);
+    }
+  }
+
+  @override
+  ASTNode? getNodeIdentifier(String name) {
+    var f = fields.where((e) => e.name == name).firstOrNull;
+    if (f != null) return f;
+    return super.getNodeIdentifier(name);
+  }
 
   @override
   List<String> get fieldsNames => <String>[];
@@ -348,6 +370,20 @@ class ASTClassNormal extends ASTClass<VMObject> {
 
   @override
   List<ASTClassField> get fields => _fields.values.toList();
+
+  @override
+  void resolveNodeFields(ASTNode? parentNode) {
+    for (var f in _fields.values) {
+      f.resolveNode(this);
+    }
+  }
+
+  @override
+  ASTNode? getNodeIdentifier(String name) {
+    var f = _fields[name];
+    if (f != null) return f;
+    return super.getNodeIdentifier(name);
+  }
 
   @override
   List<String> get fieldsNames => _fields.keys.toList();
@@ -549,6 +585,26 @@ class ASTClassNormal extends ASTClass<VMObject> {
 class ASTRoot extends ASTEntryPointBlock {
   ASTRoot() : super(null);
 
+  @override
+  void resolveNode(ASTNode? parentNode) {
+    super.resolveNode(parentNode);
+
+    for (var e in _classes.values) {
+      e.resolveNode(this);
+    }
+  }
+
+  @override
+  ASTNode? getNodeIdentifier(String name) {
+    var identifier = super.getNodeIdentifier(name);
+    if (identifier != null) return identifier;
+
+    var clazz = ApolloVMCore.getClass(name);
+    if (clazz != null) return clazz;
+
+    return null;
+  }
+
   String namespace = '';
 
   final Map<String, ASTClassNormal> _classes = <String, ASTClassNormal>{};
@@ -614,6 +670,20 @@ class ASTParameterDeclaration<T> implements ASTNode {
 
   FutureOr<ASTValue<T>?> toValue(VMContext context, Object? v) =>
       type.toValue(context, v);
+
+  ASTNode? _parentNode;
+
+  @override
+  ASTNode? get parentNode => _parentNode;
+
+  @override
+  void resolveNode(ASTNode? parentNode) {
+    _parentNode = parentNode;
+  }
+
+  @override
+  ASTNode? getNodeIdentifier(String name) =>
+      parentNode?.getNodeIdentifier(name);
 
   @override
   String toString() {
@@ -710,6 +780,20 @@ class ASTFunctionSignature implements ASTNode {
 
   bool get isNotEmpty => !isEmpty;
 
+  ASTNode? _parentNode;
+
+  @override
+  ASTNode? get parentNode => _parentNode;
+
+  @override
+  void resolveNode(ASTNode? parentNode) {
+    _parentNode = parentNode;
+  }
+
+  @override
+  ASTNode? getNodeIdentifier(String name) =>
+      parentNode?.getNodeIdentifier(name);
+
   @override
   String toString() {
     var s = StringBuffer();
@@ -781,6 +865,22 @@ class ASTFunctionSetSingle extends ASTFunctionSet {
     set.add(f);
     return set;
   }
+
+  ASTNode? _parentNode;
+
+  @override
+  ASTNode? get parentNode => _parentNode;
+
+  @override
+  void resolveNode(ASTNode? parentNode) {
+    _parentNode = parentNode;
+
+    f.resolveNode(parentNode);
+  }
+
+  @override
+  ASTNode? getNodeIdentifier(String name) =>
+      parentNode?.getNodeIdentifier(name);
 }
 
 /// [ASTFunctionSet] implementation, with multiple entries.
@@ -828,6 +928,24 @@ class ASTFunctionSetMultiple extends ASTFunctionSet {
 
     return this;
   }
+
+  ASTNode? _parentNode;
+
+  @override
+  ASTNode? get parentNode => _parentNode;
+
+  @override
+  void resolveNode(ASTNode? parentNode) {
+    _parentNode = parentNode;
+
+    for (var f in _functions) {
+      f.resolveNode(parentNode);
+    }
+  }
+
+  @override
+  ASTNode? getNodeIdentifier(String name) =>
+      parentNode?.getNodeIdentifier(name);
 }
 
 /// An AST Parameters Declaration
@@ -840,6 +958,12 @@ class ASTParametersDeclaration {
 
   ASTParametersDeclaration(
       this.positionalParameters, this.optionalParameters, this.namedParameters);
+
+  void resolveNode(ASTNode? parentNode) {
+    positionalParameters?.forEach((e) => e.resolveNode(parentNode));
+    optionalParameters?.forEach((e) => e.resolveNode(parentNode));
+    namedParameters?.forEach((e) => e.resolveNode(parentNode));
+  }
 
   int get positionalParametersSize => positionalParameters?.length ?? 0;
 
@@ -1025,6 +1149,21 @@ class ASTFunctionDeclaration<T> extends ASTBlock {
     set(block);
   }
 
+  @override
+  void resolveNode(ASTNode? parentNode) {
+    super.resolveNode(parentNode);
+
+    _parameters.resolveNode(this);
+  }
+
+  @override
+  ASTNode? getNodeIdentifier(String name) {
+    var p = _parameters.getParameterByName(name);
+    if (p != null) return p;
+
+    return super.getNodeIdentifier(name);
+  }
+
   ASTParametersDeclaration get parameters => _parameters;
 
   int get parametersSize => _parameters.size;
@@ -1072,29 +1211,55 @@ class ASTFunctionDeclaration<T> extends ASTBlock {
   }
 
   FutureOr<ASTValue<T>> resolveReturnValue(
-      VMContext context, Object? returnValue) async {
-    var resolved = await returnType.toValue(context, returnValue);
-    resolved ??= ASTValueVoid.INSTANCE as ASTValue<T>;
-    return resolved;
+      VMContext context, Object? returnValue) {
+    var ret = returnType.toValue(context, returnValue);
+    return ret.resolveMapped((resolved) {
+      resolved ??= ASTValueVoid.INSTANCE as ASTValue<T>;
+      return resolved;
+    });
   }
 
-  Future<void> initializeVariables(VMContext context,
-      List? positionalParameters, Map? namedParameters) async {
-    var i = 0;
-
+  FutureOr<void> initializeVariables(
+      VMContext context, List? positionalParameters, Map? namedParameters) {
     if (positionalParameters != null) {
-      for (; i < positionalParameters.length; ++i) {
-        var paramVal = positionalParameters[i];
-        var fParam = getParameterByIndex(i);
-        if (fParam == null) {
-          throw StateError("Can't find parameter at index: $i");
-        }
-        var value =
-            await fParam.toValue(context, paramVal) ?? ASTValueNull.INSTANCE;
-        context.declareVariableWithValue(fParam.type, fParam.name, value);
+      var ret =
+          _initialize_positionalParameters(positionalParameters, 0, context);
+      return ret.onResolve((i) {
+        _initialize_optionalParameters(i, context);
+      });
+    } else {
+      _initialize_optionalParameters(0, context);
+    }
+  }
+
+  FutureOr<int> _initialize_positionalParameters(
+      List<dynamic> positionalParameters, int i, VMContext context) {
+    FutureOr<void> prevFuture;
+
+    for (; i < positionalParameters.length; ++i) {
+      var paramVal = positionalParameters[i];
+      var fParam = getParameterByIndex(i);
+      if (fParam == null) {
+        throw StateError("Can't find parameter at index: $i");
+      }
+
+      var value = fParam.toValue(context, paramVal) ?? ASTValueNull.INSTANCE;
+
+      var future = value.onResolve((v) {
+        context.declareVariableWithValue(fParam.type, fParam.name, v);
+      });
+
+      if (prevFuture == null) {
+        prevFuture = future;
+      } else {
+        prevFuture = prevFuture.resolveWith(() => future.resolve());
       }
     }
 
+    return prevFuture.resolveWith(() => i);
+  }
+
+  void _initialize_optionalParameters(int i, VMContext context) {
     var parametersSize = this.parametersSize;
 
     for (; i < parametersSize; ++i) {

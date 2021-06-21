@@ -1,3 +1,12 @@
+## 0.0.29
+
+- Improve `ApolloVMCore`:
+  - Implementing portable `int` class for `dart` and `java11`:
+    - `parse`, `parseInt`.
+- Code generation:
+  - Correctly normalize `int` and `Integer` for `dart` and `java11`.
+- Improve `async` optimization.
+
 ## 0.0.28
 
 - Implement static class accessor, to allow calls to static functions.

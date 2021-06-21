@@ -154,11 +154,19 @@ abstract class ApolloCodeGenerator {
   StringBuffer generateASTTypeArray3D(ASTTypeArray3D type,
       [String indent = '', StringBuffer? s]);
 
+  String normalizeTypeName(String typeName, [String? callingFunction]) =>
+      typeName;
+
+  String normalizeTypeFunction(String typeName, String functionName) =>
+      functionName;
+
   StringBuffer generateASTTypeDefault(ASTType type,
       [String indent = '', StringBuffer? s]) {
     s ??= StringBuffer();
 
-    s.write(type.name);
+    var typeName = normalizeTypeName(type.name);
+
+    s.write(typeName);
 
     if (type.generics != null) {
       var generics = type.generics!;
@@ -336,7 +344,7 @@ abstract class ApolloCodeGenerator {
 
     s.write(indent);
 
-    generateASTVariable(expression.variable, '', s);
+    generateASTVariable(expression.variable, null, '', s);
     var op = getASTAssignmentOperatorText(expression.operator);
     s.write(' ');
     s.write(op);
@@ -381,7 +389,7 @@ abstract class ApolloCodeGenerator {
     s ??= StringBuffer();
     s.write(indent);
     s.write('return ');
-    generateASTVariable(statement.variable, '', s);
+    generateASTVariable(statement.variable, null, '', s);
     s.write(';');
     return s;
   }
@@ -461,10 +469,17 @@ abstract class ApolloCodeGenerator {
     s ??= StringBuffer();
     s.write(indent);
 
-    generateASTVariable(expression.variable, '', s);
+    var functionName = expression.name;
+
+    if (expression.variable.isTypeIdentifier) {
+      var typeIdentifier = expression.variable.typeIdentifier;
+      functionName = normalizeTypeFunction(typeIdentifier!.name, functionName);
+    }
+
+    generateASTVariable(expression.variable, functionName, '', s);
     s.write('.');
 
-    s.write(expression.name);
+    s.write(functionName);
     s.write('(');
 
     var arguments = expression.arguments;
@@ -506,7 +521,7 @@ abstract class ApolloCodeGenerator {
       StringBuffer? s]) {
     s ??= StringBuffer();
     s.write(indent);
-    generateASTVariable(expression.variable, '', s);
+    generateASTVariable(expression.variable, null, '', s);
     return s;
   }
 
@@ -516,14 +531,44 @@ abstract class ApolloCodeGenerator {
       StringBuffer? s]) {
     s ??= StringBuffer();
     s.write(indent);
-    generateASTVariable(expression.variable, '', s);
+    generateASTVariable(expression.variable, null, '', s);
     s.write('[');
     generateASTExpression(expression.expression, '', s);
     s.write(']');
     return s;
   }
 
-  StringBuffer generateASTVariable(ASTVariable variable,
+  StringBuffer generateASTVariable(
+      ASTVariable variable, String? callingFunction,
+      [String indent = '', StringBuffer? s]) {
+    if (variable is ASTScopeVariable) {
+      return generateASTScopeVariable(variable, callingFunction, indent, s);
+    } else {
+      return generateASTVariableGeneric(variable, callingFunction, indent, s);
+    }
+  }
+
+  StringBuffer generateASTScopeVariable(
+      ASTScopeVariable variable, String? callingFunction,
+      [String indent = '', StringBuffer? s]) {
+    s ??= StringBuffer();
+    s.write(indent);
+
+    var name = variable.name;
+
+    if (variable.isTypeIdentifier) {
+      var typeIdentifier = variable.typeIdentifier;
+      name = typeIdentifier!.name;
+      name = normalizeTypeName(name, callingFunction);
+    }
+
+    s.write(name);
+
+    return s;
+  }
+
+  StringBuffer generateASTVariableGeneric(
+      ASTVariable variable, String? callingFunction,
       [String indent = '', StringBuffer? s]) {
     s ??= StringBuffer();
     s.write(indent);

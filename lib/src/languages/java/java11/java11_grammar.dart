@@ -39,6 +39,8 @@ class Java11GrammarDefinition extends Java11GrammarLexer {
 
         root.addAllClasses(classes.cast());
 
+        root.resolveNode(null);
+
         return root;
       });
 

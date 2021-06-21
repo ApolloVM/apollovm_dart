@@ -8,6 +8,35 @@ class ApolloCodeGeneratorDart extends ApolloCodeGenerator {
       : super('dart', codeStorage);
 
   @override
+  String normalizeTypeName(String typeName, [String? callingFunction]) {
+    switch (typeName) {
+      case 'Integer':
+        return 'int';
+      default:
+        return typeName;
+    }
+  }
+
+  @override
+  String normalizeTypeFunction(String typeName, String functionName) {
+    switch (typeName) {
+      case 'int':
+      case 'Integer':
+        {
+          switch (functionName) {
+            case 'parse':
+            case 'parseInt':
+              return 'parse';
+            default:
+              return functionName;
+          }
+        }
+      default:
+        return functionName;
+    }
+  }
+
+  @override
   StringBuffer generateASTClass(ASTClassNormal clazz,
       [String indent = '', StringBuffer? s]) {
     s ??= StringBuffer();

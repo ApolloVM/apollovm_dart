@@ -11,6 +11,10 @@ abstract class ASTVariable implements ASTNode, ASTTypedNode {
 
   ASTVariable(this.name);
 
+  bool get isTypeIdentifier => false;
+
+  ASTType? get typeIdentifier => null;
+
   @override
   void associateToType(ASTTypedNode node) {}
 
@@ -36,6 +40,20 @@ abstract class ASTVariable implements ASTNode, ASTTypedNode {
     return value.readKey(context, key);
   }
 
+  ASTNode? _parentNode;
+
+  @override
+  ASTNode? get parentNode => _parentNode;
+
+  @override
+  void resolveNode(ASTNode? parentNode) {
+    _parentNode = parentNode;
+  }
+
+  @override
+  ASTNode? getNodeIdentifier(String name) =>
+      parentNode?.getNodeIdentifier(name);
+
   @override
   String toString() {
     return name;
@@ -51,6 +69,13 @@ abstract class ASTTypedVariable<T> extends ASTVariable {
 
   @override
   ASTType resolveType(VMContext? context) => type;
+
+  @override
+  void resolveNode(ASTNode? parentNode) {
+    super.resolveNode(parentNode);
+
+    type.resolveNode(parentNode);
+  }
 
   @override
   String toString() {
@@ -106,6 +131,13 @@ class ASTRuntimeVariable<T> extends ASTTypedVariable<T> {
         super(type, name, false);
 
   @override
+  void resolveNode(ASTNode? parentNode) {
+    super.resolveNode(parentNode);
+
+    _value.resolveNode(parentNode);
+  }
+
+  @override
   ASTVariable resolveVariable(VMContext context) {
     return this;
   }
@@ -146,13 +178,32 @@ class ASTScopeVariable<T> extends ASTVariable {
         var resolveType = typeResolver.resolveType(name);
         return resolveType.resolveMapped((t) {
           if (t != null) {
-            return t.getClass().staticAccessor.staticClassAccessorVariable;
+            var staticAccessor = t.getClass().staticAccessor;
+            return staticAccessor.staticClassAccessorVariable;
           }
           throw StateError("Can't find variable: '$name'");
         });
       }
       return v;
     });
+  }
+
+  ASTNode? resolvedIdentifier;
+
+  @override
+  void resolveNode(ASTNode? parentNode) {
+    super.resolveNode(parentNode);
+
+    resolvedIdentifier = this.parentNode!.getNodeIdentifier(name);
+  }
+
+  @override
+  bool get isTypeIdentifier => resolvedIdentifier is ASTClass;
+
+  @override
+  ASTType? get typeIdentifier {
+    var resolvedIdentifier = this.resolvedIdentifier;
+    return resolvedIdentifier is ASTClass ? resolvedIdentifier.type : null;
   }
 }
 

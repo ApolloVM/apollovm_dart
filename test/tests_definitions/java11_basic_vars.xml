@@ -45,7 +45,7 @@ class Foo {
 <<<< CODE_UNIT_START="/test" >>>>
 class Foo {
 
-  void main(dynamic[] args) {
+  void main(Object[] args) {
     var a = 123;
     var b = 456;
     var c = a + b;

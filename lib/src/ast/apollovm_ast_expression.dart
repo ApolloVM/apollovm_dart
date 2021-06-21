@@ -10,6 +10,20 @@ import 'apollovm_ast_variable.dart';
 
 /// Base for AST expressions.
 abstract class ASTExpression implements ASTCodeRunner, ASTNode {
+  ASTNode? _parentNode;
+
+  @override
+  ASTNode? get parentNode => _parentNode;
+
+  @override
+  void resolveNode(ASTNode? parentNode) {
+    _parentNode = parentNode;
+  }
+
+  @override
+  ASTNode? getNodeIdentifier(String name) =>
+      parentNode?.getNodeIdentifier(name);
+
   @override
   VMContext defineRunContext(VMContext parentContext) {
     return parentContext;
@@ -95,6 +109,10 @@ class ASTExpressionVariableAccess extends ASTExpression {
       variable.resolveType(context);
 
   @override
+  ASTNode? getNodeIdentifier(String name) =>
+      parentNode?.getNodeIdentifier(name);
+
+  @override
   FutureOr<ASTValue> run(VMContext parentContext, ASTRunStatus runStatus) {
     var context = defineRunContext(parentContext);
     return variable.getValue(context);
@@ -112,6 +130,10 @@ class ASTExpressionLiteral extends ASTExpression {
       value.resolveType(context);
 
   @override
+  ASTNode? getNodeIdentifier(String name) =>
+      parentNode?.getNodeIdentifier(name);
+
+  @override
   FutureOr<ASTValue> run(VMContext parentContext, ASTRunStatus runStatus) {
     return value.resolve(parentContext);
   }
@@ -127,6 +149,18 @@ class ASTExpressionVariableEntryAccess extends ASTExpression {
   @override
   FutureOr<ASTType> resolveType(VMContext? context) =>
       variable.resolveType(context);
+
+  @override
+  void resolveNode(ASTNode? parentNode) {
+    super.resolveNode(parentNode);
+
+    variable.resolveNode(parentNode);
+    expression.resolveNode(parentNode);
+  }
+
+  @override
+  ASTNode? getNodeIdentifier(String name) =>
+      parentNode?.getNodeIdentifier(name);
 
   @override
   FutureOr<ASTValue> run(
@@ -613,6 +647,15 @@ abstract class ASTExpressionFunctionInvocation extends ASTExpression {
   ASTExpressionFunctionInvocation(this.name, this.arguments);
 
   @override
+  void resolveNode(ASTNode? parentNode) {
+    super.resolveNode(parentNode);
+
+    for (var e in arguments) {
+      e.resolveNode(this);
+    }
+  }
+
+  @override
   FutureOr<ASTType> resolveType(VMContext? context) async {
     if (context != null) {
       var f = await _getFunction(context);
@@ -689,6 +732,13 @@ class ASTExpressionObjectFunctionInvocation
   ASTExpressionObjectFunctionInvocation(
       this.variable, String name, List<ASTExpression> arguments)
       : super(name, arguments);
+
+  @override
+  void resolveNode(ASTNode? parentNode) {
+    super.resolveNode(parentNode);
+
+    variable.resolveNode(this);
+  }
 
   FutureOr<ASTValue> _getVariableValue(VMContext parentContext) async {
     var obj = await variable.getValue(parentContext);

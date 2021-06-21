@@ -249,6 +249,20 @@ class ASTType<V> implements ASTNode, ASTTypedNode {
         (generics?.hashCode ?? 0);
   }
 
+  ASTNode? _parentNode;
+
+  @override
+  ASTNode? get parentNode => _parentNode;
+
+  @override
+  void resolveNode(ASTNode? parentNode) {
+    _parentNode = parentNode;
+  }
+
+  @override
+  ASTNode? getNodeIdentifier(String name) =>
+      parentNode?.getNodeIdentifier(name);
+
   @override
   String toString() {
     return generics == null ? name : '$name<${generics!.join(',')}>';
@@ -768,14 +782,18 @@ class ASTTypeArray<T extends ASTType<V>, V> extends ASTType<List<V>> {
   }
 
   @override
-  FutureOr<ASTValueArray<T, V>?> toValue(VMContext context, Object? v) async {
+  FutureOr<ASTValueArray<T, V>?> toValue(VMContext context, Object? v) {
     if (v == null) return null;
     if (v is ASTValueArray) return v as ASTValueArray<T, V>;
 
     if (v is ASTValue) {
-      v = await (v).getValue(context);
+      return v.getValue(context).resolveMapped(_toASTValueArray);
+    } else {
+      return _toASTValueArray(v);
     }
+  }
 
+  ASTValueArray<T, V>? _toASTValueArray(Object? v) {
     List list;
     if (v is List) {
       list = v;
