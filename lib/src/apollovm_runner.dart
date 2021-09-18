@@ -1,7 +1,9 @@
 import 'dart:async';
 
+import 'package:async_extension/async_extension.dart';
+
 import 'apollovm_base.dart';
-import 'apollovm_extension.dart';
+
 import 'ast/apollovm_ast_toplevel.dart';
 import 'ast/apollovm_ast_type.dart';
 import 'ast/apollovm_ast_value.dart';

@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:apollovm/apollovm.dart';
+import 'package:async_extension/async_extension.dart';
 
 import 'apollovm_ast_statement.dart';
 import 'apollovm_ast_toplevel.dart';
@@ -278,28 +279,31 @@ class ASTExpressionOperation extends ASTExpression {
   ASTExpressionOperation(this.expression1, this.operator, this.expression2);
 
   @override
-  FutureOr<ASTType> resolveType(VMContext? context) async {
+  FutureOr<ASTType> resolveType(VMContext? context) {
     switch (operator) {
       case ASTExpressionOperator.add:
       case ASTExpressionOperator.subtract:
       case ASTExpressionOperator.multiply:
       case ASTExpressionOperator.divide:
         {
-          var t1 = await expression1.resolveType(context);
-          var t2 = await expression1.resolveType(context);
-          if (_isOneOfType(t1, t2, ASTTypeDouble.INSTANCE)) {
-            return ASTTypeDouble.INSTANCE;
-          }
-          if (_isOneOfType(t1, t2, ASTTypeInt.INSTANCE)) {
-            return ASTTypeInt.INSTANCE;
-          }
-          if (_isOneOfType(t1, t2, ASTTypeString.INSTANCE)) {
-            return ASTTypeString.INSTANCE;
-          }
-          if (_isOneOfType(t1, t2, ASTTypeNum.INSTANCE)) {
-            return ASTTypeInt.INSTANCE;
-          }
-          return ASTTypeDynamic.INSTANCE;
+          var retT1 = expression1.resolveType(context);
+          var retT2 = expression1.resolveType(context);
+
+          return retT1.resolveBoth(retT2, (t1, t2) {
+            if (_isOneOfType(t1, t2, ASTTypeDouble.INSTANCE)) {
+              return ASTTypeDouble.INSTANCE;
+            }
+            if (_isOneOfType(t1, t2, ASTTypeInt.INSTANCE)) {
+              return ASTTypeInt.INSTANCE;
+            }
+            if (_isOneOfType(t1, t2, ASTTypeString.INSTANCE)) {
+              return ASTTypeString.INSTANCE;
+            }
+            if (_isOneOfType(t1, t2, ASTTypeNum.INSTANCE)) {
+              return ASTTypeInt.INSTANCE;
+            }
+            return ASTTypeDynamic.INSTANCE;
+          });
         }
       case ASTExpressionOperator.divideAsInt:
         return ASTTypeInt.INSTANCE;
@@ -320,39 +324,40 @@ class ASTExpressionOperation extends ASTExpression {
   }
 
   @override
-  FutureOr<ASTValue> run(
-      VMContext parentContext, ASTRunStatus runStatus) async {
+  FutureOr<ASTValue> run(VMContext parentContext, ASTRunStatus runStatus) {
     var context = defineRunContext(parentContext);
 
-    var val2 = await expression2.run(context, runStatus);
-    var val1 = await expression1.run(context, runStatus);
+    var retVal2 = expression2.run(context, runStatus);
+    var retVal1 = expression1.run(context, runStatus);
 
-    switch (operator) {
-      case ASTExpressionOperator.add:
-        return operatorAdd(parentContext, val1, val2);
-      case ASTExpressionOperator.subtract:
-        return operatorSubtract(parentContext, val1, val2);
-      case ASTExpressionOperator.multiply:
-        return operatorMultiply(parentContext, val1, val2);
-      case ASTExpressionOperator.divide:
-        return operatorDivide(parentContext, val1, val2);
-      case ASTExpressionOperator.divideAsInt:
-        return operatorDivideAsInt(parentContext, val1, val2);
-      case ASTExpressionOperator.divideAsDouble:
-        return operatorDivideAsDouble(parentContext, val1, val2);
-      case ASTExpressionOperator.equals:
-        return operatorEquals(parentContext, val1, val2);
-      case ASTExpressionOperator.notEquals:
-        return operatorNotEquals(parentContext, val1, val2);
-      case ASTExpressionOperator.greater:
-        return operatorGreater(parentContext, val1, val2);
-      case ASTExpressionOperator.greaterOrEq:
-        return operatorGreaterOrEq(parentContext, val1, val2);
-      case ASTExpressionOperator.lower:
-        return operatorLower(parentContext, val1, val2);
-      case ASTExpressionOperator.lowerOrEq:
-        return operatorLowerOrEq(parentContext, val1, val2);
-    }
+    return retVal2.resolveBoth(retVal1, (val2, val1) {
+      switch (operator) {
+        case ASTExpressionOperator.add:
+          return operatorAdd(parentContext, val1, val2);
+        case ASTExpressionOperator.subtract:
+          return operatorSubtract(parentContext, val1, val2);
+        case ASTExpressionOperator.multiply:
+          return operatorMultiply(parentContext, val1, val2);
+        case ASTExpressionOperator.divide:
+          return operatorDivide(parentContext, val1, val2);
+        case ASTExpressionOperator.divideAsInt:
+          return operatorDivideAsInt(parentContext, val1, val2);
+        case ASTExpressionOperator.divideAsDouble:
+          return operatorDivideAsDouble(parentContext, val1, val2);
+        case ASTExpressionOperator.equals:
+          return operatorEquals(parentContext, val1, val2);
+        case ASTExpressionOperator.notEquals:
+          return operatorNotEquals(parentContext, val1, val2);
+        case ASTExpressionOperator.greater:
+          return operatorGreater(parentContext, val1, val2);
+        case ASTExpressionOperator.greaterOrEq:
+          return operatorGreaterOrEq(parentContext, val1, val2);
+        case ASTExpressionOperator.lower:
+          return operatorLower(parentContext, val1, val2);
+        case ASTExpressionOperator.lowerOrEq:
+          return operatorLowerOrEq(parentContext, val1, val2);
+      }
+    });
   }
 
   void throwOperationError(String op, ASTType t1, ASTType t2) {
@@ -377,7 +382,7 @@ class ASTExpressionOperation extends ASTExpression {
         var r = '$v1$v2';
         return ASTValueString(r);
       } else {
-        return <FutureOr>[v1, v2].resolveAllMapped((l) {
+        return <FutureOr>[v1, v2].resolveAllJoined((l) {
           return ASTValueString(l.join());
         });
       }
@@ -543,39 +548,39 @@ class ASTExpressionOperation extends ASTExpression {
   }
 
   FutureOr<ASTValueBool> operatorEquals(
-      VMContext context, ASTValue val1, ASTValue val2) async {
-    var b = await val1.equals(val2);
-    return ASTValueBool(b);
+      VMContext context, ASTValue val1, ASTValue val2) {
+    var b = val1.equals(val2);
+    return b.resolveMapped((val) => ASTValueBool(val));
   }
 
   FutureOr<ASTValueBool> operatorNotEquals(
-      VMContext context, ASTValue val1, ASTValue val2) async {
-    var b = await val1.equals(val2);
-    return ASTValueBool(!b);
+      VMContext context, ASTValue val1, ASTValue val2) {
+    var b = val1.equals(val2);
+    return b.resolveMapped((val) => ASTValueBool(!val));
   }
 
   FutureOr<ASTValueBool> operatorGreater(
-      VMContext context, ASTValue val1, ASTValue val2) async {
+      VMContext context, ASTValue val1, ASTValue val2) {
     var b = val1 > val2;
-    return ASTValueBool(await b);
+    return b.resolveMapped((val) => ASTValueBool(val));
   }
 
   FutureOr<ASTValueBool> operatorGreaterOrEq(
-      VMContext context, ASTValue val1, ASTValue val2) async {
+      VMContext context, ASTValue val1, ASTValue val2) {
     var b = val1 >= val2;
-    return ASTValueBool(await b);
+    return b.resolveMapped((val) => ASTValueBool(val));
   }
 
   FutureOr<ASTValueBool> operatorLower(
-      VMContext context, ASTValue val1, ASTValue val2) async {
+      VMContext context, ASTValue val1, ASTValue val2) {
     var b = val1 < val2;
-    return ASTValueBool(await b);
+    return b.resolveMapped((val) => ASTValueBool(val));
   }
 
   FutureOr<ASTValueBool> operatorLowerOrEq(
-      VMContext context, ASTValue val1, ASTValue val2) async {
+      VMContext context, ASTValue val1, ASTValue val2) {
     var b = val1 <= val2;
-    return ASTValueBool(await b);
+    return b.resolveMapped((val) => ASTValueBool(val));
   }
 }
 
@@ -634,7 +639,8 @@ class ASTExpressionVariableAssignment extends ASTExpression {
         throw UnsupportedError('operator: $operator');
     }
 
-    variable.setValue(context, await result);
+    await variable.setValue(context, await result);
+
     return value;
   }
 }
@@ -740,20 +746,21 @@ class ASTExpressionObjectFunctionInvocation
     variable.resolveNode(this);
   }
 
-  FutureOr<ASTValue> _getVariableValue(VMContext parentContext) async {
-    var obj = await variable.getValue(parentContext);
-    return obj;
+  FutureOr<ASTValue> _getVariableValue(VMContext parentContext) {
+    return variable.getValue(parentContext);
   }
 
-  FutureOr<ASTClass> _getObjectClass(VMContext parentContext) async {
-    var obj = await _getVariableValue(parentContext);
+  FutureOr<ASTClass> _getObjectClass(VMContext parentContext) {
+    var retObj = _getVariableValue(parentContext);
 
-    if (obj is ASTClassInstance) {
-      return obj.clazz;
-    }
+    return retObj.resolveMapped((obj) {
+      if (obj is ASTClassInstance) {
+        return obj.clazz;
+      }
 
-    var clazz = obj.type.getClass();
-    return clazz;
+      var clazz = obj.type.getClass();
+      return clazz;
+    });
   }
 
   ASTClass? _functionClass;

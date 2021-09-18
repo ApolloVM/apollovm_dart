@@ -1,3 +1,14 @@
+## 0.0.30
+
+- Using `async_extension` to optimize async calls.
+  - Removed internal extensions with similar functionality.
+- Migrated from `pedantic` to `lints`.
+- Fixed missing await in `ASTExpressionVariableAssignment`.
+- lints: ^1.0.1
+- swiss_knife: ^3.0.8
+- async_extension: ^1.0.6
+- petitparser: ^4.2.0
+
 ## 0.0.29
 
 - Improve `ApolloVMCore`:

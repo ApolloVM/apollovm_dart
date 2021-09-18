@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:apollovm/apollovm.dart';
 import 'package:apollovm/src/core/apollovm_core_base.dart';
+import 'package:async_extension/async_extension.dart';
 import 'package:swiss_knife/swiss_knife.dart';
 
 import 'apollovm_ast_annotation.dart';
@@ -41,7 +42,7 @@ class ASTType<V> implements ASTNode, ASTTypedNode {
     return fromNativeValue(o);
   }
 
-  static FutureOr<ASTType> fromAsync(dynamic o) async {
+  static FutureOr<ASTType> fromAsync(dynamic o) {
     if (o == null) return ASTTypeNull.INSTANCE;
 
     if (o is ASTType) {
@@ -218,17 +219,20 @@ class ASTType<V> implements ASTNode, ASTTypedNode {
     return true;
   }
 
-  FutureOr<ASTValue<V>?> toValue(VMContext context, Object? v) async {
+  FutureOr<ASTValue<V>?> toValue(VMContext context, Object? v) {
     if (v == null) return null;
 
     if (v is ASTValue<V>) return v;
 
     if (v is ASTValue) {
-      v = await (v).getValue(context);
+      return v.getValue(context).resolveMapped((val) {
+        var t = val as V;
+        return ASTValue.from(this, t);
+      });
+    } else {
+      var t = v as V;
+      return ASTValue.from(this, t);
     }
-
-    var t = v as V;
-    return ASTValue.from(this, t);
   }
 
   FutureOr<ASTValue<V>?> toDefaultValue(VMContext context) => null;

@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:async_extension/async_extension.dart';
 import 'package:apollovm/apollovm.dart';
 import 'package:collection/collection.dart'
     show MapEquality, equalsIgnoreAsciiCase;
@@ -14,7 +15,7 @@ import 'languages/java/java11/java11_generator.dart';
 
 /// The Apollo VM.
 class ApolloVM implements VMTypeResolver {
-  static final String VERSION = '0.0.29';
+  static final String VERSION = '0.0.30';
 
   static int _idCount = 0;
 
@@ -670,6 +671,7 @@ class VMContext {
       variable.setValue(this, value);
       return true;
     }
+
     var field = block.getField(name);
 
     if (field != null) {

@@ -23,48 +23,56 @@ abstract class CoreClassPrimitive<T> extends ASTClassPrimitive<T> {
   }
 
   ASTExternalClassFunction<R> _externalClassFunctionArgs0<R>(
-      String name, ASTType<R> returnType, Function externalFunction) {
+      String name, ASTType<R> returnType, Function externalFunction,
+      [ParameterValueResolver? parameterValueResolver]) {
     return ASTExternalClassFunction<R>(
         this,
         name,
         ASTParametersDeclaration(null, null, null),
         returnType,
-        externalFunction);
+        externalFunction,
+        parameterValueResolver);
   }
 
   ASTExternalClassFunction<R> _externalClassFunctionArgs1<R>(
       String name,
       ASTType<R> returnType,
       ASTFunctionParameterDeclaration param1,
-      Function externalFunction) {
+      Function externalFunction,
+      [ParameterValueResolver? parameterValueResolver]) {
     return ASTExternalClassFunction<R>(
         this,
         name,
         ASTParametersDeclaration([param1], null, null),
         returnType,
-        externalFunction);
+        externalFunction,
+        parameterValueResolver);
   }
 
   // ignore: unused_element
   ASTExternalFunction<R> _externalStaticFunctionArgs0<R>(
-      String name, ASTType<R> returnType, Function externalFunction) {
+      String name, ASTType<R> returnType, Function externalFunction,
+      [ParameterValueResolver? parameterValueResolver]) {
     return ASTExternalFunction<R>(
         name,
         ASTParametersDeclaration(null, null, null),
         returnType,
-        externalFunction);
+        externalFunction,
+        parameterValueResolver);
   }
 
   ASTExternalFunction<R> _externalStaticFunctionArgs1<R>(
       String name,
       ASTType<R> returnType,
       ASTFunctionParameterDeclaration param1,
-      Function externalFunction) {
+      Function externalFunction,
+      [ParameterValueResolver? parameterValueResolver]) {
     return ASTExternalFunction<R>(
         name,
         ASTParametersDeclaration([param1], null, null),
         returnType,
-        externalFunction);
+        externalFunction,
+        parameterValueResolver);
   }
 }
 
@@ -103,8 +111,20 @@ class CoreClassString extends CoreClassPrimitive<String> {
       'valueOf',
       ASTTypeString.INSTANCE,
       ASTFunctionParameterDeclaration(ASTTypeDynamic.INSTANCE, 'obj', 0, false),
-      (dynamic o) => '$o',
+      (dynamic o) => o?.toString() ?? 'null',
+      resolveValueToString,
     );
+  }
+
+  String resolveValueToString(ASTValue? paramVal, VMContext context) {
+    if (paramVal == null) return 'null';
+
+    if (paramVal is VMObject) {
+      return paramVal.toString();
+    }
+
+    var val = paramVal.getValue(context);
+    return '$val';
   }
 
   @override

@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:async_extension/async_extension.dart';
 import 'package:apollovm/apollovm.dart';
 
 import 'apollovm_ast_type.dart';
@@ -25,19 +26,22 @@ abstract class ASTVariable implements ASTNode, ASTTypedNode {
     return variable.resolveMapped((v) => v.getValue(context));
   }
 
-  FutureOr<void> setValue(VMContext context, ASTValue value) async {
-    var variable = await resolveVariable(context);
-    variable.setValue(context, value);
+  FutureOr<void> setValue(VMContext context, ASTValue value) {
+    return resolveVariable(context).resolveMapped((variable) {
+      variable.setValue(context, value);
+    });
   }
 
-  FutureOr<V> readIndex<V>(VMContext context, int index) async {
-    var value = await getValue(context);
-    return value.readIndex(context, index);
+  FutureOr<V> readIndex<V>(VMContext context, int index) {
+    return getValue(context).resolveMapped((value) {
+      return value.readIndex(context, index);
+    });
   }
 
-  FutureOr<V> readKey<V>(VMContext context, Object key) async {
-    var value = await getValue(context);
-    return value.readKey(context, key);
+  FutureOr<V> readKey<V>(VMContext context, Object key) {
+    return getValue(context).resolveMapped((value) {
+      return value.readKey(context, key);
+    });
   }
 
   ASTNode? _parentNode;

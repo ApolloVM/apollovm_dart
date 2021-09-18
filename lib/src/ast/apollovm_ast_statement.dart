@@ -601,9 +601,9 @@ class ASTStatementForLoop extends ASTStatement {
 
         await loopBlock.run(loopContext, runStatus);
 
-        await continueExpression.run(context, runStatus);
-
         VMContext.setCurrent(context);
+
+        await continueExpression.run(context, runStatus);
       }
     } finally {
       VMContext.setCurrent(prevContext);

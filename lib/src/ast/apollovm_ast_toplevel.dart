@@ -1,8 +1,8 @@
 import 'dart:async';
 
 import 'package:apollovm/apollovm.dart';
-import 'package:apollovm/src/apollovm_extension.dart';
 import 'package:apollovm/src/core/apollovm_core_base.dart';
+import 'package:async_extension/async_extension.dart';
 import 'package:collection/collection.dart'
     show IterableExtension, equalsIgnoreAsciiCase;
 
@@ -301,52 +301,48 @@ class ASTClassPrimitive<T> extends ASTClass<T> {
 
   @override
   FutureOr<ASTValue<T>?> createInstance(
-      VMClassContext context, ASTRunStatus runStatus) async {
-    var instance = await type.toDefaultValue(context);
-    return instance;
+      VMClassContext context, ASTRunStatus runStatus) {
+    return type.toDefaultValue(context);
   }
 
   @override
-  FutureOr<void> initializeInstance(VMClassContext context,
-      ASTRunStatus runStatus, ASTValue<T> instance) async {}
+  FutureOr<void> initializeInstance(
+      VMClassContext context, ASTRunStatus runStatus, ASTValue<T> instance) {}
 
   @override
   FutureOr<void> setInstanceByVMObject(VMClassContext context,
-      ASTRunStatus runStatus, ASTValue<T> instance, VMObject obj) async {}
+      ASTRunStatus runStatus, ASTValue<T> instance, VMObject obj) {}
 
   @override
   FutureOr<void> setInstanceByValue(VMClassContext context,
-      ASTRunStatus runStatus, ASTValue<T> instance, ASTValue<T> value) async {}
+      ASTRunStatus runStatus, ASTValue<T> instance, ASTValue<T> value) {}
 
   @override
   FutureOr<void> setInstanceByMap(VMClassContext context,
       ASTRunStatus runStatus, ASTValue<T> instance, Map<String, ASTValue> value,
-      {bool caseInsensitive = false}) async {}
+      {bool caseInsensitive = false}) {}
 
   @override
   FutureOr<ASTValue?> getInstanceFieldValue(VMContext context,
-      ASTRunStatus runStatus, ASTValue<T> instance, String fieldName,
-      {bool caseInsensitive = false}) async {
-    return null;
-  }
+          ASTRunStatus runStatus, ASTValue<T> instance, String fieldName,
+          {bool caseInsensitive = false}) =>
+      null;
 
   @override
   FutureOr<ASTValue?> setInstanceFieldValue(
-      VMContext context,
-      ASTRunStatus runStatus,
-      ASTValue<T> instance,
-      String fieldName,
-      ASTValue value,
-      {bool caseInsensitive = false}) async {
-    return null;
-  }
+          VMContext context,
+          ASTRunStatus runStatus,
+          ASTValue<T> instance,
+          String fieldName,
+          ASTValue value,
+          {bool caseInsensitive = false}) =>
+      null;
 
   @override
   FutureOr<ASTValue?> removeInstanceFieldValue(VMContext context,
-      ASTRunStatus runStatus, ASTValue<T> instance, String fieldName,
-      {bool caseInsensitive = false}) async {
-    return null;
-  }
+          ASTRunStatus runStatus, ASTValue<T> instance, String fieldName,
+          {bool caseInsensitive = false}) =>
+      null;
 }
 
 /// AST of a normal VM Class.
@@ -432,11 +428,10 @@ class ASTClassNormal extends ASTClass<VMObject> {
 
   @override
   FutureOr<ASTClassInstance<VMObject>?> createInstance(
-      VMClassContext context, ASTRunStatus runStatus) async {
+      VMClassContext context, ASTRunStatus runStatus) {
     var obj = ASTClassInstance<VMObject>(
         this, VMObject.createInstance(context, type));
-    await initializeInstance(context, runStatus, obj);
-    return obj;
+    return initializeInstance(context, runStatus, obj).resolveWithValue(obj);
   }
 
   @override
@@ -545,7 +540,7 @@ class ASTClassNormal extends ASTClass<VMObject> {
       ASTValue<VMObject> instance,
       String fieldName,
       ASTValue value,
-      {bool caseInsensitive = false}) async {
+      {bool caseInsensitive = false}) {
     if (instance is! ASTClassInstance<VMObject>) {
       throw _ExceptionNotClassInstance(instance);
     }
@@ -563,7 +558,7 @@ class ASTClassNormal extends ASTClass<VMObject> {
   @override
   FutureOr<ASTValue?> removeInstanceFieldValue(VMContext context,
       ASTRunStatus runStatus, ASTValue<VMObject> instance, String fieldName,
-      {bool caseInsensitive = false}) async {
+      {bool caseInsensitive = false}) {
     if (instance is! ASTClassInstance<VMObject>) {
       throw _ExceptionNotClassInstance(instance);
     }
@@ -1183,12 +1178,12 @@ class ASTFunctionDeclaration<T> extends ASTBlock {
     return variable.resolveMapped((v) => v?.getValue(context));
   }
 
-  FutureOr<ASTValue?> getParameterValueByName(
-      VMContext context, String name) async {
+  FutureOr<ASTValue?> getParameterValueByName(VMContext context, String name) {
     var p = getParameterByName(name);
     if (p == null) return null;
-    var variable = await context.getVariable(p.name, false);
-    return variable?.getValue(context);
+    return context.getVariable(p.name, false).resolveMapped((variable) {
+      return variable?.getValue(context);
+    });
   }
 
   bool matchesParametersTypes(
@@ -1252,7 +1247,7 @@ class ASTFunctionDeclaration<T> extends ASTBlock {
       if (prevFuture == null) {
         prevFuture = future;
       } else {
-        prevFuture = prevFuture.resolveWith(() => future.resolve());
+        prevFuture = prevFuture.resolveWith(() => future);
       }
     }
 
@@ -1286,13 +1281,30 @@ class ASTFunctionDeclaration<T> extends ASTBlock {
   ASTType resolveType(VMContext? context) => returnType;
 }
 
+typedef ParameterValueResolver = FutureOr<dynamic> Function(
+    ASTValue? paramVal, VMContext context);
+
 /// An AST External Function.
 class ASTExternalFunction<T> extends ASTFunctionDeclaration<T> {
   final Function externalFunction;
 
+  final ParameterValueResolver? parameterResolver;
+
   ASTExternalFunction(String name, ASTParametersDeclaration parameters,
-      ASTType<T> returnType, this.externalFunction)
+      ASTType<T> returnType, this.externalFunction,
+      [this.parameterResolver])
       : super(name, parameters, returnType);
+
+  FutureOr<dynamic> resolveParameterValue<V>(
+      ASTValue<V>? paramVal, VMContext context) {
+    var parameterResolver = this.parameterResolver;
+
+    if (parameterResolver != null) {
+      return parameterResolver(paramVal, context);
+    } else {
+      return paramVal?.getValue(context);
+    }
+  }
 
   @override
   FutureOr<ASTValue<T>> call(VMContext parent,
@@ -1310,22 +1322,44 @@ class ASTExternalFunction<T> extends ASTFunctionDeclaration<T> {
         result = externalFunction();
       } else if (externalFunction.isParametersSize1 || parametersSize == 1) {
         var paramVal = await getParameterValueByIndex(context, 0);
-        var a0 = paramVal?.getValue(context);
+        var a0 = resolveParameterValue(paramVal, context);
         result = externalFunction(a0);
       } else if (this.parametersSize == 2) {
         var paramVal0 = await getParameterValueByIndex(context, 0);
         var paramVal1 = await getParameterValueByIndex(context, 1);
-        var a0 = paramVal0?.getValue(context);
-        var a1 = paramVal1?.getValue(context);
+        var a0 = resolveParameterValue(paramVal0, context);
+        var a1 = resolveParameterValue(paramVal1, context);
         result = externalFunction(a0, a1);
       } else if (this.parametersSize == 3) {
         var paramVal0 = await getParameterValueByIndex(context, 0);
         var paramVal1 = await getParameterValueByIndex(context, 1);
         var paramVal2 = await getParameterValueByIndex(context, 2);
-        var a0 = paramVal0?.getValue(context);
-        var a1 = paramVal1?.getValue(context);
-        var a2 = paramVal2?.getValue(context);
+        var a0 = resolveParameterValue(paramVal0, context);
+        var a1 = resolveParameterValue(paramVal1, context);
+        var a2 = resolveParameterValue(paramVal2, context);
         result = externalFunction(a0, a1, a2);
+      } else if (this.parametersSize == 4) {
+        var paramVal0 = await getParameterValueByIndex(context, 0);
+        var paramVal1 = await getParameterValueByIndex(context, 1);
+        var paramVal2 = await getParameterValueByIndex(context, 2);
+        var paramVal3 = await getParameterValueByIndex(context, 4);
+        var a0 = resolveParameterValue(paramVal0, context);
+        var a1 = resolveParameterValue(paramVal1, context);
+        var a2 = resolveParameterValue(paramVal2, context);
+        var a3 = resolveParameterValue(paramVal3, context);
+        result = externalFunction(a0, a1, a2, a3);
+      } else if (this.parametersSize == 5) {
+        var paramVal0 = await getParameterValueByIndex(context, 0);
+        var paramVal1 = await getParameterValueByIndex(context, 1);
+        var paramVal2 = await getParameterValueByIndex(context, 2);
+        var paramVal3 = await getParameterValueByIndex(context, 4);
+        var paramVal4 = await getParameterValueByIndex(context, 5);
+        var a0 = resolveParameterValue(paramVal0, context);
+        var a1 = resolveParameterValue(paramVal1, context);
+        var a2 = resolveParameterValue(paramVal2, context);
+        var a3 = resolveParameterValue(paramVal3, context);
+        var a4 = resolveParameterValue(paramVal4, context);
+        result = externalFunction(a0, a1, a2, a3, a4);
       } else {
         result = externalFunction.call();
       }
@@ -1346,13 +1380,27 @@ class ASTExternalFunction<T> extends ASTFunctionDeclaration<T> {
 class ASTExternalClassFunction<T> extends ASTClassFunctionDeclaration<T> {
   final Function externalFunction;
 
+  final ParameterValueResolver? parameterResolver;
+
   ASTExternalClassFunction(
       ASTClass clazz,
       String name,
       ASTParametersDeclaration parameters,
       ASTType<T> returnType,
-      this.externalFunction)
+      this.externalFunction,
+      [this.parameterResolver])
       : super(clazz, name, parameters, returnType);
+
+  FutureOr<dynamic> resolveParameterValue<V>(
+      ASTValue<V>? paramVal, VMContext context) {
+    var parameterResolver = this.parameterResolver;
+
+    if (parameterResolver != null) {
+      return parameterResolver(paramVal, context);
+    } else {
+      return paramVal?.getValue(context);
+    }
+  }
 
   @override
   FutureOr<ASTValue<T>> call(VMContext parent,
@@ -1373,21 +1421,21 @@ class ASTExternalClassFunction<T> extends ASTClassFunctionDeclaration<T> {
         result = externalFunction(obj);
       } else if (externalFunction.isParametersSize1 || parametersSize == 1) {
         var paramVal = await getParameterValueByIndex(context, 0);
-        var a0 = paramVal?.getValue(context);
+        var a0 = resolveParameterValue(paramVal, context);
         result = externalFunction(obj, a0);
       } else if (this.parametersSize == 2) {
         var paramVal0 = await getParameterValueByIndex(context, 0);
         var paramVal1 = await getParameterValueByIndex(context, 1);
-        var a0 = paramVal0?.getValue(context);
-        var a1 = paramVal1?.getValue(context);
+        var a0 = resolveParameterValue(paramVal0, context);
+        var a1 = resolveParameterValue(paramVal1, context);
         result = externalFunction(obj, a0, a1);
       } else if (this.parametersSize == 3) {
         var paramVal0 = await getParameterValueByIndex(context, 0);
         var paramVal1 = await getParameterValueByIndex(context, 1);
         var paramVal2 = await getParameterValueByIndex(context, 2);
-        var a0 = paramVal0?.getValue(context);
-        var a1 = paramVal1?.getValue(context);
-        var a2 = paramVal2?.getValue(context);
+        var a0 = resolveParameterValue(paramVal0, context);
+        var a1 = resolveParameterValue(paramVal1, context);
+        var a2 = resolveParameterValue(paramVal2, context);
         result = externalFunction(a0, a1, a2);
       } else {
         result = externalFunction.call(obj);

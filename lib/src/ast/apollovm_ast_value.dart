@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:apollovm/apollovm.dart';
+import 'package:async_extension/async_extension.dart';
 import 'package:collection/collection.dart'
     show DeepCollectionEquality, ListEquality;
 import 'package:swiss_knife/swiss_knife.dart';
@@ -12,7 +13,9 @@ import 'apollovm_ast_variable.dart';
 /// Base class for AST values.
 abstract class ASTValue<T> implements ASTNode, ASTTypedNode {
   factory ASTValue.from(ASTType<T> type, T value) {
-    if (type is ASTTypeString) {
+    if (value is ASTValue) {
+      return value as ASTValue<T>;
+    } else if (type is ASTTypeString) {
       return ASTValueString(value as String) as ASTValue<T>;
     } else if (type is ASTTypeInt) {
       return ASTValueInt(value as int) as ASTValue<T>;
@@ -37,6 +40,8 @@ abstract class ASTValue<T> implements ASTNode, ASTTypedNode {
 
   static ASTValue fromValue(dynamic o) {
     if (o == null) return ASTValueNull.INSTANCE;
+
+    if (o is ASTValue) return o;
 
     if (o is String) return ASTValueString(o);
     if (o is int) return ASTValueInt(o);
@@ -64,10 +69,11 @@ abstract class ASTValue<T> implements ASTNode, ASTTypedNode {
     }
   }
 
-  FutureOr<bool> isInstanceOfAsync(ASTType type) async {
+  FutureOr<bool> isInstanceOfAsync(ASTType type) {
     var context = VMContext.getCurrent();
-    var valueType = await resolveType(context);
-    return type.acceptsType(valueType);
+    return resolveType(context).resolveMapped((valueType) {
+      return type.acceptsType(valueType);
+    });
   }
 
   FutureOr<T> getValue(VMContext context);
@@ -748,21 +754,18 @@ class ASTValueAsString<T> extends ASTValue<String> {
   ASTValueAsString(this.value) : super(ASTTypeString.INSTANCE);
 
   @override
-  FutureOr<String> getValue(VMContext context) async {
-    var v = await value.getValue(context);
-    return '$v';
+  FutureOr<String> getValue(VMContext context) {
+    return value.getValue(context).resolveMapped((v) => '$v');
   }
 
   @override
-  FutureOr<String> getValueNoContext() async {
-    var v = await value.getValueNoContext();
-    return '$v';
+  FutureOr<String> getValueNoContext() {
+    return value.getValueNoContext().resolveMapped((v) => '$v');
   }
 
   @override
-  FutureOr<ASTValue<String>> resolve(VMContext context) async {
-    var value = await getValue(context);
-    return ASTValueString(value);
+  FutureOr<ASTValue<String>> resolve(VMContext context) {
+    return getValue(context).resolveMapped((v) => ASTValueString(v));
   }
 }
 
@@ -778,19 +781,18 @@ class ASTValuesListAsString extends ASTValue<String> {
       var val = e.resolve(context).resolveMapped((v) => v.getValue(context));
       return val.resolveMapped((v) => '$v');
     }).toList();
-    return vsFuture.resolveAll().resolveMapped((v) => v.join());
+    return vsFuture.resolveAllJoined((l) => l.join());
   }
 
   @override
   FutureOr<String> getValueNoContext() {
     var vsFuture = values.map((e) => e.resolveMapped((v) => '$v')).toList();
-    var vs = vsFuture.resolveAll();
-    return vs.resolveMapped((l) => l.join());
+    return vsFuture.resolveAllJoined((l) => l.join());
   }
 
   @override
   FutureOr<ASTValueString> resolve(VMContext context) {
-    var value = getValue(context).resolve();
+    var value = getValue(context);
     return value.resolveMapped((v) => ASTValueString(v));
   }
 }
@@ -815,9 +817,8 @@ class ASTValueStringExpression<T> extends ASTValue<String> {
       "Can't define an expression value without a context!");
 
   @override
-  FutureOr<ASTValueString> resolve(VMContext context) async {
-    var s = await getValue(context);
-    return ASTValueString(s);
+  FutureOr<ASTValueString> resolve(VMContext context) {
+    return getValue(context).resolveMapped((s) => ASTValueString(s));
   }
 }
 
@@ -828,10 +829,10 @@ class ASTValueStringVariable<T> extends ASTValue<String> {
   ASTValueStringVariable(this.variable) : super(ASTTypeString.INSTANCE);
 
   @override
-  FutureOr<String> getValue(VMContext context) async {
-    var value = await variable.getValue(context);
-    var v = await value.getValue(context);
-    return '$v';
+  FutureOr<String> getValue(VMContext context) {
+    return variable.getValue(context).resolveMapped((value) {
+      return value.getValue(context).resolveMapped((v) => '$v');
+    });
   }
 
   @override
@@ -839,9 +840,10 @@ class ASTValueStringVariable<T> extends ASTValue<String> {
       "Can't define an variable value without a context!");
 
   @override
-  FutureOr<ASTValue<String>> resolve(VMContext context) async {
-    var value = await variable.getValue(context);
-    return value is ASTValue<String> ? value : ASTValueAsString(value);
+  FutureOr<ASTValue<String>> resolve(VMContext context) {
+    return variable.getValue(context).resolveMapped((value) {
+      return value is ASTValue<String> ? value : ASTValueAsString(value);
+    });
   }
 }
 
@@ -852,31 +854,21 @@ class ASTValueStringConcatenation extends ASTValue<String> {
   ASTValueStringConcatenation(this.values) : super(ASTTypeString.INSTANCE);
 
   @override
-  FutureOr<String> getValue(VMContext context) async {
-    var vsFuture = values.map((e) async {
-      return await e.getValue(context);
-    }).toList();
-    var vs = await Future.wait(vsFuture);
-    return vs.join();
+  FutureOr<String> getValue(VMContext context) {
+    var vsFuture = values.map((e) => e.getValue(context));
+    return vsFuture.resolveAllJoined((l) => l.join());
   }
 
   @override
-  FutureOr<String> getValueNoContext() async {
-    var vsFuture = values.map((e) async {
-      return await e.getValueNoContext();
-    }).toList();
-    var vs = await Future.wait(vsFuture);
-    return vs.join();
+  FutureOr<String> getValueNoContext() {
+    var vsFuture = values.map((e) => e.getValueNoContext()).toList();
+    return vsFuture.resolveAllJoined((l) => l.join());
   }
 
   @override
-  FutureOr<ASTValue<String>> resolve(VMContext context) async {
-    var vsFuture = values.map((e) {
-      return e.resolve(context).resolve();
-    }).toList();
-
-    var vs = await vsFuture.resolveAll();
-    return ASTValuesListAsString(vs);
+  FutureOr<ASTValue<String>> resolve(VMContext context) {
+    var vsFuture = values.map((e) => e.resolve(context));
+    return vsFuture.resolveAllJoined((vs) => ASTValuesListAsString(vs));
   }
 }
 
@@ -888,16 +880,16 @@ class ASTValueReadIndex<T> extends ASTValue<T> {
   ASTValueReadIndex(ASTType<T> type, this.variable, this._index) : super(type);
 
   @override
-  FutureOr<ASTType> resolveType(VMContext? context) async {
-    var type = await variable.resolveType(context);
+  FutureOr<ASTType> resolveType(VMContext? context) {
+    return variable.resolveType(context).resolveMapped((type) {
+      if (type.hasGenerics) {
+        var generics = type.generics!;
+        var generic = generics[0];
+        return generic;
+      }
 
-    if (type.hasGenerics) {
-      var generics = type.generics!;
-      var generic = generics[0];
-      return generic;
-    }
-
-    return ASTTypeDynamic.INSTANCE;
+      return ASTTypeDynamic.INSTANCE;
+    });
   }
 
   int getIndex(VMContext context) {
@@ -921,9 +913,10 @@ class ASTValueReadIndex<T> extends ASTValue<T> {
       throw UnsupportedError("Can't define variable value without a context!");
 
   @override
-  FutureOr<ASTValue<T>> resolve(VMContext context) async {
-    var v = await getValue(context);
-    return ASTValue.from(type, v);
+  FutureOr<ASTValue<T>> resolve(VMContext context) {
+    return getValue(context).resolveMapped((v) {
+      return ASTValue.from(type, v);
+    });
   }
 
   @override
@@ -940,22 +933,24 @@ class ASTValueReadKey<T> extends ASTValue<T> {
   ASTValueReadKey(ASTType<T> type, this.variable, this._key) : super(type);
 
   @override
-  FutureOr<ASTType> resolveType(VMContext? context) async {
-    var type = await variable.resolveType(context);
+  FutureOr<ASTType> resolveType(VMContext? context) {
+    return variable.resolveType(context).resolveMapped((type) {
+      if (type.hasGenerics) {
+        var generics = type.generics!;
+        var generic = generics[Math.min(1, generics.length - 1)];
 
-    if (type.hasGenerics) {
-      var generics = type.generics!;
-      var generic = generics[Math.min(1, generics.length - 1)];
+        return generic;
+      }
 
-      return generic;
-    }
-
-    return ASTTypeDynamic.INSTANCE;
+      return ASTTypeDynamic.INSTANCE;
+    });
   }
 
-  FutureOr<Object> getKey(VMContext context) async {
+  FutureOr<Object> getKey(VMContext context) {
     if (_key is ASTValue) {
-      return await (_key as ASTValue).getValue(context);
+      return (_key as ASTValue)
+          .getValue(context)
+          .resolveMapped((v) => v as Object);
     } else {
       return _key;
     }
@@ -972,9 +967,10 @@ class ASTValueReadKey<T> extends ASTValue<T> {
       throw UnsupportedError("Can't define variable value without a context!");
 
   @override
-  FutureOr<ASTValue<T>> resolve(VMContext context) async {
-    var v = await getValue(context);
-    return ASTValue.from(type, v);
+  FutureOr<ASTValue<T>> resolve(VMContext context) {
+    return getValue(context).resolveMapped((v) {
+      return ASTValue.from(type, v);
+    });
   }
 
   @override
