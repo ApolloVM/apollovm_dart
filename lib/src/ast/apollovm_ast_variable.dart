@@ -131,7 +131,7 @@ class ASTRuntimeVariable<T> extends ASTTypedVariable<T> {
   ASTValue _value;
 
   ASTRuntimeVariable(ASTType<T> type, String name, [ASTValue? value])
-      : _value = value ?? ASTValueNull.INSTANCE,
+      : _value = value ?? ASTValueNull.instance,
         super(type, name, false);
 
   @override
@@ -165,7 +165,7 @@ class ASTScopeVariable<T> extends ASTVariable {
   FutureOr<ASTType> resolveType(VMContext? context) async =>
       _associatedNode != null
           ? await _associatedNode!.resolveType(context)
-          : ASTTypeDynamic.INSTANCE;
+          : ASTTypeDynamic.instance;
 
   ASTTypedNode? _associatedNode;
 
@@ -223,7 +223,7 @@ class ASTThisVariable<T> extends ASTVariable {
 
     return _associatedNode != null
         ? await _associatedNode!.resolveType(context)
-        : ASTTypeDynamic.INSTANCE;
+        : ASTTypeDynamic.instance;
   }
 
   ASTTypedNode? _associatedNode;

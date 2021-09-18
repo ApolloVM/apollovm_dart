@@ -174,7 +174,6 @@ class CommandTranslate extends CommandSourceFileBase {
         help: 'Target Programming language for translation.\n'
             '(defaults to the opposite of the source language)',
         valueHelp: 'dart|java');
-    ;
   }
 
   String get targetLanguage {

@@ -239,7 +239,10 @@ Future<void> _testCall(XmlElement call, int callIndex, String outputJson,
   expect(outputList, equals(output), reason: 'Output error');
 
   print('OUTPUT[$callIndex]:');
-  outputList.forEach((o) => print('>> $o'));
+
+  for (var o in outputList) {
+    print('>> $o');
+  }
 }
 
 List _parseJsonList(String callParametersJson) {

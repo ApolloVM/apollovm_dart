@@ -7,7 +7,7 @@ import 'dart_grammar.dart';
 
 /// Dart implementation of an [ApolloParser].
 class ApolloParserDart extends ApolloParser {
-  static final ApolloParserDart INSTANCE = ApolloParserDart();
+  static final ApolloParserDart instance = ApolloParserDart();
 
   ApolloParserDart() : super(DartGrammarDefinition());
 

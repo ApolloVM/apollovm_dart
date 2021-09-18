@@ -15,6 +15,7 @@ import 'languages/java/java11/java11_generator.dart';
 
 /// The Apollo VM.
 class ApolloVM implements VMTypeResolver {
+  // ignore: non_constant_identifier_names
   static final String VERSION = '0.0.30';
 
   static int _idCount = 0;
@@ -25,10 +26,10 @@ class ApolloVM implements VMTypeResolver {
   ApolloParser? getParser(String language) {
     switch (language) {
       case 'dart':
-        return ApolloParserDart.INSTANCE;
+        return ApolloParserDart.instance;
       case 'java':
       case 'java11':
-        return ApolloParserJava11.INSTANCE;
+        return ApolloParserJava11.instance;
       default:
         return null;
     }
@@ -648,7 +649,7 @@ class VMContext {
       if (obj != null) {
         if (obj is ASTClassInstance) {
           var fieldValue = obj.clazz
-              .getInstanceFieldValue(this, ASTRunStatus.DUMMY, obj, name);
+              .getInstanceFieldValue(this, ASTRunStatus.dummy, obj, name);
           return fieldValue.resolveMapped((v) {
             if (v != null) {
               return ASTRuntimeVariable(v.type, name, v);
@@ -684,7 +685,7 @@ class VMContext {
 
   /// Declares a variable of [type] and [name] with an optional [value] in this context.
   bool declareVariableWithValue(ASTType type, String name, ASTValue? value) {
-    value ??= ASTValueNull.INSTANCE;
+    value ??= ASTValueNull.instance;
     var variable = ASTRuntimeVariable(type, name, value);
     return declareVariable(variable);
   }
@@ -787,7 +788,7 @@ class VMObject extends ASTValue<dynamic> {
 
     for (var key in _fieldsValues.keys) {
       var value = getFieldValue(key, context);
-      fieldsValues[key] = value ?? ASTValueNull.INSTANCE;
+      fieldsValues[key] = value ?? ASTValueNull.instance;
     }
 
     return fieldsValues;

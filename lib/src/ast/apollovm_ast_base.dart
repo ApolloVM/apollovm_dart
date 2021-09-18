@@ -20,7 +20,7 @@ abstract class ASTNode {
 /// - If a function have returned.
 /// - If a loop have continued or broke.
 class ASTRunStatus {
-  static final ASTRunStatus DUMMY = ASTRunStatus();
+  static final ASTRunStatus dummy = ASTRunStatus();
 
   bool returned = false;
 
@@ -29,14 +29,14 @@ class ASTRunStatus {
 
   ASTValueVoid returnVoid() {
     returned = true;
-    returnedValue = ASTValueVoid.INSTANCE;
-    return ASTValueVoid.INSTANCE;
+    returnedValue = ASTValueVoid.instance;
+    return ASTValueVoid.instance;
   }
 
   ASTValueNull returnNull() {
     returned = true;
-    returnedValue = ASTValueNull.INSTANCE;
-    return ASTValueNull.INSTANCE;
+    returnedValue = ASTValueNull.instance;
+    return ASTValueNull.instance;
   }
 
   ASTValue returnValue(ASTValue value) {

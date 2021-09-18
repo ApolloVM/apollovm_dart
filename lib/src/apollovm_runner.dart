@@ -37,8 +37,8 @@ abstract class ApolloLanguageRunner implements VMTypeResolver {
   ApolloExternalFunctionMapper? createDefaultApolloExternalFunctionMapper() {
     var externalFunctionMapper = ApolloExternalFunctionMapper();
 
-    externalFunctionMapper.mapExternalFunction1(ASTTypeVoid.INSTANCE, 'print',
-        ASTTypeObject.INSTANCE, 'o', (o) => externalPrintFunction(o));
+    externalFunctionMapper.mapExternalFunction1(ASTTypeVoid.instance, 'print',
+        ASTTypeObject.instance, 'o', (o) => externalPrintFunction(o));
 
     return externalFunctionMapper;
   }
@@ -157,14 +157,14 @@ abstract class ApolloLanguageRunner implements VMTypeResolver {
       return await executeFunction(namespace, functionName,
           positionalParameters: [positionalParameters]);
     } else if (await getFunction(
-            namespace, functionName, [ASTTypeArray(ASTTypeString.INSTANCE)]) !=
+            namespace, functionName, [ASTTypeArray(ASTTypeString.instance)]) !=
         null) {
       return await executeFunction(namespace, functionName,
           positionalParameters: [
             positionalParameters.map((e) => '$e').toList()
           ]);
     } else if (await getFunction(
-            namespace, functionName, [ASTTypeArray(ASTTypeDynamic.INSTANCE)]) !=
+            namespace, functionName, [ASTTypeArray(ASTTypeDynamic.instance)]) !=
         null) {
       return await executeFunction(namespace, functionName,
           positionalParameters: [positionalParameters]);
@@ -190,14 +190,14 @@ abstract class ApolloLanguageRunner implements VMTypeResolver {
       return await executeClassMethod(namespace, className, functionName,
           positionalParameters: [positionalParameters]);
     } else if (await getClassMethod(namespace, className, functionName,
-            [ASTTypeArray(ASTTypeString.INSTANCE)]) !=
+            [ASTTypeArray(ASTTypeString.instance)]) !=
         null) {
       return await executeClassMethod(namespace, className, functionName,
           positionalParameters: [
             positionalParameters.map((e) => '$e').toList()
           ]);
     } else if (await getClassMethod(namespace, className, functionName,
-            [ASTTypeArray(ASTTypeDynamic.INSTANCE)]) !=
+            [ASTTypeArray(ASTTypeDynamic.instance)]) !=
         null) {
       return await executeClassMethod(namespace, className, functionName,
           positionalParameters: [positionalParameters]);

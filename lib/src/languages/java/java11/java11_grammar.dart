@@ -8,17 +8,17 @@ class Java11GrammarDefinition extends Java11GrammarLexer {
   static ASTType getTypeByName(String name) {
     switch (name) {
       case 'Object':
-        return ASTTypeObject.INSTANCE;
+        return ASTTypeObject.instance;
       case 'int':
       case 'Integer':
-        return ASTTypeInt.INSTANCE;
+        return ASTTypeInt.instance;
       case 'double':
       case 'Double':
-        return ASTTypeDouble.INSTANCE;
+        return ASTTypeDouble.instance;
       case 'String':
-        return ASTTypeString.INSTANCE;
+        return ASTTypeString.instance;
       case 'List':
-        return ASTTypeArray(ASTTypeDynamic.INSTANCE);
+        return ASTTypeArray(ASTTypeDynamic.instance);
       case 'var':
         return ASTTypeVar();
       default:

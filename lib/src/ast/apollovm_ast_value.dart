@@ -22,11 +22,11 @@ abstract class ASTValue<T> implements ASTNode, ASTTypedNode {
     } else if (type is ASTTypeDouble) {
       return ASTValueDouble(value as double) as ASTValue<T>;
     } else if (type is ASTTypeNull) {
-      return ASTValueNull.INSTANCE as ASTValue<T>;
+      return ASTValueNull.instance as ASTValue<T>;
     } else if (type is ASTTypeObject) {
       return ASTValueObject(value!) as ASTValue<T>;
     } else if (type is ASTTypeVoid) {
-      return ASTValueVoid.INSTANCE as ASTValue<T>;
+      return ASTValueVoid.instance as ASTValue<T>;
     } else if (type is ASTTypeArray3D) {
       return ASTValueArray3D(type, value as dynamic) as ASTValue<T>;
     } else if (type is ASTTypeArray2D) {
@@ -39,7 +39,7 @@ abstract class ASTValue<T> implements ASTNode, ASTTypedNode {
   }
 
   static ASTValue fromValue(dynamic o) {
-    if (o == null) return ASTValueNull.INSTANCE;
+    if (o == null) return ASTValueNull.instance;
 
     if (o is ASTValue) return o;
 
@@ -130,6 +130,16 @@ abstract class ASTValue<T> implements ASTNode, ASTTypedNode {
       return v1 == v2;
     }
     return false;
+  }
+
+  @override
+  int get hashCode {
+    var context = VMContext.getCurrent();
+    var v1 = _getValue(context, this);
+    if (v1 is Future) {
+      throw StateError("Can't hashCode Future");
+    }
+    return v1.hashCode;
   }
 
   FutureOr<bool> equals(Object other) async {
@@ -292,6 +302,11 @@ class ASTValueStatic<T> extends ASTValue<T> {
   }
 
   @override
+  int get hashCode {
+    return value.hashCode;
+  }
+
+  @override
   FutureOr<bool> equals(Object other) async {
     if (identical(this, other)) return true;
 
@@ -335,6 +350,11 @@ abstract class ASTValuePrimitive<T> extends ASTValueStatic<T> {
   }
 
   @override
+  int get hashCode {
+    return value.hashCode;
+  }
+
+  @override
   FutureOr<bool> equals(Object other) async {
     if (identical(this, other)) return true;
 
@@ -352,10 +372,12 @@ abstract class ASTValuePrimitive<T> extends ASTValueStatic<T> {
 
 /// [ASTValue] for booleans ([bool]).
 class ASTValueBool extends ASTValuePrimitive<bool> {
+  // ignore: non_constant_identifier_names
   static final ASTValueBool TRUE = ASTValueBool(true);
+  // ignore: non_constant_identifier_names
   static final ASTValueBool FALSE = ASTValueBool(false);
 
-  ASTValueBool(bool value) : super(ASTTypeBool.INSTANCE, value);
+  ASTValueBool(bool value) : super(ASTTypeBool.instance, value);
 
   static ASTValueBool from(dynamic o) {
     if (o is bool) return ASTValueBool(o);
@@ -404,6 +426,11 @@ abstract class ASTValueNum<T extends num> extends ASTValuePrimitive<T> {
           "Can't perform operation '==' in non number values: $value > $v2");
     }
     return false;
+  }
+
+  @override
+  int get hashCode {
+    return value.hashCode;
   }
 
   @override
@@ -491,7 +518,7 @@ abstract class ASTValueNum<T extends num> extends ASTValuePrimitive<T> {
 
 /// [ASTValue] for integer ([int]).
 class ASTValueInt extends ASTValueNum<int> {
-  ASTValueInt(int n) : super(ASTTypeInt.INSTANCE, n);
+  ASTValueInt(int n) : super(ASTTypeInt.instance, n);
 
   @override
   ASTValue operator +(ASTValue other) {
@@ -551,7 +578,7 @@ class ASTValueInt extends ASTValueNum<int> {
 
 /// [ASTValue] for [double].
 class ASTValueDouble extends ASTValueNum<double> {
-  ASTValueDouble(double n) : super(ASTTypeDouble.INSTANCE, n);
+  ASTValueDouble(double n) : super(ASTTypeDouble.instance, n);
 
   @override
   ASTValue operator +(ASTValue other) {
@@ -611,7 +638,7 @@ class ASTValueDouble extends ASTValueNum<double> {
 
 /// [ASTValue] for [String].
 class ASTValueString extends ASTValuePrimitive<String> {
-  ASTValueString(String s) : super(ASTTypeString.INSTANCE, s);
+  ASTValueString(String s) : super(ASTTypeString.instance, s);
 
   @override
   bool operator >(Object other) {
@@ -645,18 +672,24 @@ class ASTValueString extends ASTValuePrimitive<String> {
 
 /// [ASTValue] for [Object].
 class ASTValueObject extends ASTValueStatic<Object> {
-  ASTValueObject(Object o) : super(ASTTypeObject.INSTANCE, o);
+  ASTValueObject(Object o) : super(ASTTypeObject.instance, o);
 }
 
 /// [ASTValue] for [null].
+// ignore: prefer_void_to_null
 class ASTValueNull extends ASTValueStatic<Null> {
-  ASTValueNull() : super(ASTTypeNull.INSTANCE, null);
+  ASTValueNull() : super(ASTTypeNull.instance, null);
 
-  static final ASTValueNull INSTANCE = ASTValueNull();
+  static final ASTValueNull instance = ASTValueNull();
 
   @override
   bool operator ==(Object other) {
     return other is ASTValueNull;
+  }
+
+  @override
+  int get hashCode {
+    return -1;
   }
 
   @override
@@ -672,13 +705,18 @@ class ASTValueNull extends ASTValueStatic<Null> {
 
 /// [ASTValue] for [void].
 class ASTValueVoid extends ASTValueStatic<void> {
-  ASTValueVoid() : super(ASTTypeVoid.INSTANCE, null);
+  ASTValueVoid() : super(ASTTypeVoid.instance, null);
 
-  static final ASTValueVoid INSTANCE = ASTValueVoid();
+  static final ASTValueVoid instance = ASTValueVoid();
 
   @override
   bool operator ==(Object other) {
     return other is ASTValueVoid;
+  }
+
+  @override
+  int get hashCode {
+    return -2;
   }
 
   @override
@@ -733,6 +771,13 @@ class ASTValueArray2D<T extends ASTType<V>, V>
     }
     return super == (other);
   }
+
+  @override
+  int get hashCode {
+    var context = VMContext.getCurrent();
+    var v1 = _getValue(context, this);
+    return _listEquality.hash(v1);
+  }
 }
 
 /// [ASTValue] for a 3D array/List.
@@ -744,14 +789,14 @@ class ASTValueArray3D<T extends ASTType<V>, V>
 
 /// [ASTValue] declared with `var`.
 class ASTValueVar extends ASTValueStatic<dynamic> {
-  ASTValueVar(Object o) : super(ASTTypeVar.INSTANCE, o);
+  ASTValueVar(Object o) : super(ASTTypeVar.instance, o);
 }
 
 /// [ASTValue] that should be converted to [String].
 class ASTValueAsString<T> extends ASTValue<String> {
   ASTValue<T> value;
 
-  ASTValueAsString(this.value) : super(ASTTypeString.INSTANCE);
+  ASTValueAsString(this.value) : super(ASTTypeString.instance);
 
   @override
   FutureOr<String> getValue(VMContext context) {
@@ -773,7 +818,7 @@ class ASTValueAsString<T> extends ASTValue<String> {
 class ASTValuesListAsString extends ASTValue<String> {
   List<ASTValue> values;
 
-  ASTValuesListAsString(this.values) : super(ASTTypeString.INSTANCE);
+  ASTValuesListAsString(this.values) : super(ASTTypeString.instance);
 
   @override
   FutureOr<String> getValue(VMContext context) {
@@ -801,7 +846,7 @@ class ASTValuesListAsString extends ASTValue<String> {
 class ASTValueStringExpression<T> extends ASTValue<String> {
   final ASTExpression expression;
 
-  ASTValueStringExpression(this.expression) : super(ASTTypeString.INSTANCE);
+  ASTValueStringExpression(this.expression) : super(ASTTypeString.instance);
 
   @override
   FutureOr<String> getValue(VMContext context) {
@@ -826,7 +871,7 @@ class ASTValueStringExpression<T> extends ASTValue<String> {
 class ASTValueStringVariable<T> extends ASTValue<String> {
   final ASTVariable variable;
 
-  ASTValueStringVariable(this.variable) : super(ASTTypeString.INSTANCE);
+  ASTValueStringVariable(this.variable) : super(ASTTypeString.instance);
 
   @override
   FutureOr<String> getValue(VMContext context) {
@@ -851,7 +896,7 @@ class ASTValueStringVariable<T> extends ASTValue<String> {
 class ASTValueStringConcatenation extends ASTValue<String> {
   final List<ASTValue<String>> values;
 
-  ASTValueStringConcatenation(this.values) : super(ASTTypeString.INSTANCE);
+  ASTValueStringConcatenation(this.values) : super(ASTTypeString.instance);
 
   @override
   FutureOr<String> getValue(VMContext context) {
@@ -888,7 +933,7 @@ class ASTValueReadIndex<T> extends ASTValue<T> {
         return generic;
       }
 
-      return ASTTypeDynamic.INSTANCE;
+      return ASTTypeDynamic.instance;
     });
   }
 
@@ -942,7 +987,7 @@ class ASTValueReadKey<T> extends ASTValue<T> {
         return generic;
       }
 
-      return ASTTypeDynamic.INSTANCE;
+      return ASTTypeDynamic.instance;
     });
   }
 
@@ -1126,6 +1171,11 @@ class ASTValueFuture<T extends ASTType<V>, V> extends ASTValue<Future<V>> {
     }
 
     return super == (other);
+  }
+
+  @override
+  int get hashCode {
+    return future.hashCode;
   }
 
   @override

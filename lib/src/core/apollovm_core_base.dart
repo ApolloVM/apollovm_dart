@@ -5,10 +5,10 @@ class ApolloVMCore {
   static ASTClass<V>? getClass<V>(String className) {
     switch (className) {
       case 'String':
-        return CoreClassString.INSTANCE as ASTClass<V>;
+        return CoreClassString.instance as ASTClass<V>;
       case 'int':
       case 'Integer':
-        return CoreClassInt.INSTANCE as ASTClass<V>;
+        return CoreClassInt.instance as ASTClass<V>;
       default:
         return null;
     }
@@ -77,40 +77,40 @@ abstract class CoreClassPrimitive<T> extends ASTClassPrimitive<T> {
 }
 
 class CoreClassString extends CoreClassPrimitive<String> {
-  static final CoreClassString INSTANCE = CoreClassString._();
+  static final CoreClassString instance = CoreClassString._();
 
-  late final ASTExternalClassFunction _function_contains;
+  late final ASTExternalClassFunction _functionContains;
 
-  late final ASTExternalClassFunction _function_toUpperCase;
+  late final ASTExternalClassFunction _functionToUpperCase;
 
-  late final ASTExternalClassFunction _function_toLowerCase;
+  late final ASTExternalClassFunction _functionToLowerCase;
 
-  late final ASTExternalFunction _function_valueOf;
+  late final ASTExternalFunction _functionValueOf;
 
-  CoreClassString._() : super(ASTTypeString.INSTANCE, 'String') {
-    _function_contains = _externalClassFunctionArgs1(
+  CoreClassString._() : super(ASTTypeString.instance, 'String') {
+    _functionContains = _externalClassFunctionArgs1(
       'contains',
-      ASTTypeBool.INSTANCE,
-      ASTFunctionParameterDeclaration(ASTTypeString.INSTANCE, 's', 0, false),
+      ASTTypeBool.instance,
+      ASTFunctionParameterDeclaration(ASTTypeString.instance, 's', 0, false),
       (String o, String p1) => o.contains(p1),
     );
 
-    _function_toUpperCase = _externalClassFunctionArgs0(
+    _functionToUpperCase = _externalClassFunctionArgs0(
       'toUpperCase',
-      ASTTypeString.INSTANCE,
+      ASTTypeString.instance,
       (String o) => o.toUpperCase(),
     );
 
-    _function_toLowerCase = _externalClassFunctionArgs0(
+    _functionToLowerCase = _externalClassFunctionArgs0(
       'toLowerCase',
-      ASTTypeString.INSTANCE,
+      ASTTypeString.instance,
       (String o) => o.toLowerCase(),
     );
 
-    _function_valueOf = _externalStaticFunctionArgs1(
+    _functionValueOf = _externalStaticFunctionArgs1(
       'valueOf',
-      ASTTypeString.INSTANCE,
-      ASTFunctionParameterDeclaration(ASTTypeDynamic.INSTANCE, 'obj', 0, false),
+      ASTTypeString.instance,
+      ASTFunctionParameterDeclaration(ASTTypeDynamic.instance, 'obj', 0, false),
       (dynamic o) => o?.toString() ?? 'null',
       resolveValueToString,
     );
@@ -133,13 +133,13 @@ class CoreClassString extends CoreClassPrimitive<String> {
       {bool caseInsensitive = false}) {
     switch (fName) {
       case 'contains':
-        return _function_contains;
+        return _functionContains;
       case 'toUpperCase':
-        return _function_toUpperCase;
+        return _functionToUpperCase;
       case 'toLowerCase':
-        return _function_toLowerCase;
+        return _functionToLowerCase;
       case 'valueOf':
-        return _function_valueOf;
+        return _functionValueOf;
     }
     throw StateError(
         "Can't find core function: $coreName.$fName( $parametersSignature )");
@@ -147,24 +147,24 @@ class CoreClassString extends CoreClassPrimitive<String> {
 }
 
 class CoreClassInt extends CoreClassPrimitive<int> {
-  static final CoreClassInt INSTANCE = CoreClassInt._();
+  static final CoreClassInt instance = CoreClassInt._();
 
-  late final ASTExternalFunction _function_valueOf;
+  late final ASTExternalFunction _functionValueOf;
 
-  late final ASTExternalFunction _function_parseInt;
+  late final ASTExternalFunction _functionParseInt;
 
-  CoreClassInt._() : super(ASTTypeInt.INSTANCE, 'int') {
-    _function_parseInt = _externalStaticFunctionArgs1(
+  CoreClassInt._() : super(ASTTypeInt.instance, 'int') {
+    _functionParseInt = _externalStaticFunctionArgs1(
       'parseInt',
-      ASTTypeInt.INSTANCE,
-      ASTFunctionParameterDeclaration(ASTTypeString.INSTANCE, 's', 0, false),
+      ASTTypeInt.instance,
+      ASTFunctionParameterDeclaration(ASTTypeString.instance, 's', 0, false),
       (dynamic p1) => parseInt(p1),
     );
 
-    _function_valueOf = _externalStaticFunctionArgs1(
+    _functionValueOf = _externalStaticFunctionArgs1(
       'valueOf',
-      ASTTypeString.INSTANCE,
-      ASTFunctionParameterDeclaration(ASTTypeDynamic.INSTANCE, 'obj', 0, false),
+      ASTTypeString.instance,
+      ASTFunctionParameterDeclaration(ASTTypeDynamic.instance, 'obj', 0, false),
       (dynamic o) => '$o',
     );
   }
@@ -176,9 +176,9 @@ class CoreClassInt extends CoreClassPrimitive<int> {
     switch (fName) {
       case 'parseInt':
       case 'parse':
-        return _function_parseInt;
+        return _functionParseInt;
       case 'valueOf':
-        return _function_valueOf;
+        return _functionValueOf;
     }
     throw StateError(
         "Can't find core function: $coreName.$fName( $parametersSignature )");

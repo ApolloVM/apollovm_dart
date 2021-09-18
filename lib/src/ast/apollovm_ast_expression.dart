@@ -171,7 +171,7 @@ class ASTExpressionVariableEntryAccess extends ASTExpression {
     var key = await expression.run(context, runStatus);
     var value = await variable.getValue(context);
 
-    var readValue;
+    dynamic readValue;
 
     if (key is ASTValueNum) {
       var idx = key.getValue(context).toInt();
@@ -236,7 +236,7 @@ ASTExpressionOperator getASTExpressionOperator(String op) {
     case '<=':
       return ASTExpressionOperator.lowerOrEq;
     default:
-      throw UnsupportedError('$op');
+      throw UnsupportedError(op);
   }
 }
 
@@ -290,32 +290,32 @@ class ASTExpressionOperation extends ASTExpression {
           var retT2 = expression1.resolveType(context);
 
           return retT1.resolveBoth(retT2, (t1, t2) {
-            if (_isOneOfType(t1, t2, ASTTypeDouble.INSTANCE)) {
-              return ASTTypeDouble.INSTANCE;
+            if (_isOneOfType(t1, t2, ASTTypeDouble.instance)) {
+              return ASTTypeDouble.instance;
             }
-            if (_isOneOfType(t1, t2, ASTTypeInt.INSTANCE)) {
-              return ASTTypeInt.INSTANCE;
+            if (_isOneOfType(t1, t2, ASTTypeInt.instance)) {
+              return ASTTypeInt.instance;
             }
-            if (_isOneOfType(t1, t2, ASTTypeString.INSTANCE)) {
-              return ASTTypeString.INSTANCE;
+            if (_isOneOfType(t1, t2, ASTTypeString.instance)) {
+              return ASTTypeString.instance;
             }
-            if (_isOneOfType(t1, t2, ASTTypeNum.INSTANCE)) {
-              return ASTTypeInt.INSTANCE;
+            if (_isOneOfType(t1, t2, ASTTypeNum.instance)) {
+              return ASTTypeInt.instance;
             }
-            return ASTTypeDynamic.INSTANCE;
+            return ASTTypeDynamic.instance;
           });
         }
       case ASTExpressionOperator.divideAsInt:
-        return ASTTypeInt.INSTANCE;
+        return ASTTypeInt.instance;
       case ASTExpressionOperator.divideAsDouble:
-        return ASTTypeDouble.INSTANCE;
+        return ASTTypeDouble.instance;
       case ASTExpressionOperator.equals:
       case ASTExpressionOperator.notEquals:
       case ASTExpressionOperator.greater:
       case ASTExpressionOperator.greaterOrEq:
       case ASTExpressionOperator.lower:
       case ASTExpressionOperator.lowerOrEq:
-        return ASTTypeBool.INSTANCE;
+        return ASTTypeBool.instance;
     }
   }
 
@@ -412,7 +412,7 @@ class ASTExpressionOperation extends ASTExpression {
     }
 
     throwOperationError('+', t1, t2);
-    return ASTValueNull.INSTANCE;
+    return ASTValueNull.instance;
   }
 
   FutureOr<ASTValue> operatorSubtract(
@@ -444,7 +444,7 @@ class ASTExpressionOperation extends ASTExpression {
     }
 
     throwOperationError('-', t1, t2);
-    return ASTValueNull.INSTANCE;
+    return ASTValueNull.instance;
   }
 
   FutureOr<ASTValue> operatorMultiply(
@@ -476,7 +476,7 @@ class ASTExpressionOperation extends ASTExpression {
     }
 
     throwOperationError('*', t1, t2);
-    return ASTValueNull.INSTANCE;
+    return ASTValueNull.instance;
   }
 
   FutureOr<ASTValue> operatorDivide(
@@ -508,7 +508,7 @@ class ASTExpressionOperation extends ASTExpression {
     }
 
     throwOperationError('/', t1, t2);
-    return ASTValueNull.INSTANCE;
+    return ASTValueNull.instance;
   }
 
   FutureOr<ASTValue> operatorDivideAsInt(
@@ -526,7 +526,7 @@ class ASTExpressionOperation extends ASTExpression {
     }
 
     throwOperationError('/', t1, t2);
-    return ASTValueNull.INSTANCE;
+    return ASTValueNull.instance;
   }
 
   FutureOr<ASTValue> operatorDivideAsDouble(
@@ -544,7 +544,7 @@ class ASTExpressionOperation extends ASTExpression {
     }
 
     throwOperationError('/', t1, t2);
-    return ASTValueNull.INSTANCE;
+    return ASTValueNull.instance;
   }
 
   FutureOr<ASTValueBool> operatorEquals(
@@ -670,7 +670,7 @@ abstract class ASTExpressionFunctionInvocation extends ASTExpression {
 
     return _associatedNode != null
         ? await _associatedNode!.resolveType(context)
-        : ASTTypeDynamic.INSTANCE;
+        : ASTTypeDynamic.instance;
   }
 
   ASTTypedNode? _associatedNode;

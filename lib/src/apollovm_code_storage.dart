@@ -67,7 +67,7 @@ class ApolloCodeStorageMemory extends ApolloCodeStorage {
   @override
   List<String>? getNamespaceCodeUnitsIDs(String namespace) {
     var ns = _namespaces[namespace];
-    return ns != null ? ns.keys.toList() : null;
+    return ns?.keys.toList();
   }
 
   @override

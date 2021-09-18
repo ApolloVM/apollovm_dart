@@ -165,7 +165,7 @@ class ASTBlock extends ASTStatement {
       VMContext parentContext, ASTRunStatus runStatus) async {
     var blockContext = defineRunContext(parentContext);
 
-    FutureOr<ASTValue> returnValue = ASTValueVoid.INSTANCE;
+    FutureOr<ASTValue> returnValue = ASTValueVoid.instance;
 
     for (var stm in _statements) {
       var ret = await stm.run(blockContext, runStatus);
@@ -181,7 +181,7 @@ class ASTBlock extends ASTStatement {
   }
 
   @override
-  ASTType resolveType(VMContext? context) => ASTTypeDynamic.INSTANCE;
+  ASTType resolveType(VMContext? context) => ASTTypeDynamic.instance;
 
   ASTClassField? getField(String name, {bool caseInsensitive = false}) =>
       parentBlock != null
@@ -229,7 +229,7 @@ ASTAssignmentOperator getASTAssignmentOperator(String op) {
     case '-=':
       return ASTAssignmentOperator.subtract;
     default:
-      throw UnsupportedError('$op');
+      throw UnsupportedError(op);
   }
 }
 
@@ -281,7 +281,7 @@ class ASTStatementReturn extends ASTStatement {
   }
 
   @override
-  FutureOr<ASTType> resolveType(VMContext? context) => ASTTypeVoid.INSTANCE;
+  FutureOr<ASTType> resolveType(VMContext? context) => ASTTypeVoid.instance;
 }
 
 /// [ASTStatement] to return null.
@@ -292,7 +292,7 @@ class ASTStatementReturnNull extends ASTStatementReturn {
   }
 
   @override
-  ASTType resolveType(VMContext? context) => ASTTypeNull.INSTANCE;
+  ASTType resolveType(VMContext? context) => ASTTypeNull.instance;
 }
 
 /// [ASTStatement] to return a [value].
@@ -406,7 +406,7 @@ class ASTStatementVariableDeclaration<V> extends ASTStatement {
       parentContext.declareVariableWithValue(type, name, initValue);
       return initValue;
     } else {
-      var initValue = ASTValueNull.INSTANCE;
+      var initValue = ASTValueNull.instance;
       parentContext.declareVariableWithValue(type, name, initValue);
       return initValue;
     }
@@ -433,7 +433,7 @@ abstract class ASTBranch extends ASTStatement {
   }
 
   @override
-  ASTType resolveType(VMContext? context) => ASTTypeVoid.INSTANCE;
+  ASTType resolveType(VMContext? context) => ASTTypeVoid.instance;
 }
 
 /// [ASTBranch] simple IF: `if (exp) {}`
@@ -460,7 +460,7 @@ class ASTBranchIfBlock extends ASTBranch {
       await block.run(parentContext, runStatus);
     }
 
-    return ASTValueVoid.INSTANCE;
+    return ASTValueVoid.instance;
   }
 }
 
@@ -493,7 +493,7 @@ class ASTBranchIfElseBlock extends ASTBranch {
       await blockElse.run(parentContext, runStatus);
     }
 
-    return ASTValueVoid.INSTANCE;
+    return ASTValueVoid.instance;
   }
 }
 
@@ -512,8 +512,13 @@ class ASTBranchIfElseIfsElseBlock extends ASTBranch {
     super.resolveNode(parentNode);
 
     condition.resolveNode(parentNode);
+
     blockIf.resolveNode(parentNode);
-    blocksElseIf.forEach((e) => e.resolveNode(parentNode));
+
+    for (var e in blocksElseIf) {
+      e.resolveNode(parentNode);
+    }
+
     blockElse.resolveNode(parentNode);
   }
 
@@ -524,7 +529,7 @@ class ASTBranchIfElseIfsElseBlock extends ASTBranch {
         await evaluateCondition(parentContext, runStatus, condition);
     if (evalValue) {
       await blockIf.run(parentContext, runStatus);
-      return ASTValueVoid.INSTANCE;
+      return ASTValueVoid.instance;
     } else {
       for (var branch in blocksElseIf) {
         evalValue =
@@ -532,12 +537,12 @@ class ASTBranchIfElseIfsElseBlock extends ASTBranch {
 
         if (evalValue) {
           await branch.block.run(parentContext, runStatus);
-          return ASTValueVoid.INSTANCE;
+          return ASTValueVoid.instance;
         }
       }
 
       await blockElse.run(parentContext, runStatus);
-      return ASTValueVoid.INSTANCE;
+      return ASTValueVoid.instance;
     }
   }
 }
@@ -609,9 +614,9 @@ class ASTStatementForLoop extends ASTStatement {
       VMContext.setCurrent(prevContext);
     }
 
-    return ASTValueVoid.INSTANCE;
+    return ASTValueVoid.instance;
   }
 
   @override
-  ASTType resolveType(VMContext? context) => ASTTypeVoid.INSTANCE;
+  ASTType resolveType(VMContext? context) => ASTTypeVoid.instance;
 }

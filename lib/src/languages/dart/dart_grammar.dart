@@ -8,19 +8,19 @@ class DartGrammarDefinition extends DartGrammarLexer {
   static ASTType getTypeByName(String name) {
     switch (name) {
       case 'Object':
-        return ASTTypeObject.INSTANCE;
+        return ASTTypeObject.instance;
       case 'int':
-        return ASTTypeInt.INSTANCE;
+        return ASTTypeInt.instance;
       case 'double':
-        return ASTTypeDouble.INSTANCE;
+        return ASTTypeDouble.instance;
       case 'num':
-        return ASTTypeNum.INSTANCE;
+        return ASTTypeNum.instance;
       case 'String':
-        return ASTTypeString.INSTANCE;
+        return ASTTypeString.instance;
       case 'dynamic':
-        return ASTTypeDynamic.INSTANCE;
+        return ASTTypeDynamic.instance;
       case 'List':
-        return ASTTypeArray(ASTTypeDynamic.INSTANCE);
+        return ASTTypeArray(ASTTypeDynamic.instance);
       case 'var':
         return ASTTypeVar();
       default:
@@ -480,12 +480,12 @@ class DartGrammarDefinition extends DartGrammarLexer {
           .cast<ASTTypeArray>();
 
   Parser<ASTTypeArray> array1DTypeDynamic() => string('List').map((v) {
-        return ASTTypeArray(ASTTypeDynamic.INSTANCE);
+        return ASTTypeArray(ASTTypeDynamic.instance);
       });
 
   Parser<ASTTypeArray2D> array2DTypeDynamic() =>
       (string('List') & char('<') & string('List') & char('>')).map((v) {
-        return ASTTypeArray2D.fromElementType(ASTTypeDynamic.INSTANCE);
+        return ASTTypeArray2D.fromElementType(ASTTypeDynamic.instance);
       });
 
   Parser<ASTTypeArray3D> array3DTypeDynamic() => (string('List') &
@@ -496,7 +496,7 @@ class DartGrammarDefinition extends DartGrammarLexer {
               char('>') &
               char('>'))
           .map((v) {
-        return ASTTypeArray3D.fromElementType(ASTTypeDynamic.INSTANCE);
+        return ASTTypeArray3D.fromElementType(ASTTypeDynamic.instance);
       });
 
   Parser<ASTValue> literal() =>

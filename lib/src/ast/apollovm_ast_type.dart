@@ -12,7 +12,7 @@ import 'apollovm_ast_variable.dart';
 /// An AST Type.
 class ASTType<V> implements ASTNode, ASTTypedNode {
   static ASTType from(dynamic o) {
-    if (o == null) return ASTTypeNull.INSTANCE;
+    if (o == null) return ASTTypeNull.instance;
 
     if (o is ASTType) {
       return o;
@@ -35,7 +35,7 @@ class ASTType<V> implements ASTNode, ASTTypedNode {
       if (resolved is ASTType) {
         return resolved;
       } else {
-        return ASTTypeDynamic.INSTANCE;
+        return ASTTypeDynamic.instance;
       }
     }
 
@@ -43,7 +43,7 @@ class ASTType<V> implements ASTNode, ASTTypedNode {
   }
 
   static FutureOr<ASTType> fromAsync(dynamic o) {
-    if (o == null) return ASTTypeNull.INSTANCE;
+    if (o == null) return ASTTypeNull.instance;
 
     if (o is ASTType) {
       return o;
@@ -69,68 +69,68 @@ class ASTType<V> implements ASTNode, ASTTypedNode {
   }
 
   static ASTType fromNativeValue(dynamic o) {
-    if (o == null) return ASTTypeNull.INSTANCE;
+    if (o == null) return ASTTypeNull.instance;
 
-    if (o is String) return ASTTypeString.INSTANCE;
-    if (o is int) return ASTTypeInt.INSTANCE;
-    if (o is double) return ASTTypeDouble.INSTANCE;
+    if (o is String) return ASTTypeString.instance;
+    if (o is int) return ASTTypeInt.instance;
+    if (o is double) return ASTTypeDouble.instance;
 
     if (o is List) {
-      if (o is List<String>) return ASTTypeArray(ASTTypeString.INSTANCE);
-      if (o is List<int>) return ASTTypeArray(ASTTypeInt.INSTANCE);
-      if (o is List<double>) return ASTTypeArray(ASTTypeDouble.INSTANCE);
-      if (o is List<Object>) return ASTTypeArray(ASTTypeObject.INSTANCE);
-      if (o is List<dynamic>) return ASTTypeArray(ASTTypeDynamic.INSTANCE);
+      if (o is List<String>) return ASTTypeArray(ASTTypeString.instance);
+      if (o is List<int>) return ASTTypeArray(ASTTypeInt.instance);
+      if (o is List<double>) return ASTTypeArray(ASTTypeDouble.instance);
+      if (o is List<Object>) return ASTTypeArray(ASTTypeObject.instance);
+      if (o is List<dynamic>) return ASTTypeArray(ASTTypeDynamic.instance);
 
       if (o is List<List<String>>) {
         return ASTTypeArray2D<ASTTypeString, String>.fromElementType(
-            ASTTypeString.INSTANCE);
+            ASTTypeString.instance);
       }
       if (o is List<List<int>>)
         // ignore: curly_braces_in_flow_control_structures
         return ASTTypeArray2D<ASTTypeInt, int>.fromElementType(
-            ASTTypeInt.INSTANCE);
+            ASTTypeInt.instance);
       if (o is List<List<double>>)
         // ignore: curly_braces_in_flow_control_structures
         return ASTTypeArray2D<ASTTypeDouble, double>.fromElementType(
-            ASTTypeDouble.INSTANCE);
+            ASTTypeDouble.instance);
       if (o is List<List<Object>>) {
         return ASTTypeArray2D<ASTTypeObject, Object>.fromElementType(
-            ASTTypeObject.INSTANCE);
+            ASTTypeObject.instance);
       }
       if (o is List<List<dynamic>>) {
         return ASTTypeArray2D<ASTTypeDynamic, dynamic>.fromElementType(
-            ASTTypeDynamic.INSTANCE);
+            ASTTypeDynamic.instance);
       }
 
       if (o is List<List<List<String>>>) {
         return ASTTypeArray3D<ASTTypeString, String>.fromElementType(
-            ASTTypeString.INSTANCE);
+            ASTTypeString.instance);
       }
       if (o is List<List<List<int>>>) {
         return ASTTypeArray3D<ASTTypeInt, int>.fromElementType(
-            ASTTypeInt.INSTANCE);
+            ASTTypeInt.instance);
       }
       if (o is List<List<List<double>>>) {
         return ASTTypeArray3D<ASTTypeDouble, double>.fromElementType(
-            ASTTypeDouble.INSTANCE);
+            ASTTypeDouble.instance);
       }
       if (o is List<List<List<Object>>>) {
         return ASTTypeArray3D<ASTTypeObject, Object>.fromElementType(
-            ASTTypeObject.INSTANCE);
+            ASTTypeObject.instance);
       }
       if (o is List<List<List<dynamic>>>) {
         return ASTTypeArray3D<ASTTypeDynamic, dynamic>.fromElementType(
-            ASTTypeDynamic.INSTANCE);
+            ASTTypeDynamic.instance);
       }
 
       var t = ASTType.from(o.genericType);
       return ASTTypeArray(t);
     }
 
-    if (o.runtimeType == Object) return ASTTypeObject.INSTANCE;
+    if (o.runtimeType == Object) return ASTTypeObject.instance;
 
-    return ASTTypeDynamic.INSTANCE;
+    return ASTTypeDynamic.instance;
   }
 
   final String name;
@@ -183,7 +183,7 @@ class ASTType<V> implements ASTNode, ASTTypedNode {
   bool acceptsType(ASTType type) {
     if (type == this) return true;
 
-    if (type == ASTTypeGenericWildcard.INSTANCE) return true;
+    if (type == ASTTypeGenericWildcard.instance) return true;
 
     if (name != type.name) {
       var typeSuperType = type.superType;
@@ -294,7 +294,7 @@ abstract class ASTTypePrimitive<T> extends ASTType<T> {
 
 /// [ASTType] for booleans ([bool]).
 class ASTTypeBool extends ASTTypePrimitive<bool> {
-  static final ASTTypeBool INSTANCE = ASTTypeBool();
+  static final ASTTypeBool instance = ASTTypeBool();
 
   ASTTypeBool() : super('bool');
 
@@ -348,7 +348,7 @@ enum ASTNumType {
 
 /// [ASTType] for numbers ([num]).
 class ASTTypeNum<T extends num> extends ASTTypePrimitive<T> {
-  static final ASTTypeNum INSTANCE = ASTTypeNum();
+  static final ASTTypeNum instance = ASTTypeNum();
 
   ASTTypeNum._(String name) : super(name);
 
@@ -357,8 +357,8 @@ class ASTTypeNum<T extends num> extends ASTTypePrimitive<T> {
   @override
   bool acceptsType(ASTType type) {
     if (type == this ||
-        type == ASTTypeDouble.INSTANCE ||
-        type == ASTTypeInt.INSTANCE) return true;
+        type == ASTTypeDouble.instance ||
+        type == ASTTypeInt.instance) return true;
     return false;
   }
 
@@ -402,7 +402,7 @@ class ASTTypeNum<T extends num> extends ASTTypePrimitive<T> {
 
 /// [ASTType] for integer ([int]).
 class ASTTypeInt extends ASTTypeNum<int> {
-  static final ASTTypeInt INSTANCE = ASTTypeInt();
+  static final ASTTypeInt instance = ASTTypeInt();
 
   ASTTypeInt() : super._('int');
 
@@ -450,7 +450,7 @@ class ASTTypeInt extends ASTTypeNum<int> {
 
 /// [ASTType] for [double].
 class ASTTypeDouble extends ASTTypeNum<double> {
-  static final ASTTypeDouble INSTANCE = ASTTypeDouble();
+  static final ASTTypeDouble instance = ASTTypeDouble();
 
   ASTTypeDouble() : super._('double');
 
@@ -498,7 +498,7 @@ class ASTTypeDouble extends ASTTypeNum<double> {
 
 /// [ASTType] for [String].
 class ASTTypeString extends ASTTypePrimitive<String> {
-  static final ASTTypeString INSTANCE = ASTTypeString();
+  static final ASTTypeString instance = ASTTypeString();
 
   ASTTypeString() : super('String');
 
@@ -545,7 +545,7 @@ class ASTTypeString extends ASTTypePrimitive<String> {
 
 /// [ASTType] for [Object].
 class ASTTypeObject extends ASTType<Object> {
-  static final ASTTypeObject INSTANCE = ASTTypeObject();
+  static final ASTTypeObject instance = ASTTypeObject();
 
   ASTTypeObject() : super('Object');
 
@@ -592,7 +592,7 @@ class ASTTypeObject extends ASTType<Object> {
 
 /// [ASTType] for [var] declaration.
 class ASTTypeVar extends ASTType<dynamic> {
-  static final ASTTypeVar INSTANCE = ASTTypeVar();
+  static final ASTTypeVar instance = ASTTypeVar();
 
   ASTTypeVar() : super('var');
 
@@ -652,7 +652,7 @@ class ASTTypeVar extends ASTType<dynamic> {
 
 /// [ASTType] for [dynamic] declaration.
 class ASTTypeDynamic extends ASTType<dynamic> {
-  static final ASTTypeDynamic INSTANCE = ASTTypeDynamic();
+  static final ASTTypeDynamic instance = ASTTypeDynamic();
 
   ASTTypeDynamic() : super('dynamic');
 
@@ -685,8 +685,9 @@ class ASTTypeDynamic extends ASTType<dynamic> {
 }
 
 /// [ASTType] for [null].
+// ignore: prefer_void_to_null
 class ASTTypeNull extends ASTType<Null> {
-  static final ASTTypeNull INSTANCE = ASTTypeNull();
+  static final ASTTypeNull instance = ASTTypeNull();
 
   ASTTypeNull() : super('Null');
 
@@ -699,7 +700,7 @@ class ASTTypeNull extends ASTType<Null> {
   @override
   ASTValueNull toValue(VMContext context, Object? v) {
     if (v is ASTValueNull) return v;
-    return ASTValueNull.INSTANCE;
+    return ASTValueNull.instance;
   }
 
   @override
@@ -718,7 +719,7 @@ class ASTTypeNull extends ASTType<Null> {
 
 /// [ASTType] for [void].
 class ASTTypeVoid extends ASTType<void> {
-  static final ASTTypeVoid INSTANCE = ASTTypeVoid();
+  static final ASTTypeVoid instance = ASTTypeVoid();
 
   ASTTypeVoid() : super('void');
 
@@ -730,7 +731,7 @@ class ASTTypeVoid extends ASTType<void> {
 
   @override
   ASTValueVoid toValue(VMContext context, Object? v) {
-    return ASTValueVoid.INSTANCE;
+    return ASTValueVoid.instance;
   }
 
   @override
@@ -757,7 +758,7 @@ class ASTTypeGenericVariable extends ASTType<Object> {
 
   @override
   ASTType<Object> resolveType(VMContext? context) =>
-      (type as ASTType<Object>?) ?? ASTTypeObject.INSTANCE;
+      (type as ASTType<Object>?) ?? ASTTypeObject.instance;
 
   @override
   FutureOr<ASTValue<Object>?> toValue(VMContext context, Object? v) {
@@ -767,12 +768,12 @@ class ASTTypeGenericVariable extends ASTType<Object> {
 
 /// Generic wildcard (`?`) of an [ASTType].
 class ASTTypeGenericWildcard extends ASTTypeGenericVariable {
-  static final ASTTypeGenericWildcard INSTANCE = ASTTypeGenericWildcard();
+  static final ASTTypeGenericWildcard instance = ASTTypeGenericWildcard();
 
   ASTTypeGenericWildcard() : super('?');
 
   @override
-  ASTType<Object> resolveType(VMContext? context) => ASTTypeObject.INSTANCE;
+  ASTType<Object> resolveType(VMContext? context) => ASTTypeObject.instance;
 }
 
 /// [ASTType] for an array/List.

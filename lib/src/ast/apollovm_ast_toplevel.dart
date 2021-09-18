@@ -51,16 +51,16 @@ class ASTEntryPointBlock extends ASTBlock {
           var clazz = this as ASTClass;
           var classContext = clazz._createContext(typeResolver, rootContext);
           var obj =
-              (await clazz.createInstance(classContext, ASTRunStatus.DUMMY))!;
+              (await clazz.createInstance(classContext, ASTRunStatus.dummy))!;
 
           if (classInstanceObject != null) {
             await clazz.setInstanceByVMObject(
-                classContext, ASTRunStatus.DUMMY, obj, classInstanceObject);
+                classContext, ASTRunStatus.dummy, obj, classInstanceObject);
           }
 
           if (classInstanceFields != null) {
             await clazz.setInstanceByMap(
-                classContext, ASTRunStatus.DUMMY, obj, classInstanceFields);
+                classContext, ASTRunStatus.dummy, obj, classInstanceFields);
           }
 
           classContext.setClassInstance(obj);
@@ -311,7 +311,7 @@ class ASTClassPrimitive<T> extends ASTClass<T> {
 
   @override
   FutureOr<void> setInstanceByVMObject(VMClassContext context,
-      ASTRunStatus runStatus, ASTValue<T> instance, VMObject obj) {}
+      ASTRunStatus runStatus, ASTValue<T> instance, VMObject value) {}
 
   @override
   FutureOr<void> setInstanceByValue(VMClassContext context,
@@ -438,7 +438,7 @@ class ASTClassNormal extends ASTClass<VMObject> {
   FutureOr<void> initializeInstance(VMClassContext context,
       ASTRunStatus runStatus, ASTValue<VMObject> instance) async {
     if (instance is! ASTClassInstance<VMObject>) {
-      throw _ExceptionNotClassInstance(instance);
+      throw _exceptionNotClassInstance(instance);
     }
 
     for (var field in _fields.values) {
@@ -446,20 +446,23 @@ class ASTClassNormal extends ASTClass<VMObject> {
         var value = await field.getInitialValue(context, runStatus);
         instance.vmObject.setFieldValue(field.name, value);
       } else {
-        instance.vmObject.setFieldValue(field.name, ASTValueNull.INSTANCE);
+        instance.vmObject.setFieldValue(field.name, ASTValueNull.instance);
       }
     }
   }
 
   @override
-  FutureOr<void> setInstanceByVMObject(VMClassContext context,
-      ASTRunStatus runStatus, ASTValue<VMObject> instance, VMObject obj) async {
+  FutureOr<void> setInstanceByVMObject(
+      VMClassContext context,
+      ASTRunStatus runStatus,
+      ASTValue<VMObject> instance,
+      VMObject value) async {
     if (instance is! ASTClassInstance<VMObject>) {
-      throw _ExceptionNotClassInstance(instance);
+      throw _exceptionNotClassInstance(instance);
     }
 
     for (var field in _fields.values) {
-      var fieldValue = obj.getFieldValue(field.name, context);
+      var fieldValue = value.getFieldValue(field.name, context);
       if (fieldValue != null) {
         instance.vmObject.setFieldValue(field.name, fieldValue);
       }
@@ -473,7 +476,7 @@ class ASTClassNormal extends ASTClass<VMObject> {
       ASTValue<VMObject> instance,
       ASTValue<VMObject> value) async {
     if (instance is! ASTClassInstance<VMObject>) {
-      throw _ExceptionNotClassInstance(instance);
+      throw _exceptionNotClassInstance(instance);
     }
 
     for (var field in _fields.values) {
@@ -484,7 +487,7 @@ class ASTClassNormal extends ASTClass<VMObject> {
     }
   }
 
-  ApolloVMCastException _ExceptionNotClassInstance(
+  ApolloVMCastException _exceptionNotClassInstance(
           ASTValue<VMObject> instance) =>
       ApolloVMCastException(
           "Can't cast $instance to ASTClassInstance<VMObject>");
@@ -497,7 +500,7 @@ class ASTClassNormal extends ASTClass<VMObject> {
       Map<String, ASTValue> value,
       {bool caseInsensitive = false}) async {
     if (instance is! ASTClassInstance<VMObject>) {
-      throw _ExceptionNotClassInstance(instance);
+      throw _exceptionNotClassInstance(instance);
     }
 
     var vmObject = instance.vmObject;
@@ -520,7 +523,7 @@ class ASTClassNormal extends ASTClass<VMObject> {
       ASTRunStatus runStatus, ASTValue<VMObject> instance, String fieldName,
       {bool caseInsensitive = false}) {
     if (instance is! ASTClassInstance<VMObject>) {
-      throw _ExceptionNotClassInstance(instance);
+      throw _exceptionNotClassInstance(instance);
     }
 
     var vmObject = instance.vmObject;
@@ -542,7 +545,7 @@ class ASTClassNormal extends ASTClass<VMObject> {
       ASTValue value,
       {bool caseInsensitive = false}) {
     if (instance is! ASTClassInstance<VMObject>) {
-      throw _ExceptionNotClassInstance(instance);
+      throw _exceptionNotClassInstance(instance);
     }
 
     var vmObject = instance.vmObject;
@@ -560,7 +563,7 @@ class ASTClassNormal extends ASTClass<VMObject> {
       ASTRunStatus runStatus, ASTValue<VMObject> instance, String fieldName,
       {bool caseInsensitive = false}) {
     if (instance is! ASTClassInstance<VMObject>) {
-      throw _ExceptionNotClassInstance(instance);
+      throw _exceptionNotClassInstance(instance);
     }
 
     var vmObject = instance.vmObject;
@@ -908,7 +911,7 @@ class ASTFunctionSetMultiple extends ASTFunctionSet {
     }
 
     throw StateError(
-        "Can't find function \'${first?.name}\' with signature: $parametersSignature");
+        "Can't find function '${first?.name}' with signature: $parametersSignature");
   }
 
   @override
@@ -955,9 +958,23 @@ class ASTParametersDeclaration {
       this.positionalParameters, this.optionalParameters, this.namedParameters);
 
   void resolveNode(ASTNode? parentNode) {
-    positionalParameters?.forEach((e) => e.resolveNode(parentNode));
-    optionalParameters?.forEach((e) => e.resolveNode(parentNode));
-    namedParameters?.forEach((e) => e.resolveNode(parentNode));
+    if (positionalParameters != null) {
+      for (var e in positionalParameters!) {
+        e.resolveNode(parentNode);
+      }
+    }
+
+    if (optionalParameters != null) {
+      for (var e in optionalParameters!) {
+        e.resolveNode(parentNode);
+      }
+    }
+
+    if (namedParameters != null) {
+      for (var e in namedParameters!) {
+        e.resolveNode(parentNode);
+      }
+    }
   }
 
   int get positionalParametersSize => positionalParameters?.length ?? 0;
@@ -1209,7 +1226,7 @@ class ASTFunctionDeclaration<T> extends ASTBlock {
       VMContext context, Object? returnValue) {
     var ret = returnType.toValue(context, returnValue);
     return ret.resolveMapped((resolved) {
-      resolved ??= ASTValueVoid.INSTANCE as ASTValue<T>;
+      resolved ??= ASTValueVoid.instance as ASTValue<T>;
       return resolved;
     });
   }
@@ -1218,16 +1235,16 @@ class ASTFunctionDeclaration<T> extends ASTBlock {
       VMContext context, List? positionalParameters, Map? namedParameters) {
     if (positionalParameters != null) {
       var ret =
-          _initialize_positionalParameters(positionalParameters, 0, context);
+          _initializePositionalParameters(positionalParameters, 0, context);
       return ret.onResolve((i) {
-        _initialize_optionalParameters(i, context);
+        _initializeOptionalParameters(i, context);
       });
     } else {
-      _initialize_optionalParameters(0, context);
+      _initializeOptionalParameters(0, context);
     }
   }
 
-  FutureOr<int> _initialize_positionalParameters(
+  FutureOr<int> _initializePositionalParameters(
       List<dynamic> positionalParameters, int i, VMContext context) {
     FutureOr<void> prevFuture;
 
@@ -1238,7 +1255,7 @@ class ASTFunctionDeclaration<T> extends ASTBlock {
         throw StateError("Can't find parameter at index: $i");
       }
 
-      var value = fParam.toValue(context, paramVal) ?? ASTValueNull.INSTANCE;
+      var value = fParam.toValue(context, paramVal) ?? ASTValueNull.instance;
 
       var future = value.onResolve((v) {
         context.declareVariableWithValue(fParam.type, fParam.name, v);
@@ -1254,13 +1271,13 @@ class ASTFunctionDeclaration<T> extends ASTBlock {
     return prevFuture.resolveWith(() => i);
   }
 
-  void _initialize_optionalParameters(int i, VMContext context) {
+  void _initializeOptionalParameters(int i, VMContext context) {
     var parametersSize = this.parametersSize;
 
     for (; i < parametersSize; ++i) {
       var fParam = getParameterByIndex(i)!;
       context.declareVariableWithValue(
-          fParam.type, fParam.name, ASTValueNull.INSTANCE);
+          fParam.type, fParam.name, ASTValueNull.instance);
     }
   }
 
@@ -1317,7 +1334,7 @@ class ASTExternalFunction<T> extends ASTFunctionDeclaration<T> {
 
       var parametersSize = this.parametersSize;
 
-      var result;
+      dynamic result;
       if (externalFunction.isParametersSize0 || parametersSize == 0) {
         result = externalFunction();
       } else if (externalFunction.isParametersSize1 || parametersSize == 1) {
@@ -1416,7 +1433,7 @@ class ASTExternalClassFunction<T> extends ASTClassFunctionDeclaration<T> {
 
       var parametersSize = this.parametersSize;
 
-      var result;
+      dynamic result;
       if (externalFunction.isParametersSize0 || parametersSize == 0) {
         result = externalFunction(obj);
       } else if (externalFunction.isParametersSize1 || parametersSize == 1) {

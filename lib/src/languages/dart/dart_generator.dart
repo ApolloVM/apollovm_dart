@@ -460,10 +460,10 @@ class ApolloCodeGeneratorDart extends ApolloCodeGenerator {
     return s;
   }
 
-  static final RegExp _REGEXP_WORD = RegExp(r'^[a-zA-Z]\w*$');
+  static final RegExp _regexpWORD = RegExp(r'^[a-zA-Z]\w*$');
 
   static bool _isVariable(String s) {
-    return _REGEXP_WORD.hasMatch(s);
+    return _regexpWORD.hasMatch(s);
   }
 
   static bool _isSingleQuoteString(String s) {
