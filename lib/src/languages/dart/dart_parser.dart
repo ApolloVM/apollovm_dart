@@ -1,8 +1,6 @@
-import 'package:apollovm/apollovm.dart';
-import 'package:apollovm/src/apollovm_base.dart';
-import 'package:apollovm/src/apollovm_parser.dart';
-import 'package:apollovm/src/apollovm_runner.dart';
-
+import '../../apollovm_base.dart';
+import '../../apollovm_parser.dart';
+import '../../apollovm_runner.dart';
 import 'dart_grammar.dart';
 
 /// Dart implementation of an [ApolloParser].

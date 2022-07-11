@@ -1,6 +1,10 @@
-import 'package:apollovm/apollovm.dart';
-import 'package:apollovm/src/apollovm_code_generator.dart';
-import 'package:apollovm/src/apollovm_code_storage.dart';
+import '../../apollovm_code_generator.dart';
+import '../../apollovm_code_storage.dart';
+import '../../ast/apollovm_ast_expression.dart';
+import '../../ast/apollovm_ast_toplevel.dart';
+import '../../ast/apollovm_ast_type.dart';
+import '../../ast/apollovm_ast_value.dart';
+import '../../ast/apollovm_ast_variable.dart';
 
 /// Dart implementation of an [ApolloCodeGenerator].
 class ApolloCodeGeneratorDart extends ApolloCodeGenerator {
@@ -421,7 +425,7 @@ class ApolloCodeGeneratorDart extends ApolloCodeGenerator {
 
         if (_isVariable(s1) &&
             (_isSingleQuoteString(s2) || _isDoubleQuoteString(s2))) {
-          var sMerge = s2.substring(0, 1) + '\$$s1' + s2.substring(1);
+          var sMerge = '${s2.substring(0, 1)}\$$s1${s2.substring(1)}';
           s.write(sMerge);
           return s;
         }
@@ -436,9 +440,8 @@ class ApolloCodeGeneratorDart extends ApolloCodeGenerator {
           return s;
         } else if ((_isSingleQuoteString(s1) || _isDoubleQuoteString(s1)) &&
             _isVariable(s2)) {
-          var sMerge = s1.substring(0, s1.length - 1) +
-              '\$$s2' +
-              s1.substring(s1.length - 1);
+          var sMerge =
+              '${s1.substring(0, s1.length - 1)}\$$s2${s1.substring(s1.length - 1)}';
           s.write(sMerge);
           return s;
         }

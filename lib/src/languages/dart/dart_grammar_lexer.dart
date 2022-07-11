@@ -1,5 +1,8 @@
-import 'package:apollovm/apollovm.dart';
 import 'package:petitparser/petitparser.dart';
+
+import '../../ast/apollovm_ast_expression.dart';
+import '../../ast/apollovm_ast_value.dart';
+import '../../ast/apollovm_ast_variable.dart';
 
 abstract class DartGrammarLexer extends GrammarDefinition {
   Parser token(Object input) {

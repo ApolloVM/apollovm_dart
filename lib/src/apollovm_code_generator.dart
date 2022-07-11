@@ -1,6 +1,11 @@
-import 'package:apollovm/apollovm.dart';
-
 import 'apollovm_code_storage.dart';
+import 'ast/apollovm_ast_base.dart';
+import 'ast/apollovm_ast_expression.dart';
+import 'ast/apollovm_ast_statement.dart';
+import 'ast/apollovm_ast_toplevel.dart';
+import 'ast/apollovm_ast_type.dart';
+import 'ast/apollovm_ast_value.dart';
+import 'ast/apollovm_ast_variable.dart';
 
 /// Base class for code generators.
 ///
@@ -58,7 +63,7 @@ abstract class ApolloCodeGenerator {
       bool withBlankHeadLine = false]) {
     s ??= StringBuffer();
 
-    var indent2 = indent + '  ';
+    var indent2 = '$indent  ';
 
     if (withBrackets) s.write('$indent{\n');
 
@@ -253,7 +258,7 @@ abstract class ApolloCodeGenerator {
     s.write('if (');
     generateASTExpression(branch.condition, '', s);
     s.write(') {\n');
-    generateASTBlock(branch.block, indent + '  ', s, false);
+    generateASTBlock(branch.block, '$indent  ', s, false);
     s.write(indent);
     s.write('}\n');
 
@@ -268,10 +273,10 @@ abstract class ApolloCodeGenerator {
     s.write('if (');
     generateASTExpression(branch.condition, '', s);
     s.write(') {\n');
-    generateASTBlock(branch.blockIf, indent + '  ', s, false);
+    generateASTBlock(branch.blockIf, '$indent  ', s, false);
     s.write(indent);
     s.write('} else {\n');
-    generateASTBlock(branch.blockElse, indent + '  ', s, false);
+    generateASTBlock(branch.blockElse, '$indent  ', s, false);
     s.write(indent);
     s.write('}\n');
 
@@ -288,19 +293,19 @@ abstract class ApolloCodeGenerator {
     s.write('if (');
     generateASTExpression(branch.condition, '', s);
     s.write(') {\n');
-    generateASTBlock(branch.blockIf, indent + '  ', s, false);
+    generateASTBlock(branch.blockIf, '$indent  ', s, false);
 
     for (var branchElseIf in branch.blocksElseIf) {
       s.write(indent);
       s.write('} else if (');
-      generateASTExpression(branchElseIf.condition, indent + '  ', s);
+      generateASTExpression(branchElseIf.condition, '$indent  ', s);
       s.write(') {\n');
-      generateASTBlock(branchElseIf.block, indent + '  ', s, false);
+      generateASTBlock(branchElseIf.block, '$indent  ', s, false);
     }
 
     s.write(indent);
     s.write('} else {\n');
-    generateASTBlock(branch.blockElse, indent + '  ', s, false);
+    generateASTBlock(branch.blockElse, '$indent  ', s, false);
     s.write(indent);
     s.write('}\n');
 

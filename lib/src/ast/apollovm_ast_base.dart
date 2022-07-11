@@ -1,7 +1,7 @@
 import 'dart:async';
 
-import 'package:apollovm/apollovm.dart';
-
+import '../apollovm_base.dart';
+import 'apollovm_ast_type.dart';
 import 'apollovm_ast_value.dart';
 
 /// An AST (Abstract Syntax Tree) Node.

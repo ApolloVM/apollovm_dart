@@ -1,8 +1,9 @@
 import 'dart:async';
 
-import 'package:apollovm/apollovm.dart';
 import 'package:collection/collection.dart' show equalsIgnoreAsciiCase;
 
+import '../apollovm_base.dart';
+import 'apollovm_ast_base.dart';
 import 'apollovm_ast_expression.dart';
 import 'apollovm_ast_toplevel.dart';
 import 'apollovm_ast_type.dart';
@@ -442,6 +443,7 @@ class ASTBranchIfBlock extends ASTBranch {
   ASTBlock block;
 
   ASTBranchIfBlock(this.condition, this.block);
+
   @override
   void resolveNode(ASTNode? parentNode) {
     super.resolveNode(parentNode);

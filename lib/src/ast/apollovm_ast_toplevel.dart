@@ -1,11 +1,10 @@
-import 'dart:async';
-
-import 'package:apollovm/apollovm.dart';
-import 'package:apollovm/src/core/apollovm_core_base.dart';
 import 'package:async_extension/async_extension.dart';
 import 'package:collection/collection.dart'
     show IterableExtension, equalsIgnoreAsciiCase;
 
+import '../apollovm_base.dart';
+import '../core/apollovm_core_base.dart';
+import 'apollovm_ast_base.dart';
 import 'apollovm_ast_statement.dart';
 import 'apollovm_ast_type.dart';
 import 'apollovm_ast_value.dart';

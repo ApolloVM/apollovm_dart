@@ -1,12 +1,13 @@
-import 'dart:async';
-
-import 'package:apollovm/apollovm.dart';
 import 'package:async_extension/async_extension.dart';
 import 'package:collection/collection.dart'
     show DeepCollectionEquality, ListEquality;
 import 'package:swiss_knife/swiss_knife.dart';
 
+import '../apollovm_base.dart';
+import '../apollovm_parser.dart';
+import 'apollovm_ast_base.dart';
 import 'apollovm_ast_expression.dart';
+import 'apollovm_ast_toplevel.dart';
 import 'apollovm_ast_type.dart';
 import 'apollovm_ast_variable.dart';
 
@@ -113,8 +114,9 @@ abstract class ASTValue<T> implements ASTNode, ASTTypedNode {
   FutureOr<ASTValue> operator ~/(ASTValue other) =>
       throw UnsupportedValueOperationError('+');
 
-  FutureOr<T> _getValue(VMContext? context, ASTValue v) =>
-      context != null ? v.getValue(context) as T : v.getValueNoContext() as T;
+  FutureOr<T> _getValue(VMContext? context, ASTValue v) => context != null
+      ? v.getValue(context) as FutureOr<T>
+      : v.getValueNoContext() as FutureOr<T>;
 
   @override
   bool operator ==(Object other) {
@@ -374,6 +376,7 @@ abstract class ASTValuePrimitive<T> extends ASTValueStatic<T> {
 class ASTValueBool extends ASTValuePrimitive<bool> {
   // ignore: non_constant_identifier_names
   static final ASTValueBool TRUE = ASTValueBool(true);
+
   // ignore: non_constant_identifier_names
   static final ASTValueBool FALSE = ASTValueBool(false);
 
@@ -442,11 +445,7 @@ abstract class ASTValueNum<T extends num> extends ASTValuePrimitive<T> {
     } else if (other is ASTValue) {
       var context = VMContext.getCurrent();
       var v2 = await _getValue(context, other);
-      if (v2 is num) {
-        return value == v2;
-      }
-      throw UnsupportedError(
-          "Can't perform operation '==' in non number values: $value > $v2");
+      return value == v2;
     }
     return false;
   }
@@ -458,11 +457,7 @@ abstract class ASTValueNum<T extends num> extends ASTValuePrimitive<T> {
     } else if (other is ASTValue) {
       var context = VMContext.getCurrent();
       var v2 = await _getValue(context, other);
-      if (v2 is num) {
-        return value > v2;
-      }
-      throw UnsupportedError(
-          "Can't perform operation '>' in non number values: $value > $v2");
+      return value > v2;
     }
     return false;
   }
@@ -474,11 +469,7 @@ abstract class ASTValueNum<T extends num> extends ASTValuePrimitive<T> {
     } else if (other is ASTValue) {
       var context = VMContext.getCurrent();
       var v2 = await _getValue(context, other);
-      if (v2 is num) {
-        return value < v2;
-      }
-      throw UnsupportedError(
-          "Can't perform operation '<' in non number values: $value > $v2");
+      return value < v2;
     }
     return false;
   }
@@ -490,11 +481,7 @@ abstract class ASTValueNum<T extends num> extends ASTValuePrimitive<T> {
     } else if (other is ASTValue) {
       var context = VMContext.getCurrent();
       var v2 = await _getValue(context, other);
-      if (v2 is num) {
-        return value >= v2;
-      }
-      throw UnsupportedError(
-          "Can't perform operation '>=' in non number values: $value > $v2");
+      return value >= v2;
     }
     return false;
   }
@@ -506,11 +493,7 @@ abstract class ASTValueNum<T extends num> extends ASTValuePrimitive<T> {
     } else if (other is ASTValue) {
       var context = VMContext.getCurrent();
       var v2 = await _getValue(context, other);
-      if (v2 is num) {
-        return value <= v2;
-      }
-      throw UnsupportedError(
-          "Can't perform operation '<=' in non number values: $value > $v2");
+      return value <= v2;
     }
     return false;
   }
@@ -527,7 +510,7 @@ class ASTValueInt extends ASTValueNum<int> {
     } else if (other is ASTValueDouble) {
       return ASTValueDouble(value + other.value);
     } else if (other is ASTValueString) {
-      return ASTValueString('$value' + other.value);
+      return ASTValueString('$value${other.value}');
     } else {
       throw UnsupportedValueOperationError(
           "Can't do '+' operation with: $other");
@@ -587,7 +570,7 @@ class ASTValueDouble extends ASTValueNum<double> {
     } else if (other is ASTValueDouble) {
       return ASTValueDouble(value + other.value);
     } else if (other is ASTValueString) {
-      return ASTValueString('$value' + other.value);
+      return ASTValueString('$value${other.value}');
     } else {
       throw UnsupportedValueOperationError(
           "Can't do '+' operation with: $other");

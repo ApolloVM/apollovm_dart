@@ -1,3 +1,22 @@
+## 0.0.31
+
+- Improved GitHub CI:
+  - Added browser tests. 
+- Optimize imports.
+- Clean code and new lints adjusts.
+- sdk: '>=2.15.0 <3.0.0'
+- swiss_knife: ^3.1.1
+- async_extension: ^1.0.9
+- petitparser: ^5.0.0
+- collection: ^1.16.0
+- args: ^2.3.1
+- lints: ^2.0.0
+- dependency_validator: ^3.2.2
+- test: ^1.21.4
+- pubspec: ^2.3.0
+- xml: ^6.1.0
+- path: ^1.8.2
+
 ## 0.0.30
 
 - Using `async_extension` to optimize async calls.

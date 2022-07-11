@@ -1,9 +1,6 @@
-import 'dart:async';
-
 import 'package:async_extension/async_extension.dart';
 
 import 'apollovm_base.dart';
-
 import 'ast/apollovm_ast_toplevel.dart';
 import 'ast/apollovm_ast_type.dart';
 import 'ast/apollovm_ast_value.dart';
@@ -213,13 +210,12 @@ abstract class ApolloLanguageRunner implements VMTypeResolver {
         var ret = getClass(typeName,
             namespace: namespace, caseInsensitive: caseInsensitive);
 
-        return ret.resolveMapped((clazz) {
-          clazz?.type ??
-              apolloVM.resolveCoreType(typeName,
-                  namespace: namespace,
-                  language: language,
-                  caseInsensitive: caseInsensitive);
-        });
+        return ret.resolveMapped((clazz) =>
+            clazz?.type ??
+            apolloVM.resolveCoreType(typeName,
+                namespace: namespace,
+                language: language,
+                caseInsensitive: caseInsensitive));
       }
     }
 

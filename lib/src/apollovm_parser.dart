@@ -63,6 +63,7 @@ class ParseResult {
 /// Syntax [Error] while parsing.
 class SyntaxError extends Error {
   String message;
+
   SyntaxError(this.message);
 
   @override

@@ -1,4 +1,4 @@
-import 'package:apollovm/apollovm.dart';
+import 'apollovm_ast_base.dart';
 
 class ASTAnnotation implements ASTNode {
   String name;

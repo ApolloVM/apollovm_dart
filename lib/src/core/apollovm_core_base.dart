@@ -1,5 +1,9 @@
-import 'package:apollovm/apollovm.dart';
 import 'package:swiss_knife/swiss_knife.dart';
+
+import '../apollovm_base.dart';
+import '../ast/apollovm_ast_toplevel.dart';
+import '../ast/apollovm_ast_type.dart';
+import '../ast/apollovm_ast_value.dart';
 
 class ApolloVMCore {
   static ASTClass<V>? getClass<V>(String className) {

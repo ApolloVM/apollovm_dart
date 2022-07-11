@@ -1,22 +1,28 @@
-import 'dart:async';
-
 import 'package:async_extension/async_extension.dart';
-import 'package:apollovm/apollovm.dart';
 import 'package:collection/collection.dart'
     show MapEquality, equalsIgnoreAsciiCase;
 import 'package:swiss_knife/swiss_knife.dart';
 
 import 'apollovm_code_generator.dart';
 import 'apollovm_code_storage.dart';
+import 'apollovm_parser.dart';
 import 'apollovm_runner.dart';
+import 'ast/apollovm_ast_base.dart';
+import 'ast/apollovm_ast_statement.dart';
+import 'ast/apollovm_ast_toplevel.dart';
+import 'ast/apollovm_ast_type.dart';
+import 'ast/apollovm_ast_value.dart';
+import 'ast/apollovm_ast_variable.dart';
 import 'core/apollovm_core_base.dart';
 import 'languages/dart/dart_generator.dart';
+import 'languages/dart/dart_parser.dart';
 import 'languages/java/java11/java11_generator.dart';
+import 'languages/java/java11/java11_parser.dart';
 
 /// The Apollo VM.
 class ApolloVM implements VMTypeResolver {
   // ignore: non_constant_identifier_names
-  static final String VERSION = '0.0.30';
+  static final String VERSION = '0.0.31';
 
   static int _idCount = 0;
 

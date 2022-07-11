@@ -1,6 +1,14 @@
-import 'package:apollovm/apollovm.dart';
 import 'package:petitparser/petitparser.dart';
 
+import '../../apollovm_base.dart';
+import '../../apollovm_parser.dart';
+import '../../ast/apollovm_ast_base.dart';
+import '../../ast/apollovm_ast_expression.dart';
+import '../../ast/apollovm_ast_statement.dart';
+import '../../ast/apollovm_ast_toplevel.dart';
+import '../../ast/apollovm_ast_type.dart';
+import '../../ast/apollovm_ast_value.dart';
+import '../../ast/apollovm_ast_variable.dart';
 import 'dart_grammar_lexer.dart';
 
 /// Dart grammar definition.

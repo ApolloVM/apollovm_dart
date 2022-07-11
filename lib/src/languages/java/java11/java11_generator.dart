@@ -1,7 +1,11 @@
-import 'package:apollovm/apollovm.dart';
-
-import 'package:apollovm/src/apollovm_code_generator.dart';
-import 'package:apollovm/src/apollovm_code_storage.dart';
+import '../../../apollovm_code_generator.dart';
+import '../../../apollovm_code_storage.dart';
+import '../../../apollovm_parser.dart';
+import '../../../ast/apollovm_ast_expression.dart';
+import '../../../ast/apollovm_ast_toplevel.dart';
+import '../../../ast/apollovm_ast_type.dart';
+import '../../../ast/apollovm_ast_value.dart';
+import '../../../ast/apollovm_ast_variable.dart';
 
 /// Java11 implementation of an [ApolloCodeGenerator].
 class ApolloCodeGeneratorJava11 extends ApolloCodeGenerator {

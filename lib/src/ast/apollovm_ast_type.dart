@@ -1,11 +1,13 @@
-import 'dart:async';
-
-import 'package:apollovm/apollovm.dart';
-import 'package:apollovm/src/core/apollovm_core_base.dart';
 import 'package:async_extension/async_extension.dart';
 import 'package:swiss_knife/swiss_knife.dart';
 
+import '../apollovm_base.dart';
+import '../apollovm_parser.dart';
+import '../core/apollovm_core_base.dart';
 import 'apollovm_ast_annotation.dart';
+import 'apollovm_ast_base.dart';
+import 'apollovm_ast_expression.dart';
+import 'apollovm_ast_toplevel.dart';
 import 'apollovm_ast_value.dart';
 import 'apollovm_ast_variable.dart';
 
@@ -76,56 +78,54 @@ class ASTType<V> implements ASTNode, ASTTypedNode {
     if (o is double) return ASTTypeDouble.instance;
 
     if (o is List) {
-      if (o is List<String>) return ASTTypeArray(ASTTypeString.instance);
-      if (o is List<int>) return ASTTypeArray(ASTTypeInt.instance);
-      if (o is List<double>) return ASTTypeArray(ASTTypeDouble.instance);
-      if (o is List<Object>) return ASTTypeArray(ASTTypeObject.instance);
-      if (o is List<dynamic>) return ASTTypeArray(ASTTypeDynamic.instance);
-
-      if (o is List<List<String>>) {
+      if (o is List<String>) {
+        return ASTTypeArray(ASTTypeString.instance);
+      } else if (o is List<int>) {
+        return ASTTypeArray(ASTTypeInt.instance);
+      } else if (o is List<double>) {
+        return ASTTypeArray(ASTTypeDouble.instance);
+      } else if (o is List<Object>) {
+        return ASTTypeArray(ASTTypeObject.instance);
+      } else if (o is List<List<String>>) {
         return ASTTypeArray2D<ASTTypeString, String>.fromElementType(
             ASTTypeString.instance);
-      }
-      if (o is List<List<int>>)
-        // ignore: curly_braces_in_flow_control_structures
+      } else if (o is List<List<int>>) {
         return ASTTypeArray2D<ASTTypeInt, int>.fromElementType(
             ASTTypeInt.instance);
-      if (o is List<List<double>>)
-        // ignore: curly_braces_in_flow_control_structures
+      } else if (o is List<List<double>>) {
         return ASTTypeArray2D<ASTTypeDouble, double>.fromElementType(
             ASTTypeDouble.instance);
-      if (o is List<List<Object>>) {
+      } else if (o is List<List<Object>>) {
         return ASTTypeArray2D<ASTTypeObject, Object>.fromElementType(
             ASTTypeObject.instance);
-      }
-      if (o is List<List<dynamic>>) {
+      } else if (o is List<List<dynamic>>) {
         return ASTTypeArray2D<ASTTypeDynamic, dynamic>.fromElementType(
             ASTTypeDynamic.instance);
-      }
-
-      if (o is List<List<List<String>>>) {
+      } else if (o is List<List<List<String>>>) {
         return ASTTypeArray3D<ASTTypeString, String>.fromElementType(
             ASTTypeString.instance);
-      }
-      if (o is List<List<List<int>>>) {
+      } else if (o is List<List<List<int>>>) {
         return ASTTypeArray3D<ASTTypeInt, int>.fromElementType(
             ASTTypeInt.instance);
-      }
-      if (o is List<List<List<double>>>) {
+      } else if (o is List<List<List<double>>>) {
         return ASTTypeArray3D<ASTTypeDouble, double>.fromElementType(
             ASTTypeDouble.instance);
-      }
-      if (o is List<List<List<Object>>>) {
+      } else if (o is List<List<List<Object>>>) {
         return ASTTypeArray3D<ASTTypeObject, Object>.fromElementType(
             ASTTypeObject.instance);
-      }
-      if (o is List<List<List<dynamic>>>) {
+      } else if (o is List<List<List<dynamic>>>) {
         return ASTTypeArray3D<ASTTypeDynamic, dynamic>.fromElementType(
             ASTTypeDynamic.instance);
       }
 
-      var t = ASTType.from(o.genericType);
-      return ASTTypeArray(t);
+      var genericType = o.genericType;
+
+      if (genericType == dynamic) {
+        return ASTTypeArray(ASTTypeDynamic.instance);
+      } else {
+        var t = ASTType.from(genericType);
+        return ASTTypeArray(t);
+      }
     }
 
     if (o.runtimeType == Object) return ASTTypeObject.instance;
