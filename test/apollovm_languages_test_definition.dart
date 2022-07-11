@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:apollovm/apollovm.dart';
 import 'package:collection/collection.dart';
@@ -40,34 +39,17 @@ class TestDefinition implements Comparable<TestDefinition> {
   }
 }
 
-Future<void> main() async {
-  var definitionsDirectory = Directory('./test/tests_definitions');
+Future<void> runTestDefinitions(List<TestDefinition> testDefinitions) async {
+  print('TESTS DEFINITIONS: ${testDefinitions.length}');
 
-  print('TESTS DEFINITIONS DIRECTORY: $definitionsDirectory');
-
-  var envVars = Platform.environment;
-  var singleTest = envVars['SINGLE_TEST'];
-
-  if (singleTest != null) {
-    print('SINGLE_TEST: $singleTest');
-  }
-
-  var definitions = await definitionsDirectory
-      .list()
-      .where((f) => f.path.endsWith('.xml'))
-      .where((f) => singleTest == null || f.path.endsWith('/$singleTest'))
-      .map((f) => File(f.path))
-      .map((f) => TestDefinition(f.path, f.readAsStringSync()))
-      .toList();
-
-  definitions.sort();
+  testDefinitions.sort();
 
   var definitionsByGroup =
-      groupBy<TestDefinition, String>(definitions, (e) => e.language);
+      groupBy<TestDefinition, String>(testDefinitions, (e) => e.language);
 
-  print('FOUND TESTS DEFINITIONS: ${definitions.length}');
+  print('FOUND TESTS DEFINITIONS: ${testDefinitions.length}');
 
-  for (var f in definitions) {
+  for (var f in testDefinitions) {
     print('- ${f.fileName}');
   }
 
