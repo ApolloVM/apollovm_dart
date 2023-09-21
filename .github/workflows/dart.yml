@@ -9,9 +9,8 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       - uses: dart-lang/setup-dart@v1
       - name: Dart version
         run: |
@@ -19,31 +18,62 @@ jobs:
           uname -a
       - name: Install dependencies
         run: dart pub get
+      - name: Upgrade dependencies
+        run: dart pub upgrade
       - name: dart format
         run: dart format -o none --set-exit-if-changed .
       - name: dart analyze
         run: dart analyze --fatal-infos --fatal-warnings .
       - name: dependency_validator
         run: dart run dependency_validator
-      - name: Run tests (VM)
-        run: dart test --platform vm
-      - name: Run tests (Chrome)
-        run: dart test --platform chrome
       - name: dart doc
         run: dart doc --dry-run
+      - name: dart pub publish --dry-run
+        run: dart pub publish --dry-run
+
+  test_vm:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: dart-lang/setup-dart@v1
+      - name: Dart version
+        run: |
+          dart --version
+          uname -a
+      - name: Install dependencies
+        run: dart pub get
+      - name: Upgrade dependencies
+        run: dart pub upgrade
+      - name: Run tests (VM)
+        run: dart test --platform vm --coverage=./coverage
       - name: Generate coverage report
         run: |
           dart pub global activate coverage
-          dart run test --coverage=./coverage
           dart pub global run coverage:format_coverage --packages=.dart_tool/package_config.json --report-on=lib --lcov -o ./coverage/lcov.info -i ./coverage
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v1
+        uses: codecov/codecov-action@v3
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
         with:
           directory: ./coverage/
           flags: unittests
           env_vars: OS,DART
           fail_ci_if_error: true
           verbose: true
-      - name: dart pub publish --dry-run
-        run: dart pub publish --dry-run
 
+
+  test_chrome:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: dart-lang/setup-dart@v1
+      - name: Dart version
+        run: |
+          dart --version
+          uname -a
+      - name: Install dependencies
+        run: dart pub get
+      - name: Upgrade dependencies
+        run: dart pub upgrade
+      - name: Run tests (Chrome)
+        run: dart test --platform chrome

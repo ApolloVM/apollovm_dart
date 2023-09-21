@@ -28,7 +28,7 @@ abstract class ApolloParser {
 
     var result = _grammarParser.parse(codeUnit.source);
 
-    if (!result.isSuccess) {
+    if (result is! Success) {
       return ParseResult(errorMessage: result.message);
     }
 

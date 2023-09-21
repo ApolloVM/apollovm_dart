@@ -24,7 +24,7 @@ class TestDefinition implements Comparable<TestDefinition> {
 
   String get language => source.getAttribute('language')!;
 
-  String get sourceCode => source.text;
+  String get sourceCode => source.innerText;
 
   List<XmlElement> get calls => rootElement.findElements('call').toList();
 
@@ -133,7 +133,7 @@ Future<void> runTestDefinitions(List<TestDefinition> testDefinitions) async {
             var allSources = codeStorage.writeAllSources().toString();
             print(allSources);
 
-            expect(allSources, equals(sourceGen.text));
+            expect(allSources, equals(sourceGen.innerText));
 
             {
               print('.......................................');
@@ -183,9 +183,9 @@ String _resolveLanguageOutput(XmlElement output, String language) {
     child ??= output.children.firstWhereOrNull(
         (e) => e is XmlElement && e.getAttribute('language') == null);
     print(child);
-    outputJson = child?.text ?? output.text;
+    outputJson = child?.innerText ?? output.innerText;
   } else {
-    outputJson = output.text;
+    outputJson = output.innerText;
   }
   return outputJson;
 }
@@ -194,7 +194,7 @@ Future<void> _testCall(XmlElement call, int callIndex, String outputJson,
     ApolloLanguageRunner runner) async {
   var callClass = call.getAttribute('class');
   var callFunction = call.getAttribute('function')!;
-  var callParametersJson = call.text;
+  var callParametersJson = call.innerText;
   var callParameters = _parseJsonList(callParametersJson);
 
   var output = _parseJsonList(outputJson);

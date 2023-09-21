@@ -1,3 +1,19 @@
+## 0.0.32
+
+- Dart CI: update and optimize jobs.
+
+- sdk: '>=3.0.0 <4.0.0'
+
+- swiss_knife: ^3.1.5
+- async_extension: ^1.2.5
+- petitparser: ^6.0.1
+- collection: ^1.18.0
+- args: ^2.4.2
+- lints: ^2.1.1
+- test: ^1.24.6
+- xml: ^6.4.2
+- path: ^1.8.3
+
 ## 0.0.31
 
 - Improved GitHub CI:
