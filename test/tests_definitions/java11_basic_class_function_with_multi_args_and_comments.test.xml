@@ -1,0 +1,127 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="Basic main(Object[]) 2">
+    <source language="java11">
+        <![CDATA[
+
+            class Foo {
+              int x = 0 ;
+              int y = 10 ;
+
+              int getZ() {
+                return y * 2 ;
+              }
+
+              int calcB(int b1 , int b2) {
+                return y * b1 * b2 ;
+              }
+
+
+              int IF(bool b, int p1, int p2){
+                if(b){
+                  return p1;
+                }else{
+                  return p2;
+                }
+              }
+
+              public int test(int a) {
+                var z = getZ();
+                var b = calcB(z , 3);
+                var s = this +" > a: "+ a +" ; x: "+ x +" ; y: "+ y +" ; z: "+ z +" ; b: "+ b ;
+                print(s);
+                // Comment X
+                var f = IF(1 > 2, 1, 2);
+                print(f) ;
+                // Comment X
+                return b;
+              }
+            }
+
+        ]]>
+    </source>
+    <call class="Foo" function="test" return="600" returnType="int">
+        [ 123 ]
+    </call>
+    <output>
+        ["Foo{x: int, y: int} > a: 123 ; x: 0 ; y: 10 ; z: 20 ; b: 600", 2]
+    </output>
+    <source-generated language="dart"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+class Foo {
+
+  int x = 0;
+  int y = 10;
+
+  int getZ() {
+    return y * 2;
+  }
+
+  int calcB(int b1, int b2) {
+    return y * b1 * b2;
+  }
+
+  int IF(bool b, int p1, int p2) {
+    if (b) {
+        return p1;
+    } else {
+        return p2;
+    }
+
+  }
+
+  int test(int a) {
+    var z = getZ();
+    var b = calcB(z, 3);
+    var s = '$this > a: $a ; x: $x ; y: $y ; z: $z ; b: $b';
+    print(s);
+    var f = IF(1 > 2, 1, 2);
+    print(f);
+    return b;
+  }
+
+}
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+
+    <source-generated language="java11"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+class Foo {
+
+  int x = 0;
+  int y = 10;
+
+  int getZ() {
+    return y * 2;
+  }
+
+  int calcB(int b1, int b2) {
+    return y * b1 * b2;
+  }
+
+  int IF(bool b, int p1, int p2) {
+    if (b) {
+        return p1;
+    } else {
+        return p2;
+    }
+
+  }
+
+  int test(int a) {
+    var z = getZ();
+    var b = calcB(z, 3);
+    var s = this + " > a: " + a + " ; x: " + x + " ; y: " + y + " ; z: " + z + " ; b: " + b;
+    print(s);
+    var f = IF(1 > 2, 1, 2);
+    print(f);
+    return b;
+  }
+
+}
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+</test>

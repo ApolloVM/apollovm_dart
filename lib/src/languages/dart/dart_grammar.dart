@@ -1,7 +1,6 @@
 import 'package:petitparser/petitparser.dart';
 
 import '../../apollovm_base.dart';
-import '../../apollovm_parser.dart';
 import '../../ast/apollovm_ast_base.dart';
 import '../../ast/apollovm_ast_expression.dart';
 import '../../ast/apollovm_ast_statement.dart';
@@ -77,7 +76,7 @@ class DartGrammarDefinition extends DartGrammarLexer {
       });
 
   Parser<ASTClassNormal> classDeclaration() =>
-      (string('class').trim() & identifier() & classCodeBlock()).map((v) {
+      (string('class').trimHidden() & identifier() & classCodeBlock()).map((v) {
         var name = v[1] as String;
         var block = v[2];
         var clazz = ASTClassNormal(name, ASTType<VMObject>(name), null);
@@ -85,12 +84,12 @@ class DartGrammarDefinition extends DartGrammarLexer {
         return clazz;
       });
 
-  Parser<ASTBlock> classCodeBlock() => (char('{').trim() &
+  Parser<ASTBlock> classCodeBlock() => (char('{').trimHidden() &
               (ref0(classFunctionDeclaration) |
                       ref0(classFieldDeclaration) |
                       ref0(classFieldDeclarationWithValue))
                   .star() &
-              char('}').trim())
+              char('}').trimHidden())
           .map((v) {
         var list = v[1] as List;
         var fields = list.whereType<ASTClassField>().toList();
@@ -105,7 +104,7 @@ class DartGrammarDefinition extends DartGrammarLexer {
       });
 
   Parser<ASTClassField> classFieldDeclaration() =>
-      (type() & identifier() & char(';').trim()).map((v) {
+      (type() & identifier() & char(';').trimHidden()).map((v) {
         var type = v[0] as ASTType;
         var name = v[1] as String;
         return ASTClassField(type, name, false);
@@ -113,9 +112,9 @@ class DartGrammarDefinition extends DartGrammarLexer {
 
   Parser<ASTClassField> classFieldDeclarationWithValue() => (type() &
               identifier() &
-              char('=').trim() &
+              char('=').trimHidden() &
               ref0(expression) &
-              char(';').trim())
+              char(';').trimHidden())
           .map((v) {
         var type = v[0] as ASTType;
         var name = v[1] as String;
@@ -141,28 +140,20 @@ class DartGrammarDefinition extends DartGrammarLexer {
       });
 
   Parser<ASTModifiers> functionModifiers() =>
-      ((string('static') | string('final')).trim().flatten().plus())
-          .map((List v) {
-        v = v.map((e) => e.toString().trim()).toList();
-        if (v.length > 1) {
-          if (v.toSet().length != v.length) {
-            throw SyntaxError('Duplicated function modifiers: $v');
-          }
-        }
-        var isStatic = v.contains('static');
-        var isFinal = v.contains('final');
-        return ASTModifiers(isStatic: isStatic, isFinal: isFinal);
+      string('static').trimHidden().flatten().map((v) {
+        return ASTModifiers(isStatic: true);
       });
 
   Parser<ASTBlock> codeBlock() =>
-      (char('{').trim() & ref0(statement).star() & char('}').trim()).map((v) {
+      (char('{').trimHidden() & ref0(statement).star() & char('}').trimHidden())
+          .map((v) {
         var statements = (v[1] as List).cast<ASTStatement>().toList();
         return ASTBlock(null)..addAllStatements(statements);
       });
 
   Parser<ASTStatement> statement() => (branch() |
-          statementReturn() |
           statementLoop() |
+          statementReturn() |
           statementVariableDeclaration() |
           statementExpression())
       .cast<ASTStatement>();
@@ -171,13 +162,13 @@ class DartGrammarDefinition extends DartGrammarLexer {
       (statementVariableDeclaration() | statementExpression())
           .cast<ASTStatement>();
 
-  Parser<ASTStatementForLoop> statementLoop() => (string('for').trim() &
-              char('(').trim() &
+  Parser<ASTStatementForLoop> statementLoop() => (string('for').trimHidden() &
+              char('(').trimHidden() &
               ref0(statementSimple) &
               ref0(expression) &
-              char(';').trim() &
+              char(';').trimHidden() &
               ref0(expression) &
-              char(')').trim() &
+              char(')').trimHidden() &
               codeBlock())
           .map((v) {
         var initExp = v[2];
@@ -188,7 +179,9 @@ class DartGrammarDefinition extends DartGrammarLexer {
       });
 
   Parser<ASTStatementReturn> statementReturn() =>
-      (string('return').trim() & expression().optional() & char(';').trim())
+      (string('return').trimHidden() &
+              expression().optional() &
+              char(';').trimHidden())
           .map((v) {
         var value = v[1];
 
@@ -212,15 +205,15 @@ class DartGrammarDefinition extends DartGrammarLexer {
       });
 
   Parser<ASTStatementExpression> statementExpression() =>
-      (expression() & char(';').trim()).map((v) {
+      (expression() & char(';').trimHidden()).map((v) {
         return ASTStatementExpression(v[0]);
       });
 
   Parser<ASTStatementVariableDeclaration> statementVariableDeclaration() =>
       (type() &
               identifier() &
-              (char('=').trim() & ref0(expression)).optional() &
-              char(';').trim())
+              (char('=').trimHidden() & ref0(expression)).optional() &
+              char(';').trimHidden())
           .map((v) {
         var type = v[0] as ASTType;
         var name = v[1] as String;
@@ -235,10 +228,10 @@ class DartGrammarDefinition extends DartGrammarLexer {
           ref0(branchIfBlock))
       .cast<ASTBranch>();
 
-  Parser<ASTBranchIfBlock> branchIfBlock() => (string('if').trim() &
-              char('(').trim() &
+  Parser<ASTBranchIfBlock> branchIfBlock() => (string('if').trimHidden() &
+              char('(').trimHidden() &
               ref0(expression) &
-              char(')').trim() &
+              char(')').trimHidden() &
               codeBlock())
           .map((v) {
         var condition = v[2];
@@ -246,12 +239,13 @@ class DartGrammarDefinition extends DartGrammarLexer {
         return ASTBranchIfBlock(condition, block);
       });
 
-  Parser<ASTBranchIfElseBlock> branchIfElseBlock() => (string('if').trim() &
-              char('(').trim() &
+  Parser<ASTBranchIfElseBlock> branchIfElseBlock() =>
+      (string('if').trimHidden() &
+              char('(').trimHidden() &
               ref0(expression) &
-              char(')').trim() &
+              char(')').trimHidden() &
               codeBlock() &
-              string('else').trim() &
+              string('else').trimHidden() &
               codeBlock())
           .map((v) {
         var condition = v[2];
@@ -261,13 +255,13 @@ class DartGrammarDefinition extends DartGrammarLexer {
       });
 
   Parser<ASTBranchIfElseIfsElseBlock> branchIfElseIfsElseBlock() =>
-      (string('if').trim() &
-              char('(').trim() &
+      (string('if').trimHidden() &
+              char('(').trimHidden() &
               ref0(expression) &
-              char(')').trim() &
+              char(')').trimHidden() &
               codeBlock() &
               ref0(branchElseIfs).plus() &
-              string('else').trim() &
+              string('else').trimHidden() &
               codeBlock())
           .map((v) {
         var condition = v[2];
@@ -279,11 +273,11 @@ class DartGrammarDefinition extends DartGrammarLexer {
             blockElseIfs.cast<ASTBranchIfBlock>().toList(), blockElse);
       });
 
-  Parser<ASTBranchIfBlock> branchElseIfs() => (string('else').trim() &
-              string('if').trim() &
-              char('(').trim() &
+  Parser<ASTBranchIfBlock> branchElseIfs() => (string('else').trimHidden() &
+              string('if').trimHidden() &
+              char('(').trimHidden() &
               ref0(expression) &
-              char(')').trim() &
+              char(')').trimHidden() &
               codeBlock())
           .map((v) {
         var condition = v[3];
@@ -332,7 +326,7 @@ class DartGrammarDefinition extends DartGrammarLexer {
               string('<=') |
               char('>') |
               char('<'))
-          .trim()
+          .trimHidden()
           .map((v) {
         var op = getASTExpressionOperator(v);
         if (op == ASTExpressionOperator.divide) {
@@ -351,9 +345,9 @@ class DartGrammarDefinition extends DartGrammarLexer {
   Parser<ASTExpressionFunctionInvocation> expressionFunctionInvocation() =>
       ((identifier() & char('.')).optional() &
               identifier() &
-              char('(').trim() &
+              char('(').trimHidden() &
               ref0(expressionSequence).optional() &
-              char(')').trim())
+              char(')').trimHidden())
           .map((v) {
         var objOpt = v[0] as List?;
         var obj = objOpt != null ? objOpt[0] as String : null;
@@ -370,7 +364,7 @@ class DartGrammarDefinition extends DartGrammarLexer {
       });
 
   Parser<List<ASTExpression>> expressionSequence() =>
-      (ref0(expression) & (char(',').trim() & ref0(expression)).star())
+      (ref0(expression) & (char(',').trimHidden() & ref0(expression)).star())
           .map((v) {
         var list = _expandListDeeply(v);
         var expressions = list.whereType<ASTExpression>().toList();
@@ -399,7 +393,7 @@ class DartGrammarDefinition extends DartGrammarLexer {
       });
 
   Parser<ASTAssignmentOperator> assigmentOperator() =>
-      (char('=') | string('+=')).trim().map((v) {
+      (char('=') | string('+=')).trimHidden().map((v) {
         return getASTAssignmentOperator(v);
       });
 
@@ -507,8 +501,9 @@ class DartGrammarDefinition extends DartGrammarLexer {
         return ASTTypeArray3D.fromElementType(ASTTypeDynamic.instance);
       });
 
-  Parser<ASTValue> literal() =>
-      (literalBool() | literalNum() | literalString()).cast<ASTValue>();
+  Parser<ASTValue> literal() => (literalBool() | literalNum() | literalString())
+      .trimHidden()
+      .cast<ASTValue>();
 
   Parser<ASTValueBool> literalBool() =>
       ((string('true') | string('false')).trim()).map((v) {

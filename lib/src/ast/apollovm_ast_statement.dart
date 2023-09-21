@@ -188,6 +188,21 @@ class ASTBlock extends ASTStatement {
       parentBlock != null
           ? parentBlock!.getField(name, caseInsensitive: caseInsensitive)
           : null;
+
+  @override
+  String toString() {
+    var str = StringBuffer();
+
+    str.write('{\n');
+
+    for (var stm in _statements) {
+      str.write('$stm\n');
+    }
+
+    str.write('}');
+
+    return str.toString();
+  }
 }
 
 class ASTStatementValue extends ASTStatement {
@@ -272,6 +287,11 @@ class ASTStatementExpression extends ASTStatement {
   @override
   FutureOr<ASTType> resolveType(VMContext? context) =>
       expression.resolveType(context);
+
+  @override
+  String toString() {
+    return '$expression ;';
+  }
 }
 
 /// [ASTStatement] to return void.
@@ -283,6 +303,11 @@ class ASTStatementReturn extends ASTStatement {
 
   @override
   FutureOr<ASTType> resolveType(VMContext? context) => ASTTypeVoid.instance;
+
+  @override
+  String toString() {
+    return 'return;';
+  }
 }
 
 /// [ASTStatement] to return null.
@@ -294,6 +319,11 @@ class ASTStatementReturnNull extends ASTStatementReturn {
 
   @override
   ASTType resolveType(VMContext? context) => ASTTypeNull.instance;
+
+  @override
+  String toString() {
+    return 'return null ;';
+  }
 }
 
 /// [ASTStatement] to return a [value].
@@ -317,6 +347,11 @@ class ASTStatementReturnValue extends ASTStatementReturn {
   @override
   FutureOr<ASTType> resolveType(VMContext? context) =>
       value.resolveType(context);
+
+  @override
+  String toString() {
+    return 'return $value ;';
+  }
 }
 
 /// [ASTStatement] to return a [variable].
@@ -341,6 +376,11 @@ class ASTStatementReturnVariable extends ASTStatementReturn {
   @override
   FutureOr<ASTType> resolveType(VMContext? context) =>
       variable.resolveType(context);
+
+  @override
+  String toString() {
+    return 'return $variable ;';
+  }
 }
 
 /// [ASTStatement] to return an [expression].
@@ -365,6 +405,11 @@ class ASTStatementReturnWithExpression extends ASTStatementReturn {
   @override
   FutureOr<ASTType> resolveType(VMContext? context) =>
       expression.resolveType(context);
+
+  @override
+  String toString() {
+    return 'return $expression ;';
+  }
 }
 
 /// [ASTStatement] that declares a scope variable.
@@ -416,6 +461,15 @@ class ASTStatementVariableDeclaration<V> extends ASTStatement {
   @override
   FutureOr<ASTType> resolveType(VMContext? context) =>
       type.resolveType(context);
+
+  @override
+  String toString() {
+    if (value != null) {
+      return '$type $name = $value ;';
+    } else {
+      return '$type $name;';
+    }
+  }
 }
 
 /// [ASTStatement] base for branches.
@@ -464,6 +518,11 @@ class ASTBranchIfBlock extends ASTBranch {
 
     return ASTValueVoid.instance;
   }
+
+  @override
+  String toString() {
+    return 'if ( $condition ) $block';
+  }
 }
 
 /// [ASTBranch] IF,ELSE: `if (exp) {} else {}`
@@ -496,6 +555,11 @@ class ASTBranchIfElseBlock extends ASTBranch {
     }
 
     return ASTValueVoid.instance;
+  }
+
+  @override
+  String toString() {
+    return 'if ( $condition ) $blockIf\nelse $blockElse';
   }
 }
 
@@ -546,6 +610,20 @@ class ASTBranchIfElseIfsElseBlock extends ASTBranch {
       await blockElse.run(parentContext, runStatus);
       return ASTValueVoid.instance;
     }
+  }
+
+  @override
+  String toString() {
+    var str = StringBuffer();
+    str.write('if ( $condition ) $blockIf\n');
+
+    for (var e in blocksElseIf) {
+      str.write('else $e');
+    }
+
+    str.write('else $blockElse');
+
+    return str.toString();
   }
 }
 

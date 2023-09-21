@@ -109,8 +109,15 @@ class ASTModifiers {
     );
   }
 
+  List<String> get modifiers => [
+        if (isPublic) 'public',
+        if (isPrivate) 'private',
+        if (isStatic) 'static',
+        if (isFinal) 'final',
+      ];
+
   @override
   String toString() {
-    return 'ASTModifier{isStatic: $isStatic, isFinal: $isFinal, isPrivate: $isPrivate, isPublic: $isPublic}';
+    return modifiers.join(' ');
   }
 }

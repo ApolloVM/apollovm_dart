@@ -11,7 +11,7 @@ void _log(String ns, String message) {
 
 void main(List<String> args) async {
   var commandRunner = CommandRunner<bool>('apollovm',
-      'ApolloVM/${ApolloVM.VERSION} - a compact VM for Dart and Java.')
+      'ApolloVM/${ApolloVM.VERSION} - A compact VM for Dart and Java.')
     ..addCommand(CommandRun())
     ..addCommand(CommandTranslate());
 

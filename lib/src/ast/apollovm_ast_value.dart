@@ -649,7 +649,7 @@ class ASTValueString extends ASTValuePrimitive<String> {
 
   @override
   String toString() {
-    return '(String) $value';
+    return '"$value"';
   }
 }
 
@@ -873,6 +873,11 @@ class ASTValueStringVariable<T> extends ASTValue<String> {
       return value is ASTValue<String> ? value : ASTValueAsString(value);
     });
   }
+
+  @override
+  String toString() {
+    return '"\$$variable"';
+  }
 }
 
 /// [ASTValue] for a concatenations of other [values].
@@ -897,6 +902,11 @@ class ASTValueStringConcatenation extends ASTValue<String> {
   FutureOr<ASTValue<String>> resolve(VMContext context) {
     var vsFuture = values.map((e) => e.resolve(context));
     return vsFuture.resolveAllJoined((vs) => ASTValuesListAsString(vs));
+  }
+
+  @override
+  String toString() {
+    return values.join(' + ');
   }
 }
 

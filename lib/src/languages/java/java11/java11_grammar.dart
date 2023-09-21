@@ -53,12 +53,12 @@ class Java11GrammarDefinition extends Java11GrammarLexer {
       });
 
   Parser importDirective() =>
-      (string('import') & literalString() & char(';').trim());
+      (string('import') & literalString() & char(';').trimHidden());
 
   Parser topLevelDefinition() => (classDeclaration());
 
   Parser<ASTClassNormal> classDeclaration() =>
-      (string('class').trim() & identifier() & classCodeBlock()).map((v) {
+      (string('class').trimHidden() & identifier() & classCodeBlock()).map((v) {
         var name = v[1] as String;
         var block = v[2];
         var clazz = ASTClassNormal(name, ASTType<VMObject>(name), null);
@@ -66,12 +66,12 @@ class Java11GrammarDefinition extends Java11GrammarLexer {
         return clazz;
       });
 
-  Parser<ASTBlock> classCodeBlock() => (char('{').trim() &
+  Parser<ASTBlock> classCodeBlock() => (char('{').trimHidden() &
               (ref0(classFunctionDeclaration) |
                       ref0(classFieldDeclaration) |
                       ref0(classFieldDeclarationWithValue))
                   .star() &
-              char('}').trim())
+              char('}').trimHidden())
           .map((v) {
         var list = v[1] as List;
         var fields = list.whereType<ASTClassField>().toList();
@@ -86,7 +86,7 @@ class Java11GrammarDefinition extends Java11GrammarLexer {
       });
 
   Parser<ASTClassField> classFieldDeclaration() =>
-      (modifiers().optional() & type() & identifier() & char(';').trim())
+      (modifiers().optional() & type() & identifier() & char(';').trimHidden())
           .map((v) {
         var modifiers = (v[0] as ASTModifiers?) ?? ASTModifiers.modifiersNone;
         var type = v[1];
@@ -98,9 +98,9 @@ class Java11GrammarDefinition extends Java11GrammarLexer {
       (modifiers().optional() &
               type() &
               identifier() &
-              char('=').trim() &
+              char('=').trimHidden() &
               ref0(expression) &
-              char(';').trim())
+              char(';').trimHidden())
           .map((v) {
         var modifiers = (v[0] as ASTModifiers?) ?? ASTModifiers.modifiersNone;
         var type = v[1];
@@ -148,11 +148,12 @@ class Java11GrammarDefinition extends Java11GrammarLexer {
           string('private') |
           string('final') |
           string('static'))
-      .trim()
+      .trimHidden()
       .flatten();
 
   Parser<ASTBlock> codeBlock() =>
-      (char('{').trim() & ref0(statement).star() & char('}').trim()).map((v) {
+      (char('{').trimHidden() & ref0(statement).star() & char('}').trimHidden())
+          .map((v) {
         var statements = (v[1] as List).cast<ASTStatement>().toList();
         return ASTBlock(null)..addAllStatements(statements);
       });
@@ -168,13 +169,13 @@ class Java11GrammarDefinition extends Java11GrammarLexer {
       (statementVariableDeclaration() | statementExpression())
           .cast<ASTStatement>();
 
-  Parser<ASTStatementForLoop> statementLoop() => (string('for').trim() &
-              char('(').trim() &
+  Parser<ASTStatementForLoop> statementLoop() => (string('for').trimHidden() &
+              char('(').trimHidden() &
               ref0(statementSimple) &
               ref0(expression) &
-              char(';').trim() &
+              char(';').trimHidden() &
               ref0(expression) &
-              char(')').trim() &
+              char(')').trimHidden() &
               codeBlock())
           .map((v) {
         var initExp = v[2];
@@ -185,7 +186,9 @@ class Java11GrammarDefinition extends Java11GrammarLexer {
       });
 
   Parser<ASTStatementReturn> statementReturn() =>
-      (string('return').trim() & expression().optional() & char(';').trim())
+      (string('return').trimHidden() &
+              expression().optional() &
+              char(';').trimHidden())
           .map((v) {
         var value = v[1];
 
@@ -209,15 +212,15 @@ class Java11GrammarDefinition extends Java11GrammarLexer {
       });
 
   Parser<ASTStatementExpression> statementExpression() =>
-      (expression() & char(';').trim()).map((v) {
+      (expression() & char(';').trimHidden()).map((v) {
         return ASTStatementExpression(v[0]);
       });
 
   Parser<ASTStatementVariableDeclaration> statementVariableDeclaration() =>
       (type() &
               identifier() &
-              (char('=').trim() & ref0(expression)).optional() &
-              char(';').trim())
+              (char('=').trimHidden() & ref0(expression)).optional() &
+              char(';').trimHidden())
           .map((v) {
         var valueOpt = v[2];
         var value = valueOpt != null ? valueOpt[1] : null;
@@ -229,10 +232,10 @@ class Java11GrammarDefinition extends Java11GrammarLexer {
           ref0(branchIfBlock))
       .cast<ASTBranch>();
 
-  Parser<ASTBranchIfBlock> branchIfBlock() => (string('if').trim() &
-              char('(').trim() &
+  Parser<ASTBranchIfBlock> branchIfBlock() => (string('if').trimHidden() &
+              char('(').trimHidden() &
               ref0(expression) &
-              char(')').trim() &
+              char(')').trimHidden() &
               codeBlock())
           .map((v) {
         var condition = v[2];
@@ -240,12 +243,13 @@ class Java11GrammarDefinition extends Java11GrammarLexer {
         return ASTBranchIfBlock(condition, block);
       });
 
-  Parser<ASTBranchIfElseBlock> branchIfElseBlock() => (string('if').trim() &
-              char('(').trim() &
+  Parser<ASTBranchIfElseBlock> branchIfElseBlock() =>
+      (string('if').trimHidden() &
+              char('(').trimHidden() &
               ref0(expression) &
-              char(')').trim() &
+              char(')').trimHidden() &
               codeBlock() &
-              string('else').trim() &
+              string('else').trimHidden() &
               codeBlock())
           .map((v) {
         var condition = v[2];
@@ -255,13 +259,13 @@ class Java11GrammarDefinition extends Java11GrammarLexer {
       });
 
   Parser<ASTBranchIfElseIfsElseBlock> branchIfElseIfsElseBlock() =>
-      (string('if').trim() &
-              char('(').trim() &
+      (string('if').trimHidden() &
+              char('(').trimHidden() &
               ref0(expression) &
-              char(')').trim() &
+              char(')').trimHidden() &
               codeBlock() &
               ref0(branchElseIfs).plus() &
-              string('else').trim() &
+              string('else').trimHidden() &
               codeBlock())
           .map((v) {
         var condition = v[2];
@@ -273,11 +277,11 @@ class Java11GrammarDefinition extends Java11GrammarLexer {
             blockElseIfs.cast<ASTBranchIfBlock>().toList(), blockElse);
       });
 
-  Parser<ASTBranchIfBlock> branchElseIfs() => (string('else').trim() &
-              string('if').trim() &
-              char('(').trim() &
+  Parser<ASTBranchIfBlock> branchElseIfs() => (string('else').trimHidden() &
+              string('if').trimHidden() &
+              char('(').trimHidden() &
               ref0(expression) &
-              char(')').trim() &
+              char(')').trimHidden() &
               codeBlock())
           .map((v) {
         var condition = v[3];
@@ -321,7 +325,7 @@ class Java11GrammarDefinition extends Java11GrammarLexer {
               string('>=') |
               char('<') |
               char('>'))
-          .trim()
+          .trimHidden()
           .map((v) {
         return getASTExpressionOperator(v);
       });
@@ -336,9 +340,9 @@ class Java11GrammarDefinition extends Java11GrammarLexer {
   Parser<ASTExpressionFunctionInvocation> expressionFunctionInvocation() =>
       ((identifier() & char('.')).optional() &
               identifier() &
-              char('(').trim() &
+              char('(').trimHidden() &
               ref0(expressionSequence).optional() &
-              char(')').trim())
+              char(')').trimHidden())
           .map((v) {
         var objOpt = v[0] as List?;
         var obj = objOpt != null ? objOpt[0] as String : null;
@@ -355,7 +359,7 @@ class Java11GrammarDefinition extends Java11GrammarLexer {
       });
 
   Parser<List<ASTExpression>> expressionSequence() =>
-      (ref0(expression) & (char(',').trim() & ref0(expression)).star())
+      (ref0(expression) & (char(',').trimHidden() & ref0(expression)).star())
           .map((v) {
         var list = _expandListDeeply(v);
         var expressions = list.whereType<ASTExpression>().toList();
@@ -384,7 +388,7 @@ class Java11GrammarDefinition extends Java11GrammarLexer {
       });
 
   Parser<ASTAssignmentOperator> assigmentOperator() =>
-      (char('=') | string('+=')).trim().map((v) {
+      (char('=') | string('+=')).trimHidden().map((v) {
         return getASTAssignmentOperator(v);
       });
 
@@ -448,8 +452,9 @@ class Java11GrammarDefinition extends Java11GrammarLexer {
         }
       });
 
-  Parser<ASTValue> literal() =>
-      (literalBool() | literalNum() | literalString()).cast<ASTValue>();
+  Parser<ASTValue> literal() => (literalBool() | literalNum() | literalString())
+      .trimHidden()
+      .cast<ASTValue>();
 
   Parser<ASTValueBool> literalBool() =>
       ((string('true') | string('false')).trim()).map((v) {

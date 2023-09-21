@@ -195,27 +195,31 @@ abstract class Java11GrammarLexer extends GrammarDefinition {
         return v[1] as String;
       });
 
-  Parser<String> newlineLexicalToken() => pattern('\n\r');
+  static Parser<String> newlineLexicalToken() => pattern('\n\r');
 
   // -----------------------------------------------------------------
   // Whitespace and comments.
   // -----------------------------------------------------------------
   Parser hiddenWhitespace() => ref0(hiddenStuffWhitespace).plus();
 
-  Parser hiddenStuffWhitespace() =>
+  static Parser hiddenStuffWhitespace() =>
       ref0(visibleWhitespace) |
       ref0(singleLineComment) |
       ref0(multiLineComment);
 
-  Parser visibleWhitespace() => whitespace();
+  static Parser visibleWhitespace() => whitespace();
 
-  Parser singleLineComment() =>
+  static Parser singleLineComment() =>
       string('//') &
       ref0(newlineLexicalToken).neg().star() &
       ref0(newlineLexicalToken).optional();
 
-  Parser multiLineComment() =>
+  static Parser multiLineComment() =>
       string('/*') &
       (ref0(multiLineComment) | string('*/').neg()).star() &
       string('*/');
+}
+
+extension TrimHiddenStuffWhitespaceParserExtension<R> on Parser<R> {
+  Parser<R> trimHidden() => trim(Java11GrammarLexer.hiddenStuffWhitespace());
 }

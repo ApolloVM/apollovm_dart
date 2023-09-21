@@ -27,7 +27,7 @@ Now you can use the `apollovm` Dart executable:
 ```shell
 $> apollovm help
 
-ApolloVM - a compact VM for Dart and Java.
+ApolloVM - A compact VM for Dart and Java.
 
 Usage: apollovm <command> [arguments]
 

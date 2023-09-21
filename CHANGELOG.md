@@ -1,3 +1,9 @@
+## 0.0.33
+
+- `ASTNode` implementations:
+  - Implement `toString` with a pseudo-code version of the node to facilitate debugging. 
+- Fixed parsing of comments in Dart and Java 11.
+
 ## 0.0.32
 
 - Dart CI: update and optimize jobs.

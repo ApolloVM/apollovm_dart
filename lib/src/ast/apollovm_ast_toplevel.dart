@@ -1295,6 +1295,12 @@ class ASTFunctionDeclaration<T> extends ASTBlock {
 
   @override
   ASTType resolveType(VMContext? context) => returnType;
+
+  @override
+  String toString() {
+    var block = super.toString();
+    return '$modifiers $returnType $name($_parameters) $block';
+  }
 }
 
 typedef ParameterValueResolver = FutureOr<dynamic> Function(

@@ -117,6 +117,11 @@ class ASTExpressionVariableAccess extends ASTExpression {
     var context = defineRunContext(parentContext);
     return variable.getValue(context);
   }
+
+  @override
+  String toString() {
+    return '$variable';
+  }
 }
 
 /// [ASTExpression] that declares a literal (number, boolean and String).
@@ -136,6 +141,11 @@ class ASTExpressionLiteral extends ASTExpression {
   @override
   FutureOr<ASTValue> run(VMContext parentContext, ASTRunStatus runStatus) {
     return value.resolve(parentContext);
+  }
+
+  @override
+  String toString() {
+    return '$value';
   }
 }
 
@@ -191,6 +201,11 @@ class ASTExpressionVariableEntryAccess extends ASTExpression {
     }
 
     return ASTValue.fromValue(readValue);
+  }
+
+  @override
+  String toString() {
+    return '$variable.$expression';
   }
 }
 
@@ -581,6 +596,12 @@ class ASTExpressionOperation extends ASTExpression {
     var b = val1 <= val2;
     return b.resolveMapped((val) => ASTValueBool(val));
   }
+
+  @override
+  String toString() {
+    var op = getASTExpressionOperatorText(operator);
+    return '$expression1 $op $expression2';
+  }
 }
 
 /// [ASTExpression] to assign the value of a variable.
@@ -696,6 +717,11 @@ abstract class ASTExpressionFunctionInvocation extends ASTExpression {
 
     return f.call(parentContext, positionalParameters: argumentsValues);
   }
+
+  @override
+  String toString() {
+    return '$name( $arguments )';
+  }
 }
 
 Future<List<ASTValue>> _resolveArgumentsValues(VMContext parentContext,
@@ -805,5 +831,11 @@ class ASTExpressionObjectFunctionInvocation
       // Static function call:
       return f.call(parentContext, positionalParameters: argumentsValues);
     }
+  }
+
+  @override
+  String toString() {
+    var f = super.toString();
+    return '$variable.$f';
   }
 }

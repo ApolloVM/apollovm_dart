@@ -194,6 +194,9 @@ Future<void> _testCall(XmlElement call, int callIndex, String outputJson,
     ApolloLanguageRunner runner) async {
   var callClass = call.getAttribute('class');
   var callFunction = call.getAttribute('function')!;
+  var callReturn = call.getAttribute('return');
+  var callReturnType = call.getAttribute('returnType');
+
   var callParametersJson = call.innerText;
   var callParameters = _parseJsonList(callParametersJson);
 
@@ -204,18 +207,38 @@ Future<void> _testCall(XmlElement call, int callIndex, String outputJson,
 
   print('---------------------------------------');
   print(runner);
+
+  if (callReturn != null) {
+    print(
+        'EXPECTED RETURN[$callIndex]: (${callReturnType ?? '?'}) $callReturn');
+  }
+
   print('EXPECTED OUTPUT[$callIndex]');
   print(output);
   print('');
 
+  ASTValue executionReturn;
   if (callClass != null) {
     print('EXECUTING[$callIndex]: $callClass.$callFunction( $callParameters )');
-    await runner.executeClassMethod('', callClass, callFunction,
+    executionReturn = await runner.executeClassMethod(
+        '', callClass, callFunction,
         positionalParameters: callParameters);
   } else {
     print('EXECUTING[$callIndex]: $callFunction( $callParameters )');
-    await runner.executeFunction('', callFunction,
+    executionReturn = await runner.executeFunction('', callFunction,
         positionalParameters: callParameters);
+  }
+
+  print('RETURN[$callIndex]: $executionReturn');
+
+  if (callReturnType != null) {
+    expect(executionReturn.getValueNoContext().toString(), equals(callReturn),
+        reason: 'Return error');
+  }
+
+  if (callReturnType != null) {
+    expect(executionReturn.type.name, equals(callReturnType),
+        reason: 'Return type error');
   }
 
   expect(outputList, equals(output), reason: 'Output error');
