@@ -146,9 +146,9 @@ void main() async {
     throw StateError('Error parsing Dart code!');
   }
 
-  var dartRunner = vm.getRunner('dart')!;
+  var dartRunner = vm.createRunner('dart')!;
   
-  dartRunner.executeFunction('', 'main', [
+  dartRunner.executeFunction('', 'main', positionalParameters: [
     ['Sums:', 10, 30, 50]
   ]);
 
@@ -206,9 +206,9 @@ void main() async {
     throw StateError('Error parsing Java11 code!');
   }
 
-  var javaRunner = vm.getRunner('java11')!;
+  var javaRunner = vm.createRunner('java11')!;
   
-  javaRunner.executeClassMethod('', 'Foo', 'main', [
+  javaRunner.executeClassMethod('', 'Foo', 'main', positionalParameters: [
     ['Sums:', 10, 20, 30]
   ]);
 
