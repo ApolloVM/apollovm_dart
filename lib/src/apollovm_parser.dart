@@ -1,4 +1,5 @@
 import 'package:petitparser/petitparser.dart';
+import 'package:swiss_knife/swiss_knife.dart';
 
 import 'apollovm_base.dart';
 import 'ast/apollovm_ast_toplevel.dart';
@@ -29,11 +30,20 @@ abstract class ApolloParser {
     var result = _grammarParser.parse(codeUnit.source);
 
     if (result is! Success) {
-      return ParseResult(errorMessage: result.message);
+      var lineAndColumn = result
+          .toPositionString()
+          .split(':')
+          .map((e) => parseInt(e)!)
+          .toList();
+
+      return ParseResult(codeUnit,
+          errorMessage: result.message,
+          errorPosition: result.position,
+          errorLineAndColumn: lineAndColumn);
     }
 
     var root = result.value;
-    return ParseResult(root: root);
+    return ParseResult(codeUnit, root: root);
   }
 
   void check(CodeUnit codeUnit) {
@@ -45,11 +55,23 @@ abstract class ApolloParser {
 }
 
 class ParseResult {
+  /// The parsed code.
+  final CodeUnit codeUnit;
+
+  /// The parsed [codeUnit] source.
+  String get source => codeUnit.source;
+
   /// A parsed [ASTRoot]
   final ASTRoot? root;
 
   /// The error message if some parsing error occurred.
   final String? errorMessage;
+
+  /// The position of the error in the [codeUnit] [source].
+  final int? errorPosition;
+
+  /// The line and column of the error in the [codeUnit] [source].
+  final List<int>? errorLineAndColumn;
 
   /// Returns true if this parse result is OK.
   bool get isOK => root != null;
@@ -57,14 +79,62 @@ class ParseResult {
   /// Returns true if this parse result has errors.
   bool get hasError => root == null;
 
-  ParseResult({this.root, this.errorMessage});
+  /// The error line at [codeUnit].
+  String? get errorLine {
+    var lineAndColumn = errorLineAndColumn;
+    if (lineAndColumn != null && lineAndColumn.isNotEmpty) {
+      return codeUnit.getLine(lineAndColumn[0]);
+    }
+
+    return null;
+  }
+
+  ParseResult(this.codeUnit,
+      {this.root,
+      this.errorMessage,
+      this.errorPosition,
+      this.errorLineAndColumn});
+
+  /// Returns the [errorMessage] with the error line information.
+  String get errorMessageExtended {
+    final errorLine = this.errorLine;
+    if (errorLine != null && errorLine.isNotEmpty) {
+      final errorLineAndColumn = this.errorLineAndColumn;
+
+      if (errorLineAndColumn != null && errorLineAndColumn.length >= 2) {
+        var line = errorLineAndColumn[0].toString();
+        var column = errorLineAndColumn[1];
+
+        var errorCursor = column < 0
+            ? ''
+            : '\n${' '.padLeft(line.length)} ${'^'.padLeft(column)}';
+
+        return "$errorMessage @$errorPosition$errorLineAndColumn:\n$line>$errorLine$errorCursor";
+      } else {
+        return "$errorMessage @$errorPosition$errorLineAndColumn:\n$errorLine";
+      }
+    } else {
+      return "$errorMessage @$errorPosition$errorLineAndColumn";
+    }
+  }
+
+  @override
+  String toString() {
+    if (isOK) {
+      return 'ParseResult[OK]: $root';
+    } else {
+      return 'ParseResult[ERROR]: $errorMessageExtended';
+    }
+  }
 }
 
 /// Syntax [Error] while parsing.
 class SyntaxError extends Error {
-  String message;
+  final String message;
 
-  SyntaxError(this.message);
+  final ParseResult? parseResult;
+
+  SyntaxError(this.message, {this.parseResult});
 
   @override
   String toString() {

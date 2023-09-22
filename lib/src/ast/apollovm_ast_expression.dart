@@ -284,6 +284,52 @@ String getASTExpressionOperatorText(ASTExpressionOperator op) {
   }
 }
 
+/// [ASTExpression] that negates another [expression].
+class ASTExpressionNegation extends ASTExpression {
+  ASTExpression expression;
+
+  ASTExpressionNegation(this.expression);
+
+  @override
+  FutureOr<ASTType> resolveType(VMContext? context) => ASTTypeBool.instance;
+
+  @override
+  FutureOr<ASTValue> run(VMContext parentContext, ASTRunStatus runStatus) {
+    var context = defineRunContext(parentContext);
+
+    var retVal = expression.run(context, runStatus);
+
+    return retVal.resolveMapped((val) {
+      return operatorNegation(parentContext, val);
+    });
+  }
+
+  Never throwOperationError(ASTType t) {
+    var message = "Can't perform negation operation with type: $t";
+
+    if (t is ASTTypeNull) {
+      throw ApolloVMNullPointerException(message);
+    }
+
+    throw UnsupportedError(message);
+  }
+
+  FutureOr<ASTValueBool> operatorNegation(VMContext context, ASTValue val) {
+    var t = val.type;
+
+    if (t is ASTTypeBool) {
+      var v1 = val.getValue(context) as bool;
+      var r = !v1;
+      return ASTValueBool(r);
+    }
+
+    throwOperationError(t);
+  }
+
+  @override
+  String toString() => '!$expression';
+}
+
 /// [ASTExpression] for an operation between 2 expressions.
 class ASTExpressionOperation extends ASTExpression {
   ASTExpression expression1;
@@ -374,7 +420,7 @@ class ASTExpressionOperation extends ASTExpression {
     });
   }
 
-  void throwOperationError(String op, ASTType t1, ASTType t2) {
+  Never throwOperationError(String op, ASTType t1, ASTType t2) {
     var message = "Can't perform '$op' operation with types: $t1 $op $t2";
 
     if (t1 is ASTTypeNull || t2 is ASTTypeNull) {
@@ -426,7 +472,6 @@ class ASTExpressionOperation extends ASTExpression {
     }
 
     throwOperationError('+', t1, t2);
-    return ASTValueNull.instance;
   }
 
   FutureOr<ASTValue> operatorSubtract(
@@ -458,7 +503,6 @@ class ASTExpressionOperation extends ASTExpression {
     }
 
     throwOperationError('-', t1, t2);
-    return ASTValueNull.instance;
   }
 
   FutureOr<ASTValue> operatorMultiply(
@@ -490,7 +534,6 @@ class ASTExpressionOperation extends ASTExpression {
     }
 
     throwOperationError('*', t1, t2);
-    return ASTValueNull.instance;
   }
 
   FutureOr<ASTValue> operatorDivide(
@@ -522,7 +565,6 @@ class ASTExpressionOperation extends ASTExpression {
     }
 
     throwOperationError('/', t1, t2);
-    return ASTValueNull.instance;
   }
 
   FutureOr<ASTValue> operatorDivideAsInt(
@@ -540,7 +582,6 @@ class ASTExpressionOperation extends ASTExpression {
     }
 
     throwOperationError('/', t1, t2);
-    return ASTValueNull.instance;
   }
 
   FutureOr<ASTValue> operatorDivideAsDouble(
@@ -558,7 +599,6 @@ class ASTExpressionOperation extends ASTExpression {
     }
 
     throwOperationError('/', t1, t2);
-    return ASTValueNull.instance;
   }
 
   FutureOr<ASTValueBool> operatorEquals(

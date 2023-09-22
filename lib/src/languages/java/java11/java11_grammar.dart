@@ -330,12 +330,25 @@ class Java11GrammarDefinition extends Java11GrammarLexer {
         return getASTExpressionOperator(v);
       });
 
-  Parser<ASTExpression> expressionNoOperation() => (expressionLiteral() |
+  Parser<ASTExpression> expressionNoOperation() => (expressionNegate() |
+          expressionLiteral() |
+          expressionGroup() |
           expressionVariableAssigment() |
           expressionFunctionInvocation() |
           expressionVariableEntryAccess() |
           expressionVariableAccess())
       .cast<ASTExpression>();
+
+  Parser<ASTExpressionNegation> expressionNegate() => (char('!').trimHidden() &
+              (ref0(expressionNoOperation) | ref0(expressionGroup)))
+          .map((v) {
+        var exp = v[1] as ASTExpression;
+        return ASTExpressionNegation(exp);
+      });
+
+  Parser<ASTExpression> expressionGroup() =>
+      (char('(').trimHidden() & ref0(expression) & char(')').trimHidden())
+          .map((v) => v[1] as ASTExpression);
 
   Parser<ASTExpressionFunctionInvocation> expressionFunctionInvocation() =>
       ((identifier() & char('.')).optional() &

@@ -1,3 +1,13 @@
+## 0.0.34
+
+- `ApolloVM`:
+  - `loadCodeUnit` now throws a `SyntaxError` with extended details.
+- `ParseResult`:
+  - Added fields `codeUnit`, `errorPosition` and `errorLineAndColumn`.
+  - Added getters `errorLine` and `errorMessageExtended`
+- Added `ASTExpressionNegation`:
+  - Added support for `dart` and `java11`. 
+
 ## 0.0.33
 
 - `ASTNode` implementations:

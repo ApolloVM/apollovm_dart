@@ -27,7 +27,7 @@ class DartGrammarDefinition extends DartGrammarLexer {
       case 'dynamic':
         return ASTTypeDynamic.instance;
       case 'List':
-        return ASTTypeArray(ASTTypeDynamic.instance);
+        return ASTTypeArray.instanceOfDynamic;
       case 'var':
         return ASTTypeVar();
       default:
@@ -335,12 +335,25 @@ class DartGrammarDefinition extends DartGrammarLexer {
         return op;
       });
 
-  Parser<ASTExpression> expressionNoOperation() => (expressionLiteral() |
+  Parser<ASTExpression> expressionNoOperation() => (expressionNegate() |
+          expressionLiteral() |
+          expressionGroup() |
           expressionVariableAssigment() |
           expressionFunctionInvocation() |
           expressionVariableEntryAccess() |
           expressionVariableAccess())
       .cast<ASTExpression>();
+
+  Parser<ASTExpressionNegation> expressionNegate() => (char('!').trimHidden() &
+              (ref0(expressionNoOperation) | ref0(expressionGroup)))
+          .map((v) {
+        var exp = v[1] as ASTExpression;
+        return ASTExpressionNegation(exp);
+      });
+
+  Parser<ASTExpression> expressionGroup() =>
+      (char('(').trimHidden() & ref0(expression) & char(')').trimHidden())
+          .map((v) => v[1] as ASTExpression);
 
   Parser<ASTExpressionFunctionInvocation> expressionFunctionInvocation() =>
       ((identifier() & char('.')).optional() &
@@ -482,7 +495,7 @@ class DartGrammarDefinition extends DartGrammarLexer {
           .cast<ASTTypeArray>();
 
   Parser<ASTTypeArray> array1DTypeDynamic() => string('List').map((v) {
-        return ASTTypeArray(ASTTypeDynamic.instance);
+        return ASTTypeArray.instanceOfDynamic;
       });
 
   Parser<ASTTypeArray2D> array2DTypeDynamic() =>

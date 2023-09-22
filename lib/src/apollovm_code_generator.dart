@@ -421,6 +421,8 @@ abstract class ApolloCodeGenerator {
       return generateASTExpressionVariableEntryAccess(expression, indent, s);
     } else if (expression is ASTExpressionLiteral) {
       return generateASTExpressionLiteral(expression, indent, s);
+    } else if (expression is ASTExpressionNegation) {
+      return generateASTExpressionNegation(expression, indent, s);
     } else if (expression is ASTExpressionLocalFunctionInvocation) {
       return generateASTExpressionLocalFunctionInvocation(
           expression, indent, s);
@@ -464,6 +466,15 @@ abstract class ApolloCodeGenerator {
     s ??= StringBuffer();
     s.write(indent);
     generateASTValue(expression.value, '', s);
+    return s;
+  }
+
+  StringBuffer generateASTExpressionNegation(ASTExpressionNegation expression,
+      [String indent = '', StringBuffer? s]) {
+    s ??= StringBuffer();
+    s.write(indent);
+    s.write('!');
+    s.write(generateASTExpression(expression.expression));
     return s;
   }
 

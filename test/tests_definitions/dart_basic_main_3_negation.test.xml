@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="Basic main(List<Object>) 3">
+    <source language="dart">
+        <![CDATA[
+        void main(List<Object> args) {
+          var title = args[0];
+          var a = args[1];
+          var b = args[2];
+          var c = args[3];
+          var sumAB = a + b ;
+          var sumABC = a + b + c;
+          var lower = sumABC < sumAB ;
+          print(title);
+          print(sumAB);
+          print(sumABC);
+          if ( !lower ) {
+            var eq = lower == false ;
+            print('[NOT] sumABC:$sumABC > sumAB:$sumAB = $eq');
+          } else {
+             var eq = lower == true ;
+            print('sumABC:$sumABC < sumAB:$sumAB = $eq');
+          }
+        }
+        ]]>
+    </source>
+    <call function="main">
+        [
+        ["Sums:", 10, 20, 50]
+        ]
+    </call>
+    <output>
+        ["Sums:", 30, 80, "[NOT] sumABC:80 > sumAB:30 = true"]
+    </output>
+    <call function="main">
+        [
+        ["Sums:", 10, 20, -50]
+        ]
+    </call>
+    <output>
+        ["Sums:", 30, -20, "sumABC:-20 &lt; sumAB:30 = true"]
+    </output>
+    <source-generated language="dart"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+  void main(List<Object> args) {
+    var title = args[0];
+    var a = args[1];
+    var b = args[2];
+    var c = args[3];
+    var sumAB = a + b;
+    var sumABC = a + b + c;
+    var lower = sumABC < sumAB;
+    print(title);
+    print(sumAB);
+    print(sumABC);
+    if (!lower) {
+        var eq = lower == false;
+        print('[NOT] sumABC:$sumABC > sumAB:$sumAB = $eq');
+    } else {
+        var eq = lower == true;
+        print('sumABC:$sumABC < sumAB:$sumAB = $eq');
+    }
+
+  }
+
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+</test>

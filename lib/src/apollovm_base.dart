@@ -22,7 +22,7 @@ import 'languages/java/java11/java11_parser.dart';
 /// The Apollo VM.
 class ApolloVM implements VMTypeResolver {
   // ignore: non_constant_identifier_names
-  static final String VERSION = '0.0.33';
+  static final String VERSION = '0.0.34';
 
   static int _idCount = 0;
 
@@ -95,6 +95,8 @@ class ApolloVM implements VMTypeResolver {
 
   /// Loads [codeUnit], parsing the [CodeUnit.source] to the
   /// corresponding AST (Abstract Syntax Tree).
+  /// - Returns `false` if there's no parser for the [codeUnit] language.
+  /// - Throws a [SyntaxError] if the code can't be parsed.
   Future<bool> loadCodeUnit(CodeUnit codeUnit) async {
     var language = codeUnit.language;
     var parser = getParser(language);
@@ -103,7 +105,9 @@ class ApolloVM implements VMTypeResolver {
 
     var result = await parser.parse(codeUnit);
 
-    if (!result.isOK) return false;
+    if (!result.isOK) {
+      throw SyntaxError(result.errorMessageExtended, parseResult: result);
+    }
 
     var root = result.root!;
 
@@ -426,6 +430,16 @@ class CodeUnit {
 
   /// The [ASTRoot] corresponding to the parsed [source].
   ASTRoot? root;
+
+  /// Returns the [source] lines.
+  List<String> get lines => source.split(RegExp(r'\r\n|\n|\r'));
+
+  /// Returns a [source] line.
+  String? getLine(int lineNumber) {
+    var idx = lineNumber - 1;
+    var lines = this.lines;
+    return (idx >= 0 && idx < lines.length) ? lines[idx] : null;
+  }
 
   @override
   String toString() {

@@ -154,14 +154,14 @@ abstract class ApolloLanguageRunner implements VMTypeResolver {
       return await executeFunction(namespace, functionName,
           positionalParameters: [positionalParameters]);
     } else if (await getFunction(
-            namespace, functionName, [ASTTypeArray(ASTTypeString.instance)]) !=
+            namespace, functionName, [ASTTypeArray.instanceOfString]) !=
         null) {
       return await executeFunction(namespace, functionName,
           positionalParameters: [
             positionalParameters.map((e) => '$e').toList()
           ]);
     } else if (await getFunction(
-            namespace, functionName, [ASTTypeArray(ASTTypeDynamic.instance)]) !=
+            namespace, functionName, [ASTTypeArray.instanceOfDynamic]) !=
         null) {
       return await executeFunction(namespace, functionName,
           positionalParameters: [positionalParameters]);
@@ -180,21 +180,20 @@ abstract class ApolloLanguageRunner implements VMTypeResolver {
         null) {
       return await executeClassMethod(namespace, className, functionName,
           positionalParameters: positionalParameters);
-    }
-    if (await getClassMethod(
+    } else if (await getClassMethod(
             namespace, className, functionName, [positionalParameters]) !=
         null) {
       return await executeClassMethod(namespace, className, functionName,
           positionalParameters: [positionalParameters]);
     } else if (await getClassMethod(namespace, className, functionName,
-            [ASTTypeArray(ASTTypeString.instance)]) !=
+            [ASTTypeArray.instanceOfString]) !=
         null) {
       return await executeClassMethod(namespace, className, functionName,
           positionalParameters: [
             positionalParameters.map((e) => '$e').toList()
           ]);
     } else if (await getClassMethod(namespace, className, functionName,
-            [ASTTypeArray(ASTTypeDynamic.instance)]) !=
+            [ASTTypeArray.instanceOfDynamic]) !=
         null) {
       return await executeClassMethod(namespace, className, functionName,
           positionalParameters: [positionalParameters]);

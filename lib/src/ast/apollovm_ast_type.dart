@@ -79,13 +79,13 @@ class ASTType<V> implements ASTNode, ASTTypedNode {
 
     if (o is List) {
       if (o is List<String>) {
-        return ASTTypeArray(ASTTypeString.instance);
+        return ASTTypeArray.instanceOfString;
       } else if (o is List<int>) {
-        return ASTTypeArray(ASTTypeInt.instance);
+        return ASTTypeArray.instanceOfInt;
       } else if (o is List<double>) {
-        return ASTTypeArray(ASTTypeDouble.instance);
+        return ASTTypeArray.instanceOfDouble;
       } else if (o is List<Object>) {
-        return ASTTypeArray(ASTTypeObject.instance);
+        return ASTTypeArray.instanceOfObject;
       } else if (o is List<List<String>>) {
         return ASTTypeArray2D<ASTTypeString, String>.fromElementType(
             ASTTypeString.instance);
@@ -135,11 +135,11 @@ class ASTType<V> implements ASTNode, ASTTypedNode {
 
   final String name;
 
-  List<ASTType>? generics;
+  final List<ASTType>? generics;
 
-  ASTType? superType;
+  final ASTType? superType;
 
-  List<ASTAnnotation>? annotations;
+  final List<ASTAnnotation>? annotations;
 
   ASTType(this.name, {this.generics, this.superType, this.annotations});
 
@@ -750,9 +750,9 @@ class ASTTypeVoid extends ASTType<void> {
 
 /// Generic variable of an [ASTType].
 class ASTTypeGenericVariable extends ASTType<Object> {
-  String variableName;
+  final String variableName;
 
-  ASTType? type;
+  final ASTType? type;
 
   ASTTypeGenericVariable(this.variableName, [this.type]) : super(variableName);
 
@@ -778,13 +778,29 @@ class ASTTypeGenericWildcard extends ASTTypeGenericVariable {
 
 /// [ASTType] for an array/List.
 class ASTTypeArray<T extends ASTType<V>, V> extends ASTType<List<V>> {
-  T componentType;
+  static final ASTTypeArray<ASTTypeString, String> instanceOfString =
+      ASTTypeArray<ASTTypeString, String>(ASTTypeString.instance);
+
+  static final ASTTypeArray<ASTTypeInt, int> instanceOfInt =
+      ASTTypeArray<ASTTypeInt, int>(ASTTypeInt.instance);
+
+  static final ASTTypeArray<ASTTypeDouble, double> instanceOfDouble =
+      ASTTypeArray<ASTTypeDouble, double>(ASTTypeDouble.instance);
+
+  static final ASTTypeArray<ASTTypeBool, bool> instanceOfBool =
+      ASTTypeArray<ASTTypeBool, bool>(ASTTypeBool.instance);
+
+  static final ASTTypeArray<ASTTypeObject, Object> instanceOfObject =
+      ASTTypeArray<ASTTypeObject, Object>(ASTTypeObject.instance);
+
+  static final ASTTypeArray<ASTTypeDynamic, dynamic> instanceOfDynamic =
+      ASTTypeArray<ASTTypeDynamic, dynamic>(ASTTypeDynamic.instance);
+
+  final T componentType;
 
   ASTType get elementType => componentType;
 
-  ASTTypeArray(this.componentType) : super('List') {
-    generics = [componentType];
-  }
+  ASTTypeArray(this.componentType) : super('List', generics: [componentType]);
 
   @override
   FutureOr<ASTValueArray<T, V>?> toValue(VMContext context, Object? v) {
