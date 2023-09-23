@@ -11,6 +11,17 @@ class ApolloParserJava11 extends ApolloParser {
 
   @override
   String get language => 'java11';
+
+  @override
+  bool acceptsLanguage(String language) {
+    language = language.toLowerCase().trim();
+
+    if (this.language == language || language == 'java') {
+      return true;
+    }
+
+    return false;
+  }
 }
 
 class ApolloRunnerJava11 extends ApolloLanguageRunner {

@@ -655,6 +655,9 @@ class ASTRoot extends ASTEntryPointBlock {
       addClass(clazz);
     }
   }
+
+  ASTClassNormal? getClassWithMethod(String methodName) => _classes.values
+      .firstWhereOrNull((c) => c.containsFunctionWithName(methodName));
 }
 
 /// An AST Parameter declaration.

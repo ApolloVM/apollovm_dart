@@ -1,3 +1,12 @@
+## 0.0.35
+
+- `ASTRoot`:
+  - Added `getClassWithMethod`.
+- `CodeNamespace`:
+  - Added `getCodeUnitWithClassMethod`.
+- `ApolloLanguageRunner`:
+  - `executeFunction`: added parameter `allowClassMethod`.
+
 ## 0.0.34
 
 - `ApolloVM`:

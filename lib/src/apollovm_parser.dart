@@ -47,10 +47,14 @@ abstract class ApolloParser {
   }
 
   void check(CodeUnit codeUnit) {
-    if (codeUnit.language != language) {
+    if (!acceptsLanguage(codeUnit.language)) {
       throw StateError(
           "This parser is for the language '$language'. Trying to parse a CodeUnit of language: '${codeUnit.language}'");
     }
+  }
+
+  bool acceptsLanguage(String language) {
+    return this.language == language;
   }
 }
 

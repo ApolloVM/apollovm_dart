@@ -22,7 +22,7 @@ import 'languages/java/java11/java11_parser.dart';
 /// The Apollo VM.
 class ApolloVM implements VMTypeResolver {
   // ignore: non_constant_identifier_names
-  static final String VERSION = '0.0.34';
+  static final String VERSION = '0.0.35';
 
   static int _idCount = 0;
 
@@ -98,8 +98,7 @@ class ApolloVM implements VMTypeResolver {
   /// - Returns `false` if there's no parser for the [codeUnit] language.
   /// - Throws a [SyntaxError] if the code can't be parsed.
   Future<bool> loadCodeUnit(CodeUnit codeUnit) async {
-    var language = codeUnit.language;
-    var parser = getParser(language);
+    var parser = getParser(codeUnit.language);
 
     if (parser == null) return false;
 
@@ -111,7 +110,7 @@ class ApolloVM implements VMTypeResolver {
 
     var root = result.root!;
 
-    var langNamespaces = getLanguageNamespaces(language);
+    var langNamespaces = getLanguageNamespaces(parser.language);
 
     var codeNamespace = langNamespaces.get(root.namespace);
 
@@ -388,6 +387,17 @@ class CodeNamespace {
     for (var cu in _codeUnits) {
       if (cu.root!.containsFunctionWithName(fName,
           caseInsensitive: caseInsensitive)) return cu;
+    }
+    return null;
+  }
+
+  /// Returns the 1st [CodeUnit] with a class method of name [fName].
+  CodeUnit? getCodeUnitWithClassMethod(String fName,
+      {bool caseInsensitive = false}) {
+    for (var cu in _codeUnits) {
+      if (cu.root!.classes.any((c) => c.containsFunctionWithName(fName))) {
+        return cu;
+      }
     }
     return null;
   }

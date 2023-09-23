@@ -107,17 +107,33 @@ abstract class ApolloLanguageRunner implements VMTypeResolver {
   /// - [positionalParameters] Positional parameters to pass to the function.
   /// - [namedParameters] Named parameters to pass to the function.
   FutureOr<ASTValue> executeFunction(String namespace, String functionName,
-      {List? positionalParameters, Map? namedParameters}) async {
+      {List? positionalParameters,
+      Map? namedParameters,
+      bool allowClassMethod = false}) async {
     var codeNamespace = _languageNamespaces.get(namespace);
 
     var codeUnit = codeNamespace.getCodeUnitWithFunction(functionName);
+
+    if (codeUnit == null && allowClassMethod) {
+      var classWithMethod = codeNamespace
+          .getCodeUnitWithClassMethod(functionName)
+          ?.root
+          ?.getClassWithMethod(functionName);
+
+      if (classWithMethod != null) {
+        return executeClassMethod(namespace, classWithMethod.name, functionName,
+            positionalParameters: positionalParameters,
+            namedParameters: namedParameters);
+      }
+    }
+
     if (codeUnit == null) {
       throw StateError("Can't find function to execute: $functionName");
     }
 
     var result = await codeUnit.root!.execute(
         functionName, positionalParameters, namedParameters,
-        externalFunctionMapper: externalFunctionMapper);
+        externalFunctionMapper: externalFunctionMapper, typeResolver: this);
 
     return result;
   }
