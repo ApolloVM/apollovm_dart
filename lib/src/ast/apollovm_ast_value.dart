@@ -870,6 +870,11 @@ class ASTValueStringExpression<T> extends ASTValue<String> {
   FutureOr<ASTValueString> resolve(VMContext context) {
     return getValue(context).resolveMapped((s) => ASTValueString(s));
   }
+
+  @override
+  String toString() {
+    return '"\${ $expression }"';
+  }
 }
 
 /// [ASTValue] for a variable that should resolved and converted to [String].
