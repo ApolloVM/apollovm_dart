@@ -243,35 +243,39 @@ ApolloVM uses [PetitParser for Dart][petitparser-pub] to define the grammars of 
 
 Please file feature requests and bugs at the [issue tracker][tracker].
 
+[tracker]: https://github.com/ApolloVM/apollovm_dart/issues
+
 ## Contribution
 
-Any help from the open-source community is always welcome and needed.
+Any help from the open-source community is always welcome and needed:
 
-- Found an issue?
-  - Fill a bug with details.
-- Wish a feature?
-  - Open a feature request.
-- Are you using and liking the project?
-  - Promote the project: create an article, do a post or make a donation.
-- Are you a developer?
-  - Fix a bug and send a pull request.
-  - Implement a new feature.
-  - Improve a language support.
-  - Add support for another language.
-  - Improve the Unit Tests.
-- Have you already helped in any way?
-  - **Many thanks from me, the contributors and everybody that uses this project!**
+- **Have an issue?**
+  Please fill a bug report 👍.
+- **Feature?**
+  Request with use cases 🤝.
+- **Like the project?**
+  Promote, post, or donate 😄.
+- **Are you a developer?**
+  Fix a bug, add a feature, or improve tests 🚀.
+- **Already helped?**
+  Many thanks from me, the contributors and all project users 👏👏👏!
 
-*If you donate 1 hour of your time, you can contribute a lot,
-because others will do the same, just be part and start with your 1 hour.*
-
-[tracker]: https://github.com/ApolloVM/apollovm_dart/issues
+*Contribute an hour and inspire others to do the same.*
 
 ## Author
 
 Graciliano M. Passos: [gmpassos@GitHub][github].
 
 [github]: https://github.com/gmpassos
+
+## Sponsor
+
+Don't be shy, show some love, and become our [GitHub Sponsor][github_sponsors].
+Your support means the world to us, and it keeps the code caffeinated! ☕✨
+
+Thanks a million! 🚀😄
+
+[github_sponsors]: https://github.com/sponsors/gmpassos
 
 ## License
 
