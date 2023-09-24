@@ -26,6 +26,18 @@ void main() async {
             print(title);
             print(sumAB);
             print(sumABC);
+            
+            // Map:
+            var map = <String,int>{
+            'a': a,
+            'b': b,
+            'c': c,
+            'sumAB': sumAB,
+            "sumABC": sumABC,
+            };
+            
+            print('Map: $map');
+            print('Map `b`: ${map['b']}');
           }
           
       }
