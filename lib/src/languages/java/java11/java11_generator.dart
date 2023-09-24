@@ -251,7 +251,7 @@ class ApolloCodeGeneratorJava11 extends ApolloCodeGenerator {
         list.add(s2);
         prevIsString = !prevIsString;
       } else if (v is ASTValueStringExpression) {
-        var s2 = generateASTValueStringExpresion(v, '');
+        var s2 = generateASTValueStringExpression(v, '');
         list.add(s2);
         prevIsString = true;
       } else if (v is ASTValueStringConcatenation) {
@@ -305,7 +305,7 @@ class ApolloCodeGeneratorJava11 extends ApolloCodeGenerator {
   }
 
   @override
-  StringBuffer generateASTValueStringExpresion(ASTValueStringExpression value,
+  StringBuffer generateASTValueStringExpression(ASTValueStringExpression value,
       [String indent = '', StringBuffer? s]) {
     s ??= StringBuffer();
 
