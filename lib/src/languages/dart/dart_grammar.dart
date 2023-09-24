@@ -28,6 +28,8 @@ class DartGrammarDefinition extends DartGrammarLexer {
         return ASTTypeDynamic.instance;
       case 'List':
         return ASTTypeArray.instanceOfDynamic;
+      case 'Map':
+        return ASTTypeMap.instanceOfDynamicOfDynamic;
       case 'var':
         return ASTTypeVar();
       default:
@@ -338,6 +340,10 @@ class DartGrammarDefinition extends DartGrammarLexer {
   Parser<ASTExpression> expressionNoOperation() => (expressionNegate() |
           expressionLiteral() |
           expressionGroup() |
+          expressionListEmptyLiteral() |
+          expressionListLiteral() |
+          expressionMapEmptyLiteral() |
+          expressionMapLiteral() |
           expressionVariableAssigment() |
           expressionFunctionInvocation() |
           expressionVariableEntryAccess() |
@@ -400,6 +406,83 @@ class DartGrammarDefinition extends DartGrammarLexer {
         return ASTExpressionVariableEntryAccess(variable, expression);
       });
 
+  Parser<ASTExpressionListLiteral> expressionListEmptyLiteral() =>
+      ((char('<').trimHidden() & simpleType() & char('>').trimHidden())
+                  .optional() &
+              char('[').trimHidden() &
+              char(']').trimHidden())
+          .map((v) {
+        var type = (v[0]?[1] as ASTType?) ?? ASTTypeDynamic.instance;
+        return ASTExpressionListLiteral(type, []);
+      });
+
+  Parser<ASTExpressionListLiteral> expressionListLiteral() =>
+      ((char('<').trimHidden() & simpleType() & char('>').trimHidden())
+                  .optional() &
+              char('[').trimHidden() &
+              ref0(expression) &
+              (char(',').trimHidden() & ref0(expression)).star() &
+              char(',').trimHidden().optional() &
+              char(']').trimHidden())
+          .map((v) {
+        var type = (v[0]?[1] as ASTType?) ?? ASTTypeDynamic.instance;
+        var v0 = v[2];
+        var tail = (v[3] as List?) ?? [];
+
+        var vs = tail.expand((e) => e).whereType<ASTExpression>().toList();
+
+        return ASTExpressionListLiteral(type, [v0, ...vs]);
+      });
+
+  Parser<ASTExpressionMapLiteral> expressionMapEmptyLiteral() =>
+      ((char('<').trimHidden() &
+                      simpleType() &
+                      char(',').trimHidden() &
+                      simpleType() &
+                      char('>').trimHidden())
+                  .optional() &
+              char('{').trimHidden() &
+              char('}').trimHidden())
+          .map((v) {
+        var keyType = (v[0]?[1] as ASTType?) ?? ASTTypeDynamic.instance;
+        var valueType = (v[0]?[2] as ASTType?) ?? ASTTypeDynamic.instance;
+        return ASTExpressionMapLiteral(keyType, valueType, []);
+      });
+
+  Parser<ASTExpressionMapLiteral> expressionMapLiteral() =>
+      ((char('<').trimHidden() &
+                      simpleType() &
+                      char(',').trimHidden() &
+                      simpleType() &
+                      char('>').trimHidden())
+                  .trimHidden()
+                  .optional() &
+              char('{').trimHidden() &
+              (expression() & char(':').trimHidden() & expression()) &
+              (char(',').trimHidden() &
+                      expression() &
+                      char(':').trimHidden() &
+                      expression())
+                  .star() &
+              char(',').trimHidden().optional() &
+              char('}').trimHidden())
+          .map((v) {
+        var keyType = (v[0]?[1] as ASTType?) ?? ASTTypeDynamic.instance;
+        var valueType = (v[0]?[3] as ASTType?) ?? ASTTypeDynamic.instance;
+        var entry0 = (v[2] as List).whereType<ASTExpression>().toList();
+        var entriesTail = (v[3] as List?)
+            ?.whereType<List>()
+            .map((l) => l.whereType<ASTExpression>().toList())
+            .toList();
+
+        var entries = [
+          MapEntry(entry0[0], entry0[1]),
+          ...?entriesTail?.map((e) => MapEntry(e[0], e[1]))
+        ];
+
+        return ASTExpressionMapLiteral(keyType, valueType, entries);
+      });
+
   Parser<ASTExpressionVariableAssignment> expressionVariableAssigment() =>
       (variable() & assigmentOperator() & ref0(expression)).map((v) {
         return ASTExpressionVariableAssignment(v[0], v[1], v[2]);
@@ -447,8 +530,12 @@ class DartGrammarDefinition extends DartGrammarLexer {
         return ASTFunctionParameterDeclaration(v[0], v[1], -1, false);
       });
 
-  Parser<ASTType> type() =>
-      (arrayTyped() | arrayTypeDynamic() | simpleType()).cast<ASTType>();
+  Parser<ASTType> type() => (arrayTyped() |
+          arrayTypeDynamic() |
+          mapTyped() |
+          mapTypeDynamic() |
+          simpleType())
+      .cast<ASTType>();
 
   Parser<ASTType> simpleType() => identifier().map((v) {
         return getTypeByName(v);
@@ -499,7 +586,8 @@ class DartGrammarDefinition extends DartGrammarLexer {
       });
 
   Parser<ASTTypeArray2D> array2DTypeDynamic() =>
-      (string('List') & char('<') & string('List') & char('>')).map((v) {
+      (string('List') & char('<').trim() & string('List') & char('>').trim())
+          .map((v) {
         return ASTTypeArray2D.fromElementType(ASTTypeDynamic.instance);
       });
 
@@ -512,6 +600,21 @@ class DartGrammarDefinition extends DartGrammarLexer {
               char('>'))
           .map((v) {
         return ASTTypeArray3D.fromElementType(ASTTypeDynamic.instance);
+      });
+
+  Parser<ASTTypeMap> mapTyped() => (string('Map') &
+              char('<').trim() &
+              simpleType() &
+              char(',').trim() &
+              char('>').trim())
+          .map((v) {
+        var key = v[2] as ASTType;
+        var val = v[3] as ASTType;
+        return ASTTypeMap(key, val);
+      });
+
+  Parser<ASTTypeMap> mapTypeDynamic() => string('Map').map((v) {
+        return ASTTypeMap.instanceOfDynamicOfDynamic;
       });
 
   Parser<ASTValue> literal() => (literalBool() | literalNum() | literalString())

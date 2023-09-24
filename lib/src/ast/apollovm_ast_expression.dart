@@ -10,6 +10,26 @@ import 'apollovm_ast_variable.dart';
 
 /// Base for AST expressions.
 abstract class ASTExpression implements ASTCodeRunner, ASTNode {
+  static FutureOr<ASTType> typeFromExpressions(
+      Iterable<ASTExpression> expressions,
+      {VMContext? context}) {
+    var types = expressions.map((e) => e.resolveType(context)).toSet();
+
+    if (types.isEmpty) {
+      return ASTTypeDynamic.instance;
+    } else if (types.length == 1) {
+      return types.first;
+    }
+
+    return types.resolveAll().resolveMapped((types) {
+      if (types.every((t) => t is ASTTypeNumber)) {
+        return ASTTypeNum.instance;
+      }
+
+      return ASTTypeDynamic.instance;
+    });
+  }
+
   ASTNode? _parentNode;
 
   @override
@@ -146,6 +166,121 @@ class ASTExpressionLiteral extends ASTExpression {
   @override
   String toString() {
     return '$value';
+  }
+}
+
+/// [ASTExpression] that declares a [List] literal.
+class ASTExpressionListLiteral extends ASTExpression {
+  final ASTType? type;
+
+  final List<ASTExpression> valuesExpressions;
+
+  ASTExpressionListLiteral(this.type, this.valuesExpressions);
+
+  @override
+  FutureOr<ASTType> resolveType(VMContext? context) =>
+      ASTExpression.typeFromExpressions(valuesExpressions);
+
+  @override
+  ASTNode? getNodeIdentifier(String name) =>
+      parentNode?.getNodeIdentifier(name);
+
+  @override
+  FutureOr<ASTValue> run(VMContext parentContext, ASTRunStatus runStatus) {
+    var type = this.type ?? resolveType(parentContext);
+
+    return type.resolveMapped((type) {
+      if (valuesExpressions.isEmpty) {
+        return ASTValueArray(type, []);
+      }
+
+      var astValues = valuesExpressions
+          .map((e) => e.run(parentContext, runStatus))
+          .toList()
+          .resolveAll();
+
+      return astValues.resolveMapped((astValues) {
+        return astValues
+            .map((v) => v.getValue(parentContext))
+            .toList()
+            .resolveAll()
+            .resolveMapped((values) {
+          return ASTValueArray(type, values);
+        });
+      });
+    });
+  }
+
+  @override
+  String toString() {
+    return '$valuesExpressions';
+  }
+}
+
+/// [ASTExpression] that declares a [Map] literal.
+class ASTExpressionMapLiteral extends ASTExpression {
+  final ASTType? keyType;
+  final ASTType? valueType;
+
+  final List<MapEntry<ASTExpression, ASTExpression>> entriesExpressions;
+
+  ASTExpressionMapLiteral(
+      this.keyType, this.valueType, this.entriesExpressions);
+
+  FutureOr<ASTType> resolveKeyType(VMContext? context) =>
+      ASTExpression.typeFromExpressions(entriesExpressions.map((e) => e.key));
+
+  FutureOr<ASTType> resolveValueType(VMContext? context) =>
+      ASTExpression.typeFromExpressions(entriesExpressions.map((e) => e.value));
+
+  @override
+  FutureOr<ASTType> resolveType(VMContext? context) =>
+      resolveValueType(context);
+
+  @override
+  ASTNode? getNodeIdentifier(String name) =>
+      parentNode?.getNodeIdentifier(name);
+
+  @override
+  FutureOr<ASTValue> run(VMContext parentContext, ASTRunStatus runStatus) {
+    var keyType = this.keyType ?? resolveKeyType(parentContext);
+    var valueType = this.valueType ?? resolveValueType(parentContext);
+
+    return keyType.resolveBoth(valueType, (keyType, valueType) {
+      if (entriesExpressions.isEmpty) {
+        return ASTValueMap(keyType, valueType, {});
+      }
+
+      var astEntries = entriesExpressions
+          .map((e) {
+            var k = e.key.run(parentContext, runStatus);
+            var v = e.value.run(parentContext, runStatus);
+            return MapEntry(k, v);
+          })
+          .toList()
+          .resolveAll();
+
+      return astEntries.resolveMapped((astEntries) {
+        var astKeys = astEntries.map((e) => e.key).resolveAll();
+        var astValues = astEntries.map((e) => e.value).resolveAll();
+
+        return astKeys.resolveBoth(astValues, (astKeys, astValues) {
+          var keys = astKeys.map((e) => e.getValue(parentContext)).resolveAll();
+          var values =
+              astValues.map((e) => e.getValue(parentContext)).resolveAll();
+
+          return keys.resolveBoth(values, (keys, values) {
+            var map = Map.fromIterables(keys, values);
+            return ASTValueMap(keyType, valueType, map);
+          });
+        });
+      });
+    });
+  }
+
+  @override
+  String toString() {
+    return '$entriesExpressions';
   }
 }
 

@@ -6,6 +6,8 @@
   - Added `getCodeUnitWithClassMethod`.
 - `ApolloLanguageRunner`:
   - `executeFunction`: added parameter `allowClassMethod`.
+- Added `ASTExpressionListLiteral` and `ASTExpressionMapLiteral`:
+  - Support in `dart` and `java` grammar.
 
 ## 0.0.34
 

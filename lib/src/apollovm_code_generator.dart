@@ -421,6 +421,10 @@ abstract class ApolloCodeGenerator {
       return generateASTExpressionVariableEntryAccess(expression, indent, s);
     } else if (expression is ASTExpressionLiteral) {
       return generateASTExpressionLiteral(expression, indent, s);
+    } else if (expression is ASTExpressionListLiteral) {
+      return generateASTExpressionListLiteral(expression, indent, s);
+    } else if (expression is ASTExpressionMapLiteral) {
+      return generateASTExpressionMapLiteral(expression, indent, s);
     } else if (expression is ASTExpressionNegation) {
       return generateASTExpressionNegation(expression, indent, s);
     } else if (expression is ASTExpressionLocalFunctionInvocation) {
@@ -466,6 +470,75 @@ abstract class ApolloCodeGenerator {
     s ??= StringBuffer();
     s.write(indent);
     generateASTValue(expression.value, '', s);
+    return s;
+  }
+
+  StringBuffer generateASTExpressionListLiteral(
+      ASTExpressionListLiteral expression,
+      [String indent = '',
+      StringBuffer? s]) {
+    s ??= StringBuffer();
+    s.write(indent);
+
+    final type = expression.type;
+    if (type != null) {
+      s.write('<');
+      generateASTType(type, '', s);
+      s.write('>');
+    }
+
+    s.write('[');
+
+    var valuesExpressions = expression.valuesExpressions;
+    for (var i = 0; i < valuesExpressions.length; ++i) {
+      var e = valuesExpressions[i];
+
+      if (i > 0) {
+        s.write(', ');
+      }
+      generateASTExpression(e, '', s);
+    }
+
+    s.write(']');
+
+    return s;
+  }
+
+  StringBuffer generateASTExpressionMapLiteral(
+      ASTExpressionMapLiteral expression,
+      [String indent = '',
+      StringBuffer? s]) {
+    s ??= StringBuffer();
+    s.write(indent);
+
+    final keyType = expression.keyType;
+    final valueType = expression.valueType;
+
+    if (keyType != null && valueType != null) {
+      s.write('<');
+      generateASTType(keyType, '', s);
+      s.write(',');
+      generateASTType(valueType, '', s);
+      s.write('>');
+    }
+
+    s.write('{');
+
+    var entriesExpressions = expression.entriesExpressions;
+    for (var i = 0; i < entriesExpressions.length; ++i) {
+      var e = entriesExpressions[i];
+
+      if (i > 0) {
+        s.write(', ');
+      }
+
+      generateASTExpression(e.key, '', s);
+      s.write(": ");
+      generateASTExpression(e.value, '', s);
+    }
+
+    s.write('}');
+
     return s;
   }
 

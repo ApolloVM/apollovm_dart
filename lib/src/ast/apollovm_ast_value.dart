@@ -1,6 +1,6 @@
 import 'package:async_extension/async_extension.dart';
 import 'package:collection/collection.dart'
-    show DeepCollectionEquality, ListEquality;
+    show DeepCollectionEquality, ListEquality, MapEquality;
 import 'package:swiss_knife/swiss_knife.dart';
 
 import '../apollovm_base.dart';
@@ -249,21 +249,15 @@ class ASTValueStatic<T> extends ASTValue<T> {
 
   @override
   V readIndex<V>(VMContext context, int index) {
+    final value = this.value;
+
     if (value is List) {
-      var list = value as List;
-      return list[index] as V;
+      return value[index] as V;
     } else if (value is Iterable) {
-      var it = value as Iterable;
-
-      var idx = 0;
-      for (var e in it) {
-        if (idx == index) {
-          return e;
-        }
-        idx++;
-      }
-
-      throw RangeError.index(index, it);
+      return value.elementAt(index);
+    } else if (value is Map) {
+      var entry = value.entries.elementAt(index);
+      return entry.value;
     }
 
     throw ApolloVMNullPointerException(
@@ -272,9 +266,15 @@ class ASTValueStatic<T> extends ASTValue<T> {
 
   @override
   V readKey<V>(VMContext context, Object key) {
+    final value = this.value;
+
     if (value is Map) {
-      var map = value as Map;
-      return map[key];
+      return value[key];
+    } else if (value is Iterable) {
+      var idx = key is int ? key : int.tryParse('$key');
+      if (idx != null) {
+        return value.elementAt(idx);
+      }
     }
 
     throw ApolloVMNullPointerException(
@@ -713,7 +713,7 @@ class ASTValueVoid extends ASTValueStatic<void> {
   }
 }
 
-/// [ASTValue] for an array/List.
+/// [ASTValue] for an array/[List].
 class ASTValueArray<T extends ASTType<V>, V> extends ASTValueStatic<List<V>> {
   ASTValueArray(T type, List<V> value) : super(ASTTypeArray<T, V>(type), value);
 
@@ -733,7 +733,7 @@ class ASTValueArray<T extends ASTType<V>, V> extends ASTValueStatic<List<V>> {
   }
 }
 
-/// [ASTValue] for a 2D array/List.
+/// [ASTValue] for a 2D array/[List].
 class ASTValueArray2D<T extends ASTType<V>, V>
     extends ASTValueArray<ASTTypeArray<T, V>, List<V>> {
   ASTValueArray2D(T type, List<List<V>> value)
@@ -763,11 +763,33 @@ class ASTValueArray2D<T extends ASTType<V>, V>
   }
 }
 
-/// [ASTValue] for a 3D array/List.
+/// [ASTValue] for a 3D array/[List].
 class ASTValueArray3D<T extends ASTType<V>, V>
     extends ASTValueArray2D<ASTTypeArray<T, V>, List<V>> {
   ASTValueArray3D(T type, List<List<List<V>>> value)
       : super(ASTTypeArray<T, V>(type), value);
+}
+
+/// [ASTValue] for a [Map].
+class ASTValueMap<TK extends ASTType<K>, TV extends ASTType<V>, K, V>
+    extends ASTValueStatic<Map<K, V>> {
+  ASTValueMap(TK keyType, TV valueType, Map<K, V> value)
+      : super(ASTTypeMap<TK, TV, K, V>(keyType, valueType), value);
+
+  static final MapEquality _mapEquality = const MapEquality();
+
+  @override
+  FutureOr<bool> equals(Object other) async {
+    if (identical(this, other)) return true;
+
+    if (other is ASTValueMap) {
+      var context = VMContext.getCurrent();
+      var v1 = await _getValue(context, this);
+      var v2 = await _getValue(context, other);
+      return _mapEquality.equals(v1, v2);
+    }
+    return super == (other);
+  }
 }
 
 /// [ASTValue] declared with `var`.

@@ -1,4 +1,5 @@
 import 'package:async_extension/async_extension.dart';
+import 'package:collection/collection.dart';
 import 'package:swiss_knife/swiss_knife.dart';
 
 import '../apollovm_base.dart';
@@ -346,8 +347,16 @@ enum ASTNumType {
   double,
 }
 
+/// Base [ASTType] for primitive numbers.
+abstract class ASTTypeNumber<T> extends ASTTypePrimitive<T> {
+  ASTTypeNumber(String name) : super(name);
+
+  @override
+  bool acceptsType(ASTType type);
+}
+
 /// [ASTType] for numbers ([num]).
-class ASTTypeNum<T extends num> extends ASTTypePrimitive<T> {
+class ASTTypeNum<T extends num> extends ASTTypeNumber<T> {
   static final ASTTypeNum instance = ASTTypeNum();
 
   ASTTypeNum._(String name) : super(name);
@@ -898,6 +907,78 @@ class ASTTypeArray3D<T extends ASTType<V>, V>
     var list2 = list.whereType<List<List<V>>>().toList();
 
     var value = ASTValueArray3D<T, V>(elementType as T, list2);
+    return value;
+  }
+}
+
+/// [ASTType] for an array/List.
+class ASTTypeMap<TK extends ASTType<K>, TV extends ASTType<V>, K, V>
+    extends ASTType<Map<K, V>> {
+  static final ASTTypeMap<ASTTypeString, ASTTypeDynamic, String, dynamic>
+      instanceOfStringOfDynamic =
+      ASTTypeMap<ASTTypeString, ASTTypeDynamic, String, dynamic>(
+          ASTTypeString.instance, ASTTypeDynamic.instance);
+
+  static final ASTTypeMap<ASTTypeString, ASTTypeString, String, String>
+      instanceOfStringOfString =
+      ASTTypeMap<ASTTypeString, ASTTypeString, String, String>(
+          ASTTypeString.instance, ASTTypeString.instance);
+
+  static final ASTTypeMap<ASTTypeDynamic, ASTTypeDynamic, dynamic, dynamic>
+      instanceOfDynamicOfDynamic =
+      ASTTypeMap<ASTTypeDynamic, ASTTypeDynamic, dynamic, dynamic>(
+          ASTTypeDynamic.instance, ASTTypeDynamic.instance);
+
+  final TK keyType;
+  final TV valueType;
+
+  ASTTypeMap(this.keyType, this.valueType)
+      : super('Map', generics: [keyType, valueType]);
+
+  @override
+  FutureOr<ASTValue<Map<K, V>>?> toValue(VMContext context, Object? v) {
+    if (v == null) return null;
+    if (v is ASTValueMap) return v as ASTValueMap<TK, TV, K, V>;
+
+    if (v is ASTValue) {
+      return v.getValue(context).resolveMapped(_toASTValueMap);
+    } else {
+      return _toASTValueMap(v);
+    }
+  }
+
+  ASTValueMap<TK, TV, K, V>? _toASTValueMap(Object? v) {
+    Map? map;
+    if (v is Map) {
+      map = v;
+    } else if (v is List) {
+      if (v is List<MapEntry>) {
+        map = Map.fromEntries(v);
+      } else if (v.every((e) => e is MapEntry)) {
+        map = Map.fromEntries(v.cast<MapEntry>());
+      } else if (v.isEmpty) {
+        map = {};
+      } else if (v.length == 2) {
+        map = {v[0]: v[1]};
+      } else if (v.length % 2 == 0) {
+        map = {};
+        for (var i = 0; i < v.length; i += 2) {
+          var k = map[i];
+          var v = map[i + 1];
+          map[k] = v;
+        }
+      }
+    }
+
+    map ??= {};
+
+    var map2 = Map<K, V>.fromEntries(map.entries.map((e) {
+      var k = e.key;
+      var v = e.value;
+      return k is K && v is V ? MapEntry(k, v) : null;
+    }).whereNotNull());
+
+    var value = ASTValueMap<TK, TV, K, V>(keyType, valueType, map2);
     return value;
   }
 }
