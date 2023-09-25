@@ -11,7 +11,20 @@
 [![Code size](https://img.shields.io/github/languages/code-size/ApolloVM/apollovm_dart?logo=github&logoColor=white)](https://github.com/ApolloVM/apollovm_dart)
 [![License](https://img.shields.io/github/license/ApolloVM/apollovm_dart?logo=open-source-initiative&logoColor=green)](https://github.com/ApolloVM/apollovm_dart/blob/master/LICENSE)
 
-ApolloVM is a portable VM (native, JS/Web, Flutter) that can parse, translate and run multiple languages, like Dart, Java, Kotlin and JavaScript.
+ApolloVM is a portable VM (native, JS/Web, Flutter) that can parse, translate and run multiple languages, like Dart, Java and JavaScript.
+
+-----------------------------
+
+## Live Example
+
+Experience ApolloVM in action right from your browser:
+
+- Explore the [ApolloVM Web Demo](https://apollovm.github.io/apollovm_web_example/www/)
+
+If you prefer to run the demo on your local machine:
+- Follow the step-by-step instructions available in the [GitHub Repository](https://github.com/ApolloVM/apollovm_web_example).
+
+-----------------------------
 
 ## Command Line Usage
 
@@ -101,11 +114,13 @@ $> cp bin/apollovm.exe /usr/bin/apollovm
 Now you can use `apollovm` as a self-executable,
 even if you don't have Dart installed.
 
+-----------------------------
+
 ## Package Usage
 
 The ApolloVM is still in alpha stage. Below, we can see a simple usage examples in Dart and Java.
 
-### Language: Dart
+### Language: `Dart`
 
 Loading Dart source code, executing it, and then converting it to Java 11:
 
@@ -246,7 +261,7 @@ class Foo {
 
 ```
 
-### Language: Java11
+### Language: `Java 11`
 
 Loading Java 11 source code, executing it, and then converting it to Dart:
 
@@ -343,6 +358,8 @@ class Foo {
 <<<< [SOURCES_END] >>>>
 
 ```
+
+-----------------------------
 
 ## See Also
 
