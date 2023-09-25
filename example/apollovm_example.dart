@@ -6,6 +6,7 @@ void main() async {
   var codeUnit = CodeUnit(
       'dart',
       r'''
+      
       class Foo {
       
           int main(List<Object> args) {
@@ -43,6 +44,7 @@ void main() async {
           }
           
       }
+      
       ''',
       'test');
 
@@ -60,21 +62,27 @@ void main() async {
   // Map the `print` function in the VM:
   dartRunner.externalPrintFunction = (o) => print("» $o");
 
-  var astValue = await dartRunner
-      .executeClassMethod('', 'Foo', 'main', positionalParameters: [
-    ['Sums:', 10, 30, 50]
-  ]);
+  var astValue = await dartRunner.executeClassMethod(
+    '',
+    'Foo',
+    'main',
+    positionalParameters: [
+      ['Sums:', 10, 30, 50]
+    ],
+  );
 
   var result = astValue.getValueNoContext();
   print('Result: $result');
 
   print('---------------------------------------');
+
   // Regenerate code in Dart:
   var codeStorageDart = vm.generateAllCodeIn('dart');
   var allSourcesDart = codeStorageDart.writeAllSources();
   print(allSourcesDart);
 
   print('---------------------------------------');
+
   // Regenerate code in Java11:
   var codeStorageJava = vm.generateAllCodeIn('java11');
   var allSourcesJava = codeStorageJava.writeAllSources();
