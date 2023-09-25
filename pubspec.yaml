@@ -10,9 +10,7 @@ topics:
   - dart
   - java
   - compiler
-  - runner
   - translator
-  - programming
 
 screenshots:
   - description: 'ApolloVM Logo'
