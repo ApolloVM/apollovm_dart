@@ -184,7 +184,7 @@ class Foo {
 ]]></source-generated>
 </test>
     '''),
-    TestDefinition('dart_basic_main_3.test.xml', '''
+    TestDefinition('dart_basic_main_3.test.xml', r'''
 <?xml version="1.0" encoding="UTF-8"?>
 <test title="Basic main(List<String>) 3">
     <source language="dart">
@@ -206,8 +206,9 @@ class Foo {
               'b': b,
               'c': c,
               };
-              print(map);
-              print(map['b']);
+              
+              print('Map: $map');
+              print('Map `b`: ${map['b']}');
             }
         ]]>
     </source>
@@ -217,7 +218,7 @@ class Foo {
         ]
     </call>
     <output>
-         ["Integers:", 30, 60, {"a": 10, "b": 20, "c": 30}, 20]
+          ["Integers:", 30, 60, "Map: {a: 10, b: 20, c: 30}", "Map `b`: 20"]
     </output>
     <source-generated language="dart"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
 <<<< NAMESPACE="" >>>>
@@ -233,8 +234,8 @@ class Foo {
     print(sumAB);
     print(sumABC);
     var map = <String,int>{'a': a, 'b': b, 'c': c};
-    print(map);
-    print(map['b']);
+    print('Map: $map');
+    print('Map `b`: ${map['b']}');
   }
 
 <<<< CODE_UNIT_END="/test" >>>>
