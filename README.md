@@ -107,6 +107,8 @@ The ApolloVM is still in alpha stage. Below, we can see a simple usage examples 
 
 ### Language: Dart
 
+Loading Dart source code, executing it, and then converting it to Java 11:
+
 ```dart
 import 'package:apollovm/apollovm.dart';
 
@@ -246,18 +248,19 @@ class Foo {
 
 ### Language: Java11
 
+Loading Java 11 source code, executing it, and then converting it to Dart:
+
 ```dart
 import 'package:apollovm/apollovm.dart';
 
 void main() async {
-
   var vm = ApolloVM();
 
   var codeUnit = CodeUnit(
           'java11',
           r'''
             class Foo {
-               static public void main(String[] args) {
+               static public void main(Object[] args) {
                  var title = args[0];
                  var a = args[1];
                  var b = args[2];
@@ -269,14 +272,15 @@ void main() async {
                  print(sumABC);
                  
                  // Map:
-                 var map = <String,int>{
-                 'a': a,
-                 'b': b,
-                 'c': c,
-                 };
+                 var map = new HashMap<String,int>(){{
+                  put("a", a);
+                  put("b", b);
+                  put("c", c);
+                  put("sumAB", sumAB);
+                  put("sumABC", sumABC);
+                }};
                  
-                 print('Map: $map');
-                 print('Map `b`: ${map['b']}');
+                print("Map: " + map);
                }
             }
           ''',
@@ -289,23 +293,20 @@ void main() async {
   }
 
   var javaRunner = vm.createRunner('java11')!;
-  
-  javaRunner.executeClassMethod('', 'Foo', 'main', positionalParameters: [
+
+  // Map the `print` function in the VM:
+  javaRunner.externalPrintFunction = (o) => print("» $o");
+
+  await javaRunner.executeClassMethod('', 'Foo', 'main', positionalParameters: [
     ['Sums:', 10, 20, 30]
   ]);
 
   print('---------------------------------------');
+
   // Regenerate code:
   var codeStorageDart = vm.generateAllCodeIn('dart');
   var allSourcesDart = codeStorageDart.writeAllSources().toString();
   print(allSourcesDart);
-
-  print('---------------------------------------');
-  // Regenerate code:
-  var codeStorageJava = vm.generateAllCodeIn('java11');
-  var allSourcesJava = codeStorageJava.writeAllSources().toString();
-  print(allSourcesJava);
-  
 }
 ```
 
@@ -313,6 +314,34 @@ void main() async {
 
 Output:
 ```text
+» Sums:
+» 30
+» 60
+» Map: {a: 10, b: 20, c: 30, sumAB: 30, sumABC: 60}
+---------------------------------------
+<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+class Foo {
+
+  static void main(List<Object> args) {
+    var title = args[0];
+    var a = args[1];
+    var b = args[2];
+    var c = args[3];
+    var sumAB = a + b;
+    var sumABC = a + b + c;
+    print(title);
+    print(sumAB);
+    print(sumABC);
+    var map = <String,int>{'a': a, 'b': b, 'c': c, 'sumAB': sumAB, 'sumABC': sumABC};
+    print('Map: $map');
+  }
+
+}
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+
 ```
 
 ## See Also
