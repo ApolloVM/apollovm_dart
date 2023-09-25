@@ -4,6 +4,8 @@
   - Added issue_tracker
   - Added topics.
   - Added screenshots.
+- `README.md`:
+  - Added `Codecov` badge and link.
 
 ## 0.0.37
 
