@@ -22,7 +22,7 @@ import 'languages/java/java11/java11_parser.dart';
 /// The Apollo VM.
 class ApolloVM implements VMTypeResolver {
   // ignore: non_constant_identifier_names
-  static final String VERSION = '0.0.35';
+  static final String VERSION = '0.0.36';
 
   static int _idCount = 0;
 

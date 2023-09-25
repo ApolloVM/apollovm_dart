@@ -333,6 +333,10 @@ class Java11GrammarDefinition extends Java11GrammarLexer {
   Parser<ASTExpression> expressionNoOperation() => (expressionNegate() |
           expressionLiteral() |
           expressionGroup() |
+          expressionListLiteral() |
+          expressionListEmptyLiteral() |
+          expressionMapLiteral() |
+          expressionMapEmptyLiteral() |
           expressionVariableAssigment() |
           expressionFunctionInvocation() |
           expressionVariableEntryAccess() |
@@ -393,6 +397,112 @@ class Java11GrammarDefinition extends Java11GrammarLexer {
         var variable = v[0];
         var expression = v[2];
         return ASTExpressionVariableEntryAccess(variable, expression);
+      });
+
+  Parser<ASTExpressionListLiteral> expressionListEmptyLiteral() =>
+      (string('new').trimHidden() &
+              string('ArrayList').trimHidden() &
+              ((char('<').trimHidden() &
+                      simpleType() &
+                      char('>').trimHidden()) |
+                  (char('<').trimHidden() & char('>').trimHidden())) &
+              char('(').trimHidden() &
+              char(')').trimHidden())
+          .map((v) {
+        var type = (v[2]?[1] as ASTType?) ?? ASTTypeDynamic.instance;
+        return ASTExpressionListLiteral(type, []);
+      });
+
+  Parser<ASTExpressionListLiteral> expressionListLiteral() =>
+      (string('new').trimHidden() &
+              string('ArrayList').trimHidden() &
+              ((char('<').trimHidden() &
+                      simpleType() &
+                      char('>').trimHidden()) |
+                  (char('<').trimHidden() & char('>').trimHidden())) &
+              char('(').trimHidden() &
+              char(')').trimHidden() &
+              string('{{').trimHidden() &
+              (string('add(').trimHidden() &
+                  expression() &
+                  char(')').trimHidden() &
+                  char(';').trimHidden()) &
+              (string('add(').trimHidden() &
+                      expression() &
+                      char(')').trimHidden() &
+                      char(';').trimHidden())
+                  .star() &
+              string('}}').trimHidden())
+          .map((v) {
+        var type = (v[2]?[1] as ASTType?) ?? ASTTypeDynamic.instance;
+        var v0 = (v[6] as List).whereType<ASTExpression>().first;
+        var tail = (v[7] as List?)
+                ?.whereType<List>()
+                .map((e) => e.whereType<ASTExpression>().first)
+                .toList() ??
+            [];
+
+        return ASTExpressionListLiteral(type, [v0, ...tail]);
+      });
+
+  Parser<ASTExpressionMapLiteral> expressionMapEmptyLiteral() =>
+      (string('new').trimHidden() &
+              string('HashMap') &
+              ((char('<').trimHidden() &
+                      simpleType() &
+                      char(',').trimHidden() &
+                      simpleType() &
+                      char('>').trimHidden()) |
+                  (char('<').trimHidden() & char('>').trimHidden())) &
+              char('(').trimHidden() &
+              char(')').trimHidden())
+          .map((v) {
+        var keyType = (v[2]?[1] as ASTType?) ?? ASTTypeDynamic.instance;
+        var valueType = (v[2]?[3] as ASTType?) ?? ASTTypeDynamic.instance;
+        return ASTExpressionMapLiteral(keyType, valueType, []);
+      });
+
+  Parser<ASTExpressionMapLiteral> expressionMapLiteral() =>
+      (string('new').trimHidden() &
+              string('HashMap') &
+              ((char('<').trimHidden() &
+                      simpleType() &
+                      char(',').trimHidden() &
+                      simpleType() &
+                      char('>').trimHidden()) |
+                  (char('<').trimHidden() & char('<').trimHidden())) &
+              char('(').trimHidden() &
+              char(')').trimHidden() &
+              string('{{').trimHidden() &
+              (string('put(').trimHidden() &
+                  expression() &
+                  char(',').trimHidden() &
+                  expression() &
+                  char(')').trimHidden() &
+                  char(';').trimHidden()) &
+              (string('put(').trimHidden() &
+                      expression() &
+                      char(',').trimHidden() &
+                      expression() &
+                      char(')').trimHidden() &
+                      char(';').trimHidden())
+                  .star() &
+              string('}}').trimHidden())
+          .map((v) {
+        var keyType = (v[2]?[1] as ASTType?) ?? ASTTypeDynamic.instance;
+        var valueType = (v[2]?[3] as ASTType?) ?? ASTTypeDynamic.instance;
+        var entry0 = (v[6] as List).whereType<ASTExpression>().toList();
+        var entriesTail = (v[7] as List?)
+            ?.whereType<List>()
+            .map((l) => l.whereType<ASTExpression>().toList())
+            .toList();
+
+        var entries = [
+          MapEntry(entry0[0], entry0[1]),
+          ...?entriesTail?.map((e) => MapEntry(e[0], e[1]))
+        ];
+
+        return ASTExpressionMapLiteral(keyType, valueType, entries);
       });
 
   Parser<ASTExpressionVariableAssignment> expressionVariableAssigment() =>

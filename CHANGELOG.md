@@ -1,3 +1,10 @@
+## 0.0.36
+
+- `ApolloCodeGenerator`:
+  - `generateASTValueStringExpression`: try to preserve single quotes in concatenations sequence.
+- Java 11:
+  - Added support for `ArrayList` and `HashMap` literals. 
+
 ## 0.0.35
 
 - `ASTRoot`:

@@ -42,10 +42,11 @@ class ApolloCodeGeneratorDart extends ApolloCodeGenerator {
 
   @override
   StringBuffer generateASTClass(ASTClassNormal clazz,
-      [String indent = '', StringBuffer? s]) {
+      {StringBuffer? s, String indent = ''}) {
     s ??= StringBuffer();
 
-    var code = generateASTBlock(clazz, '', null, true, true);
+    var code =
+        generateASTBlock(clazz, withBrackets: true, withBlankHeadLine: true);
 
     s.write('class ');
     s.write(clazz.name);
@@ -57,7 +58,7 @@ class ApolloCodeGeneratorDart extends ApolloCodeGenerator {
 
   @override
   StringBuffer generateASTClassField(ASTClassField field,
-      [String indent = '', StringBuffer? s]) {
+      {StringBuffer? s, String indent = ''}) {
     s ??= StringBuffer();
 
     var typeCode = generateASTType(field.type);
@@ -86,24 +87,24 @@ class ApolloCodeGeneratorDart extends ApolloCodeGenerator {
   @override
   StringBuffer generateASTClassFunctionDeclaration(
       ASTClassFunctionDeclaration f,
-      [String indent = '',
-      StringBuffer? s]) {
-    return _generateASTFunctionDeclarationImpl(f, indent, s);
+      {StringBuffer? s,
+      String indent = ''}) {
+    return _generateASTFunctionDeclarationImpl(f, s, indent);
   }
 
   @override
   StringBuffer generateASTFunctionDeclaration(ASTFunctionDeclaration f,
-      [String indent = '', StringBuffer? s]) {
-    return _generateASTFunctionDeclarationImpl(f, indent, s);
+      {StringBuffer? s, String indent = ''}) {
+    return _generateASTFunctionDeclarationImpl(f, s, indent);
   }
 
-  StringBuffer _generateASTFunctionDeclarationImpl(ASTFunctionDeclaration f,
-      [String indent = '', StringBuffer? s]) {
+  StringBuffer _generateASTFunctionDeclarationImpl(
+      ASTFunctionDeclaration f, StringBuffer? s, String indent) {
     s ??= StringBuffer();
 
     var typeCode = generateASTType(f.returnType);
 
-    var blockCode = generateASTBlock(f, indent, null, false);
+    var blockCode = generateASTBlock(f, indent: indent, withBrackets: false);
 
     s.write(indent);
 
@@ -119,7 +120,7 @@ class ApolloCodeGeneratorDart extends ApolloCodeGenerator {
     s.write('(');
 
     if (f.parametersSize > 0) {
-      generateASTParametersDeclaration(f.parameters, '', s);
+      generateASTParametersDeclaration(f.parameters, s: s);
     }
 
     s.write(') {\n');
@@ -133,8 +134,8 @@ class ApolloCodeGeneratorDart extends ApolloCodeGenerator {
   @override
   StringBuffer generateASTParametersDeclaration(
       ASTParametersDeclaration parameters,
-      [String indent = '',
-      StringBuffer? s]) {
+      {StringBuffer? s,
+      String indent = ''}) {
     s ??= StringBuffer();
 
     var positionalParameters = parameters.positionalParameters;
@@ -142,7 +143,7 @@ class ApolloCodeGeneratorDart extends ApolloCodeGenerator {
       for (var i = 0; i < positionalParameters.length; ++i) {
         var p = positionalParameters[i];
         if (i > 0) s.write(', ');
-        generateASTFunctionParameterDeclaration(p, '', s);
+        generateASTFunctionParameterDeclaration(p, s: s);
       }
     }
 
@@ -152,7 +153,7 @@ class ApolloCodeGeneratorDart extends ApolloCodeGenerator {
       for (var i = 0; i < optionalParameters.length; ++i) {
         var p = optionalParameters[i];
         if (i > 0) s.write(', ');
-        generateASTFunctionParameterDeclaration(p, '', s);
+        generateASTFunctionParameterDeclaration(p, s: s);
       }
       s.write(']');
     }
@@ -163,7 +164,7 @@ class ApolloCodeGeneratorDart extends ApolloCodeGenerator {
       for (var i = 0; i < namedParameters.length; ++i) {
         var p = namedParameters[i];
         if (i > 0) s.write(', ');
-        generateASTFunctionParameterDeclaration(p, '', s);
+        generateASTFunctionParameterDeclaration(p, s: s);
       }
       s.write('}');
     }
@@ -174,9 +175,9 @@ class ApolloCodeGeneratorDart extends ApolloCodeGenerator {
   @override
   StringBuffer generateASTFunctionParameterDeclaration(
       ASTFunctionParameterDeclaration parameter,
-      [String indent = '',
-      StringBuffer? s]) {
-    return generateASTParameterDeclaration(parameter, indent, s);
+      {StringBuffer? s,
+      String indent = ''}) {
+    return generateASTParameterDeclaration(parameter, s: s, indent: indent);
   }
 
   @override
@@ -187,25 +188,25 @@ class ApolloCodeGeneratorDart extends ApolloCodeGenerator {
 
   @override
   StringBuffer generateASTTypeArray(ASTTypeArray type,
-          [String indent = '', StringBuffer? s]) =>
-      generateASTTypeDefault(type, indent, s);
+          {StringBuffer? s, String indent = ''}) =>
+      generateASTTypeDefault(type, s: s, indent: indent);
 
   @override
   StringBuffer generateASTTypeArray2D(ASTTypeArray2D type,
-          [String indent = '', StringBuffer? s]) =>
-      generateASTTypeDefault(type, indent, s);
+          {StringBuffer? s, String indent = ''}) =>
+      generateASTTypeDefault(type, s: s, indent: indent);
 
   @override
   StringBuffer generateASTTypeArray3D(ASTTypeArray3D type,
-          [String indent = '', StringBuffer? s]) =>
-      generateASTTypeDefault(type, indent, s);
+          {StringBuffer? s, String indent = ''}) =>
+      generateASTTypeDefault(type, s: s, indent: indent);
 
   @override
   StringBuffer generateASTValueString(ASTValueString value,
-      [String indent = '', StringBuffer? s]) {
+      {StringBuffer? s, String indent = '', bool headIndented = true}) {
     s ??= StringBuffer();
 
-    s.write(indent);
+    if (headIndented) s.write(indent);
 
     var strRaw = value.value;
 
@@ -259,25 +260,27 @@ class ApolloCodeGeneratorDart extends ApolloCodeGenerator {
   @override
   StringBuffer generateASTValueStringConcatenation(
       ASTValueStringConcatenation value,
-      [String indent = '',
-      StringBuffer? s]) {
+      {StringBuffer? s,
+      String indent = ''}) {
     var list = <dynamic>[];
 
     var prevString = '';
     for (var v in value.values) {
       if (v is ASTValueStringVariable) {
         var prevDoubleQuote = prevString.endsWith('"');
-        var s2 =
-            generateASTValueStringVariable(v, '', null, false, prevDoubleQuote);
+        var s2 = generateASTValueStringVariable(v,
+            precededByString: false, prevDoubleQuote: prevDoubleQuote);
         list.add(prevString = s2.toString());
       } else if (v is ASTValueStringExpression) {
-        var s2 = generateASTValueStringExpresion(v, '');
+        var prevDoubleQuote = prevString.endsWith('"');
+        var s2 = generateASTValueStringExpression(v,
+            prevDoubleQuote: prevDoubleQuote);
         list.add(prevString = s2.toString());
       } else if (v is ASTValueStringConcatenation) {
-        var s2 = generateASTValueStringConcatenation(v, '');
+        var s2 = generateASTValueStringConcatenation(v);
         list.add(prevString = s2.toString());
       } else if (v is ASTValueString) {
-        var s2 = generateASTValueString(v, '');
+        var s2 = generateASTValueString(v);
         list.add(prevString = s2.toString());
       }
     }
@@ -344,10 +347,10 @@ class ApolloCodeGeneratorDart extends ApolloCodeGenerator {
 
   @override
   StringBuffer generateASTValueStringVariable(ASTValueStringVariable value,
-      [String indent = '',
-      StringBuffer? s,
+      {StringBuffer? s,
+      String indent = '',
       bool precededByString = false,
-      bool prevDoubleQuote = false]) {
+      bool prevDoubleQuote = false}) {
     s ??= StringBuffer();
 
     if (prevDoubleQuote) {
@@ -364,13 +367,13 @@ class ApolloCodeGeneratorDart extends ApolloCodeGenerator {
   }
 
   @override
-  StringBuffer generateASTValueStringExpresion(ASTValueStringExpression value,
-      [String indent = '', StringBuffer? s]) {
+  StringBuffer generateASTValueStringExpression(ASTValueStringExpression value,
+      {String indent = '', StringBuffer? s, bool prevDoubleQuote = false}) {
     s ??= StringBuffer();
 
-    var exp = generateASTExpression(value.expression, '').toString();
+    var exp = generateASTExpression(value.expression).toString();
 
-    if (exp.contains("'")) {
+    if (exp.contains("'") && prevDoubleQuote) {
       s.write('"');
       s.write(r'${');
       s.write(exp);
@@ -389,7 +392,7 @@ class ApolloCodeGeneratorDart extends ApolloCodeGenerator {
 
   @override
   StringBuffer generateASTValueArray(ASTValueArray value,
-      [String indent = '', StringBuffer? s]) {
+      {StringBuffer? s, String indent = '', bool headIndented = true}) {
     s ??= StringBuffer();
     s.write(value.value);
     return s;
@@ -397,7 +400,7 @@ class ApolloCodeGeneratorDart extends ApolloCodeGenerator {
 
   @override
   StringBuffer generateASTValueArray2D(ASTValueArray2D value,
-      [String indent = '', StringBuffer? s]) {
+      {StringBuffer? s, String indent = '', bool headIndented = true}) {
     s ??= StringBuffer();
     s.write(value.value);
     return s;
@@ -405,7 +408,7 @@ class ApolloCodeGeneratorDart extends ApolloCodeGenerator {
 
   @override
   StringBuffer generateASTValueArray3D(ASTValueArray3D value,
-      [String indent = '', StringBuffer? s]) {
+      {StringBuffer? s, String indent = '', bool headIndented = true}) {
     s ??= StringBuffer();
     s.write(value.value);
     return s;
@@ -413,15 +416,16 @@ class ApolloCodeGeneratorDart extends ApolloCodeGenerator {
 
   @override
   StringBuffer generateASTExpressionOperation(ASTExpressionOperation expression,
-      [String indent = '', StringBuffer? s]) {
+      {StringBuffer? s, String indent = '', bool headIndented = true}) {
     s ??= StringBuffer();
-    s.write(indent);
+
+    if (headIndented) s.write(indent);
 
     // Merge into string template:
     if (expression.operator == ASTExpressionOperator.add) {
       if (expression.expression1.isVariableAccess) {
-        var s1 = generateASTExpression(expression.expression1, '').toString();
-        var s2 = generateASTExpression(expression.expression2, '').toString();
+        var s1 = generateASTExpression(expression.expression1).toString();
+        var s2 = generateASTExpression(expression.expression2).toString();
 
         if (_isVariable(s1) &&
             (_isSingleQuoteString(s2) || _isDoubleQuoteString(s2))) {
@@ -430,8 +434,8 @@ class ApolloCodeGeneratorDart extends ApolloCodeGenerator {
           return s;
         }
       } else if (expression.expression1.isLiteralString) {
-        var s1 = generateASTExpression(expression.expression1, '').toString();
-        var s2 = generateASTExpression(expression.expression2, '').toString();
+        var s1 = generateASTExpression(expression.expression1).toString();
+        var s2 = generateASTExpression(expression.expression2).toString();
 
         if ((_isSingleQuoteString(s1) && _isSingleQuoteString(s2)) ||
             (_isDoubleQuoteString(s1) && _isDoubleQuoteString(s2))) {
@@ -454,11 +458,11 @@ class ApolloCodeGeneratorDart extends ApolloCodeGenerator {
       expression.expression2.literalNumType,
     );
 
-    generateASTExpression(expression.expression1, '', s);
+    generateASTExpression(expression.expression1, s: s);
     s.write(' ');
     s.write(op);
     s.write(' ');
-    generateASTExpression(expression.expression2, '', s);
+    generateASTExpression(expression.expression2, s: s);
 
     return s;
   }

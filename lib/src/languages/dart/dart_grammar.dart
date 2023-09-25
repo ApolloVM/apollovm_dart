@@ -455,7 +455,6 @@ class DartGrammarDefinition extends DartGrammarLexer {
                       char(',').trimHidden() &
                       simpleType() &
                       char('>').trimHidden())
-                  .trimHidden()
                   .optional() &
               char('{').trimHidden() &
               (expression() & char(':').trimHidden() & expression()) &

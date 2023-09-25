@@ -21,46 +21,49 @@ abstract class ApolloCodeGenerator {
       : language = language.trim().toLowerCase();
 
   StringBuffer generateASTNode(ASTNode node,
-      [String indent = '', StringBuffer? s]) {
+      {StringBuffer? s, String indent = '', bool headIndented = true}) {
     if (node is ASTValue) {
-      return generateASTValue(node, indent, s);
+      return generateASTValue(node,
+          s: s, indent: indent, headIndented: headIndented);
     } else if (node is ASTExpression) {
-      return generateASTExpression(node, indent, s);
+      return generateASTExpression(node,
+          s: s, indent: indent, headIndented: headIndented);
     } else if (node is ASTRoot) {
-      return generateASTRoot(node, indent, s);
+      return generateASTRoot(node, s: s, indent: indent);
     } else if (node is ASTClassNormal) {
-      return generateASTClass(node, indent, s);
+      return generateASTClass(node, s: s, indent: indent);
     } else if (node is ASTBlock) {
-      return generateASTBlock(node, indent, s);
+      return generateASTBlock(node, s: s, indent: indent);
     } else if (node is ASTStatement) {
-      return generateASTStatement(node, indent, s);
+      return generateASTStatement(node,
+          s: s, indent: indent, headIndented: headIndented);
     } else if (node is ASTClassFunctionDeclaration) {
-      return generateASTClassFunctionDeclaration(node, indent, s);
+      return generateASTClassFunctionDeclaration(node, s: s, indent: indent);
     } else if (node is ASTFunctionDeclaration) {
-      return generateASTFunctionDeclaration(node, indent, s);
+      return generateASTFunctionDeclaration(node, s: s, indent: indent);
     }
 
     throw UnsupportedError("Can't handle ASTNode: $node");
   }
 
   StringBuffer generateASTRoot(ASTRoot root,
-      [String indent = '', StringBuffer? s, bool withBrackets = true]) {
+      {String indent = '', StringBuffer? s, bool withBrackets = true}) {
     s ??= StringBuffer();
 
-    generateASTBlock(root, '', s, false);
+    generateASTBlock(root, s: s, withBrackets: false);
 
     for (var clazz in root.classes) {
-      generateASTClass(clazz, '', s);
+      generateASTClass(clazz, s: s);
     }
 
     return s;
   }
 
   StringBuffer generateASTBlock(ASTBlock block,
-      [String indent = '',
-      StringBuffer? s,
+      {StringBuffer? s,
+      String indent = '',
       bool withBrackets = true,
-      bool withBlankHeadLine = false]) {
+      bool withBlankHeadLine = false}) {
     s ??= StringBuffer();
 
     var indent2 = '$indent  ';
@@ -71,7 +74,7 @@ abstract class ApolloCodeGenerator {
 
     if (block is ASTClassNormal) {
       for (var field in block.fields) {
-        generateASTClassField(field, indent2, s);
+        generateASTClassField(field, s: s, indent: indent2);
       }
 
       if (block.fields.isNotEmpty) {
@@ -82,15 +85,15 @@ abstract class ApolloCodeGenerator {
     for (var set in block.functions) {
       for (var f in set.functions) {
         if (f is ASTClassFunctionDeclaration) {
-          generateASTClassFunctionDeclaration(f, indent2, s);
+          generateASTClassFunctionDeclaration(f, s: s, indent: indent2);
         } else {
-          generateASTFunctionDeclaration(f, indent2, s);
+          generateASTFunctionDeclaration(f, s: s, indent: indent2);
         }
       }
     }
 
     for (var stm in block.statements) {
-      generateASTStatement(stm, indent2, s);
+      generateASTStatement(stm, s: s, indent: indent2);
       s.write('\n');
     }
 
@@ -100,33 +103,33 @@ abstract class ApolloCodeGenerator {
   }
 
   StringBuffer generateASTClass(ASTClassNormal clazz,
-      [String indent = '', StringBuffer? s]);
+      {StringBuffer? s, String indent = ''});
 
   StringBuffer generateASTClassField(ASTClassField field,
-      [String indent = '', StringBuffer? s]);
+      {StringBuffer? s, String indent = ''});
 
   StringBuffer generateASTClassFunctionDeclaration(
       ASTClassFunctionDeclaration f,
-      [String indent = '',
-      StringBuffer? s]);
+      {StringBuffer? s,
+      String indent = ''});
 
   StringBuffer generateASTFunctionDeclaration(ASTFunctionDeclaration f,
-      [String indent = '', StringBuffer? s]);
+      {StringBuffer? s, String indent = ''});
 
   StringBuffer generateASTParametersDeclaration(
       ASTParametersDeclaration parameters,
-      [String indent = '',
-      StringBuffer? s]);
+      {StringBuffer? s,
+      String indent = ''});
 
   StringBuffer generateASTFunctionParameterDeclaration(
       ASTFunctionParameterDeclaration parameter,
-      [String indent = '',
-      StringBuffer? s]);
+      {StringBuffer? s,
+      String indent = ''});
 
   StringBuffer generateASTParameterDeclaration(
       ASTParameterDeclaration parameter,
-      [String indent = '',
-      StringBuffer? s]) {
+      {StringBuffer? s,
+      String indent = ''}) {
     s ??= StringBuffer();
 
     var typeStr = generateASTType(parameter.type);
@@ -138,26 +141,26 @@ abstract class ApolloCodeGenerator {
   }
 
   StringBuffer generateASTType(ASTType type,
-      [String indent = '', StringBuffer? s]) {
+      {StringBuffer? s, String indent = ''}) {
     if (type is ASTTypeArray) {
-      return generateASTTypeArray(type, indent, s);
+      return generateASTTypeArray(type, s: s, indent: indent);
     } else if (type is ASTTypeArray2D) {
-      return generateASTTypeArray2D(type, indent, s);
+      return generateASTTypeArray2D(type, s: s, indent: indent);
     } else if (type is ASTTypeArray3D) {
-      return generateASTTypeArray3D(type, indent, s);
+      return generateASTTypeArray3D(type, s: s, indent: indent);
     }
 
-    return generateASTTypeDefault(type, indent, s);
+    return generateASTTypeDefault(type, s: s, indent: indent);
   }
 
   StringBuffer generateASTTypeArray(ASTTypeArray type,
-      [String indent = '', StringBuffer? s]);
+      {StringBuffer? s, String indent = ''});
 
   StringBuffer generateASTTypeArray2D(ASTTypeArray2D type,
-      [String indent = '', StringBuffer? s]);
+      {StringBuffer? s, String indent = ''});
 
   StringBuffer generateASTTypeArray3D(ASTTypeArray3D type,
-      [String indent = '', StringBuffer? s]);
+      {StringBuffer? s, String indent = ''});
 
   String normalizeTypeName(String typeName, [String? callingFunction]) =>
       typeName;
@@ -166,7 +169,7 @@ abstract class ApolloCodeGenerator {
       functionName;
 
   StringBuffer generateASTTypeDefault(ASTType type,
-      [String indent = '', StringBuffer? s]) {
+      {StringBuffer? s, String indent = ''}) {
     s ??= StringBuffer();
 
     var typeName = normalizeTypeName(type.name);
@@ -189,59 +192,75 @@ abstract class ApolloCodeGenerator {
   }
 
   StringBuffer generateASTStatement(ASTStatement statement,
-      [String indent = '', StringBuffer? s]) {
+      {String indent = '', StringBuffer? s, bool headIndented = true}) {
     if (statement is ASTStatementExpression) {
-      return generateASTStatementExpression(statement, indent, s);
+      return generateASTStatementExpression(statement,
+          s: s, indent: indent, headIndented: headIndented);
     } else if (statement is ASTStatementVariableDeclaration) {
-      return generateASTStatementVariableDeclaration(statement, indent, s);
+      return generateASTStatementVariableDeclaration(statement,
+          s: s, indent: indent, headIndented: headIndented);
     } else if (statement is ASTBranch) {
-      return generateASTBranch(statement, indent, s);
+      return generateASTBranch(statement,
+          s: s, indent: indent, headIndented: headIndented);
     } else if (statement is ASTStatementForLoop) {
-      return generateASTStatementForLoop(statement, indent, s);
+      return generateASTStatementForLoop(statement,
+          s: s, indent: indent, headIndented: headIndented);
     } else if (statement is ASTStatementReturnNull) {
-      return generateASTStatementReturnNull(statement, indent, s);
+      return generateASTStatementReturnNull(statement,
+          s: s, indent: indent, headIndented: headIndented);
     } else if (statement is ASTStatementReturnValue) {
-      return generateASTStatementReturnValue(statement, indent, s);
+      return generateASTStatementReturnValue(statement,
+          s: s, indent: indent, headIndented: headIndented);
     } else if (statement is ASTStatementReturnVariable) {
-      return generateASTStatementReturnVariable(statement, indent, s);
+      return generateASTStatementReturnVariable(statement,
+          s: s, indent: indent, headIndented: headIndented);
     } else if (statement is ASTStatementReturnWithExpression) {
-      return generateASTStatementReturnWithExpression(statement, indent, s);
+      return generateASTStatementReturnWithExpression(statement,
+          s: s, indent: indent, headIndented: headIndented);
     } else if (statement is ASTStatementReturn) {
-      return generateASTStatementReturn(statement, indent, s);
+      return generateASTStatementReturn(statement,
+          s: s, indent: indent, headIndented: headIndented);
     }
 
     throw UnsupportedError("Can't handle statement: $statement");
   }
 
   StringBuffer generateASTBranch(ASTBranch branch,
-      [String indent = '', StringBuffer? s]) {
+      {StringBuffer? s, String indent = '', bool headIndented = true}) {
     if (branch is ASTBranchIfBlock) {
-      return generateASTBranchIfBlock(branch, indent, s);
+      return generateASTBranchIfBlock(branch,
+          s: s, indent: indent, headIndented: headIndented);
     } else if (branch is ASTBranchIfElseBlock) {
-      return generateASTBranchIfElseBlock(branch, indent, s);
+      return generateASTBranchIfElseBlock(branch,
+          s: s, indent: indent, headIndented: headIndented);
     } else if (branch is ASTBranchIfElseIfsElseBlock) {
-      return generateASTBranchIfElseIfsElseBlock(branch, indent, s);
+      return generateASTBranchIfElseIfsElseBlock(branch,
+          s: s, indent: indent, headIndented: headIndented);
     }
 
     throw UnsupportedError("Can't handle branch: $branch");
   }
 
   StringBuffer generateASTStatementForLoop(ASTStatementForLoop forLoop,
-      [String indent = '', StringBuffer? s]) {
+      {StringBuffer? s, String indent = '', bool headIndented = true}) {
     s ??= StringBuffer();
 
-    s.write(indent);
-    s.write('for (');
+    if (headIndented) s.write(indent);
 
-    generateASTStatement(forLoop.initStatement, '', s);
+    s.write('for (');
+    generateASTStatement(forLoop.initStatement,
+        s: s, indent: indent, headIndented: false);
     s.write(' ');
-    generateASTExpression(forLoop.conditionExpression, '', s);
+    generateASTExpression(forLoop.conditionExpression,
+        s: s, indent: indent, headIndented: false);
     s.write(' ; ');
-    generateASTExpression(forLoop.continueExpression, '', s);
+    generateASTExpression(forLoop.continueExpression,
+        s: s, indent: indent, headIndented: false);
 
     s.write(') {\n');
 
-    var blockCode = generateASTBlock(forLoop.loopBlock, indent, null, false);
+    var blockCode = generateASTBlock(forLoop.loopBlock,
+        indent: indent, withBrackets: false);
 
     s.write(blockCode);
     s.write(indent);
@@ -251,14 +270,17 @@ abstract class ApolloCodeGenerator {
   }
 
   StringBuffer generateASTBranchIfBlock(ASTBranchIfBlock branch,
-      [String indent = '', StringBuffer? s]) {
+      {StringBuffer? s, String indent = '', bool headIndented = true}) {
     s ??= StringBuffer();
 
-    s.write(indent);
+    if (headIndented) s.write(indent);
+
     s.write('if (');
-    generateASTExpression(branch.condition, '', s);
+    generateASTExpression(branch.condition,
+        s: s, indent: indent, headIndented: false);
     s.write(') {\n');
-    generateASTBlock(branch.block, '$indent  ', s, false);
+    generateASTBlock(branch.block,
+        s: s, indent: '$indent  ', withBrackets: false);
     s.write(indent);
     s.write('}\n');
 
@@ -266,17 +288,21 @@ abstract class ApolloCodeGenerator {
   }
 
   StringBuffer generateASTBranchIfElseBlock(ASTBranchIfElseBlock branch,
-      [String indent = '', StringBuffer? s]) {
+      {StringBuffer? s, String indent = '', bool headIndented = true}) {
     s ??= StringBuffer();
 
-    s.write(indent);
+    if (headIndented) s.write(indent);
+
     s.write('if (');
-    generateASTExpression(branch.condition, '', s);
+    generateASTExpression(branch.condition,
+        s: s, indent: indent, headIndented: false);
     s.write(') {\n');
-    generateASTBlock(branch.blockIf, '$indent  ', s, false);
+    generateASTBlock(branch.blockIf,
+        s: s, indent: '$indent  ', withBrackets: false);
     s.write(indent);
     s.write('} else {\n');
-    generateASTBlock(branch.blockElse, '$indent  ', s, false);
+    generateASTBlock(branch.blockElse,
+        s: s, indent: '$indent  ', withBrackets: false);
     s.write(indent);
     s.write('}\n');
 
@@ -285,27 +311,34 @@ abstract class ApolloCodeGenerator {
 
   StringBuffer generateASTBranchIfElseIfsElseBlock(
       ASTBranchIfElseIfsElseBlock branch,
-      [String indent = '',
-      StringBuffer? s]) {
+      {StringBuffer? s,
+      String indent = '',
+      bool headIndented = true}) {
     s ??= StringBuffer();
 
-    s.write(indent);
+    if (headIndented) s.write(indent);
+
     s.write('if (');
-    generateASTExpression(branch.condition, '', s);
+    generateASTExpression(branch.condition,
+        s: s, indent: indent, headIndented: false);
     s.write(') {\n');
-    generateASTBlock(branch.blockIf, '$indent  ', s, false);
+    generateASTBlock(branch.blockIf,
+        s: s, indent: '$indent  ', withBrackets: false);
 
     for (var branchElseIf in branch.blocksElseIf) {
       s.write(indent);
       s.write('} else if (');
-      generateASTExpression(branchElseIf.condition, '$indent  ', s);
+      generateASTExpression(branchElseIf.condition,
+          s: s, indent: indent, headIndented: false);
       s.write(') {\n');
-      generateASTBlock(branchElseIf.block, '$indent  ', s, false);
+      generateASTBlock(branchElseIf.block,
+          s: s, indent: '$indent  ', withBrackets: false);
     }
 
     s.write(indent);
     s.write('} else {\n');
-    generateASTBlock(branch.blockElse, '$indent  ', s, false);
+    generateASTBlock(branch.blockElse,
+        s: s, indent: '$indent  ', withBrackets: false);
     s.write(indent);
     s.write('}\n');
 
@@ -313,28 +346,32 @@ abstract class ApolloCodeGenerator {
   }
 
   StringBuffer generateASTStatementExpression(ASTStatementExpression statement,
-      [String indent = '', StringBuffer? s]) {
+      {StringBuffer? s, String indent = '', bool headIndented = true}) {
     s ??= StringBuffer();
-    s.write(indent);
-    generateASTExpression(statement.expression, '', s);
+
+    if (headIndented) s.write(indent);
+    generateASTExpression(statement.expression, s: s);
     s.write(';');
     return s;
   }
 
   StringBuffer generateASTStatementVariableDeclaration(
       ASTStatementVariableDeclaration statement,
-      [String indent = '',
-      StringBuffer? s]) {
+      {StringBuffer? s,
+      String indent = '',
+      bool headIndented = true}) {
     s ??= StringBuffer();
 
-    s.write(indent);
-    generateASTType(statement.type, '', s);
+    if (headIndented) s.write(indent);
+
+    generateASTType(statement.type, s: s);
 
     s.write(' ');
     s.write(statement.name);
     if (statement.value != null) {
       s.write(' = ');
-      generateASTExpression(statement.value!, '', s);
+      generateASTExpression(statement.value!,
+          s: s, indent: indent, headIndented: false);
     }
     s.write(';');
 
@@ -343,106 +380,130 @@ abstract class ApolloCodeGenerator {
 
   StringBuffer generateASTExpressionVariableAssignment(
       ASTExpressionVariableAssignment expression,
-      [String indent = '',
-      StringBuffer? s]) {
+      {StringBuffer? s,
+      String indent = '',
+      bool headIndented = true}) {
     s ??= StringBuffer();
 
-    s.write(indent);
+    if (headIndented) s.write(indent);
 
-    generateASTVariable(expression.variable, null, '', s);
+    generateASTVariable(expression.variable,
+        s: s, indent: indent, headIndented: headIndented);
+
     var op = getASTAssignmentOperatorText(expression.operator);
     s.write(' ');
     s.write(op);
     s.write(' ');
-    generateASTExpression(expression.expression, '', s);
+    generateASTExpression(expression.expression,
+        s: s, indent: '$indent  ', headIndented: false);
 
     return s;
   }
 
   StringBuffer generateASTStatementReturn(ASTStatementReturn statement,
-      [String indent = '', StringBuffer? s]) {
+      {StringBuffer? s, String indent = '', bool headIndented = true}) {
     s ??= StringBuffer();
-    s.write(indent);
+    if (headIndented) s.write(indent);
     s.write('return;');
     return s;
   }
 
   StringBuffer generateASTStatementReturnNull(ASTStatementReturnNull statement,
-      [String indent = '', StringBuffer? s]) {
+      {StringBuffer? s, String indent = '', bool headIndented = true}) {
     s ??= StringBuffer();
-    s.write(indent);
+
+    if (headIndented) s.write(indent);
     s.write('return null;');
     return s;
   }
 
   StringBuffer generateASTStatementReturnValue(
       ASTStatementReturnValue statement,
-      [String indent = '',
-      StringBuffer? s]) {
+      {StringBuffer? s,
+      String indent = '',
+      bool headIndented = true}) {
     s ??= StringBuffer();
-    s.write(indent);
+
+    if (headIndented) s.write(indent);
     s.write('return ');
-    generateASTValue(statement.value, '', s);
+    generateASTValue(statement.value,
+        s: s, indent: indent, headIndented: false);
     s.write(';');
     return s;
   }
 
   StringBuffer generateASTStatementReturnVariable(
       ASTStatementReturnVariable statement,
-      [String indent = '',
-      StringBuffer? s]) {
+      {StringBuffer? s,
+      String indent = '',
+      bool headIndented = true}) {
     s ??= StringBuffer();
-    s.write(indent);
+
+    if (headIndented) s.write(indent);
     s.write('return ');
-    generateASTVariable(statement.variable, null, '', s);
+    generateASTVariable(statement.variable,
+        s: s, indent: indent, headIndented: false);
     s.write(';');
     return s;
   }
 
   StringBuffer generateASTStatementReturnWithExpression(
       ASTStatementReturnWithExpression statement,
-      [String indent = '',
-      StringBuffer? s]) {
+      {StringBuffer? s,
+      String indent = '',
+      bool headIndented = true}) {
     s ??= StringBuffer();
-    s.write(indent);
+
+    if (headIndented) s.write(indent);
     s.write('return ');
-    generateASTExpression(statement.expression, '', s);
+    generateASTExpression(statement.expression,
+        s: s, indent: indent, headIndented: false);
     s.write(';');
     return s;
   }
 
   StringBuffer generateASTExpression(ASTExpression expression,
-      [String indent = '', StringBuffer? s]) {
+      {StringBuffer? s, String indent = '', bool headIndented = true}) {
     if (expression is ASTExpressionVariableAccess) {
-      return generateASTExpressionVariableAccess(expression, indent, s);
+      return generateASTExpressionVariableAccess(expression,
+          s: s, indent: indent, headIndented: headIndented);
     } else if (expression is ASTExpressionVariableAssignment) {
-      return generateASTExpressionVariableAssignment(expression, indent, s);
+      return generateASTExpressionVariableAssignment(expression,
+          s: s, indent: indent, headIndented: headIndented);
     } else if (expression is ASTExpressionVariableEntryAccess) {
-      return generateASTExpressionVariableEntryAccess(expression, indent, s);
+      return generateASTExpressionVariableEntryAccess(expression,
+          s: s, indent: indent, headIndented: headIndented);
     } else if (expression is ASTExpressionLiteral) {
-      return generateASTExpressionLiteral(expression, indent, s);
+      return generateASTExpressionLiteral(expression,
+          s: s, indent: indent, headIndented: headIndented);
     } else if (expression is ASTExpressionListLiteral) {
-      return generateASTExpressionListLiteral(expression, indent, s);
+      return generateASTExpressionListLiteral(expression,
+          s: s, indent: indent, headIndented: headIndented);
     } else if (expression is ASTExpressionMapLiteral) {
-      return generateASTExpressionMapLiteral(expression, indent, s);
+      return generateASTExpressionMapLiteral(expression,
+          s: s, indent: indent, headIndented: headIndented);
     } else if (expression is ASTExpressionNegation) {
-      return generateASTExpressionNegation(expression, indent, s);
+      return generateASTExpressionNegation(expression,
+          s: s, indent: indent, headIndented: headIndented);
     } else if (expression is ASTExpressionLocalFunctionInvocation) {
-      return generateASTExpressionLocalFunctionInvocation(
-          expression, indent, s);
+      return generateASTExpressionLocalFunctionInvocation(expression,
+          s: s, indent: indent, headIndented: headIndented);
     } else if (expression is ASTExpressionObjectFunctionInvocation) {
-      return generateASTExpressionFunctionInvocation(expression, indent, s);
+      return generateASTExpressionFunctionInvocation(expression,
+          s: s, indent: indent, headIndented: headIndented);
     } else if (expression is ASTExpressionOperation) {
-      return generateASTExpressionOperation(expression, indent, s);
+      return generateASTExpressionOperation(expression,
+          s: s, indent: indent, headIndented: headIndented);
     }
 
     throw UnsupportedError("Can't generate expression: $expression");
   }
 
   StringBuffer generateASTExpressionOperation(ASTExpressionOperation expression,
-      [String indent = '', StringBuffer? s]) {
+      {StringBuffer? s, String indent = '', bool headIndented = true}) {
     s ??= StringBuffer();
-    s.write(indent);
+
+    if (headIndented) s.write(indent);
 
     var expression1 = expression.expression1;
     var expression2 = expression.expression2;
@@ -453,11 +514,15 @@ abstract class ApolloCodeGenerator {
       expression2.literalNumType,
     );
 
-    generateASTExpression(expression1, '', s);
+    generateASTExpression(expression1,
+        s: s, indent: '$indent  ', headIndented: false);
+
     s.write(' ');
     s.write(op);
     s.write(' ');
-    generateASTExpression(expression2, '', s);
+
+    generateASTExpression(expression2,
+        s: s, indent: '$indent  ', headIndented: false);
 
     return s;
   }
@@ -466,24 +531,27 @@ abstract class ApolloCodeGenerator {
       ASTExpressionOperator operator, ASTNumType aNumType, ASTNumType bNumType);
 
   StringBuffer generateASTExpressionLiteral(ASTExpressionLiteral expression,
-      [String indent = '', StringBuffer? s]) {
+      {String indent = '', StringBuffer? s, bool headIndented = true}) {
     s ??= StringBuffer();
-    s.write(indent);
-    generateASTValue(expression.value, '', s);
+    if (headIndented) s.write(indent);
+    generateASTValue(expression.value,
+        s: s, indent: indent, headIndented: false);
     return s;
   }
 
   StringBuffer generateASTExpressionListLiteral(
       ASTExpressionListLiteral expression,
-      [String indent = '',
-      StringBuffer? s]) {
+      {StringBuffer? s,
+      String indent = '',
+      bool headIndented = true}) {
     s ??= StringBuffer();
-    s.write(indent);
+
+    if (headIndented) s.write(indent);
 
     final type = expression.type;
     if (type != null) {
       s.write('<');
-      generateASTType(type, '', s);
+      generateASTType(type, s: s);
       s.write('>');
     }
 
@@ -496,7 +564,7 @@ abstract class ApolloCodeGenerator {
       if (i > 0) {
         s.write(', ');
       }
-      generateASTExpression(e, '', s);
+      generateASTExpression(e, s: s);
     }
 
     s.write(']');
@@ -506,19 +574,21 @@ abstract class ApolloCodeGenerator {
 
   StringBuffer generateASTExpressionMapLiteral(
       ASTExpressionMapLiteral expression,
-      [String indent = '',
-      StringBuffer? s]) {
+      {StringBuffer? s,
+      String indent = '',
+      bool headIndented = true}) {
     s ??= StringBuffer();
-    s.write(indent);
+
+    if (headIndented) s.write(indent);
 
     final keyType = expression.keyType;
     final valueType = expression.valueType;
 
     if (keyType != null && valueType != null) {
       s.write('<');
-      generateASTType(keyType, '', s);
+      generateASTType(keyType, s: s);
       s.write(',');
-      generateASTType(valueType, '', s);
+      generateASTType(valueType, s: s);
       s.write('>');
     }
 
@@ -532,9 +602,9 @@ abstract class ApolloCodeGenerator {
         s.write(', ');
       }
 
-      generateASTExpression(e.key, '', s);
+      generateASTExpression(e.key, s: s);
       s.write(": ");
-      generateASTExpression(e.value, '', s);
+      generateASTExpression(e.value, s: s);
     }
 
     s.write('}');
@@ -543,20 +613,27 @@ abstract class ApolloCodeGenerator {
   }
 
   StringBuffer generateASTExpressionNegation(ASTExpressionNegation expression,
-      [String indent = '', StringBuffer? s]) {
+      {String indent = '', StringBuffer? s, bool headIndented = true}) {
     s ??= StringBuffer();
-    s.write(indent);
+
+    if (headIndented) s.write(indent);
+
     s.write('!');
-    s.write(generateASTExpression(expression.expression));
+
+    generateASTExpression(expression.expression,
+        s: s, indent: indent, headIndented: false);
+
     return s;
   }
 
   StringBuffer generateASTExpressionFunctionInvocation(
       ASTExpressionObjectFunctionInvocation expression,
-      [String indent = '',
-      StringBuffer? s]) {
+      {String indent = '',
+      StringBuffer? s,
+      bool headIndented = true}) {
     s ??= StringBuffer();
-    s.write(indent);
+
+    if (headIndented) s.write(indent);
 
     var functionName = expression.name;
 
@@ -565,7 +642,11 @@ abstract class ApolloCodeGenerator {
       functionName = normalizeTypeFunction(typeIdentifier!.name, functionName);
     }
 
-    generateASTVariable(expression.variable, functionName, '', s);
+    generateASTVariable(expression.variable,
+        callingFunction: functionName,
+        s: s,
+        indent: indent,
+        headIndented: false);
     s.write('.');
 
     s.write(functionName);
@@ -575,7 +656,8 @@ abstract class ApolloCodeGenerator {
     for (var i = 0; i < arguments.length; ++i) {
       var arg = arguments[i];
       if (i > 0) s.write(', ');
-      generateASTExpression(arg, '', s);
+      generateASTExpression(arg,
+          s: s, indent: '$indent  ', headIndented: false);
     }
     s.write(')');
 
@@ -584,10 +666,12 @@ abstract class ApolloCodeGenerator {
 
   StringBuffer generateASTExpressionLocalFunctionInvocation(
       ASTExpressionLocalFunctionInvocation expression,
-      [String indent = '',
-      StringBuffer? s]) {
+      {String indent = '',
+      StringBuffer? s,
+      bool headIndented = true}) {
     s ??= StringBuffer();
-    s.write(indent);
+
+    if (headIndented) s.write(indent);
 
     s.write(expression.name);
     s.write('(');
@@ -597,7 +681,8 @@ abstract class ApolloCodeGenerator {
       var arg = arguments[i];
       if (i > 0) s.write(', ');
 
-      generateASTExpression(arg, '', s);
+      generateASTExpression(arg,
+          s: s, indent: '$indent  ', headIndented: false);
     }
     s.write(')');
 
@@ -606,42 +691,64 @@ abstract class ApolloCodeGenerator {
 
   StringBuffer generateASTExpressionVariableAccess(
       ASTExpressionVariableAccess expression,
-      [String indent = '',
-      StringBuffer? s]) {
+      {StringBuffer? s,
+      String indent = '',
+      bool headIndented = true}) {
     s ??= StringBuffer();
-    s.write(indent);
-    generateASTVariable(expression.variable, null, '', s);
+
+    if (headIndented) s.write(indent);
+    generateASTVariable(expression.variable,
+        s: s, indent: indent, headIndented: false);
+
     return s;
   }
 
   StringBuffer generateASTExpressionVariableEntryAccess(
       ASTExpressionVariableEntryAccess expression,
-      [String indent = '',
-      StringBuffer? s]) {
+      {StringBuffer? s,
+      String indent = '',
+      bool headIndented = true}) {
     s ??= StringBuffer();
-    s.write(indent);
-    generateASTVariable(expression.variable, null, '', s);
+
+    if (headIndented) s.write(indent);
+
+    generateASTVariable(expression.variable,
+        s: s, indent: indent, headIndented: headIndented);
     s.write('[');
-    generateASTExpression(expression.expression, '', s);
+    generateASTExpression(expression.expression,
+        s: s, indent: indent, headIndented: false);
     s.write(']');
     return s;
   }
 
-  StringBuffer generateASTVariable(
-      ASTVariable variable, String? callingFunction,
-      [String indent = '', StringBuffer? s]) {
+  StringBuffer generateASTVariable(ASTVariable variable,
+      {String? callingFunction,
+      StringBuffer? s,
+      String indent = '',
+      bool headIndented = true}) {
     if (variable is ASTScopeVariable) {
-      return generateASTScopeVariable(variable, callingFunction, indent, s);
+      return generateASTScopeVariable(variable,
+          callingFunction: callingFunction,
+          s: s,
+          indent: indent,
+          headIndented: headIndented);
     } else {
-      return generateASTVariableGeneric(variable, callingFunction, indent, s);
+      return generateASTVariableGeneric(variable,
+          callingFunction: callingFunction,
+          s: s,
+          indent: indent,
+          headIndented: headIndented);
     }
   }
 
-  StringBuffer generateASTScopeVariable(
-      ASTScopeVariable variable, String? callingFunction,
-      [String indent = '', StringBuffer? s]) {
+  StringBuffer generateASTScopeVariable(ASTScopeVariable variable,
+      {String? callingFunction,
+      StringBuffer? s,
+      String indent = '',
+      bool headIndented = true}) {
     s ??= StringBuffer();
-    s.write(indent);
+
+    if (headIndented) s.write(indent);
 
     var name = variable.name;
 
@@ -656,43 +763,56 @@ abstract class ApolloCodeGenerator {
     return s;
   }
 
-  StringBuffer generateASTVariableGeneric(
-      ASTVariable variable, String? callingFunction,
-      [String indent = '', StringBuffer? s]) {
+  StringBuffer generateASTVariableGeneric(ASTVariable variable,
+      {String? callingFunction,
+      StringBuffer? s,
+      String indent = '',
+      bool headIndented = true}) {
     s ??= StringBuffer();
-    s.write(indent);
+
+    if (headIndented) s.write(indent);
     s.write(variable.name);
     return s;
   }
 
   StringBuffer generateASTValue(ASTValue value,
-      [String indent = '', StringBuffer? s]) {
+      {StringBuffer? s, String indent = '', bool headIndented = true}) {
     if (value is ASTValueString) {
-      return generateASTValueString(value, indent, s);
+      return generateASTValueString(value,
+          s: s, indent: indent, headIndented: headIndented);
     } else if (value is ASTValueInt) {
-      return generateASTValueInt(value, indent, s);
+      return generateASTValueInt(value,
+          s: s, indent: indent, headIndented: headIndented);
     } else if (value is ASTValueDouble) {
-      return generateASTValueDouble(value, indent, s);
+      return generateASTValueDouble(value,
+          s: s, indent: indent, headIndented: headIndented);
     } else if (value is ASTValueNull) {
-      return generateASTValueNull(value, indent, s);
+      return generateASTValueNull(value,
+          s: s, indent: indent, headIndented: headIndented);
     } else if (value is ASTValueVar) {
-      return generateASTValueVar(value, indent, s);
+      return generateASTValueVar(value,
+          s: s, indent: indent, headIndented: headIndented);
     } else if (value is ASTValueObject) {
-      return generateASTValueObject(value, indent, s);
+      return generateASTValueObject(value,
+          s: s, indent: indent, headIndented: headIndented);
     } else if (value is ASTValueStatic) {
-      return generateASTValueStatic(value, indent, s);
+      return generateASTValueStatic(value,
+          s: s, indent: indent, headIndented: headIndented);
     } else if (value is ASTValueStringVariable) {
-      return generateASTValueStringVariable(value, indent, s);
+      return generateASTValueStringVariable(value, s: s, indent: indent);
     } else if (value is ASTValueStringConcatenation) {
-      return generateASTValueStringConcatenation(value, indent, s);
+      return generateASTValueStringConcatenation(value, s: s, indent: indent);
     } else if (value is ASTValueStringExpression) {
-      return generateASTValueStringExpresion(value, indent, s);
+      return generateASTValueStringExpression(value, indent: indent, s: s);
     } else if (value is ASTValueArray) {
-      return generateASTValueArray(value, indent, s);
+      return generateASTValueArray(value,
+          s: s, indent: indent, headIndented: headIndented);
     } else if (value is ASTValueArray2D) {
-      return generateASTValueArray2D(value, indent, s);
+      return generateASTValueArray2D(value,
+          s: s, indent: indent, headIndented: headIndented);
     } else if (value is ASTValueArray3D) {
-      return generateASTValueArray3D(value, indent, s);
+      return generateASTValueArray3D(value,
+          s: s, indent: indent, headIndented: headIndented);
     }
 
     throw UnsupportedError("Can't generate value: $value");
@@ -700,64 +820,70 @@ abstract class ApolloCodeGenerator {
 
   StringBuffer generateASTValueStringConcatenation(
       ASTValueStringConcatenation value,
-      [String indent = '',
-      StringBuffer? s]);
+      {StringBuffer? s,
+      String indent = ''});
 
   StringBuffer generateASTValueStringVariable(ASTValueStringVariable value,
-      [String indent = '', StringBuffer? s, bool precededByString = false]);
+      {StringBuffer? s, String indent = '', bool precededByString = false});
 
-  StringBuffer generateASTValueStringExpresion(ASTValueStringExpression value,
-      [String indent = '', StringBuffer? s]);
+  StringBuffer generateASTValueStringExpression(ASTValueStringExpression value,
+      {StringBuffer? s, String indent = ''});
 
   StringBuffer generateASTValueString(ASTValueString value,
-      [String indent = '', StringBuffer? s]);
+      {StringBuffer? s, String indent = '', bool headIndented = true});
 
   StringBuffer generateASTValueInt(ASTValueInt value,
-      [String indent = '', StringBuffer? s]) {
+      {StringBuffer? s, String indent = '', bool headIndented = true}) {
     s ??= StringBuffer();
-    s.write(indent);
+
+    if (headIndented) s.write(indent);
     s.write(value.value);
     return s;
   }
 
   StringBuffer generateASTValueDouble(ASTValueDouble value,
-      [String indent = '', StringBuffer? s]) {
+      {StringBuffer? s, String indent = '', bool headIndented = true}) {
     s ??= StringBuffer();
-    s.write(indent);
+
+    if (headIndented) s.write(indent);
     s.write(value.value);
     return s;
   }
 
   StringBuffer generateASTValueNull(ASTValueNull value,
-      [String indent = '', StringBuffer? s]) {
+      {StringBuffer? s, String indent = '', bool headIndented = true}) {
     s ??= StringBuffer();
-    s.write(indent);
+
+    if (headIndented) s.write(indent);
     s.write('null');
     return s;
   }
 
   StringBuffer generateASTValueVar(ASTValueVar value,
-      [String indent = '', StringBuffer? s]) {
+      {StringBuffer? s, String indent = '', bool headIndented = true}) {
     s ??= StringBuffer();
-    s.write(indent);
+
+    if (headIndented) s.write(indent);
     s.write(value.value);
     return s;
   }
 
   StringBuffer generateASTValueObject(ASTValueObject value,
-      [String indent = '', StringBuffer? s]) {
+      {StringBuffer? s, String indent = '', bool headIndented = true}) {
     s ??= StringBuffer();
-    s.write(indent);
+
+    if (headIndented) s.write(indent);
     s.write(value.value);
     return s;
   }
 
   StringBuffer generateASTValueStatic(ASTValueStatic value,
-      [String indent = '', StringBuffer? s]) {
+      {StringBuffer? s, String indent = '', bool headIndented = true}) {
     var v = value.value;
 
     if (v is ASTNode) {
-      return generateASTNode(v, indent, s);
+      return generateASTNode(v,
+          s: s, indent: indent, headIndented: headIndented);
     }
 
     s ??= StringBuffer();
@@ -766,11 +892,11 @@ abstract class ApolloCodeGenerator {
   }
 
   StringBuffer generateASTValueArray(ASTValueArray value,
-      [String indent = '', StringBuffer? s]);
+      {StringBuffer? s, String indent = '', bool headIndented = true});
 
   StringBuffer generateASTValueArray2D(ASTValueArray2D value,
-      [String indent = '', StringBuffer? s]);
+      {StringBuffer? s, String indent = '', bool headIndented = true});
 
   StringBuffer generateASTValueArray3D(ASTValueArray3D value,
-      [String indent = '', StringBuffer? s]);
+      {StringBuffer? s, String indent = '', bool headIndented = true});
 }
