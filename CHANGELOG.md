@@ -1,3 +1,10 @@
+## 0.0.38
+
+- `pubspec.yaml`:
+  - Added issue_tracker
+  - Added topics.
+  - Added screenshots.
+
 ## 0.0.37
 
 - Update `pubspec.yaml` description.
