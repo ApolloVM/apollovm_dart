@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<test title="Basic main(Object[]) 3">
+<test title="Basic main(Object[]) negation">
     <source language="java11">
         <![CDATA[
 

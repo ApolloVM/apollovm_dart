@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<test title="Basic main(Object[]) 2">
+<test title="Basic main(Object[]) with branches">
     <source language="java11">
         <![CDATA[
 
@@ -74,7 +74,7 @@ class Bar {
 
     if (a < b) {
         print('if: a<b');
-    } else if (      a > b) {
+    } else if (a > b) {
         print('else: a>b');
     } else {
         print('else: a==b');
@@ -108,7 +108,7 @@ class Bar {
 
     if (a < b) {
         print("if: a<b");
-    } else if (      a > b) {
+    } else if (a > b) {
         print("else: a>b");
     } else {
         print("else: a==b");

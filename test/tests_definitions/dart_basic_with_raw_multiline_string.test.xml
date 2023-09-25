@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<test title="Basic main(List<Object>)">
+<test title="Basic main(List<Object>) with raw multiline string">
     <source language="dart">
         <![CDATA[
 

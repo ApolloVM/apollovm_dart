@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<test title="Basic main(List<String>) 2">
+<test title="Basic main(List<String>) for loop">
     <source language="java11">
         <![CDATA[
           class Foo {

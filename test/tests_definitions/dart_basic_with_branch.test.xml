@@ -63,7 +63,7 @@ class Bar {
 
     if (a < b) {
         print('if: a<b');
-    } else if (      a > b) {
+    } else if (a > b) {
         print('else: a>b');
     } else {
         print('else: a==b');
