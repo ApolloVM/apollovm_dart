@@ -393,6 +393,17 @@ Any help from the open-source community is always welcome and needed:
 
 *Contribute an hour and inspire others to do the same.*
 
+## TODO
+
+- JavaScript support:
+  - *Use the [Java implementation (at "lib/src/languages/java/java11")](https://github.com/ApolloVM/apollovm_dart/tree/master/lib/src/languages/java/java11) as starting point.*
+
+
+- Python support.
+
+
+- Package Importer.
+
 ## Author
 
 Graciliano M. Passos: [gmpassos@GitHub][github].

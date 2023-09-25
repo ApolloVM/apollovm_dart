@@ -1,3 +1,8 @@
+## 0.0.37
+
+- Update `pubspec.yaml` description.
+- `README.md`: added TODO list.
+
 ## 0.0.36
 
 - `ApolloCodeGenerator`:
