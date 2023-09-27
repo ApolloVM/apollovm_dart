@@ -771,28 +771,30 @@ class VMContext {
   }
 }
 
-/// When a cast error happens while executing some code.
-class ApolloVMCastException implements Exception {
+/// When an error happens while executing some code ([ASTNode]).
+class ApolloVMRuntimeError implements Exception {
   String? message;
 
-  ApolloVMCastException([this.message]);
+  ApolloVMRuntimeError([this.message]);
 
   @override
-  String toString() {
-    return 'ApolloVMCastException: $message';
-  }
+  String toString() => 'ApolloVMRuntimeError: $message';
+}
+
+/// When a cast error happens while executing some code.
+class ApolloVMCastException extends ApolloVMRuntimeError {
+  ApolloVMCastException([super.message]);
+
+  @override
+  String toString() => 'ApolloVMCastException: $message';
 }
 
 /// When a NPE happens while executing some code.
-class ApolloVMNullPointerException implements Exception {
-  String? message;
-
-  ApolloVMNullPointerException([this.message]);
+class ApolloVMNullPointerException extends ApolloVMRuntimeError {
+  ApolloVMNullPointerException([super.message]);
 
   @override
-  String toString() {
-    return 'ApolloVMNullPointerException: $message';
-  }
+  String toString() => 'ApolloVMNullPointerException: $message';
 }
 
 /// An VM Object instance, with respective fields for class [type].

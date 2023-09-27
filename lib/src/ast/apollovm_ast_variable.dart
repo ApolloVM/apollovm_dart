@@ -248,7 +248,8 @@ class ASTThisVariable<T> extends ASTVariable {
   ASTVariable resolveVariable(VMContext context) {
     var obj = context.getClassInstance();
     if (obj == null) {
-      throw StateError("Can't determine 'this'! No ASTObjectInstance defined!");
+      throw ApolloVMRuntimeError(
+          "Can't determine 'this'! No ASTObjectInstance defined!");
     }
     return ASTRuntimeVariable(obj.type, 'this', obj);
   }

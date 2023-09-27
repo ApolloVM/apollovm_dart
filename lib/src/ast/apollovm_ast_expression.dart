@@ -930,7 +930,7 @@ class ASTExpressionLocalFunctionInvocation
     var f = parentContext.getFunction(name, fSignature);
 
     if (f == null) {
-      throw StateError(
+      throw ApolloVMRuntimeError(
           'Can\'t find function "$name" with parameters signature: $fSignature > $arguments');
     }
 
@@ -990,7 +990,7 @@ class ASTExpressionObjectFunctionInvocation
 
     if (f == null) {
       var obj = await _getVariableValue(parentContext);
-      throw StateError(
+      throw ApolloVMRuntimeError(
           "Can't find class[${clazz.name}] function[$name( $fSignature )] for object: $obj");
     }
 

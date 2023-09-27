@@ -40,7 +40,8 @@ class ASTEntryPointBlock extends ASTBlock {
       var f = getFunction(entryFunctionName, fSignature, rootContext,
           caseInsensitive: true);
       if (f == null) {
-        throw StateError("Can't find entry function: $entryFunctionName");
+        throw ApolloVMRuntimeError(
+            "Can't find entry function: $entryFunctionName");
       }
 
       var context = rootContext;
@@ -65,7 +66,7 @@ class ASTEntryPointBlock extends ASTBlock {
           classContext.setClassInstance(obj);
           context = classContext;
         } else {
-          throw StateError(
+          throw ApolloVMRuntimeError(
               "Can't call non-static function without a class context: $this");
         }
       }
