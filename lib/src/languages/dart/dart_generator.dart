@@ -8,7 +8,7 @@ import '../../ast/apollovm_ast_variable.dart';
 
 /// Dart implementation of an [ApolloCodeGenerator].
 class ApolloCodeGeneratorDart extends ApolloCodeGenerator {
-  ApolloCodeGeneratorDart(ApolloCodeStorage codeStorage)
+  ApolloCodeGeneratorDart(ApolloSourceCodeStorage codeStorage)
       : super('dart', codeStorage);
 
   @override
@@ -43,7 +43,7 @@ class ApolloCodeGeneratorDart extends ApolloCodeGenerator {
   @override
   StringBuffer generateASTClass(ASTClassNormal clazz,
       {StringBuffer? out, String indent = ''}) {
-    out ??= StringBuffer();
+    out ??= newOutput();
 
     var code =
         generateASTBlock(clazz, withBrackets: true, withBlankHeadLine: true);
@@ -59,7 +59,7 @@ class ApolloCodeGeneratorDart extends ApolloCodeGenerator {
   @override
   StringBuffer generateASTClassField(ASTClassField field,
       {StringBuffer? out, String indent = ''}) {
-    out ??= StringBuffer();
+    out ??= newOutput();
 
     var typeCode = generateASTType(field.type);
 
@@ -100,7 +100,7 @@ class ApolloCodeGeneratorDart extends ApolloCodeGenerator {
 
   StringBuffer _generateASTFunctionDeclarationImpl(
       ASTFunctionDeclaration f, StringBuffer? out, String indent) {
-    out ??= StringBuffer();
+    out ??= newOutput();
 
     var typeCode = generateASTType(f.returnType);
 
@@ -136,7 +136,7 @@ class ApolloCodeGeneratorDart extends ApolloCodeGenerator {
       ASTParametersDeclaration parameters,
       {StringBuffer? out,
       String indent = ''}) {
-    out ??= StringBuffer();
+    out ??= newOutput();
 
     var positionalParameters = parameters.positionalParameters;
     if (positionalParameters != null) {
@@ -204,7 +204,7 @@ class ApolloCodeGeneratorDart extends ApolloCodeGenerator {
   @override
   StringBuffer generateASTValueString(ASTValueString value,
       {StringBuffer? out, String indent = '', bool headIndented = true}) {
-    out ??= StringBuffer();
+    out ??= newOutput();
 
     if (headIndented) out.write(indent);
 
@@ -287,7 +287,7 @@ class ApolloCodeGeneratorDart extends ApolloCodeGenerator {
 
     var generatedStrings = list.whereType<String>().toList();
 
-    out ??= StringBuffer();
+    out ??= newOutput();
 
     if (generatedStrings.every((s) => s.startsWith("'''")) ||
         generatedStrings.every((s) => s.startsWith('"""'))) {
@@ -351,7 +351,7 @@ class ApolloCodeGeneratorDart extends ApolloCodeGenerator {
       String indent = '',
       bool precededByString = false,
       bool prevDoubleQuote = false}) {
-    out ??= StringBuffer();
+    out ??= newOutput();
 
     if (prevDoubleQuote) {
       out.write(r'"$');
@@ -369,7 +369,7 @@ class ApolloCodeGeneratorDart extends ApolloCodeGenerator {
   @override
   StringBuffer generateASTValueStringExpression(ASTValueStringExpression value,
       {StringBuffer? out, String indent = '', bool prevDoubleQuote = false}) {
-    out ??= StringBuffer();
+    out ??= newOutput();
 
     var exp = generateASTExpression(value.expression).toString();
 
@@ -393,7 +393,7 @@ class ApolloCodeGeneratorDart extends ApolloCodeGenerator {
   @override
   StringBuffer generateASTValueArray(ASTValueArray value,
       {StringBuffer? out, String indent = '', bool headIndented = true}) {
-    out ??= StringBuffer();
+    out ??= newOutput();
     out.write(value.value);
     return out;
   }
@@ -401,7 +401,7 @@ class ApolloCodeGeneratorDart extends ApolloCodeGenerator {
   @override
   StringBuffer generateASTValueArray2D(ASTValueArray2D value,
       {StringBuffer? out, String indent = '', bool headIndented = true}) {
-    out ??= StringBuffer();
+    out ??= newOutput();
     out.write(value.value);
     return out;
   }
@@ -409,7 +409,7 @@ class ApolloCodeGeneratorDart extends ApolloCodeGenerator {
   @override
   StringBuffer generateASTValueArray3D(ASTValueArray3D value,
       {StringBuffer? out, String indent = '', bool headIndented = true}) {
-    out ??= StringBuffer();
+    out ??= newOutput();
     out.write(value.value);
     return out;
   }
@@ -417,7 +417,7 @@ class ApolloCodeGeneratorDart extends ApolloCodeGenerator {
   @override
   StringBuffer generateASTExpressionOperation(ASTExpressionOperation expression,
       {StringBuffer? out, String indent = '', bool headIndented = true}) {
-    out ??= StringBuffer();
+    out ??= newOutput();
 
     if (headIndented) out.write(indent);
 

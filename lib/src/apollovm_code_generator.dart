@@ -1,3 +1,4 @@
+import 'apollovm_code_storage.dart';
 import 'apollovm_generator.dart';
 import 'ast/apollovm_ast_base.dart';
 import 'ast/apollovm_ast_expression.dart';
@@ -10,8 +11,12 @@ import 'ast/apollovm_ast_variable.dart';
 /// Base class for code generators.
 ///
 /// An [ASTRoot] loaded in [ApolloVM] can be converted to a code in a specific language.
-abstract class ApolloCodeGenerator extends ApolloGenerator<StringBuffer> {
+abstract class ApolloCodeGenerator
+    extends ApolloGenerator<StringBuffer, ApolloSourceCodeStorage, String> {
   ApolloCodeGenerator(super.language, super.codeStorage);
+
+  @override
+  String toStorageData(StringBuffer out) => out.toString();
 
   @override
   StringBuffer newOutput() => StringBuffer();
@@ -47,7 +52,7 @@ abstract class ApolloCodeGenerator extends ApolloGenerator<StringBuffer> {
   @override
   StringBuffer generateASTRoot(ASTRoot root,
       {StringBuffer? out, String indent = '', bool withBrackets = true}) {
-    out ??= StringBuffer();
+    out ??= newOutput();
 
     generateASTBlock(root, out: out, withBrackets: false);
 
@@ -64,7 +69,7 @@ abstract class ApolloCodeGenerator extends ApolloGenerator<StringBuffer> {
       String indent = '',
       bool withBrackets = true,
       bool withBlankHeadLine = false}) {
-    out ??= StringBuffer();
+    out ??= newOutput();
 
     var indent2 = '$indent  ';
 
@@ -137,7 +142,7 @@ abstract class ApolloCodeGenerator extends ApolloGenerator<StringBuffer> {
       ASTParameterDeclaration parameter,
       {StringBuffer? out,
       String indent = ''}) {
-    out ??= StringBuffer();
+    out ??= newOutput();
 
     var typeStr = generateASTType(parameter.type);
 
@@ -184,7 +189,7 @@ abstract class ApolloCodeGenerator extends ApolloGenerator<StringBuffer> {
   @override
   StringBuffer generateASTTypeDefault(ASTType type,
       {StringBuffer? out, String indent = ''}) {
-    out ??= StringBuffer();
+    out ??= newOutput();
 
     var typeName = normalizeTypeName(type.name);
 
@@ -260,7 +265,7 @@ abstract class ApolloCodeGenerator extends ApolloGenerator<StringBuffer> {
   @override
   StringBuffer generateASTStatementForLoop(ASTStatementForLoop forLoop,
       {StringBuffer? out, String indent = '', bool headIndented = true}) {
-    out ??= StringBuffer();
+    out ??= newOutput();
 
     if (headIndented) out.write(indent);
 
@@ -289,7 +294,7 @@ abstract class ApolloCodeGenerator extends ApolloGenerator<StringBuffer> {
   @override
   StringBuffer generateASTBranchIfBlock(ASTBranchIfBlock branch,
       {StringBuffer? out, String indent = '', bool headIndented = true}) {
-    out ??= StringBuffer();
+    out ??= newOutput();
 
     if (headIndented) out.write(indent);
 
@@ -308,7 +313,7 @@ abstract class ApolloCodeGenerator extends ApolloGenerator<StringBuffer> {
   @override
   StringBuffer generateASTBranchIfElseBlock(ASTBranchIfElseBlock branch,
       {StringBuffer? out, String indent = '', bool headIndented = true}) {
-    out ??= StringBuffer();
+    out ??= newOutput();
 
     if (headIndented) out.write(indent);
 
@@ -334,7 +339,7 @@ abstract class ApolloCodeGenerator extends ApolloGenerator<StringBuffer> {
       {StringBuffer? out,
       String indent = '',
       bool headIndented = true}) {
-    out ??= StringBuffer();
+    out ??= newOutput();
 
     if (headIndented) out.write(indent);
 
@@ -368,7 +373,7 @@ abstract class ApolloCodeGenerator extends ApolloGenerator<StringBuffer> {
   @override
   StringBuffer generateASTStatementExpression(ASTStatementExpression statement,
       {StringBuffer? out, String indent = '', bool headIndented = true}) {
-    out ??= StringBuffer();
+    out ??= newOutput();
 
     if (headIndented) out.write(indent);
     generateASTExpression(statement.expression, out: out);
@@ -382,7 +387,7 @@ abstract class ApolloCodeGenerator extends ApolloGenerator<StringBuffer> {
       {StringBuffer? out,
       String indent = '',
       bool headIndented = true}) {
-    out ??= StringBuffer();
+    out ??= newOutput();
 
     if (headIndented) out.write(indent);
 
@@ -406,7 +411,7 @@ abstract class ApolloCodeGenerator extends ApolloGenerator<StringBuffer> {
       {StringBuffer? out,
       String indent = '',
       bool headIndented = true}) {
-    out ??= StringBuffer();
+    out ??= newOutput();
 
     if (headIndented) out.write(indent);
 
@@ -426,7 +431,7 @@ abstract class ApolloCodeGenerator extends ApolloGenerator<StringBuffer> {
   @override
   StringBuffer generateASTStatementReturn(ASTStatementReturn statement,
       {StringBuffer? out, String indent = '', bool headIndented = true}) {
-    out ??= StringBuffer();
+    out ??= newOutput();
     if (headIndented) out.write(indent);
     out.write('return;');
     return out;
@@ -435,7 +440,7 @@ abstract class ApolloCodeGenerator extends ApolloGenerator<StringBuffer> {
   @override
   StringBuffer generateASTStatementReturnNull(ASTStatementReturnNull statement,
       {StringBuffer? out, String indent = '', bool headIndented = true}) {
-    out ??= StringBuffer();
+    out ??= newOutput();
 
     if (headIndented) out.write(indent);
     out.write('return null;');
@@ -448,7 +453,7 @@ abstract class ApolloCodeGenerator extends ApolloGenerator<StringBuffer> {
       {StringBuffer? out,
       String indent = '',
       bool headIndented = true}) {
-    out ??= StringBuffer();
+    out ??= newOutput();
 
     if (headIndented) out.write(indent);
     out.write('return ');
@@ -464,7 +469,7 @@ abstract class ApolloCodeGenerator extends ApolloGenerator<StringBuffer> {
       {StringBuffer? out,
       String indent = '',
       bool headIndented = true}) {
-    out ??= StringBuffer();
+    out ??= newOutput();
 
     if (headIndented) out.write(indent);
     out.write('return ');
@@ -480,7 +485,7 @@ abstract class ApolloCodeGenerator extends ApolloGenerator<StringBuffer> {
       {StringBuffer? out,
       String indent = '',
       bool headIndented = true}) {
-    out ??= StringBuffer();
+    out ??= newOutput();
 
     if (headIndented) out.write(indent);
     out.write('return ');
@@ -531,7 +536,7 @@ abstract class ApolloCodeGenerator extends ApolloGenerator<StringBuffer> {
   @override
   StringBuffer generateASTExpressionOperation(ASTExpressionOperation expression,
       {StringBuffer? out, String indent = '', bool headIndented = true}) {
-    out ??= StringBuffer();
+    out ??= newOutput();
 
     if (headIndented) out.write(indent);
 
@@ -564,7 +569,7 @@ abstract class ApolloCodeGenerator extends ApolloGenerator<StringBuffer> {
   @override
   StringBuffer generateASTExpressionLiteral(ASTExpressionLiteral expression,
       {StringBuffer? out, String indent = '', bool headIndented = true}) {
-    out ??= StringBuffer();
+    out ??= newOutput();
     if (headIndented) out.write(indent);
     generateASTValue(expression.value,
         out: out, indent: indent, headIndented: false);
@@ -577,7 +582,7 @@ abstract class ApolloCodeGenerator extends ApolloGenerator<StringBuffer> {
       {StringBuffer? out,
       String indent = '',
       bool headIndented = true}) {
-    out ??= StringBuffer();
+    out ??= newOutput();
 
     if (headIndented) out.write(indent);
 
@@ -611,7 +616,7 @@ abstract class ApolloCodeGenerator extends ApolloGenerator<StringBuffer> {
       {StringBuffer? out,
       String indent = '',
       bool headIndented = true}) {
-    out ??= StringBuffer();
+    out ??= newOutput();
 
     if (headIndented) out.write(indent);
 
@@ -649,7 +654,7 @@ abstract class ApolloCodeGenerator extends ApolloGenerator<StringBuffer> {
   @override
   StringBuffer generateASTExpressionNegation(ASTExpressionNegation expression,
       {StringBuffer? out, String indent = '', bool headIndented = true}) {
-    out ??= StringBuffer();
+    out ??= newOutput();
 
     if (headIndented) out.write(indent);
 
@@ -667,7 +672,7 @@ abstract class ApolloCodeGenerator extends ApolloGenerator<StringBuffer> {
       {StringBuffer? out,
       String indent = '',
       bool headIndented = true}) {
-    out ??= StringBuffer();
+    out ??= newOutput();
 
     if (headIndented) out.write(indent);
 
@@ -706,7 +711,7 @@ abstract class ApolloCodeGenerator extends ApolloGenerator<StringBuffer> {
       {String indent = '',
       StringBuffer? out,
       bool headIndented = true}) {
-    out ??= StringBuffer();
+    out ??= newOutput();
 
     if (headIndented) out.write(indent);
 
@@ -732,7 +737,7 @@ abstract class ApolloCodeGenerator extends ApolloGenerator<StringBuffer> {
       {StringBuffer? out,
       String indent = '',
       bool headIndented = true}) {
-    out ??= StringBuffer();
+    out ??= newOutput();
 
     if (headIndented) out.write(indent);
     generateASTVariable(expression.variable,
@@ -747,7 +752,7 @@ abstract class ApolloCodeGenerator extends ApolloGenerator<StringBuffer> {
       {StringBuffer? out,
       String indent = '',
       bool headIndented = true}) {
-    out ??= StringBuffer();
+    out ??= newOutput();
 
     if (headIndented) out.write(indent);
 
@@ -787,7 +792,7 @@ abstract class ApolloCodeGenerator extends ApolloGenerator<StringBuffer> {
       StringBuffer? out,
       String indent = '',
       bool headIndented = true}) {
-    out ??= StringBuffer();
+    out ??= newOutput();
 
     if (headIndented) out.write(indent);
 
@@ -810,7 +815,7 @@ abstract class ApolloCodeGenerator extends ApolloGenerator<StringBuffer> {
       StringBuffer? out,
       String indent = '',
       bool headIndented = true}) {
-    out ??= StringBuffer();
+    out ??= newOutput();
 
     if (headIndented) out.write(indent);
     out.write(variable.name);
@@ -883,7 +888,7 @@ abstract class ApolloCodeGenerator extends ApolloGenerator<StringBuffer> {
   @override
   StringBuffer generateASTValueInt(ASTValueInt value,
       {StringBuffer? out, String indent = '', bool headIndented = true}) {
-    out ??= StringBuffer();
+    out ??= newOutput();
 
     if (headIndented) out.write(indent);
     out.write(value.value);
@@ -893,7 +898,7 @@ abstract class ApolloCodeGenerator extends ApolloGenerator<StringBuffer> {
   @override
   StringBuffer generateASTValueDouble(ASTValueDouble value,
       {StringBuffer? out, String indent = '', bool headIndented = true}) {
-    out ??= StringBuffer();
+    out ??= newOutput();
 
     if (headIndented) out.write(indent);
     out.write(value.value);
@@ -903,7 +908,7 @@ abstract class ApolloCodeGenerator extends ApolloGenerator<StringBuffer> {
   @override
   StringBuffer generateASTValueNull(ASTValueNull value,
       {StringBuffer? out, String indent = '', bool headIndented = true}) {
-    out ??= StringBuffer();
+    out ??= newOutput();
 
     if (headIndented) out.write(indent);
     out.write('null');
@@ -913,7 +918,7 @@ abstract class ApolloCodeGenerator extends ApolloGenerator<StringBuffer> {
   @override
   StringBuffer generateASTValueVar(ASTValueVar value,
       {StringBuffer? out, String indent = '', bool headIndented = true}) {
-    out ??= StringBuffer();
+    out ??= newOutput();
 
     if (headIndented) out.write(indent);
     out.write(value.value);
@@ -923,7 +928,7 @@ abstract class ApolloCodeGenerator extends ApolloGenerator<StringBuffer> {
   @override
   StringBuffer generateASTValueObject(ASTValueObject value,
       {StringBuffer? out, String indent = '', bool headIndented = true}) {
-    out ??= StringBuffer();
+    out ??= newOutput();
 
     if (headIndented) out.write(indent);
     out.write(value.value);
@@ -940,7 +945,7 @@ abstract class ApolloCodeGenerator extends ApolloGenerator<StringBuffer> {
           out: out, indent: indent, headIndented: headIndented);
     }
 
-    out ??= StringBuffer();
+    out ??= newOutput();
     out.write(value.value);
     return out;
   }

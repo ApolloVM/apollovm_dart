@@ -7,8 +7,15 @@ import 'ast/apollovm_ast_type.dart';
 import 'ast/apollovm_ast_value.dart';
 import 'ast/apollovm_ast_variable.dart';
 
+/// Base class for code generation output.
 abstract class GeneratedOutput<O extends Object, T extends Object> {
-  write(T o);
+  void writeAll(Iterable<T> list) {
+    for (var e in list) {
+      write(e);
+    }
+  }
+
+  void write(T o);
 
   O finish();
 }
@@ -16,15 +23,20 @@ abstract class GeneratedOutput<O extends Object, T extends Object> {
 /// Base class for generators.
 ///
 /// An [ASTRoot] loaded in [ApolloVM] can be converted to another representation.
-abstract class ApolloGenerator<O extends Object> {
+abstract class ApolloGenerator<O extends Object,
+    S extends ApolloCodeUnitStorage<D>, D extends Object> {
   /// Target programming language of this code generator implementation.
   final String language;
 
   /// The code storage for generated code.
-  final ApolloCodeStorage codeStorage;
+  final S codeStorage;
 
   ApolloGenerator(String language, this.codeStorage)
       : language = language.trim().toLowerCase();
+
+  D toStorageData(O out);
+
+  O newOutput();
 
   O generateASTNode(ASTNode node, {O? out}) {
     if (node is ASTValue) {
@@ -47,8 +59,6 @@ abstract class ApolloGenerator<O extends Object> {
 
     throw UnsupportedError("Can't handle ASTNode: $node");
   }
-
-  O newOutput();
 
   O generateASTRoot(ASTRoot root, {O? out}) {
     out ??= newOutput();

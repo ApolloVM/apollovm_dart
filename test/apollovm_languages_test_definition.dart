@@ -130,7 +130,7 @@ Future<void> runTestDefinitions(List<TestDefinition> testDefinitions) async {
                 '-- Checking code generation for language: $sourceGenLanguage');
 
             var codeStorage = vm.generateAllCodeIn(sourceGenLanguage);
-            var allSources = codeStorage.writeAllSources().toString();
+            var allSources = (await codeStorage.writeAllSources()).toString();
             print(allSources);
 
             expect(allSources, equals(sourceGen.innerText));
@@ -141,10 +141,10 @@ Future<void> runTestDefinitions(List<TestDefinition> testDefinitions) async {
               var vmCodeGen = ApolloVM();
               print('-- Testing generated code in VM: $vmCodeGen');
 
-              for (var ns in codeStorage.getNamespaces()) {
-                for (var id in codeStorage.getNamespaceCodeUnitsIDs(ns) ?? []) {
-                  var source = codeStorage.getNamespaceCodeUnitSource(ns, id)!;
-                  var cu = CodeUnit(sourceGenLanguage, source, id);
+              for (var ns in await codeStorage.getNamespaces()) {
+                for (var id in await codeStorage.getNamespaceCodeUnitsIDs(ns)) {
+                  var source = await codeStorage.getNamespaceCodeUnit(ns, id);
+                  var cu = CodeUnit(sourceGenLanguage, source!, id);
 
                   print('-- Loading generated code: $cu');
                   var ok = await vmCodeGen.loadCodeUnit(cu);

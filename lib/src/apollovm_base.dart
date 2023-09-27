@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:async_extension/async_extension.dart';
 import 'package:collection/collection.dart'
     show MapEquality, equalsIgnoreAsciiCase;
@@ -5,6 +7,7 @@ import 'package:swiss_knife/swiss_knife.dart';
 
 import 'apollovm_code_generator.dart';
 import 'apollovm_code_storage.dart';
+import 'apollovm_generator.dart';
 import 'apollovm_parser.dart';
 import 'apollovm_runner.dart';
 import 'ast/apollovm_ast_base.dart';
@@ -22,7 +25,7 @@ import 'languages/java/java11/java11_parser.dart';
 /// The Apollo VM.
 class ApolloVM implements VMTypeResolver {
   // ignore: non_constant_identifier_names
-  static final String VERSION = '0.0.38';
+  static final String VERSION = '0.0.39';
 
   static int _idCount = 0;
 
@@ -141,9 +144,9 @@ class ApolloVM implements VMTypeResolver {
     }
   }
 
-  /// Creates a [ApolloCodeGenerator] for the [language] and a [codeStorage].
+  /// Creates an [ApolloCodeGenerator] for the [language] and a [codeStorage].
   ApolloCodeGenerator? createCodeGenerator(
-      String language, ApolloCodeStorage codeStorage) {
+      String language, ApolloSourceCodeStorage codeStorage) {
     switch (language) {
       case 'dart':
         return ApolloCodeGeneratorDart(codeStorage);
@@ -156,16 +159,43 @@ class ApolloVM implements VMTypeResolver {
   }
 
   /// Generates all the VM loaded code in [language],
-  /// returning a [ApolloCodeStorage].
-  ApolloCodeStorage generateAllCodeIn(String language,
-      {ApolloCodeStorage? codeStorage}) {
-    codeStorage ??= ApolloCodeStorageMemory();
+  /// returning a [ApolloSourceCodeStorage].
+  ApolloSourceCodeStorage generateAllCodeIn(String language,
+      {ApolloSourceCodeStorage? codeStorage}) {
+    codeStorage ??= ApolloSourceCodeStorageMemory();
     var codeGenerator = createCodeGenerator(language, codeStorage);
     if (codeGenerator == null) {
       throw StateError(
           "Can't find an ApolloCodeGenerator for language: $language");
     }
     generateAllCode(codeGenerator);
+    return codeStorage;
+  }
+
+  /// Generates all the VM loaded code in [language],
+  /// returning a [ApolloSourceCodeStorage].
+  ApolloCodeUnitStorage<O> generateAllIn<O extends Object>(String language,
+      {ApolloCodeUnitStorage<O>? codeStorage}) {
+    if (codeStorage == null) {
+      if (O == String) {
+        codeStorage =
+            ApolloSourceCodeStorageMemory() as ApolloCodeUnitStorage<O>;
+      } else if (O == Uint8List) {
+        codeStorage =
+            ApolloBinaryCodeStorageMemory() as ApolloCodeUnitStorage<O>;
+      } else {
+        codeStorage =
+            ApolloBinaryCodeStorageMemory() as ApolloCodeUnitStorage<O>;
+      }
+    }
+
+    var generator = createGenerator(language, codeStorage);
+    if (generator == null) {
+      throw StateError(
+          "Can't find an ApolloCodeGenerator for language: $language");
+    }
+
+    generateAll(generator);
     return codeStorage;
   }
 
@@ -305,6 +335,12 @@ class LanguageNamespaces {
     }
   }
 
+  void generateAll(ApolloGenerator generator) {
+    for (var namespace in _namespaces.values) {
+      namespace.generateAll(generator);
+    }
+  }
+
   /// returns a [List] of classes names.
   List<String> get classesNames =>
       _namespaces.values.expand((e) => e.classesNames).toList();
@@ -416,11 +452,16 @@ class CodeNamespace {
   }
 
   /// Generates all the code of this namespace using [codeGenerator].
-  void generateAllCode(ApolloCodeGenerator codeGenerator) {
-    var codeStorage = codeGenerator.codeStorage;
+  void generateAllCode(ApolloCodeGenerator codeGenerator) =>
+      generateAll(codeGenerator);
+
+  /// Generates all the code of this namespace using [codeGenerator].
+  void generateAll<O extends Object, S extends ApolloCodeUnitStorage<D>,
+      D extends Object>(ApolloGenerator<O, S, D> generator) {
+    var codeStorage = generator.codeStorage;
     for (var cu in _codeUnits) {
-      var cuSource = cu.generateCode(codeGenerator);
-      codeStorage.addSource(name, cu.id, cuSource.toString());
+      var cuOutput = cu.generate(generator);
+      codeStorage.add(name, cu.id, generator.toStorageData(cuOutput));
     }
   }
 }
@@ -457,7 +498,12 @@ class CodeUnit {
   }
 
   /// Generates the code of this [ASTRoot] ([root]), using [codeGenerator].
-  StringBuffer generateCode(ApolloCodeGenerator codeGenerator) {
+  StringBuffer generateCode(ApolloCodeGenerator codeGenerator) =>
+      generate(codeGenerator);
+
+  /// Generates the code of this [ASTRoot] ([root]), using [codeGenerator].
+  O generate<O extends Object, S extends ApolloCodeUnitStorage<D>,
+      D extends Object>(ApolloGenerator<O, S, D> codeGenerator) {
     if (root == null) {
       throw StateError(
           'No ASTRoot! Ensure that this CodeUnit is loaded by ApolloVM!');
