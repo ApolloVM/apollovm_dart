@@ -293,7 +293,15 @@ class ASTExpressionVariableEntryAccess extends ASTExpression {
 
   @override
   FutureOr<ASTType> resolveType(VMContext? context) =>
-      variable.resolveType(context);
+      variable.resolveType(context).resolveMapped((variableType) {
+        if (variableType is ASTTypeArray) {
+          return variableType.elementType;
+        } else if (variableType is ASTTypeMap) {
+          return variableType.valueType;
+        } else {
+          return ASTTypeDynamic.instance;
+        }
+      });
 
   @override
   void resolveNode(ASTNode? parentNode) {

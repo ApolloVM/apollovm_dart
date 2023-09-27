@@ -164,10 +164,21 @@ class ASTScopeVariable<T> extends ASTVariable {
   ASTScopeVariable(String name) : super(name);
 
   @override
-  FutureOr<ASTType> resolveType(VMContext? context) async =>
-      _associatedNode != null
-          ? await _associatedNode!.resolveType(context)
-          : ASTTypeDynamic.instance;
+  FutureOr<ASTType> resolveType(VMContext? context) async {
+    final associatedNode = _associatedNode;
+
+    if (associatedNode != null) {
+      return associatedNode.resolveType(context);
+    }
+
+    if (context == null) {
+      return ASTTypeDynamic.instance;
+    }
+
+    return context.getVariable(name, false).resolveMapped((variable) {
+      return variable?.resolveType(context) ?? ASTTypeDynamic.instance;
+    });
+  }
 
   ASTTypedNode? _associatedNode;
 
