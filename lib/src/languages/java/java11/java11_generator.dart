@@ -1,3 +1,7 @@
+// Copyright © 2020 Graciliano M. P. All rights reserved.
+// This code is governed by the Apache License, Version 2.0.
+// Please refer to the LICENSE and AUTHORS files for details.
+
 import '../../../apollovm_code_generator.dart';
 import '../../../apollovm_code_storage.dart';
 import '../../../apollovm_parser.dart';
@@ -9,7 +13,7 @@ import '../../../ast/apollovm_ast_variable.dart';
 
 /// Java11 implementation of an [ApolloCodeGenerator].
 class ApolloCodeGeneratorJava11 extends ApolloCodeGenerator {
-  ApolloCodeGeneratorJava11(ApolloCodeStorage codeStorage)
+  ApolloCodeGeneratorJava11(ApolloSourceCodeStorage codeStorage)
       : super('java11', codeStorage);
 
   @override
@@ -45,106 +49,106 @@ class ApolloCodeGeneratorJava11 extends ApolloCodeGenerator {
 
   @override
   StringBuffer generateASTClass(ASTClassNormal clazz,
-      {StringBuffer? s, String indent = ''}) {
-    s ??= StringBuffer();
+      {StringBuffer? out, String indent = ''}) {
+    out ??= newOutput();
 
     var code =
         generateASTBlock(clazz, withBrackets: true, withBlankHeadLine: true);
 
-    s.write('class ');
-    s.write(clazz.name);
-    s.write(' ');
-    s.write(code);
+    out.write('class ');
+    out.write(clazz.name);
+    out.write(' ');
+    out.write(code);
 
-    return s;
+    return out;
   }
 
   @override
   StringBuffer generateASTClassField(ASTClassField field,
-      {StringBuffer? s, String indent = ''}) {
-    s ??= StringBuffer();
+      {StringBuffer? out, String indent = ''}) {
+    out ??= newOutput();
 
     var typeCode = generateASTType(field.type);
 
-    s.write(indent);
+    out.write(indent);
 
     if (field.finalValue) {
-      s.write('final ');
+      out.write('final ');
     }
 
-    s.write(typeCode);
-    s.write(' ');
-    s.write(field.name);
+    out.write(typeCode);
+    out.write(' ');
+    out.write(field.name);
 
     if (field is ASTClassFieldWithInitialValue) {
       var initialValueCode = generateASTExpression(field.initialValue,
           indent: "$indent  ", headIndented: false);
-      s.write(' = ');
-      s.write(initialValueCode);
+      out.write(' = ');
+      out.write(initialValueCode);
     }
 
-    s.write(';\n');
+    out.write(';\n');
 
-    return s;
+    return out;
   }
 
   @override
   StringBuffer generateASTFunctionDeclaration(ASTFunctionDeclaration f,
-      {StringBuffer? s, String indent = ''}) {
+      {StringBuffer? out, String indent = ''}) {
     throw UnsupportedSyntaxError('All functions in Java are from a class: $f');
   }
 
   @override
   StringBuffer generateASTClassFunctionDeclaration(
       ASTClassFunctionDeclaration f,
-      {StringBuffer? s,
+      {StringBuffer? out,
       String indent = ''}) {
-    s ??= StringBuffer();
+    out ??= newOutput();
 
     var typeCode = generateASTType(f.returnType);
 
     var blockCode = generateASTBlock(f, indent: indent, withBrackets: false);
 
-    s.write(indent);
+    out.write(indent);
 
     if (f.modifiers.isStatic) {
-      s.write('static ');
+      out.write('static ');
     }
 
     if (f.modifiers.isFinal) {
-      s.write('final ');
+      out.write('final ');
     }
 
-    s.write(typeCode);
-    s.write(' ');
-    s.write(f.name);
-    s.write('(');
+    out.write(typeCode);
+    out.write(' ');
+    out.write(f.name);
+    out.write('(');
 
     if (f.parametersSize > 0) {
-      generateASTParametersDeclaration(f.parameters, s: s);
+      generateASTParametersDeclaration(f.parameters, out: out);
     }
 
-    s.write(') {\n');
-    s.write(blockCode);
-    s.write(indent);
-    s.write('}\n\n');
+    out.write(') {\n');
+    out.write(blockCode);
+    out.write(indent);
+    out.write('}\n\n');
 
-    return s;
+    return out;
   }
 
   @override
   StringBuffer generateASTParametersDeclaration(
       ASTParametersDeclaration parameters,
-      {StringBuffer? s,
+      {StringBuffer? out,
       String indent = ''}) {
-    s ??= StringBuffer();
+    out ??= newOutput();
 
     var positionalParameters = parameters.positionalParameters;
     if (positionalParameters != null) {
       for (var i = 0; i < positionalParameters.length; ++i) {
         var p = positionalParameters[i];
-        if (i > 0) s.write(', ');
-        generateASTFunctionParameterDeclaration(p, s: s);
+        if (i > 0) out.write(', ');
+        generateASTFunctionParameterDeclaration(p, out: out);
       }
     }
 
@@ -152,8 +156,8 @@ class ApolloCodeGeneratorJava11 extends ApolloCodeGenerator {
     if (optionalParameters != null) {
       for (var i = 0; i < optionalParameters.length; ++i) {
         var p = optionalParameters[i];
-        if (i > 0) s.write(', ');
-        generateASTFunctionParameterDeclaration(p, s: s);
+        if (i > 0) out.write(', ');
+        generateASTFunctionParameterDeclaration(p, out: out);
       }
     }
 
@@ -161,20 +165,20 @@ class ApolloCodeGeneratorJava11 extends ApolloCodeGenerator {
     if (namedParameters != null) {
       for (var i = 0; i < namedParameters.length; ++i) {
         var p = namedParameters[i];
-        if (i > 0) s.write(', ');
-        generateASTFunctionParameterDeclaration(p, s: s);
+        if (i > 0) out.write(', ');
+        generateASTFunctionParameterDeclaration(p, out: out);
       }
     }
 
-    return s;
+    return out;
   }
 
   @override
   StringBuffer generateASTFunctionParameterDeclaration(
       ASTFunctionParameterDeclaration parameter,
-      {StringBuffer? s,
+      {StringBuffer? out,
       String indent = ''}) {
-    return generateASTParameterDeclaration(parameter, s: s, indent: indent);
+    return generateASTParameterDeclaration(parameter, out: out, indent: indent);
   }
 
   @override
@@ -189,126 +193,126 @@ class ApolloCodeGeneratorJava11 extends ApolloCodeGenerator {
   @override
   StringBuffer generateASTExpressionListLiteral(
       ASTExpressionListLiteral expression,
-      {StringBuffer? s,
+      {StringBuffer? out,
       String indent = '',
       bool headIndented = true}) {
-    s ??= StringBuffer();
+    out ??= newOutput();
 
-    if (headIndented) s.write(indent);
+    if (headIndented) out.write(indent);
 
     final type = expression.type;
 
-    s.write('new ArrayList');
+    out.write('new ArrayList');
 
     if (type != null) {
-      s.write('<');
-      generateASTType(type, s: s);
-      s.write('>');
+      out.write('<');
+      generateASTType(type, out: out);
+      out.write('>');
     } else {
-      s.write('<>');
+      out.write('<>');
     }
 
-    s.write('(){{\n');
+    out.write('(){{\n');
 
     var valuesExpressions = expression.valuesExpressions;
     for (var i = 0; i < valuesExpressions.length; ++i) {
       var e = valuesExpressions[i];
 
-      s.write('$indent  add(');
-      generateASTExpression(e, s: s);
-      s.write(');\n');
+      out.write('$indent  add(');
+      generateASTExpression(e, out: out);
+      out.write(');\n');
     }
 
-    s.write('$indent}}');
+    out.write('$indent}}');
 
-    return s;
+    return out;
   }
 
   @override
   StringBuffer generateASTExpressionMapLiteral(
       ASTExpressionMapLiteral expression,
       {String indent = '',
-      StringBuffer? s,
+      StringBuffer? out,
       bool headIndented = true}) {
-    s ??= StringBuffer();
+    out ??= newOutput();
 
-    if (headIndented) s.write(indent);
+    if (headIndented) out.write(indent);
 
     final keyType = expression.keyType;
     final valueType = expression.valueType;
 
-    s.write('new HashMap');
+    out.write('new HashMap');
 
     if (keyType != null && valueType != null) {
-      s.write('<');
-      generateASTType(keyType, s: s);
-      s.write(',');
-      generateASTType(valueType, s: s);
-      s.write('>');
+      out.write('<');
+      generateASTType(keyType, out: out);
+      out.write(',');
+      generateASTType(valueType, out: out);
+      out.write('>');
     } else {
-      s.write('<>');
+      out.write('<>');
     }
 
-    s.write('(){{\n');
+    out.write('(){{\n');
 
     var entriesExpressions = expression.entriesExpressions;
     for (var i = 0; i < entriesExpressions.length; ++i) {
       var e = entriesExpressions[i];
 
-      s.write("$indent  put(");
-      generateASTExpression(e.key, s: s);
-      s.write(", ");
-      generateASTExpression(e.value, s: s);
-      s.write(");\n");
+      out.write("$indent  put(");
+      generateASTExpression(e.key, out: out);
+      out.write(", ");
+      generateASTExpression(e.value, out: out);
+      out.write(");\n");
     }
 
-    s.write('$indent}}');
+    out.write('$indent}}');
 
-    return s;
+    return out;
   }
 
   @override
   StringBuffer generateASTTypeArray(ASTTypeArray type,
-      {StringBuffer? s, String indent = ''}) {
-    s ??= StringBuffer();
-    s.write(indent);
-    generateASTType(type.elementType, s: s);
-    s.write('[]');
-    return s;
+      {StringBuffer? out, String indent = ''}) {
+    out ??= newOutput();
+    out.write(indent);
+    generateASTType(type.elementType, out: out);
+    out.write('[]');
+    return out;
   }
 
   @override
   StringBuffer generateASTTypeArray2D(ASTTypeArray2D type,
-      {StringBuffer? s, String indent = ''}) {
-    s ??= StringBuffer();
-    s.write(indent);
-    generateASTType(type.elementType, s: s);
-    s.write('[][]');
-    return s;
+      {StringBuffer? out, String indent = ''}) {
+    out ??= newOutput();
+    out.write(indent);
+    generateASTType(type.elementType, out: out);
+    out.write('[][]');
+    return out;
   }
 
   @override
   StringBuffer generateASTTypeArray3D(ASTTypeArray3D type,
-      {StringBuffer? s, String indent = ''}) {
-    s ??= StringBuffer();
-    s.write(indent);
-    generateASTType(type.elementType, s: s);
-    s.write('[][][]');
-    return s;
+      {StringBuffer? out, String indent = ''}) {
+    out ??= newOutput();
+    out.write(indent);
+    generateASTType(type.elementType, out: out);
+    out.write('[][][]');
+    return out;
   }
 
   @override
   StringBuffer generateASTValueString(ASTValueString value,
-      {StringBuffer? s, String indent = '', bool headIndented = true}) {
-    s ??= StringBuffer();
+      {StringBuffer? out, String indent = '', bool headIndented = true}) {
+    out ??= newOutput();
 
-    if (headIndented) s.write(indent);
+    if (headIndented) out.write(indent);
 
     var str = value.value;
     str = _escapeString(str);
-    s.write('"$str"');
+    out.write('"$str"');
 
-    return s;
+    return out;
   }
 
   String _escapeString(String str) {
@@ -323,7 +327,7 @@ class ApolloCodeGeneratorJava11 extends ApolloCodeGenerator {
   @override
   StringBuffer generateASTValueStringConcatenation(
       ASTValueStringConcatenation value,
-      {StringBuffer? s,
+      {StringBuffer? out,
       String indent = ''}) {
     var list = <dynamic>[];
 
@@ -350,7 +354,7 @@ class ApolloCodeGeneratorJava11 extends ApolloCodeGenerator {
       }
     }
 
-    s ??= StringBuffer();
+    out ??= newOutput();
 
     for (var i = 1; i < list.length;) {
       var prev = list[i - 1];
@@ -367,59 +371,59 @@ class ApolloCodeGeneratorJava11 extends ApolloCodeGenerator {
 
     for (var i = 0; i < list.length; ++i) {
       var e = list[i];
-      if (i > 0) s.write(' + ');
-      s.write(e);
+      if (i > 0) out.write(' + ');
+      out.write(e);
     }
 
-    return s;
+    return out;
   }
 
   @override
   StringBuffer generateASTValueStringVariable(ASTValueStringVariable value,
-      {StringBuffer? s, String indent = '', bool precededByString = false}) {
-    s ??= StringBuffer();
+      {StringBuffer? out, String indent = '', bool precededByString = false}) {
+    out ??= newOutput();
 
     if (precededByString) {
-      s.write(value.variable.name);
+      out.write(value.variable.name);
     } else {
-      s.write('String.valueOf( ${value.variable.name} )');
+      out.write('String.valueOf( ${value.variable.name} )');
     }
 
-    return s;
+    return out;
   }
 
   @override
   StringBuffer generateASTValueStringExpression(ASTValueStringExpression value,
-      {StringBuffer? s, String indent = ''}) {
-    s ??= StringBuffer();
+      {StringBuffer? out, String indent = ''}) {
+    out ??= newOutput();
 
     var exp = generateASTExpression(value.expression).toString();
-    s.write('String.valueOf( $exp )');
+    out.write('String.valueOf( $exp )');
 
-    return s;
+    return out;
   }
 
   @override
   StringBuffer generateASTValueArray(ASTValueArray value,
-      {StringBuffer? s, String indent = '', bool headIndented = true}) {
-    s ??= StringBuffer();
-    s.write(value.value);
-    return s;
+      {StringBuffer? out, String indent = '', bool headIndented = true}) {
+    out ??= newOutput();
+    out.write(value.value);
+    return out;
   }
 
   @override
   StringBuffer generateASTValueArray2D(ASTValueArray2D value,
-      {StringBuffer? s, String indent = '', bool headIndented = true}) {
-    s ??= StringBuffer();
-    s.write(value.value);
-    return s;
+      {StringBuffer? out, String indent = '', bool headIndented = true}) {
+    out ??= newOutput();
+    out.write(value.value);
+    return out;
   }
 
   @override
   StringBuffer generateASTValueArray3D(ASTValueArray3D value,
-      {StringBuffer? s, String indent = '', bool headIndented = true}) {
-    s ??= StringBuffer();
-    s.write(value.value);
-    return s;
+      {StringBuffer? out, String indent = '', bool headIndented = true}) {
+    out ??= newOutput();
+    out.write(value.value);
+    return out;
   }
 }

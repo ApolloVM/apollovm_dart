@@ -1,3 +1,7 @@
+// Copyright © 2020 Graciliano M. P. All rights reserved.
+// This code is governed by the Apache License, Version 2.0.
+// Please refer to the LICENSE and AUTHORS files for details.
+
 import 'dart:async';
 
 import 'package:collection/collection.dart' show equalsIgnoreAsciiCase;
@@ -438,14 +442,14 @@ class ASTStatementVariableDeclaration<V> extends ASTStatement {
       var variableResolvedType = await type.resolveType(parentContext);
 
       if (!valueResolvedType.canCastToType(variableResolvedType)) {
-        throw StateError(
+        throw ApolloVMRuntimeError(
             "Can't cast variable type ($variableResolvedType) to type: $type");
       }
 
       var initValue = await value.run(parentContext, runStatus);
 
       if (!(await initValue.isInstanceOfAsync(variableResolvedType))) {
-        throw StateError(
+        throw ApolloVMRuntimeError(
             "Can't cast initial ($initValue) value to type: $type");
       }
 
@@ -480,7 +484,7 @@ abstract class ASTBranch extends ASTStatement {
     var evalValue = await evaluation.getValue(parentContext);
 
     if (evalValue is! bool) {
-      throw StateError(
+      throw ApolloVMRuntimeError(
           'A branch condition should return a boolean: $evalValue');
     }
 
@@ -676,7 +680,8 @@ class ASTStatementForLoop extends ASTStatement {
           if (condOK is bool) {
             if (!condOK) break;
           } else {
-            throw StateError('Condition not returning a boolean: $condOK');
+            throw ApolloVMRuntimeError(
+                'Condition not returning a boolean: $condOK');
           }
         }
 

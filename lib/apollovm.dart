@@ -1,3 +1,7 @@
+// Copyright © 2020 Graciliano M. P. All rights reserved.
+// This code is governed by the Apache License, Version 2.0.
+// Please refer to the LICENSE and AUTHORS files for details.
+
 library apollovm;
 
 export 'package:async_extension/async_extension.dart';

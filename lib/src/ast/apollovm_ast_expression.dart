@@ -1,3 +1,7 @@
+// Copyright © 2020 Graciliano M. P. All rights reserved.
+// This code is governed by the Apache License, Version 2.0.
+// Please refer to the LICENSE and AUTHORS files for details.
+
 import 'package:async_extension/async_extension.dart';
 
 import '../apollovm_base.dart';
@@ -293,7 +297,15 @@ class ASTExpressionVariableEntryAccess extends ASTExpression {
 
   @override
   FutureOr<ASTType> resolveType(VMContext? context) =>
-      variable.resolveType(context);
+      variable.resolveType(context).resolveMapped((variableType) {
+        if (variableType is ASTTypeArray) {
+          return variableType.elementType;
+        } else if (variableType is ASTTypeMap) {
+          return variableType.valueType;
+        } else {
+          return ASTTypeDynamic.instance;
+        }
+      });
 
   @override
   void resolveNode(ASTNode? parentNode) {
@@ -922,7 +934,7 @@ class ASTExpressionLocalFunctionInvocation
     var f = parentContext.getFunction(name, fSignature);
 
     if (f == null) {
-      throw StateError(
+      throw ApolloVMRuntimeError(
           'Can\'t find function "$name" with parameters signature: $fSignature > $arguments');
     }
 
@@ -982,7 +994,7 @@ class ASTExpressionObjectFunctionInvocation
 
     if (f == null) {
       var obj = await _getVariableValue(parentContext);
-      throw StateError(
+      throw ApolloVMRuntimeError(
           "Can't find class[${clazz.name}] function[$name( $fSignature )] for object: $obj");
     }
 

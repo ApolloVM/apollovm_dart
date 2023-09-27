@@ -1,3 +1,16 @@
+## 0.0.39
+
+- `ApolloVMNullPointerException` and `ApolloVMCastException` now extends `ApolloVMRuntimeError`.
+- AST implementation:
+  - Changes some `StateError` while executing to `ApolloVMRuntimeError`.
+- New abstract `ApolloCodeUnitStorage`:
+  - Implementations:
+    - `ApolloSourceCodeStorage`, `ApolloSourceCodeStorageMemory`.
+    - `ApolloBinaryCodeStorage`, `ApolloBinaryCodeStorageMemory`.
+    - `ApolloGenericCodeStorageMemory`.
+- `ApolloGenerator` now defines the output type.
+- New `GeneratedOutput`.
+
 ## 0.0.38
 
 - `pubspec.yaml`:

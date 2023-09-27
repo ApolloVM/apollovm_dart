@@ -1,3 +1,7 @@
+// Copyright © 2020 Graciliano M. P. All rights reserved.
+// This code is governed by the Apache License, Version 2.0.
+// Please refer to the LICENSE and AUTHORS files for details.
+
 import 'package:async_extension/async_extension.dart';
 import 'package:collection/collection.dart'
     show IterableExtension, equalsIgnoreAsciiCase;
@@ -40,7 +44,8 @@ class ASTEntryPointBlock extends ASTBlock {
       var f = getFunction(entryFunctionName, fSignature, rootContext,
           caseInsensitive: true);
       if (f == null) {
-        throw StateError("Can't find entry function: $entryFunctionName");
+        throw ApolloVMRuntimeError(
+            "Can't find entry function: $entryFunctionName");
       }
 
       var context = rootContext;
@@ -65,7 +70,7 @@ class ASTEntryPointBlock extends ASTBlock {
           classContext.setClassInstance(obj);
           context = classContext;
         } else {
-          throw StateError(
+          throw ApolloVMRuntimeError(
               "Can't call non-static function without a class context: $this");
         }
       }

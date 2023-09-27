@@ -1,3 +1,7 @@
+// Copyright © 2020 Graciliano M. P. All rights reserved.
+// This code is governed by the Apache License, Version 2.0.
+// Please refer to the LICENSE and AUTHORS files for details.
+
 import 'package:async_extension/async_extension.dart';
 
 import '../apollovm_base.dart';
@@ -164,10 +168,21 @@ class ASTScopeVariable<T> extends ASTVariable {
   ASTScopeVariable(String name) : super(name);
 
   @override
-  FutureOr<ASTType> resolveType(VMContext? context) async =>
-      _associatedNode != null
-          ? await _associatedNode!.resolveType(context)
-          : ASTTypeDynamic.instance;
+  FutureOr<ASTType> resolveType(VMContext? context) async {
+    final associatedNode = _associatedNode;
+
+    if (associatedNode != null) {
+      return associatedNode.resolveType(context);
+    }
+
+    if (context == null) {
+      return ASTTypeDynamic.instance;
+    }
+
+    return context.getVariable(name, false).resolveMapped((variable) {
+      return variable?.resolveType(context) ?? ASTTypeDynamic.instance;
+    });
+  }
 
   ASTTypedNode? _associatedNode;
 
@@ -237,7 +252,8 @@ class ASTThisVariable<T> extends ASTVariable {
   ASTVariable resolveVariable(VMContext context) {
     var obj = context.getClassInstance();
     if (obj == null) {
-      throw StateError("Can't determine 'this'! No ASTObjectInstance defined!");
+      throw ApolloVMRuntimeError(
+          "Can't determine 'this'! No ASTObjectInstance defined!");
     }
     return ASTRuntimeVariable(obj.type, 'this', obj);
   }
