@@ -158,6 +158,36 @@ class ApolloVM implements VMTypeResolver {
     }
   }
 
+  /// Generate all the loaded code with [codeGenerator] implementation.
+  void generateAll(ApolloGenerator generator) {
+    for (var languageNamespace in _languageNamespaces.values) {
+      languageNamespace.generateAll(generator);
+    }
+  }
+
+  /// Creates an [ApolloGenerator] for the [language] and a [codeStorage].
+  ApolloGenerator? createGenerator<O extends Object>(
+      String language, ApolloCodeUnitStorage<O> codeStorage) {
+    switch (language) {
+      // case 'wasm':
+      //   {
+      //     if (codeStorage is ApolloBinaryCodeStorage) {
+      //       return ApolloGeneratorWasm(codeStorage as ApolloBinaryCodeStorage);
+      //     }
+      //   }
+      default:
+        {
+          if (codeStorage is ApolloSourceCodeStorage) {
+            return createCodeGenerator(
+                language, codeStorage as ApolloSourceCodeStorage);
+          }
+        }
+    }
+
+    throw StateError(
+        "Can't create a generator> language: $language ; codeStorage: $codeStorage");
+  }
+
   /// Generates all the VM loaded code in [language],
   /// returning a [ApolloSourceCodeStorage].
   ApolloSourceCodeStorage generateAllCodeIn(String language,
