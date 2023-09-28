@@ -7,6 +7,8 @@ library apollovm;
 export 'package:async_extension/async_extension.dart';
 
 export 'src/apollovm_base.dart';
+export 'src/apollovm_generated_output.dart';
+export 'src/apollovm_generator.dart';
 export 'src/apollovm_parser.dart';
 export 'src/apollovm_runner.dart';
 export 'src/ast/apollovm_ast_annotation.dart';

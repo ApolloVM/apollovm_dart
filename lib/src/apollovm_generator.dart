@@ -11,19 +11,6 @@ import 'ast/apollovm_ast_type.dart';
 import 'ast/apollovm_ast_value.dart';
 import 'ast/apollovm_ast_variable.dart';
 
-/// Base class for code generation output.
-abstract class GeneratedOutput<O extends Object, T extends Object> {
-  void writeAll(Iterable<T> list) {
-    for (var e in list) {
-      write(e);
-    }
-  }
-
-  void write(T o);
-
-  O finish();
-}
-
 /// Base class for generators.
 ///
 /// An [ASTRoot] loaded in [ApolloVM] can be converted to another representation.
