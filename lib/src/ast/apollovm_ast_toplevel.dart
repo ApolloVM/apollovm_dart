@@ -1081,7 +1081,7 @@ class ASTParametersDeclaration {
 
   /// Returns true if [param] accepts [type].
   ///
-  /// - [exactType] if true the [param.type] should be exact to [type].
+  /// - [exactType]: if true the [param] should be exact to [type].
   static bool parameterAcceptsType(
       ASTFunctionParameterDeclaration? param, ASTType? type, bool exactType) {
     if (param == null || type == null) {

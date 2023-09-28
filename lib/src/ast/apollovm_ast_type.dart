@@ -603,7 +603,7 @@ class ASTTypeObject extends ASTType<Object> {
   }
 }
 
-/// [ASTType] for [var] declaration.
+/// [ASTType] for `var` declaration.
 class ASTTypeVar extends ASTType<dynamic> {
   static final ASTTypeVar instance = ASTTypeVar();
 
@@ -697,7 +697,7 @@ class ASTTypeDynamic extends ASTType<dynamic> {
   }
 }
 
-/// [ASTType] for [null].
+/// [ASTType] for `null`.
 // ignore: prefer_void_to_null
 class ASTTypeNull extends ASTType<Null> {
   static final ASTTypeNull instance = ASTTypeNull();
@@ -730,7 +730,7 @@ class ASTTypeNull extends ASTType<Null> {
   }
 }
 
-/// [ASTType] for [void].
+/// [ASTType] for `void`.
 class ASTTypeVoid extends ASTType<void> {
   static final ASTTypeVoid instance = ASTTypeVoid();
 
