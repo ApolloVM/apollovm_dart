@@ -360,6 +360,14 @@ class Foo {
 
 ```
 
+## Wasm Support
+
+ApolloVM can compile its AST tree to WebAssembly (Wasm). This means that parsed code loaded into the VM can be compiled
+on the fly, without the need for any third-party tools.
+
+- **Status:** *Wasm support is still in the alpha stage and currently only supports basic integer operations. Full support for
+AST trees is currently under development.*
+
 -----------------------------
 
 ## See Also
