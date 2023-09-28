@@ -533,6 +533,10 @@ Any help from the open-source community is always welcome and needed:
 
 - Package Importer.
 
+
+- Full Wasm support:
+  - *See the [Wasm generator](https://github.com/ApolloVM/apollovm_dart/tree/master/lib/src/languages/wasm).*
+
 ## Author
 
 Graciliano M. Passos: [gmpassos@GitHub][github].
