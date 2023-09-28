@@ -1,3 +1,8 @@
+## 0.0.41
+
+- `README.md`: added Wasm example.
+- Minor fixes.
+
 ## 0.0.40
 
 - New `ApolloGeneratorWasm`.

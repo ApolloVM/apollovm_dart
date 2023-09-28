@@ -31,7 +31,7 @@ import 'languages/wasm/wasm_generator.dart';
 /// The Apollo VM.
 class ApolloVM implements VMTypeResolver {
   // ignore: non_constant_identifier_names
-  static final String VERSION = '0.0.40';
+  static final String VERSION = '0.0.41';
 
   static int _idCount = 0;
 
