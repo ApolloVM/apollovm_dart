@@ -662,7 +662,7 @@ class ASTValueObject extends ASTValueStatic<Object> {
   ASTValueObject(Object o) : super(ASTTypeObject.instance, o);
 }
 
-/// [ASTValue] for [null].
+/// [ASTValue] for `null`.
 // ignore: prefer_void_to_null
 class ASTValueNull extends ASTValueStatic<Null> {
   ASTValueNull() : super(ASTTypeNull.instance, null);
@@ -690,7 +690,7 @@ class ASTValueNull extends ASTValueStatic<Null> {
   }
 }
 
-/// [ASTValue] for [void].
+/// [ASTValue] for `void`.
 class ASTValueVoid extends ASTValueStatic<void> {
   ASTValueVoid() : super(ASTTypeVoid.instance, null);
 

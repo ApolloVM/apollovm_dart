@@ -77,7 +77,7 @@ abstract class ASTCodeRunner extends ASTTypedNode {
   FutureOr<ASTValue> run(VMContext parentContext, ASTRunStatus runStatus);
 }
 
-/// Modifiers of an [AST] element.
+/// Modifiers of an [ASTNode] element.
 class ASTModifiers {
   static final ASTModifiers modifiersNone = ASTModifiers();
   static final ASTModifiers modifierStatic = ASTModifiers(isStatic: true);

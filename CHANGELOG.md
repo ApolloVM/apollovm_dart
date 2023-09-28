@@ -1,3 +1,11 @@
+## 0.0.40
+
+- New `ApolloGeneratorWasm`.
+  - Basic support to compile the AST tree to Wasm.
+- New `BytesOutput` for binary code generation.
+
+- data_serializer: ^1.0.10
+
 ## 0.0.39
 
 - `ApolloVMNullPointerException` and `ApolloVMCastException` now extends `ApolloVMRuntimeError`.

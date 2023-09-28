@@ -11,6 +11,7 @@ import 'package:swiss_knife/swiss_knife.dart';
 
 import 'apollovm_code_generator.dart';
 import 'apollovm_code_storage.dart';
+import 'apollovm_generated_output.dart';
 import 'apollovm_generator.dart';
 import 'apollovm_parser.dart';
 import 'apollovm_runner.dart';
@@ -25,11 +26,12 @@ import 'languages/dart/dart_generator.dart';
 import 'languages/dart/dart_parser.dart';
 import 'languages/java/java11/java11_generator.dart';
 import 'languages/java/java11/java11_parser.dart';
+import 'languages/wasm/wasm_generator.dart';
 
 /// The Apollo VM.
 class ApolloVM implements VMTypeResolver {
   // ignore: non_constant_identifier_names
-  static final String VERSION = '0.0.39';
+  static final String VERSION = '0.0.40';
 
   static int _idCount = 0;
 
@@ -173,12 +175,10 @@ class ApolloVM implements VMTypeResolver {
   ApolloGenerator? createGenerator<O extends Object>(
       String language, ApolloCodeUnitStorage<O> codeStorage) {
     switch (language) {
-      // case 'wasm':
-      //   {
-      //     if (codeStorage is ApolloBinaryCodeStorage) {
-      //       return ApolloGeneratorWasm(codeStorage as ApolloBinaryCodeStorage);
-      //     }
-      //   }
+      case 'wasm':
+        {
+          return ApolloGeneratorWasm<ApolloCodeUnitStorage<O>, O>(codeStorage);
+        }
       default:
         {
           if (codeStorage is ApolloSourceCodeStorage) {
@@ -217,6 +217,9 @@ class ApolloVM implements VMTypeResolver {
       } else if (O == Uint8List) {
         codeStorage =
             ApolloBinaryCodeStorageMemory() as ApolloCodeUnitStorage<O>;
+      } else if (O == BytesOutput) {
+        codeStorage = ApolloGenericCodeStorageMemory<BytesOutput>()
+            as ApolloCodeUnitStorage<O>;
       } else {
         codeStorage =
             ApolloBinaryCodeStorageMemory() as ApolloCodeUnitStorage<O>;
