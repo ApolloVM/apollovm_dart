@@ -368,6 +368,126 @@ on the fly, without the need for any third-party tools.
 - **Status:** *Wasm support is still in the alpha stage and currently only supports basic integer operations. Full support for
 AST trees is currently under development.*
 
+Example of Dart code compiled to Wasm:
+```dart
+int main( int a , int b ) {
+  int x = (a + b) + 10 ;
+  return x ;
+}
+```
+
+Example code to compile to WebAssembly (Wasm):
+```dart
+Future<Uint8List> compileToWasm(String codeLanguage, String code) async {
+  var vm = ApolloVM();
+
+  var codeUnit = CodeUnit(codeLanguage, code, 'test');
+
+  Object? loadError;
+  var loadOK = false;
+  try {
+    loadOK = await vm.loadCodeUnit(codeUnit);
+  } catch (e, s) {
+    loadError = e;
+  }
+
+  if (!loadOK) {
+    throw StateError("Can't load source! Language: $codeLanguage\n\n$loadError");
+  }
+  
+  var storageWasm = vm.generateAllIn<BytesOutput>('wasm');
+  var wasmModules = await storageWasm.allEntries();
+  
+  var namespace0 = wasmModules.values.first;
+  
+  var wasmModule = namespace0.entries.first;
+  var wasmOutput = wasmModule.value; // BytesOutput
+  
+  print( wasmOutput.toString() ); // Show bytes description.
+  
+  var wasmBytes = wasmOutput.output();
+  return wasmBytes;
+}
+```
+
+Generated `Wasm` bytes with description:
+```text
+  ## Wasm Magic:
+  [0, 97, 115, 109]
+  ## Version 1:
+  [1, 0, 0, 0]
+  ## Section: Type:
+      ## Section Type ID:
+      1
+      ## Bytes block length:
+      [7]
+      ## Functions signatures:
+        ## Types count:
+        [1]
+          ## Type: function:
+          96
+          ## Parameters types:
+          [2, 127, 127]
+          ## Return value:
+          [1, 127]
+  ## Section: Function:
+      ## Section Function ID:
+      3
+      ## Bytes block length:
+      [2]
+      ## Functions type indexes:
+      1 0
+  ## Section: Export:
+      ## Section Export ID:
+      7
+      ## Bytes block length:
+      [8]
+      ## Exported types:
+        ## Exported types count:
+        [1]
+        ## Export function:
+          ## Function name(`main`):
+          [4, 109, 97, 105, 110]
+          ## Export type(function):
+          0
+          ## Type index(0):
+          [0]
+  ## Section: Code:
+      ## Section Code ID:
+      10
+      ## Bytes block length:
+      [18]
+      ## Functions bodies:
+        ## Bodies count:
+        [1]
+          ## Bytes block length:
+          [16]
+          ## Function body:
+              ## Local variables count:
+              [1]
+              ## Declared variable count:
+              [1]
+              ## Declared variable type:
+              127
+              ## [OP] local get: 0 $a:
+              [32, 0]
+              ## [OP] local get: 1 $b:
+              [32, 1]
+              ## [OP] operator: add(i32):
+              106
+              ## [OP] push constant(i32): 10:
+              [65, 10]
+              ## [OP] operator: add(i32):
+              106
+              ## [OP] local set: 2 $x:
+              [33, 2]
+              ## [OP] local get: 2 $x (return):
+              [32, 2]
+              ## Code body end:
+              11
+
+```
+
 -----------------------------
 
 ## See Also

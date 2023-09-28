@@ -372,7 +372,8 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
 
     var varIdx = _getVariableIndex(context, name);
 
-    out.write(Wasm.localGet(varIdx), description: "[OP] local get: $varIdx");
+    out.write(Wasm.localGet(varIdx),
+        description: "[OP] local get: $varIdx \$$name");
 
     return out;
   }
@@ -536,7 +537,8 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
 
     var varIdx = _getVariableIndex(context, name);
 
-    out.write(Wasm.localGet(varIdx), description: "[OP] local get: $varIdx");
+    out.write(Wasm.localGet(varIdx),
+        description: "[OP] local get: $varIdx \$$name (return)");
 
     return out;
   }
@@ -566,7 +568,8 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
 
     generateASTExpression(value, out: out, context: context);
 
-    out.write(Wasm.localSet(varIdx), description: "[OP] local set: $varIdx");
+    out.write(Wasm.localSet(varIdx),
+        description: "[OP] local set: $varIdx \$$name");
 
     return out;
   }
