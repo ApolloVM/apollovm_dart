@@ -5,8 +5,8 @@
 import '../../apollovm_base.dart';
 import '../../apollovm_runner.dart';
 
-/// Dart implementation of an [ApolloLanguageRunner].
-class ApolloRunnerDart extends ApolloLanguageRunner {
+/// Dart implementation of an [ApolloRunner].
+class ApolloRunnerDart extends ApolloRunner {
   ApolloRunnerDart(ApolloVM apolloVM) : super(apolloVM);
 
   @override

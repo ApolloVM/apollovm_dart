@@ -5,8 +5,8 @@
 import '../../../apollovm_base.dart';
 import '../../../apollovm_runner.dart';
 
-/// Java11 implementation of an [ApolloLanguageRunner].
-class ApolloRunnerJava11 extends ApolloLanguageRunner {
+/// Java11 implementation of an [ApolloRunner].
+class ApolloRunnerJava11 extends ApolloRunner {
   ApolloRunnerJava11(ApolloVM apolloVM) : super(apolloVM);
 
   @override

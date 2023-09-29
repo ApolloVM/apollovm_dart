@@ -191,7 +191,7 @@ String _resolveLanguageOutput(XmlElement output, String language) {
 }
 
 Future<void> _testCall(XmlElement call, int callIndex, String outputJson,
-    ApolloLanguageRunner runner) async {
+    ApolloRunner runner) async {
   var callClass = call.getAttribute('class');
   var callFunction = call.getAttribute('function')!;
   var callReturn = call.getAttribute('return');

@@ -1,3 +1,8 @@
+## 0.0.42
+
+- Renamed `ApolloLanguageRunner` to `ApolloRunner`.
+- Organize runners implementation files.
+
 ## 0.0.41
 
 - `README.md`: added Wasm example.

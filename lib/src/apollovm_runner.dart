@@ -9,11 +9,14 @@ import 'ast/apollovm_ast_toplevel.dart';
 import 'ast/apollovm_ast_type.dart';
 import 'ast/apollovm_ast_value.dart';
 
+@Deprecated("Renamed to `ApolloRunner`")
+typedef ApolloLanguageRunner = ApolloRunner;
+
 /// Base class for [ApolloVM] runners.
 ///
 /// Implementations of this class allows the execution of an [ASTRoot]
 /// in a specific [language].
-abstract class ApolloLanguageRunner implements VMTypeResolver {
+abstract class ApolloRunner implements VMTypeResolver {
   /// The [ApolloVM] of this runner.
   final ApolloVM apolloVM;
 
@@ -24,13 +27,13 @@ abstract class ApolloLanguageRunner implements VMTypeResolver {
 
   ApolloExternalFunctionMapper? externalFunctionMapper;
 
-  ApolloLanguageRunner(this.apolloVM) {
+  ApolloRunner(this.apolloVM) {
     _languageNamespaces = apolloVM.getLanguageNamespaces(language);
     externalFunctionMapper = createDefaultApolloExternalFunctionMapper();
   }
 
   /// Returns a copy of this instance.
-  ApolloLanguageRunner copy();
+  ApolloRunner copy();
 
   /// The default [ApolloExternalFunctionMapper] for this target language runner.
   ///
@@ -250,6 +253,6 @@ abstract class ApolloLanguageRunner implements VMTypeResolver {
 
   @override
   String toString() {
-    return 'ApolloLanguageRunner{ language: $language, apolloVM: $apolloVM }';
+    return 'ApolloRunner{ language: $language, apolloVM: $apolloVM }';
   }
 }
