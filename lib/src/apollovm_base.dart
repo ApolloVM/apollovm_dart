@@ -24,8 +24,10 @@ import 'ast/apollovm_ast_variable.dart';
 import 'core/apollovm_core_base.dart';
 import 'languages/dart/dart_generator.dart';
 import 'languages/dart/dart_parser.dart';
+import 'languages/dart/dart_runner.dart';
 import 'languages/java/java11/java11_generator.dart';
 import 'languages/java/java11/java11_parser.dart';
+import 'languages/java/java11/java11_runner.dart';
 import 'languages/wasm/wasm_generator.dart';
 
 /// The Apollo VM.
