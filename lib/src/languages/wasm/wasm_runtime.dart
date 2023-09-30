@@ -4,7 +4,8 @@ import 'package:async_extension/async_extension.dart';
 
 import 'wasm_runtime_generic.dart'
     if (dart.library.html) 'wasm_runtime_browser.dart'
-    if (dart.library.io) 'wasm_runtime_io.dart';
+// if (dart.library.io) 'wasm_runtime_io.dart'
+    ;
 
 /// A WebAssembly (Wasm) Runtime.
 abstract class WasmRuntime {
