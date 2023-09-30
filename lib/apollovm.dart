@@ -23,3 +23,6 @@ export 'src/languages/dart/dart_parser.dart';
 export 'src/languages/dart/dart_runner.dart';
 export 'src/languages/java/java11/java11_parser.dart';
 export 'src/languages/java/java11/java11_runner.dart';
+export 'src/languages/wasm/wasm_parser.dart';
+export 'src/languages/wasm/wasm_runner.dart';
+export 'src/languages/wasm/wasm_runtime.dart';

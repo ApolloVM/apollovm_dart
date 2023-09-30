@@ -6,7 +6,7 @@ import '../../../apollovm_parser.dart';
 import 'java11_grammar.dart';
 
 /// Java11 implementation of an [ApolloParser].
-class ApolloParserJava11 extends ApolloParser {
+class ApolloParserJava11 extends ApolloSourceCodeParser {
   static final ApolloParserJava11 instance = ApolloParserJava11();
 
   ApolloParserJava11() : super(Java11GrammarDefinition());

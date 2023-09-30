@@ -118,7 +118,7 @@ class CommandRun extends CommandSourceFileBase {
 
     var vm = ApolloVM();
 
-    var codeUnit = CodeUnit(language, source, sourceFilePath);
+    var codeUnit = SourceCodeUnit(language, source, id: sourceFilePath);
 
     var loadOK = await vm.loadCodeUnit(codeUnit);
 
@@ -196,7 +196,7 @@ class CommandTranslate extends CommandSourceFileBase {
 
     var vm = ApolloVM();
 
-    var codeUnit = CodeUnit(language, source, sourceFilePath);
+    var codeUnit = SourceCodeUnit(language, source, id: sourceFilePath);
 
     var loadOK = await vm.loadCodeUnit(codeUnit);
 

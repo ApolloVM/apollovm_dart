@@ -961,8 +961,8 @@ class ASTParametersDeclaration {
 
   List<ASTFunctionParameterDeclaration>? namedParameters;
 
-  ASTParametersDeclaration(
-      this.positionalParameters, this.optionalParameters, this.namedParameters);
+  ASTParametersDeclaration(this.positionalParameters,
+      [this.optionalParameters, this.namedParameters]);
 
   void resolveNode(ASTNode? parentNode) {
     if (positionalParameters != null) {

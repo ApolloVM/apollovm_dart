@@ -5,6 +5,7 @@
 import 'dart:typed_data';
 
 import 'package:collection/collection.dart';
+import 'package:data_serializer/data_serializer.dart';
 
 import '../../apollovm_code_storage.dart';
 import '../../apollovm_generated_output.dart';
@@ -43,15 +44,12 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
   @override
   BytesOutput newOutput() => BytesOutput();
 
-  static const magicModuleHeader = <int>[0x00, 0x61, 0x73, 0x6d];
-  static const moduleVersion = <int>[0x01, 0x00, 0x00, 0x00];
-
   @override
   BytesOutput generateASTRoot(ASTRoot root, {BytesOutput? out}) {
     out ??= newOutput();
 
-    out.write(magicModuleHeader, description: "Wasm Magic");
-    out.write(moduleVersion, description: "Version 1");
+    out.write(Wasm.magicModuleHeader, description: "Wasm Magic");
+    out.write(Wasm.moduleVersion, description: "Version 1");
 
     var sectionType = generateSectionType(root);
     var sectionFunction = generateSectionFunction(root, sectionType.functions);
@@ -103,7 +101,7 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
         ));
 
     out.writeByte(0x07, description: "Section Export ID");
-    out.writeBytesBlock(entries, description: "Exported types");
+    out.writeBytesLeb128Block(entries, description: "Exported types");
 
     return out;
   }
@@ -122,7 +120,7 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
             description: "Types count"));
 
     out.writeByte(0x01, description: "Section Type ID");
-    out.writeBytesBlock(entries, description: "Functions signatures");
+    out.writeBytesLeb128Block(entries, description: "Functions signatures");
 
     return (bytes: out, functions: functions);
   }
@@ -138,7 +136,7 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     indexes.insert(0, Leb128.encodeUnsigned(indexes.length));
 
     out.writeByte(0x03, description: "Section Function ID");
-    out.writeBlock(indexes, description: "Functions type indexes");
+    out.writeLeb128Block(indexes, description: "Functions type indexes");
 
     return out;
   }
@@ -158,7 +156,7 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
             description: "Bodies count"));
 
     out.writeByte(0x0A, description: "Section Code ID");
-    out.writeBytesBlock(entries, description: "Functions bodies");
+    out.writeBytesLeb128Block(entries, description: "Functions bodies");
 
     return out;
   }
@@ -427,7 +425,7 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
 
     outBody.writeByte(Wasm.end, description: "Code body end");
 
-    out.writeBytesBlock([outBody], description: "Function body");
+    out.writeBytesLeb128Block([outBody], description: "Function body");
 
     return out;
   }

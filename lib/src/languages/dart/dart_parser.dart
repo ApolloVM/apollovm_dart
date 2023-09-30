@@ -6,7 +6,7 @@ import '../../apollovm_parser.dart';
 import 'dart_grammar.dart';
 
 /// Dart implementation of an [ApolloParser].
-class ApolloParserDart extends ApolloParser {
+class ApolloParserDart extends ApolloSourceCodeParser {
   static final ApolloParserDart instance = ApolloParserDart();
 
   ApolloParserDart() : super(DartGrammarDefinition());

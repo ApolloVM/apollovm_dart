@@ -1,3 +1,24 @@
+## 0.0.43
+
+- New `SourceCodeUnit` and `BinaryCodeUnit`.
+  - `CodeUnit` now is `abstract`:
+    - Renamed field `source` to `code`.
+- Using `SourceCodeUnit` instead of `CodeUnit` when necessary.
+- `ApolloParser` renamed to `ApolloCodeParser`:
+  - Allows binary code parsing (not only strings).
+  - New `ApolloSourceCodeParser`.
+- `ApolloRunner`:
+  - Added `getFunctionCodeUnit`.
+- Using `Leb128` from package `data_serializer`.
+- `BytesOutput` now extends `BytesEmitter` (from `data_serializer`).
+- New `WasmRuntime` and `WasmModule`.
+  - Implementation: `WasmRuntimeBrowser`.
+
+- data_serializer: ^1.0.11
+- wasm_interop: ^2.0.1
+- crypto: ^3.0.3
+- path: ^1.8.3
+
 ## 0.0.42
 
 - Renamed `ApolloLanguageRunner` to `ApolloRunner`.

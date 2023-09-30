@@ -109,14 +109,9 @@ abstract class ApolloRunner implements VMTypeResolver {
         externalFunctionMapper: externalFunctionMapper, typeResolver: this);
   }
 
-  /// Executes a function in [namespace] and with name [functionName].
-  ///
-  /// - [positionalParameters] Positional parameters to pass to the function.
-  /// - [namedParameters] Named parameters to pass to the function.
-  FutureOr<ASTValue> executeFunction(String namespace, String functionName,
-      {List? positionalParameters,
-      Map? namedParameters,
-      bool allowClassMethod = false}) async {
+  FutureOr<({CodeUnit? codeUnit, String? className})> getFunctionCodeUnit(
+      String namespace, String functionName,
+      {bool allowClassMethod = false}) {
     var codeNamespace = _languageNamespaces.get(namespace);
 
     var codeUnit = codeNamespace.getCodeUnitWithFunction(functionName);
@@ -128,14 +123,35 @@ abstract class ApolloRunner implements VMTypeResolver {
           ?.getClassWithMethod(functionName);
 
       if (classWithMethod != null) {
-        return executeClassMethod(namespace, classWithMethod.name, functionName,
-            positionalParameters: positionalParameters,
-            namedParameters: namedParameters);
+        return (codeUnit: codeUnit, className: classWithMethod.name);
       }
     }
 
+    return (codeUnit: codeUnit, className: null);
+  }
+
+  /// Executes a function in [namespace] and with name [functionName].
+  ///
+  /// - [positionalParameters] Positional parameters to pass to the function.
+  /// - [namedParameters] Named parameters to pass to the function.
+  Future<ASTValue> executeFunction(String namespace, String functionName,
+      {List? positionalParameters,
+      Map? namedParameters,
+      bool allowClassMethod = false}) async {
+    var r = await getFunctionCodeUnit(namespace, functionName,
+        allowClassMethod: allowClassMethod);
+
+    var codeUnit = r.codeUnit;
     if (codeUnit == null) {
-      throw StateError("Can't find function to execute: $functionName");
+      throw StateError(
+          "Can't find function to execute> functionName: $functionName ; language: $language");
+    }
+
+    var className = r.className;
+    if (className != null) {
+      return executeClassMethod(namespace, className, functionName,
+          positionalParameters: positionalParameters,
+          namedParameters: namedParameters);
     }
 
     var result = await codeUnit.root!.execute(

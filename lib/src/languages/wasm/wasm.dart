@@ -5,7 +5,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
-import '../../apollovm_generated_output.dart';
+import 'package:data_serializer/data_serializer.dart';
 
 enum BlockType {
   voidType(0x40),
@@ -23,6 +23,9 @@ enum FloatAlign { align1, align2, align3 }
 
 /// Wasm constants and helpers.
 class Wasm {
+  static const magicModuleHeader = <int>[0x00, 0x61, 0x73, 0x6d];
+  static const moduleVersion = <int>[0x01, 0x00, 0x00, 0x00];
+
   static const typeIdx = 0x00;
   static const memoryIdx = 0x02;
   static const globalType = 0x03;
