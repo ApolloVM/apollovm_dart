@@ -18,9 +18,14 @@ class WasmRuntimeBrowser extends WasmRuntime {
   @override
   Future<WasmModuleBrowser> loadModuleImpl(
       String moduleName, Uint8List wasmModuleBinary) async {
-    final moduleInstance =
-        await browser_wasm.Instance.fromBytesAsync(wasmModuleBinary);
-    return WasmModuleBrowser(moduleName, moduleInstance);
+    try {
+      final moduleInstance =
+          await browser_wasm.Instance.fromBytesAsync(wasmModuleBinary);
+      return WasmModuleBrowser(moduleName, moduleInstance);
+    } catch (e) {
+      throw WasmModuleLoadError("Can't load wasm module: $moduleName",
+          cause: e);
+    }
   }
 }
 
