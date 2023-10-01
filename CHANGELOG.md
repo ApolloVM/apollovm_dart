@@ -11,6 +11,8 @@
   - Added `getFunctionCodeUnit`.
 - Using `Leb128` from package `data_serializer`.
 - `BytesOutput` now extends `BytesEmitter` (from `data_serializer`).
+- `ApolloGeneratorWasm`:
+  - `generateASTExpressionOperation`: allow operations with different types (auto casting from `int` to `double`).
 - New `WasmRuntime` and `WasmModule`.
   - Implementation: `WasmRuntimeBrowser`.
 - New `WasmModuleLoadError`.
