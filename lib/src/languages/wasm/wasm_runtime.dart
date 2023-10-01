@@ -65,3 +65,17 @@ abstract class WasmModule {
   /// Disposes this module instance.
   FutureOr<void> dispose() {}
 }
+
+/// Thrown when [WasmModule] fails to load.
+class WasmModuleLoadError extends Error {
+  final String message;
+
+  final Object? cause;
+
+  WasmModuleLoadError(this.message, {this.cause});
+
+  @override
+  String toString() {
+    return 'WasmModuleLoadError: $message\nCause: $cause';
+  }
+}

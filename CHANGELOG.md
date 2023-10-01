@@ -13,6 +13,9 @@
 - `BytesOutput` now extends `BytesEmitter` (from `data_serializer`).
 - New `WasmRuntime` and `WasmModule`.
   - Implementation: `WasmRuntimeBrowser`.
+- New `WasmModuleLoadError`.
+- `WasmContext`:
+  - Added stack status to help code generation. 
 
 - data_serializer: ^1.0.11
 - wasm_interop: ^2.0.1

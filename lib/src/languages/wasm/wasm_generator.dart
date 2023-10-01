@@ -739,49 +739,166 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
 
 /// The Wasm code context.
 class WasmContext {
-  final Map<String, MapEntry<ASTType, int>> _localVariables = {};
+  final Map<String, ({ASTType type, int index})> _localVariables = {};
 
-  int getLocalVariableIndex(String name) {
-    var prev = _localVariables[name];
-    return prev?.value ?? (throw StateError("Variable `$name` not defined!"));
+  ({ASTType type, int index})? getLocalVariable(String name) {
+    return _localVariables[name];
   }
 
+  /// Returns the type of a local variable by [name].
+  ASTType? getLocalVariableType(String name) {
+    return _localVariables[name]?.type;
+  }
+
+  /// Returns the type of a local variable by [index].
+  ASTType? getLocalVariableTypeByIndex(int index) {
+    return _localVariables.values
+        .firstWhereOrNull((e) => e.index == index)
+        ?.type;
+  }
+
+  /// Returns the index of a local variable with [name].
+  int getLocalVariableIndex(String name) {
+    var prev = _localVariables[name];
+    return prev?.index ?? (throw StateError("Variable `$name` not defined!"));
+  }
+
+  /// Adds a local variable and returns its index.
   int addLocalVariable(String name, ASTType type) {
     var prev = _localVariables[name];
     if (prev != null) {
-      var prevType = prev.key;
+      var prevType = prev.type;
 
       if (prevType != type) {
         throw StateError(
             "Variable `$name` ($type) already defined with a different type: $prevType");
       } else {
-        return prev.value;
+        return prev.index;
       }
     }
 
-    var entry = MapEntry(type, _localVariables.length);
+    var entry = (type: type, index: _localVariables.length);
     _localVariables[name] = entry;
-    return entry.value;
+    return entry.index;
+  }
+
+  final ListQueue<({ASTType type, String description})> _stack = ListQueue();
+
+  /// The length of the stack.
+  int get stackLength => _stack.length;
+
+  /// Asserts the stack length.
+  int assertStackLength([int? expectedLength, String? description]) {
+    var currentLength = stackLength;
+
+    if (currentLength != expectedLength) {
+      throw StateError(
+          "Invalid stack length> stackLength: $stackLength != expected: $expectedLength${description != null ? ' ($description)' : ''}");
+    }
+
+    return currentLength;
+  }
+
+  /// Notify a stack push.
+  void stackPush(ASTType type, String description) {
+    _stack.add((type: type, description: description));
+  }
+
+  /// Notify a stack drop.
+  ({ASTType type, String description}) stackDrop([ASTType? expectedType]) {
+    if (_stack.isEmpty) {
+      throw StateError(
+          "Drop from stack error> Empty stack! Expected type: $expectedType");
+    }
+
+    var entry = _stack.removeLast();
+    if (expectedType != null && entry.type != expectedType) {
+      throw StateError(
+          "Drop from stack error> Not expected type: stack.drop:${entry.type} != expected:$expectedType");
+    }
+    return entry;
+  }
+
+  /// Notify a binary stack operation.
+  void stackOperationBinary(
+    ASTType type,
+    String description, [
+    ASTType? expectedType1,
+    ASTType? expectedType2,
+  ]) {
+    stackDrop(expectedType1);
+    stackDrop(expectedType2);
+    stackPush(type, description);
+  }
+
+  /// Replaces the top stack entry.
+  void stackReplace(ASTType type, String description,
+      [ASTType? expectedType1]) {
+    stackDrop(expectedType1);
+    stackPush(type, description);
+  }
+
+  /// Replaces a stack entry at [index].
+  void stackReplaceAt(int index, ASTType type, String description,
+      [ASTType? expectedType1]) {
+    var prev = ListQueue<({ASTType type, String description})>();
+
+    for (var i = 0; i <= index; ++i) {
+      var s = stackDrop();
+
+      if (i == index) {
+        stackPush(type, description);
+        _stack.addAll(prev);
+        return;
+      } else {
+        prev.addFirst(s);
+      }
+    }
+
+    throw StateError(
+        "Can't find stack index: $index (stack length: $stackLength");
+  }
+
+  /// Gets the stack entry.
+  /// - [index] is in reverse order, from last added to first added (`0` is the top of the stack).
+  ({ASTType type, String description})? stackGet(int index) {
+    if (_stack.isEmpty) return null;
+
+    if (index == 0) {
+      return _stack.last;
+    }
+
+    var i = _stack.length - 1;
+    for (var s in _stack) {
+      if (i == index) {
+        return s;
+      }
+      --i;
+    }
+
+    return null;
   }
 }
 
 extension _ASTTypeExtension on ASTType {
   bool get isVoid => this is ASTTypeVoid || name == 'void';
 
-  int get wasmCode {
+  BlockType get wasmType {
     if (this is ASTTypeString) {
     } else if (this is ASTTypeInt) {
-      return BlockType.i32Type.value;
+      return BlockType.i32Type;
     } else if (this is ASTTypeDouble) {
-      return BlockType.f32Type.value;
+      return BlockType.f32Type;
     } else if (this is ASTTypeVoid) {
-      return BlockType.voidType.value;
+      return BlockType.voidType;
     } else if (name == 'void') {
-      return BlockType.voidType.value;
+      return BlockType.voidType;
     }
 
     throw StateError("Can;t handle type: $this");
   }
+
+  int get wasmCode => wasmType.value;
 }
 
 extension on Iterable<ASTFunctionParameterDeclaration> {
