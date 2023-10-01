@@ -7,16 +7,17 @@ import 'dart:typed_data';
 
 import 'package:data_serializer/data_serializer.dart';
 
-enum BlockType {
-  voidType(0x40),
-  i32Type(0x7f),
-  i64Type(0x7e),
-  f32Type(0x7d),
-  f64Type(0x7c);
+enum WasmType {
+  voidType('void', 0x40),
+  i32Type('i32', 0x7f),
+  i64Type('i64', 0x7e),
+  f32Type('f32', 0x7d),
+  f64Type('f64', 0x7c);
 
+  final String name;
   final int value;
 
-  const BlockType(this.value);
+  const WasmType(this.name, this.value);
 }
 
 enum FloatAlign { align1, align2, align3 }
@@ -77,11 +78,11 @@ class Wasm {
   static const f64ConvertI64S = 0xb9;
   static const f64ConvertI32S = 0xb7;
 
-  static block(BlockType blockType) => [0x02, blockType];
+  static block(WasmType blockType) => [0x02, blockType];
 
-  static loop(BlockType blockType) => [0x03, blockType];
+  static loop(WasmType blockType) => [0x03, blockType];
 
-  static ifInstruction(BlockType retType) => [0x04, retType];
+  static ifInstruction(WasmType retType) => [0x04, retType];
   static const elseInstruction = 0x05;
   static const end = 0x0b;
 
