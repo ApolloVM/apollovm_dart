@@ -87,6 +87,29 @@ void main() async {
                 '0061736D0100000001080160037F7F7F017F03020100070801046164643400000A27012503017F017F017F20002001410A6A6A21032002B74102B7A3AA2104200320046B210520050B',
           }),
     );
+
+    test(
+      'basic 5',
+      () => _testWasm(
+          language: 'dart',
+          code: r'''
+      
+          int add5(int a, int b, int c) {
+            int x = a + b + 10;
+            int y = c ~/ 2;
+            int z = x - y;
+            return z * z;
+          }
+          
+        ''',
+          functionName: 'add5',
+          parameters: [101, 50, 30],
+          expectedResult: 21316,
+          expecteWasm: {
+            'test':
+                '0061736D0100000001080160037F7F7F017F03020100070801046164643500000A2A012803017F017F017F20002001410A6A6A21032002B74102B7A3AA2104200320046B2105200520056C0B',
+          }),
+    );
   });
 }
 

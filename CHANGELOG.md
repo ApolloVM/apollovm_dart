@@ -1,3 +1,8 @@
+## 0.0.45
+
+- `ApolloGeneratorWasm`:
+  - Implemented `generateASTStatementReturnWithExpression`
+
 ## 0.0.44
 
 - `pubspec.yaml`: update description.

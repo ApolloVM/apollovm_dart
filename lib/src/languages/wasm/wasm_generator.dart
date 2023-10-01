@@ -652,7 +652,8 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       return generateASTStatementReturnVariable(statement,
           out: out, context: context);
     } else if (statement is ASTStatementReturnWithExpression) {
-      return generateASTStatementReturnWithExpression(statement, out: out);
+      return generateASTStatementReturnWithExpression(statement,
+          out: out, context: context);
     } else if (statement is ASTStatementReturn) {
       return generateASTStatementReturn(statement, out: out);
     }
@@ -750,9 +751,18 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
   @override
   BytesOutput generateASTStatementReturnWithExpression(
       ASTStatementReturnWithExpression statement,
-      {BytesOutput? out}) {
-    // TODO: implement generateASTStatementReturnWithExpression
-    throw UnimplementedError();
+      {BytesOutput? out,
+      WasmContext? context}) {
+    out ??= newOutput();
+    context ??= WasmContext();
+
+    final stackLng0 = context.stackLength;
+
+    generateASTExpression(statement.expression, out: out, context: context);
+
+    context.assertStackLength(stackLng0 + 1, "After expression (return)");
+
+    return out;
   }
 
   @override
