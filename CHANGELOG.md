@@ -1,5 +1,9 @@
 ## 0.0.43
 
+- New `WasmRuntimeIO`.
+
+## 0.0.42
+
 - New `SourceCodeUnit` and `BinaryCodeUnit`.
   - `CodeUnit` now is `abstract`:
     - Renamed field `source` to `code`.
