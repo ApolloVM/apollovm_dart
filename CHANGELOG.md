@@ -1,3 +1,7 @@
+## 0.0.44
+
+- `pubspec.yaml`: update description.
+
 ## 0.0.43
 
 - `ApolloRunner`:
