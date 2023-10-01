@@ -24,7 +24,7 @@
 - crypto: ^3.0.3
 - path: ^1.8.3
 
-## 0.0.42
+## 0.0.42+alpha
 
 - Renamed `ApolloLanguageRunner` to `ApolloRunner`.
 - Organize runners implementation files.
