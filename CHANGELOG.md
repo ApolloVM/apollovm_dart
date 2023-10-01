@@ -1,4 +1,4 @@
-## 0.0.43
+## 0.0.42
 
 - New `SourceCodeUnit` and `BinaryCodeUnit`.
   - `CodeUnit` now is `abstract`:
