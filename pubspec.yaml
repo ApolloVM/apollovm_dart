@@ -27,8 +27,6 @@ dependencies:
   collection: ^1.18.0
   args: ^2.4.2
   wasm_interop: ^2.0.1
-  crypto: ^3.0.3
-  path: ^1.8.3
 
 dev_dependencies:
   lints: ^2.1.1
@@ -36,6 +34,7 @@ dev_dependencies:
   test: ^1.24.6
   pubspec: ^2.3.0
   xml: ^6.4.2
+  path: ^1.8.3
 
 executables:
   apollovm:
