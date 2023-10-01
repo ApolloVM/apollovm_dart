@@ -151,9 +151,9 @@ extension _IntExtension on int {
   ASTType toASTType() {
     final t = this;
 
-    if (t == BlockType.i32Type.value || t == BlockType.i64Type.value) {
+    if (t == WasmType.i32Type.value || t == WasmType.i64Type.value) {
       return ASTTypeInt.instance;
-    } else if (t == BlockType.f32Type.value || t == BlockType.f64Type.value) {
+    } else if (t == WasmType.f32Type.value || t == WasmType.f64Type.value) {
       return ASTTypeDouble.instance;
     } else {
       throw StateError("Can't handle type: $t");
