@@ -3,7 +3,7 @@ import 'package:apollovm/apollovm.dart';
 void main() async {
   var vm = ApolloVM();
 
-  var codeUnit = CodeUnit(
+  var codeUnit = SourceCodeUnit(
       'dart',
       r'''
       
@@ -46,7 +46,7 @@ void main() async {
       }
       
       ''',
-      'test');
+      id: 'test');
 
   var loadOK = await vm.loadCodeUnit(codeUnit);
 

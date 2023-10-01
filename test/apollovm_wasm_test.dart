@@ -84,7 +84,7 @@ void main() async {
           expectedResult: 146,
           expecteWasm: {
             'test':
-                '0061736D0100000001080160037F7F7F017F03020100070801046164643400000A24012203017F017F017F20002001410A6A6A210320024102A32104200320046B210520050B',
+                '0061736D0100000001080160037F7F7F017F03020100070801046164643400000A27012503017F017F017F20002001410A6A6A21032002B74102B7A3AA2104200320046B210520050B',
           }),
     );
   });
@@ -102,7 +102,7 @@ Future<void> _testWasm(
 
   var vm = ApolloVM();
 
-  var codeUnit = CodeUnit(language, code, 'test');
+  var codeUnit = SourceCodeUnit(language, code, id: 'test');
 
   print(">> Loading code...");
 
@@ -145,6 +145,8 @@ Future<void> _testWasm(
 
   expecteWasm ??= {};
 
+  BytesOutput? compiledWasm;
+
   for (var namespace in wasmModules.entries) {
     for (var module in namespace.value.entries) {
       var moduleName = module.key;
@@ -167,8 +169,43 @@ Future<void> _testWasm(
 
       expect(wasmBytes, expectedBytes);
 
+      compiledWasm ??= wasm;
+
       //_saveWasmFile(language, functionName, wasmBytes);
     }
+  }
+
+  expect(compiledWasm, isNotNull);
+
+  print('------------------------------------------------------------------');
+
+  final wasmRuntime = WasmRuntime();
+
+  if (wasmRuntime.isSupported) {
+    print(">> Running compiled Wasm...");
+
+    var vmWasm = ApolloVM();
+
+    var wasmCodeUnit = BinaryCodeUnit('wasm', compiledWasm!.output(),
+        id: 'test.wasm', namespace: '');
+
+    var loadOK = await vmWasm.loadCodeUnit(wasmCodeUnit);
+    expect(loadOK, isTrue);
+
+    var wasmRunner = vmWasm.createRunner('wasm')!;
+
+    // Map the `print` function in the VM:
+    wasmRunner.externalPrintFunction = (o) => print("wasm» $o");
+
+    var wasmAstValue = await wasmRunner.executeFunction('', functionName,
+        positionalParameters: parameters);
+
+    var wasmResult = wasmAstValue.getValueNoContext();
+    print('Wasm Result: $wasmResult');
+
+    expect(wasmResult, expectedResult);
+  } else {
+    print('** `WasmRuntime` not supported: ${wasmRuntime.platformVersion}');
   }
 }
 

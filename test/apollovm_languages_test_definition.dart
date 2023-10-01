@@ -103,7 +103,8 @@ Future<void> runTestDefinitions(List<TestDefinition> testDefinitions) async {
 
           var vm = ApolloVM();
 
-          var codeUnit = CodeUnit(language, testDefinition.sourceCode, 'test');
+          var codeUnit =
+              SourceCodeUnit(language, testDefinition.sourceCode, id: 'test');
 
           print('-- Loading source code');
           var loadOK = await vm.loadCodeUnit(codeUnit);
@@ -144,11 +145,11 @@ Future<void> runTestDefinitions(List<TestDefinition> testDefinitions) async {
               for (var ns in await codeStorage.getNamespaces()) {
                 for (var id in await codeStorage.getNamespaceCodeUnitsIDs(ns)) {
                   var source = await codeStorage.getNamespaceCodeUnit(ns, id);
-                  var cu = CodeUnit(sourceGenLanguage, source!, id);
+                  var cu = SourceCodeUnit(sourceGenLanguage, source!, id: id);
 
                   print('-- Loading generated code: $cu');
                   var ok = await vmCodeGen.loadCodeUnit(cu);
-                  print(cu.source);
+                  print(cu.code);
                   expect(ok, isTrue,
                       reason:
                           'Error loading generated code: $sourceGenLanguage');
@@ -191,7 +192,7 @@ String _resolveLanguageOutput(XmlElement output, String language) {
 }
 
 Future<void> _testCall(XmlElement call, int callIndex, String outputJson,
-    ApolloLanguageRunner runner) async {
+    ApolloRunner runner) async {
   var callClass = call.getAttribute('class');
   var callFunction = call.getAttribute('function')!;
   var callReturn = call.getAttribute('return');

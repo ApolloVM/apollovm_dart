@@ -24,27 +24,33 @@ import 'ast/apollovm_ast_variable.dart';
 import 'core/apollovm_core_base.dart';
 import 'languages/dart/dart_generator.dart';
 import 'languages/dart/dart_parser.dart';
+import 'languages/dart/dart_runner.dart';
 import 'languages/java/java11/java11_generator.dart';
 import 'languages/java/java11/java11_parser.dart';
+import 'languages/java/java11/java11_runner.dart';
 import 'languages/wasm/wasm_generator.dart';
+import 'languages/wasm/wasm_parser.dart';
+import 'languages/wasm/wasm_runner.dart';
 
 /// The Apollo VM.
 class ApolloVM implements VMTypeResolver {
   // ignore: non_constant_identifier_names
-  static final String VERSION = '0.0.41';
+  static final String VERSION = '0.0.43';
 
   static int _idCount = 0;
 
   final int id = ++_idCount;
 
   /// Returns a parser for a [language].
-  ApolloParser? getParser(String language) {
+  ApolloCodeParser<T>? getParser<T extends Object>(String language) {
     switch (language) {
       case 'dart':
-        return ApolloParserDart.instance;
+        return ApolloParserDart.instance as ApolloCodeParser<T>;
       case 'java':
       case 'java11':
-        return ApolloParserJava11.instance;
+        return ApolloParserJava11.instance as ApolloCodeParser<T>;
+      case 'wasm':
+        return ApolloParserWasm.instance as ApolloCodeParser<T>;
       default:
         return null;
     }
@@ -106,24 +112,36 @@ class ApolloVM implements VMTypeResolver {
   /// corresponding AST (Abstract Syntax Tree).
   /// - Returns `false` if there's no parser for the [codeUnit] language.
   /// - Throws a [SyntaxError] if the code can't be parsed.
-  Future<bool> loadCodeUnit(CodeUnit codeUnit) async {
-    var parser = getParser(codeUnit.language);
+  Future<bool> loadCodeUnit<T extends Object>(CodeUnit<T> codeUnit) async {
+    var language = codeUnit.language;
 
-    if (parser == null) return false;
+    ApolloCodeParser<T>? parser;
+    if (codeUnit.root == null) {
+      parser = getParser<T>(codeUnit.language);
 
-    var result = await parser.parse(codeUnit);
+      if (parser != null) {
+        language = parser.language;
 
-    if (!result.isOK) {
-      throw SyntaxError(result.errorMessageExtended, parseResult: result);
+        var result = await parser.parse(codeUnit);
+
+        if (!result.isOK) {
+          throw SyntaxError(result.errorMessageExtended, parseResult: result);
+        }
+
+        var root = result.root!;
+        codeUnit.root = root;
+
+        codeUnit.namespace ??= root.namespace;
+      }
     }
 
-    var root = result.root!;
+    var namespace = codeUnit.namespace;
+    if (namespace == null) {
+      throw StateError("`CodeUnit` namespace NOT defined. Parser: $parser");
+    }
 
-    var langNamespaces = getLanguageNamespaces(parser.language);
-
-    var codeNamespace = langNamespaces.get(root.namespace);
-
-    codeUnit.root = root;
+    var langNamespaces = getLanguageNamespaces(language);
+    var codeNamespace = langNamespaces.get(namespace);
 
     codeNamespace.addCodeUnit(codeUnit);
 
@@ -131,13 +149,15 @@ class ApolloVM implements VMTypeResolver {
   }
 
   /// Creates a runner for the [language].
-  ApolloLanguageRunner? createRunner(String language) {
+  ApolloRunner? createRunner(String language) {
     switch (language) {
       case 'dart':
         return ApolloRunnerDart(this);
       case 'java':
       case 'java11':
         return ApolloRunnerJava11(this);
+      case 'wasm':
+        return ApolloRunnerWasm(this);
       default:
         return null;
     }
@@ -385,6 +405,11 @@ class LanguageNamespaces {
   /// returns a [List] of functions names.
   List<String> get functions =>
       _namespaces.values.expand((e) => e.functions).toList();
+
+  @override
+  String toString() {
+    return 'LanguageNamespaces{language: $language, namespaces: ${_namespaces.length}}';
+  }
 }
 
 /// A namespace that can have multiple loaded [CodeUnit] instances.
@@ -501,33 +526,32 @@ class CodeNamespace {
       codeStorage.add(name, cu.id, generator.toStorageData(cuOutput));
     }
   }
+
+  @override
+  String toString() {
+    return 'CodeNamespace{language: $language, name: $name, codeUnits: ${_codeUnits.length}}';
+  }
 }
 
 /// A Code Unit, with a [source] code in a specific [language].
-class CodeUnit {
-  /// Programming language of the [source] code.
+/// See [SourceCodeUnit] and [BinaryCodeUnit].
+abstract class CodeUnit<T> {
+  /// Programming language of the [code].
   final String language;
 
-  /// Source code.
-  final String source;
+  /// The code.
+  final T code;
 
   /// The ID of this Code Unit, usually a file path.
   final String id;
 
-  CodeUnit(this.language, this.source, [this.id = '']);
+  CodeUnit(this.language, this.code, {this.id = '', this.namespace});
 
-  /// The [ASTRoot] corresponding to the parsed [source].
+  /// The [ASTRoot] corresponding to the [code].
   ASTRoot? root;
 
-  /// Returns the [source] lines.
-  List<String> get lines => source.split(RegExp(r'\r\n|\n|\r'));
-
-  /// Returns a [source] line.
-  String? getLine(int lineNumber) {
-    var idx = lineNumber - 1;
-    var lines = this.lines;
-    return (idx >= 0 && idx < lines.length) ? lines[idx] : null;
-  }
+  /// The namespace of this code.
+  String? namespace;
 
   @override
   String toString() {
@@ -546,6 +570,36 @@ class CodeUnit {
           'No ASTRoot! Ensure that this CodeUnit is loaded by ApolloVM!');
     }
     return codeGenerator.generateASTRoot(root!);
+  }
+}
+
+/// A source code implementation of a [CodeUnit].
+class SourceCodeUnit extends CodeUnit<String> {
+  SourceCodeUnit(super.language, super.source, {super.id, super.namespace});
+
+  /// Returns the [code] lines.
+  List<String> get lines => code.split(RegExp(r'\r\n|\n|\r'));
+
+  /// Returns a [source] line.
+  String? getLine(int lineNumber) {
+    var idx = lineNumber - 1;
+    var lines = this.lines;
+    return (idx >= 0 && idx < lines.length) ? lines[idx] : null;
+  }
+
+  @override
+  String toString() {
+    return 'SourceCodeUnit{language: $language, id: $id, length: ${code.length} chars}';
+  }
+}
+
+/// A source code implementation of a [CodeUnit].
+class BinaryCodeUnit extends CodeUnit<Uint8List> {
+  BinaryCodeUnit(super.language, super.binary, {super.id, super.namespace});
+
+  @override
+  String toString() {
+    return 'BinaryCodeUnit{language: $language, id: $id, length: ${code.length} bytes}';
   }
 }
 
