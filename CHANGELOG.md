@@ -1,3 +1,8 @@
+## 0.0.43
+
+- `ApolloRunner`:
+  - `getFunctionCodeUnit`: fix returned codeUnit when `allowClassMethod = true`.
+
 ## 0.0.42
 
 - New `SourceCodeUnit` and `BinaryCodeUnit`.
