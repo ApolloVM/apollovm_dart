@@ -44,6 +44,8 @@ class Wasm {
 
   static const functionReturn = 0x0f;
 
+  static const unreachable = 0x00;
+
   static List<int> brIf(int i) => <int>[0x0d, ...Leb128.encodeUnsigned(i)];
 
   static List<int> call(int i) => <int>[0x10, ...Leb128.encodeUnsigned(i)];

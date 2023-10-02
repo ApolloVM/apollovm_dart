@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:apollovm/apollovm.dart';
 import 'package:data_serializer/data_serializer.dart';
 import 'package:test/test.dart';
@@ -139,7 +141,7 @@ void main() async {
           },
           expecteWasm: {
             'test':
-                '0061736D0100000001060160017E017E03020100070801046164643600000A13011100200042E40055044042010F0B42000F0B',
+                '0061736D0100000001060160017E017E03020100070801046164643600000A16011400200042E40055044042010F0B42000F0042000B',
           }),
     );
 
@@ -199,7 +201,7 @@ void main() async {
           },
           expecteWasm: {
             'test':
-                '0061736D0100000001060160017E017E03020100070801046164643800000A20011E00200042E40055044042010F052000420051044042000F05427F0F0B0B0B',
+                '0061736D0100000001060160017E017E03020100070801046164643800000A21011F00200042E40055044042010F05200050044042000F05427F0F0B0B0042000B',
           }),
     );
 
@@ -222,6 +224,8 @@ void main() async {
             else {
               return -1 ;
             }
+            
+            return -2 ;
           }
           
         ''',
@@ -234,7 +238,7 @@ void main() async {
           },
           expecteWasm: {
             'test':
-                '0061736D0100000001060160017E017E03020100070801046164643900000A21011F00200042E40055044042E4000F052000420051044042000F05427F0F0B0B0B',
+                '0061736D0100000001060160017E017E03020100070801046164643900000A31012F00200042E40055044042E4000F05200050044042000F052000420151044042010F05427F0F0B0B0B427E0F0042000B',
           }),
     );
 
@@ -264,7 +268,7 @@ void main() async {
           },
           expecteWasm: {
             'test':
-                '0061736D0100000001060160017E017E0302010007090105616464313000000A1F011D00200042E40055044042010F052000420051044042000F0B0B42750F0B',
+                '0061736D0100000001060160017E017E0302010007090105616464313000000A20011E00200042E40055044042010F05200050044042000F0B0B42750F0042000B',
           }),
     );
   });
@@ -340,6 +344,7 @@ Future<void> _testWasm(
   expecteWasm ??= {};
 
   BytesOutput? compiledWasm;
+  Uint8List? expectedWasmBytes;
 
   for (var namespace in wasmModules.entries) {
     for (var module in namespace.value.entries) {
@@ -363,7 +368,7 @@ Future<void> _testWasm(
 
       // _saveWasmFile(language, functionName, wasmBytes);
 
-      expect(wasmBytes, expectedBytes);
+      expectedWasmBytes = expectedBytes;
 
       compiledWasm ??= wasm;
     }
@@ -410,6 +415,12 @@ Future<void> _testWasm(
   } else {
     print('** `WasmRuntime` not supported: ${wasmRuntime.platformVersion}');
   }
+
+  expect(expectedWasmBytes, isNotNull, reason: "Null `expectedWasmBytes`");
+
+  print('<< EXPECTED WASM: HEX>>\n${hex.encode(expectedWasmBytes!)}');
+
+  expect(compiledWasm?.output(), expectedWasmBytes);
 }
 
 /*

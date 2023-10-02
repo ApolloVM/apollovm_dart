@@ -147,10 +147,10 @@ extension _ListIntExtension on List<int> {
   List<ASTType> toASTTypes() => map((t) => t.toASTType()).toList();
 }
 
-final _astTypeInt32 = ASTTypeInt(bits: 32);
-final _astTypeInt64 = ASTTypeInt(bits: 64);
-final _astTypeDouble32 = ASTTypeDouble(bits: 32);
-final _astTypeDouble64 = ASTTypeDouble(bits: 64);
+final _astTypeInt32 = ASTTypeInt.instance32;
+final _astTypeInt64 = ASTTypeInt.instance64;
+final _astTypeDouble32 = ASTTypeDouble.instance32;
+final _astTypeDouble64 = ASTTypeDouble.instance64;
 
 extension _IntExtension on int {
   ASTType toASTType() {

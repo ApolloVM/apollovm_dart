@@ -422,6 +422,8 @@ abstract class ASTValueNum<T extends num> extends ASTValuePrimitive<T> {
     throw StateError("Can't parse number: $o");
   }
 
+  bool get isZero => value == 0;
+
   @override
   FutureOr<ASTValue> operator +(ASTValue other);
 

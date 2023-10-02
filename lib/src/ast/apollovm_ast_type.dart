@@ -402,7 +402,7 @@ class ASTTypeNum<T extends num> extends ASTTypeNumber<T> {
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      super == other && other is ASTTypeInt && runtimeType == other.runtimeType;
+      super == other && other is ASTTypeNum && runtimeType == other.runtimeType;
 
   @override
   int get hashCode => name.hashCode;
@@ -416,6 +416,8 @@ class ASTTypeNum<T extends num> extends ASTTypeNumber<T> {
 /// [ASTType] for integer ([int]).
 class ASTTypeInt extends ASTTypeNum<int> {
   static final ASTTypeInt instance = ASTTypeInt();
+  static final ASTTypeInt instance32 = ASTTypeInt(bits: 32);
+  static final ASTTypeInt instance64 = ASTTypeInt(bits: 64);
 
   /// Amount of bits of the `int` (optional).
   final int? bits;
@@ -451,9 +453,19 @@ class ASTTypeInt extends ASTTypeNum<int> {
   }
 
   @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      super == other && other is ASTTypeInt && runtimeType == other.runtimeType;
+  bool operator ==(Object other) {
+    if (identical(this, other)) return true;
+
+    if (other is ASTTypeInt && runtimeType == other.runtimeType) {
+      if (bits != null && other.bits != null) {
+        return bits == other.bits;
+      }
+
+      return true;
+    }
+
+    return false;
+  }
 
   @override
   int get hashCode => name.hashCode;
@@ -467,6 +479,8 @@ class ASTTypeInt extends ASTTypeNum<int> {
 /// [ASTType] for [double].
 class ASTTypeDouble extends ASTTypeNum<double> {
   static final ASTTypeDouble instance = ASTTypeDouble();
+  static final ASTTypeDouble instance32 = ASTTypeDouble(bits: 32);
+  static final ASTTypeDouble instance64 = ASTTypeDouble(bits: 64);
 
   /// Amount of bits of the `float`/`double` (optional).
   final int? bits;
@@ -502,9 +516,19 @@ class ASTTypeDouble extends ASTTypeNum<double> {
   }
 
   @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      super == other && other is ASTTypeInt && runtimeType == other.runtimeType;
+  bool operator ==(Object other) {
+    if (identical(this, other)) return true;
+
+    if (other is ASTTypeDouble && runtimeType == other.runtimeType) {
+      if (bits != null && other.bits != null) {
+        return bits == other.bits;
+      }
+
+      return true;
+    }
+
+    return false;
+  }
 
   @override
   int get hashCode => name.hashCode;
