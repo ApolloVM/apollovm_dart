@@ -292,18 +292,19 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
 
     generateASTBlock(branch.blockIf, out: out, context: context);
 
-    out.writeByte(Wasm.elseInstruction, description: "[OP] else");
-
     {
       final blocksElseIf = branch.blocksElseIf.toList();
       var blockElse = branch.blockElse;
 
       if (blocksElseIf.isEmpty) {
         if (blockElse != null) {
+          out.writeByte(Wasm.elseInstruction, description: "[OP] else");
           generateASTBlock(blockElse, out: out, context: context);
         }
       } else {
         var blocksElseIf0 = blocksElseIf.removeAt(0);
+
+        out.writeByte(Wasm.elseInstruction, description: "[OP] else");
 
         if (blocksElseIf.length == 1) {
           generateASTBranchIfElseBlock(

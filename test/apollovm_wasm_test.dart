@@ -264,7 +264,7 @@ void main() async {
           },
           expecteWasm: {
             'test':
-                '0061736D0100000001060160017E017E0302010007090105616464313000000A20011E00200042E40055044042010F052000420051044042000F050B0B42750F0B',
+                '0061736D0100000001060160017E017E0302010007090105616464313000000A1F011D00200042E40055044042010F052000420051044042000F0B0B42750F0B',
           }),
     );
   });
@@ -413,7 +413,7 @@ Future<void> _testWasm(
 }
 
 /*
-void _saveWasmFile(String language, String functionName, Uint8List wasmBytes) {
+void _saveWasmFile(String language, String functionName, List<int> wasmBytes) {
   try {
     var fileName = 'apollovm-$language-$functionName-test.wasm';
 
