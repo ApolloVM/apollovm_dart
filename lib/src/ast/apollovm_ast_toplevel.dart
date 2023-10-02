@@ -984,6 +984,13 @@ class ASTParametersDeclaration {
     }
   }
 
+  /// Returns a list with all the [positionalParameters], [optionalParameters] and [namedParameters].
+  List<ASTFunctionParameterDeclaration> get allParameters => [
+        ...?positionalParameters,
+        ...?optionalParameters,
+        ...?namedParameters,
+      ];
+
   int get positionalParametersSize => positionalParameters?.length ?? 0;
 
   int get optionalParametersSize => optionalParameters?.length ?? 0;

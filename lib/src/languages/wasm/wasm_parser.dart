@@ -147,14 +147,23 @@ extension _ListIntExtension on List<int> {
   List<ASTType> toASTTypes() => map((t) => t.toASTType()).toList();
 }
 
+final _astTypeInt32 = ASTTypeInt.instance32;
+final _astTypeInt64 = ASTTypeInt.instance64;
+final _astTypeDouble32 = ASTTypeDouble.instance32;
+final _astTypeDouble64 = ASTTypeDouble.instance64;
+
 extension _IntExtension on int {
   ASTType toASTType() {
     final t = this;
 
-    if (t == WasmType.i32Type.value || t == WasmType.i64Type.value) {
-      return ASTTypeInt.instance;
-    } else if (t == WasmType.f32Type.value || t == WasmType.f64Type.value) {
-      return ASTTypeDouble.instance;
+    if (t == WasmType.i32Type.value) {
+      return _astTypeInt32;
+    } else if (t == WasmType.i64Type.value) {
+      return _astTypeInt64;
+    } else if (t == WasmType.f32Type.value) {
+      return _astTypeDouble32;
+    } else if (t == WasmType.f64Type.value) {
+      return _astTypeDouble64;
     } else {
       throw StateError("Can't handle type: $t");
     }

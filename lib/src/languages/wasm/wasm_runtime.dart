@@ -62,20 +62,52 @@ abstract class WasmModule {
   /// Returns a module function mapped to [F].
   F? getFunction<F extends Function>(String functionName);
 
+  /// Resolves the returned [value] from a called module function.
+  Object? resolveReturnedValue(Object? value);
+
   /// Disposes this module instance.
   FutureOr<void> dispose() {}
 }
 
-/// Thrown when [WasmModule] fails to load.
-class WasmModuleLoadError extends Error {
+/// [WasmModule] error.
+class WasmModuleError extends Error {
   final String message;
 
+  WasmModuleError(this.message);
+
+  @override
+  String toString() {
+    return 'WasmModuleError: $message';
+  }
+}
+
+/// Thrown when [WasmModule] fails to load.
+class WasmModuleLoadError extends WasmModuleError {
   final Object? cause;
 
-  WasmModuleLoadError(this.message, {this.cause});
+  WasmModuleLoadError(super.message, {this.cause});
 
   @override
   String toString() {
     return 'WasmModuleLoadError: $message\nCause: $cause';
+  }
+}
+
+/// Thrown when [WasmModule] execution fails.
+class WasmModuleExecutionError extends WasmModuleError {
+  final String functionName;
+  final List? parameters;
+  final Function? function;
+
+  final Object? cause;
+
+  WasmModuleExecutionError(this.functionName,
+      {this.parameters, this.function, String? message, this.cause})
+      : super(
+            "Error executing Wasm function> $functionName( $parameters )${function != null ? ' -> $function' : ''}");
+
+  @override
+  String toString() {
+    return 'WasmModuleExecutionError: $message\nCause: $cause';
   }
 }
