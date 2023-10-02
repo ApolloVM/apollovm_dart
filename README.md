@@ -131,7 +131,7 @@ import 'package:apollovm/apollovm.dart';
 void main() async {
   var vm = ApolloVM();
 
-  var codeUnit = CodeUnit(
+  var codeUnit = SourceCodeUnit(
           'dart',
           r'''
       
@@ -174,7 +174,7 @@ void main() async {
       }
       
       ''',
-          'test');
+          id: 'test');
 
   var loadOK = await vm.loadCodeUnit(codeUnit);
 
@@ -203,10 +203,10 @@ void main() async {
   print('Result: $result');
 
   print('---------------------------------------');
-  
+
   // Regenerate code in Java11:
   var codeStorageJava = vm.generateAllCodeIn('java11');
-  var allSourcesJava = codeStorageJava.writeAllSources();
+  var allSourcesJava = await codeStorageJava.writeAllSources();
   print(allSourcesJava);
 }
 ```
@@ -259,7 +259,6 @@ class Foo {
 }
 <<<< CODE_UNIT_END="/test" >>>>
 <<<< [SOURCES_END] >>>>
-
 ```
 
 ### Language: `Java 11`
@@ -272,7 +271,7 @@ import 'package:apollovm/apollovm.dart';
 void main() async {
   var vm = ApolloVM();
 
-  var codeUnit = CodeUnit(
+  var codeUnit = SourceCodeUnit(
           'java11',
           r'''
             class Foo {
@@ -300,7 +299,7 @@ void main() async {
                }
             }
           ''',
-          'test');
+          id: 'test');
 
   var loadOK = await vm.loadCodeUnit(codeUnit);
 
@@ -321,8 +320,8 @@ void main() async {
 
   // Regenerate code:
   var codeStorageDart = vm.generateAllCodeIn('dart');
-  var allSourcesDart = codeStorageDart.writeAllSources().toString();
-  print(allSourcesDart);
+  var allSourcesDart = await codeStorageDart.writeAllSources();
+  print(allSourcesDart.toString());
 }
 ```
 
@@ -357,7 +356,6 @@ class Foo {
 }
 <<<< CODE_UNIT_END="/test" >>>>
 <<<< [SOURCES_END] >>>>
-
 ```
 
 ## Wasm Support
@@ -378,10 +376,26 @@ int main( int a , int b ) {
 
 Example code to compile to WebAssembly (Wasm):
 ```dart
+import 'dart:typed_data';
+import 'package:apollovm/apollovm.dart';
+
+void main() async {
+  var wasmBytes = await compileToWasm('dart', '''
+    
+    int main( int a , int b ) {
+      int x = (a + b) + 10 ;
+      return x ;
+    }
+    
+  ''');
+
+  // Execute or save the compiled Wasm...
+}
+
 Future<Uint8List> compileToWasm(String codeLanguage, String code) async {
   var vm = ApolloVM();
 
-  var codeUnit = CodeUnit(codeLanguage, code, 'test');
+  var codeUnit = SourceCodeUnit(codeLanguage, code, id: 'test');
 
   Object? loadError;
   var loadOK = false;
@@ -392,19 +406,20 @@ Future<Uint8List> compileToWasm(String codeLanguage, String code) async {
   }
 
   if (!loadOK) {
-    throw StateError("Can't load source! Language: $codeLanguage\n\n$loadError");
+    throw StateError(
+            "Can't load source! Language: $codeLanguage\n\n$loadError");
   }
-  
+
   var storageWasm = vm.generateAllIn<BytesOutput>('wasm');
   var wasmModules = await storageWasm.allEntries();
-  
+
   var namespace0 = wasmModules.values.first;
-  
+
   var wasmModule = namespace0.entries.first;
   var wasmOutput = wasmModule.value; // BytesOutput
-  
-  print( wasmOutput.toString() ); // Show bytes description.
-  
+
+  print(wasmOutput.toString()); // Show bytes description.
+
   var wasmBytes = wasmOutput.output();
   return wasmBytes;
 }
@@ -412,34 +427,35 @@ Future<Uint8List> compileToWasm(String codeLanguage, String code) async {
 
 Generated `Wasm` bytes with description:
 ```text
+
   ## Wasm Magic:
-  [0, 97, 115, 109]
+  [0 97 115 109]
   ## Version 1:
-  [1, 0, 0, 0]
+  [1 0 0 0]
   ## Section: Type:
       ## Section Type ID:
-      1
+      [1]
       ## Bytes block length:
       [7]
       ## Functions signatures:
         ## Types count:
         [1]
           ## Type: function:
-          96
+          [96]
           ## Parameters types:
-          [2, 127, 127]
+          [2 126 126]
           ## Return value:
-          [1, 127]
+          [1 126]
   ## Section: Function:
       ## Section Function ID:
-      3
+      [3]
       ## Bytes block length:
       [2]
       ## Functions type indexes:
-      1 0
+      [1 0]
   ## Section: Export:
       ## Section Export ID:
-      7
+      [7]
       ## Bytes block length:
       [8]
       ## Exported types:
@@ -447,44 +463,46 @@ Generated `Wasm` bytes with description:
         [1]
         ## Export function:
           ## Function name(`main`):
-          [4, 109, 97, 105, 110]
+          [4 109 97 105 110]
           ## Export type(function):
-          0
+          [0]
           ## Type index(0):
           [0]
   ## Section: Code:
       ## Section Code ID:
-      10
+      [10]
       ## Bytes block length:
-      [18]
+      [19]
       ## Functions bodies:
         ## Bodies count:
         [1]
           ## Bytes block length:
-          [16]
+          [17]
           ## Function body:
               ## Local variables count:
               [1]
               ## Declared variable count:
               [1]
-              ## Declared variable type:
-              127
-              ## [OP] local get: 0 $a:
-              [32, 0]
-              ## [OP] local get: 1 $b:
-              [32, 1]
-              ## [OP] operator: add(i32):
-              106
-              ## [OP] push constant(i32): 10:
-              [65, 10]
-              ## [OP] operator: add(i32):
-              106
+              ## Declared variable type(i64):
+              [126]
+                  ## [OP] local get: 0 $a:
+                  [32 0]
+                  ## [OP] local get: 1 $b:
+                  [32 1]
+                ## [OP] operator: add(i64):
+                [124]
+                ## [OP] push constant(i64): 10:
+                [66 10]
+              ## [OP] operator: add(i64):
+              [124]
               ## [OP] local set: 2 $x:
-              [33, 2]
+              [33 2]
               ## [OP] local get: 2 $x (return):
-              [32, 2]
+              [32 2]
+              ## [OP] return variable: 2 $x:
+              [15]
               ## Code body end:
-              11
+              [11]
 
 ```
 
