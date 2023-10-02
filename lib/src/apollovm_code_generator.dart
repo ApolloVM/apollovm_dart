@@ -328,11 +328,18 @@ abstract class ApolloCodeGenerator
     generateASTBlock(branch.blockIf,
         out: out, indent: '$indent  ', withBrackets: false);
     out.write(indent);
-    out.write('} else {\n');
-    generateASTBlock(branch.blockElse,
-        out: out, indent: '$indent  ', withBrackets: false);
-    out.write(indent);
-    out.write('}\n');
+
+    var blockElse = branch.blockElse;
+
+    if (blockElse != null) {
+      out.write('} else {\n');
+      generateASTBlock(blockElse,
+          out: out, indent: '$indent  ', withBrackets: false);
+      out.write(indent);
+      out.write('}\n');
+    } else {
+      out.write('}\n');
+    }
 
     return out;
   }
@@ -365,11 +372,18 @@ abstract class ApolloCodeGenerator
     }
 
     out.write(indent);
-    out.write('} else {\n');
-    generateASTBlock(branch.blockElse,
-        out: out, indent: '$indent  ', withBrackets: false);
-    out.write(indent);
-    out.write('}\n');
+
+    var blockElse = branch.blockElse;
+
+    if (blockElse != null) {
+      out.write('} else {\n');
+      generateASTBlock(blockElse,
+          out: out, indent: '$indent  ', withBrackets: false);
+      out.write(indent);
+      out.write('}\n');
+    } else {
+      out.write('}\n');
+    }
 
     return out;
   }

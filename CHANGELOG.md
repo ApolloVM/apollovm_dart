@@ -1,7 +1,31 @@
 ## 0.0.45
 
+- `ASTBranchIfElseBlock` and `ASTBranchIfElseIfsElseBlock`:
+  - `blockElse`: optional.
+- `ASTParametersDeclaration`:
+  - Added `allParameters`.
+- `ASTTypeInt` and `ASTTypeDouble`:
+  - Added `bits`
+- `ASTValueNum`:
+  - Added field `negative`.
+
 - `ApolloGeneratorWasm`:
-  - Implemented `generateASTStatementReturnWithExpression`
+  - Changed to 64 bits.
+  - `Wasm`: split in `Wasm32` and `Wasm64` with improved opcodes.
+  - Allow operations with different types (auto casting).
+  - Implemented:
+    - `generateASTValue`, `generateASTValueDouble`, `generateASTValueInt`.
+    - `generateASTExpressionVariableAssignment`, `generateASTStatementExpression`
+    - `generateASTBranchIfBlock`, `generateASTBranchIfElseBlock`, `generateASTBranchIfElseIfsElseBlock`.
+    - `generateASTStatementReturnWithExpression`, `generateASTStatementReturn`, `generateASTStatementReturnValue`.
+- `ApolloParserWasm`:
+  - Identify if an `ASTTypeInt` or `ASTTypeDouble` type is a `32` or `64` bits. 
+- `ApolloRunnerWasm`:
+  - Use the parsed Wasm functions (AST) to normalize the parameters before calling the Wasm function.  
+- `WasmModule`:
+  - Added `resolveReturnedValue`.
+    - Browser implementation: when the function returns a `f64`, the JS `bigint` needs to be converted to a Dart `BigInt`.
+- New `WasmModuleExecutionError`.
 
 ## 0.0.44
 

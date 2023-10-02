@@ -417,7 +417,10 @@ class ASTTypeNum<T extends num> extends ASTTypeNumber<T> {
 class ASTTypeInt extends ASTTypeNum<int> {
   static final ASTTypeInt instance = ASTTypeInt();
 
-  ASTTypeInt() : super._('int');
+  /// Amount of bits of the `int` (optional).
+  final int? bits;
+
+  ASTTypeInt({this.bits}) : super._('int');
 
   @override
   bool acceptsType(ASTType type) {
@@ -457,7 +460,7 @@ class ASTTypeInt extends ASTTypeNum<int> {
 
   @override
   String toString() {
-    return 'int';
+    return 'int${bits != null ? '($bits)' : ''}';
   }
 }
 
@@ -465,7 +468,10 @@ class ASTTypeInt extends ASTTypeNum<int> {
 class ASTTypeDouble extends ASTTypeNum<double> {
   static final ASTTypeDouble instance = ASTTypeDouble();
 
-  ASTTypeDouble() : super._('double');
+  /// Amount of bits of the `float`/`double` (optional).
+  final int? bits;
+
+  ASTTypeDouble({this.bits}) : super._('double');
 
   @override
   bool acceptsType(ASTType type) {
@@ -505,7 +511,7 @@ class ASTTypeDouble extends ASTTypeNum<double> {
 
   @override
   String toString() {
-    return 'double';
+    return 'double${bits != null ? '($bits)' : ''}';
   }
 }
 

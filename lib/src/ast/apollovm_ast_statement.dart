@@ -232,7 +232,28 @@ class ASTStatementValue extends ASTStatement {
       value.resolveType(context);
 }
 
-enum ASTAssignmentOperator { set, multiply, divide, sum, subtract }
+enum ASTAssignmentOperator {
+  set,
+  multiply,
+  divide,
+  sum,
+  subtract;
+
+  ASTExpressionOperator? get asASTExpressionOperator {
+    switch (this) {
+      case sum:
+        return ASTExpressionOperator.add;
+      case subtract:
+        return ASTExpressionOperator.subtract;
+      case multiply:
+        return ASTExpressionOperator.multiply;
+      case divide:
+        return ASTExpressionOperator.divide;
+      default:
+        return null;
+    }
+  }
+}
 
 ASTAssignmentOperator getASTAssignmentOperator(String op) {
   op = op.trim();
@@ -533,7 +554,7 @@ class ASTBranchIfBlock extends ASTBranch {
 class ASTBranchIfElseBlock extends ASTBranch {
   ASTExpression condition;
   ASTBlock blockIf;
-  ASTBlock blockElse;
+  ASTBlock? blockElse;
 
   ASTBranchIfElseBlock(this.condition, this.blockIf, this.blockElse);
 
@@ -543,7 +564,7 @@ class ASTBranchIfElseBlock extends ASTBranch {
 
     condition.resolveNode(parentNode);
     blockIf.resolveNode(parentNode);
-    blockElse.resolveNode(parentNode);
+    blockElse?.resolveNode(parentNode);
   }
 
   @override
@@ -555,7 +576,7 @@ class ASTBranchIfElseBlock extends ASTBranch {
     if (evalValue) {
       await blockIf.run(parentContext, runStatus);
     } else {
-      await blockElse.run(parentContext, runStatus);
+      await blockElse?.run(parentContext, runStatus);
     }
 
     return ASTValueVoid.instance;
@@ -572,7 +593,7 @@ class ASTBranchIfElseIfsElseBlock extends ASTBranch {
   ASTExpression condition;
   ASTBlock blockIf;
   List<ASTBranchIfBlock> blocksElseIf;
-  ASTBlock blockElse;
+  ASTBlock? blockElse;
 
   ASTBranchIfElseIfsElseBlock(
       this.condition, this.blockIf, this.blocksElseIf, this.blockElse);
@@ -589,7 +610,7 @@ class ASTBranchIfElseIfsElseBlock extends ASTBranch {
       e.resolveNode(parentNode);
     }
 
-    blockElse.resolveNode(parentNode);
+    blockElse?.resolveNode(parentNode);
   }
 
   @override
@@ -611,7 +632,7 @@ class ASTBranchIfElseIfsElseBlock extends ASTBranch {
         }
       }
 
-      await blockElse.run(parentContext, runStatus);
+      await blockElse?.run(parentContext, runStatus);
       return ASTValueVoid.instance;
     }
   }

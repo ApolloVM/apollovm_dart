@@ -49,6 +49,23 @@ class WasmModuleBrowser extends WasmModule {
   }
 
   @override
+  Object? resolveReturnedValue(Object? value) {
+    if (value == null) return null;
+
+    if (browser_wasm.JsBigInt.isJsBigInt(value)) {
+      var bigInt = browser_wasm.JsBigInt.toBigInt(value);
+
+      if (bigInt.isValidInt) {
+        return bigInt.toInt();
+      } else {
+        return bigInt;
+      }
+    }
+
+    return value;
+  }
+
+  @override
   String toString() {
     return 'WasmModuleBrowser{name: $name, instance: $instance}';
   }

@@ -5,7 +5,7 @@ import 'package:test/test.dart';
 void main() async {
   group('ApolloVM - Wasm Generator', () {
     test(
-      'basic 1',
+      'empty',
       () => _testWasm(
           language: 'dart',
           code: r'''
@@ -16,7 +16,9 @@ void main() async {
           
         ''',
           functionName: 'empty',
-          parameters: [],
+          executions: {
+            []: null,
+          },
           expecteWasm: {
             'test':
                 '0061736D010000000104016000000302010007090105656D70747900000A040102000B',
@@ -24,7 +26,7 @@ void main() async {
     );
 
     test(
-      'basic 2',
+      'add1',
       () => _testWasm(
           language: 'dart',
           code: r'''
@@ -36,16 +38,17 @@ void main() async {
           
         ''',
           functionName: 'add1',
-          parameters: [101],
-          expectedResult: 111,
+          executions: {
+            [101]: 111,
+          },
           expecteWasm: {
             'test':
-                '0061736D0100000001060160017F017F03020100070801046164643100000A0F010D01017F2000410A6A210120010B',
+                '0061736D0100000001060160017E017E03020100070801046164643100000A10010E01017E2000420A7C210120010F0B',
           }),
     );
 
     test(
-      'basic 3',
+      'add3',
       () => _testWasm(
           language: 'dart',
           code: r'''
@@ -57,16 +60,17 @@ void main() async {
           
         ''',
           functionName: 'add3',
-          parameters: [101, 50],
-          expectedResult: 161,
+          executions: {
+            [101, 50]: 161,
+          },
           expecteWasm: {
             'test':
-                '0061736D0100000001070160027F7F017F03020100070801046164643300000A12011001017F20002001410A6A6A210220020B',
+                '0061736D0100000001070160027E7E017E03020100070801046164643300000A13011101017E20002001420A7C7C210220020F0B',
           }),
     );
 
     test(
-      'basic 4',
+      'add4',
       () => _testWasm(
           language: 'dart',
           code: r'''
@@ -80,16 +84,17 @@ void main() async {
           
         ''',
           functionName: 'add4',
-          parameters: [101, 50, 30],
-          expectedResult: 146,
+          executions: {
+            [101, 50, 30]: 146,
+          },
           expecteWasm: {
             'test':
-                '0061736D0100000001080160037F7F7F017F03020100070801046164643400000A27012503017F017F017F20002001410A6A6A21032002B74102B7A3AA2104200320046B210520050B',
+                '0061736D0100000001080160037E7E7E017E03020100070801046164643400000A28012603017E017E017E20002001420A7C7C21032002B94202B9A3B02104200320047D210520050F0B',
           }),
     );
 
     test(
-      'basic 5',
+      'add5',
       () => _testWasm(
           language: 'dart',
           code: r'''
@@ -103,11 +108,163 @@ void main() async {
           
         ''',
           functionName: 'add5',
-          parameters: [101, 50, 30],
-          expectedResult: 21316,
+          executions: {
+            [101, 50, 30]: 21316,
+            [10, 50, 300]: 6400,
+          },
           expecteWasm: {
             'test':
-                '0061736D0100000001080160037F7F7F017F03020100070801046164643500000A2A012803017F017F017F20002001410A6A6A21032002B74102B7A3AA2104200320046B2105200520056C0B',
+                '0061736D0100000001080160037E7E7E017E03020100070801046164643500000A2A012803017E017E017E20002001420A7C7C21032002B94202B9A3B02104200320047D2105200520057E0B',
+          }),
+    );
+
+    test(
+      'add6',
+      () => _testWasm(
+          language: 'dart',
+          code: r'''
+      
+          int add6(int a) {
+            if (a > 100) {
+              return 1 ;
+            } 
+            return 0 ;
+          }
+          
+        ''',
+          functionName: 'add6',
+          executions: {
+            [101]: 1,
+            [10]: 0,
+          },
+          expecteWasm: {
+            'test':
+                '0061736D0100000001060160017E017E03020100070801046164643600000A13011100200042E40055044042010F0B42000F0B',
+          }),
+    );
+
+    test(
+      'add7',
+      () => _testWasm(
+          language: 'dart',
+          code: r'''
+      
+          int add7(int a) {
+            if (a > 100) {
+              a = a + 100;
+            }
+            else {
+              a = a + 10;
+            }
+            
+            return a ;
+          }
+          
+        ''',
+          functionName: 'add7',
+          executions: {
+            [111]: 211,
+            [11]: 21,
+          },
+          expecteWasm: {
+            'test':
+                '0061736D0100000001060160017E017E03020100070801046164643700000A20011E00200042E400550440200042E4007C2100052000420A7C21000B20000F0B',
+          }),
+    );
+
+    test(
+      'add8',
+      () => _testWasm(
+          language: 'dart',
+          code: r'''
+      
+          int add8(int a) {
+            if (a > 100) {
+              return 1 ;
+            } 
+            else if ( a == 0 ) {
+              return 0 ;
+            }
+            else {
+              return -1 ;
+            }
+          }
+          
+        ''',
+          functionName: 'add8',
+          executions: {
+            [101]: 1,
+            [0]: 0,
+            [10]: -1,
+          },
+          expecteWasm: {
+            'test':
+                '0061736D0100000001060160017E017E03020100070801046164643800000A20011E00200042E40055044042010F052000420051044042000F05427F0F0B0B0B',
+          }),
+    );
+
+    test(
+      'add9',
+      () => _testWasm(
+          language: 'dart',
+          code: r'''
+      
+          int add9(int a) {
+            if (a > 100) {
+              return 100 ;
+            } 
+            else if ( a == 0 ) {
+              return 0 ;
+            }
+            else if ( a == 1 ) {
+              return 1 ;
+            }
+            else {
+              return -1 ;
+            }
+          }
+          
+        ''',
+          functionName: 'add9',
+          executions: {
+            [101]: 100,
+            [0]: 0,
+            [1]: 1,
+            [10]: -1,
+          },
+          expecteWasm: {
+            'test':
+                '0061736D0100000001060160017E017E03020100070801046164643900000A21011F00200042E40055044042E4000F052000420051044042000F05427F0F0B0B0B',
+          }),
+    );
+
+    test(
+      'add10',
+      () => _testWasm(
+          language: 'dart',
+          code: r'''
+      
+          int add10(int a) {
+            if (a > 100) {
+              return 1 ;
+            } 
+            else if ( a == 0 ) {
+              return 0 ;
+            }
+            
+            return -11 ;
+          }
+          
+        ''',
+          functionName: 'add10',
+          executions: {
+            [101]: 1,
+            [0]: 0,
+            [10]: -11,
+          },
+          expecteWasm: {
+            'test':
+                '0061736D0100000001060160017E017E0302010007090105616464313000000A20011E00200042E40055044042010F052000420051044042000F050B0B42750F0B',
           }),
     );
   });
@@ -117,11 +274,16 @@ Future<void> _testWasm(
     {required String language,
     required String code,
     required String functionName,
-    required List parameters,
-    Object? expectedResult,
+    required Map<List, Object?> executions,
     Map<String, dynamic>? expecteWasm}) async {
   print('==================================================================');
-  print("$language>> $functionName$parameters");
+  print("$language>> $functionName");
+
+  for (var e in executions.entries) {
+    var parameters = e.key;
+    var expectedResult = e.value;
+    print('  -- $parameters -> $expectedResult');
+  }
 
   var vm = ApolloVM();
 
@@ -143,13 +305,22 @@ Future<void> _testWasm(
   // Map the `print` function in the VM:
   dartRunner.externalPrintFunction = (o) => print("» $o");
 
-  var astValue = await dartRunner.executeFunction('', functionName,
-      positionalParameters: parameters);
+  for (var e in executions.entries) {
+    var parameters = e.key;
+    var expectedResult = e.value;
 
-  var result = astValue.getValueNoContext();
-  print('Result: $result');
+    print('<<<<<<<<<<<<<<<<<<<<<<<<<<<<');
+    print('EXECUTE AST> $parameters -> $expectedResult');
 
-  expect(result, expectedResult);
+    var astValue = await dartRunner.executeFunction('', functionName,
+        positionalParameters: parameters);
+
+    var result = astValue.getValueNoContext();
+    print('Result: $result');
+
+    expect(result, expectedResult);
+    print('>>>>>>>>>>>>>>>>>>>>>>>>>>>>');
+  }
 
   print('------------------------------------------------------------------');
 
@@ -190,11 +361,11 @@ Future<void> _testWasm(
       print('<<WASM: Bytes>>');
       print(wasmBytes);
 
+      // _saveWasmFile(language, functionName, wasmBytes);
+
       expect(wasmBytes, expectedBytes);
 
       compiledWasm ??= wasm;
-
-      //_saveWasmFile(language, functionName, wasmBytes);
     }
   }
 
@@ -220,13 +391,22 @@ Future<void> _testWasm(
     // Map the `print` function in the VM:
     wasmRunner.externalPrintFunction = (o) => print("wasm» $o");
 
-    var wasmAstValue = await wasmRunner.executeFunction('', functionName,
-        positionalParameters: parameters);
+    for (var e in executions.entries) {
+      var parameters = e.key;
+      var expectedResult = e.value;
 
-    var wasmResult = wasmAstValue.getValueNoContext();
-    print('Wasm Result: $wasmResult');
+      print('<<<<<<<<<<<<<<<<<<<<<<<<<<<<');
+      print('EXECUTE WASM> $parameters -> $expectedResult');
 
-    expect(wasmResult, expectedResult);
+      var wasmAstValue = await wasmRunner.executeFunction('', functionName,
+          positionalParameters: parameters);
+
+      var wasmResult = wasmAstValue.getValueNoContext();
+      print('Wasm Result: $wasmResult');
+
+      expect(wasmResult, expectedResult);
+      print('>>>>>>>>>>>>>>>>>>>>>>>>>>>>');
+    }
   } else {
     print('** `WasmRuntime` not supported: ${wasmRuntime.platformVersion}');
   }
@@ -243,4 +423,4 @@ void _saveWasmFile(String language, String functionName, Uint8List wasmBytes) {
     print('>> SAVED: $file');
   } catch (_) {}
 }
-*/
+ */

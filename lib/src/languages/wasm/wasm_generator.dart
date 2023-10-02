@@ -19,6 +19,7 @@ import '../../ast/apollovm_ast_value.dart';
 import '../../ast/apollovm_ast_variable.dart';
 import 'wasm.dart';
 
+final _astTypeInt = ASTTypeInt.instance;
 final _astTypeDouble = ASTTypeDouble.instance;
 
 /// Wasm binary generator.
@@ -186,32 +187,143 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     }
 
     for (var stm in block.statements) {
-      generateASTStatement(stm, out: out);
+      generateASTStatement(stm, out: out, context: context);
     }
 
     return out;
   }
 
   @override
+  BytesOutput generateASTBranch(ASTBranch branch,
+      {BytesOutput? out, WasmContext? context}) {
+    if (branch is ASTBranchIfBlock) {
+      return generateASTBranchIfBlock(branch, out: out, context: context);
+    } else if (branch is ASTBranchIfElseBlock) {
+      return generateASTBranchIfElseBlock(branch, out: out, context: context);
+    } else if (branch is ASTBranchIfElseIfsElseBlock) {
+      return generateASTBranchIfElseIfsElseBlock(branch,
+          out: out, context: context);
+    }
+
+    throw UnsupportedError("Can't handle branch: $branch");
+  }
+
+  @override
   BytesOutput generateASTBranchIfBlock(ASTBranchIfBlock branch,
-      {BytesOutput? out}) {
-    // TODO: implement generateASTBranchIfBlock
-    throw UnimplementedError();
+      {BytesOutput? out, WasmContext? context}) {
+    out ??= newOutput();
+    context ??= WasmContext();
+
+    final stackLng0 = context.stackLength;
+
+    var condition = branch.condition;
+    generateASTExpression(condition, out: out, context: context);
+
+    context.assertStackLength(stackLng0 + 1, "After expression (return)");
+    var stackType = context.stackGet(0)!.type;
+    if (stackType != _astTypeInt) {
+      throw StateError("Stack type error> not a boolean type: $stackType");
+    }
+
+    out.write(Wasm.ifInstruction(WasmType.voidType),
+        description: "[OP] if ( $condition )");
+
+    generateASTBlock(branch.block, out: out, context: context);
+
+    out.writeByte(Wasm.end, description: "[OP] if end");
+
+    return out;
   }
 
   @override
   BytesOutput generateASTBranchIfElseBlock(ASTBranchIfElseBlock branch,
-      {BytesOutput? out}) {
-    // TODO: implement generateASTBranchIfElseBlock
-    throw UnimplementedError();
+      {BytesOutput? out, WasmContext? context}) {
+    out ??= newOutput();
+    context ??= WasmContext();
+
+    final stackLng0 = context.stackLength;
+
+    var condition = branch.condition;
+    generateASTExpression(condition, out: out, context: context);
+
+    context.assertStackLength(stackLng0 + 1, "After expression (return)");
+    var stackType = context.stackGet(0)!.type;
+    if (stackType != _astTypeInt) {
+      throw StateError("Stack type error> not a boolean type: $stackType");
+    }
+
+    out.write(Wasm.ifInstruction(WasmType.voidType),
+        description: "[OP] if ( $condition )");
+
+    generateASTBlock(branch.blockIf, out: out, context: context);
+
+    var blockElse = branch.blockElse;
+    if (blockElse != null) {
+      out.writeByte(Wasm.elseInstruction, description: "[OP] else");
+      generateASTBlock(blockElse, out: out, context: context);
+    }
+
+    out.writeByte(Wasm.end, description: "[OP] if else end");
+
+    return out;
   }
 
   @override
   BytesOutput generateASTBranchIfElseIfsElseBlock(
       ASTBranchIfElseIfsElseBlock branch,
-      {BytesOutput? out}) {
-    // TODO: implement generateASTBranchIfElseIfsElseBlock
-    throw UnimplementedError();
+      {BytesOutput? out,
+      WasmContext? context}) {
+    out ??= newOutput();
+    context ??= WasmContext();
+
+    final stackLng0 = context.stackLength;
+
+    var condition = branch.condition;
+    generateASTExpression(condition, out: out, context: context);
+
+    context.assertStackLength(stackLng0 + 1, "After expression (return)");
+    var stackType = context.stackGet(0)!.type;
+    if (stackType != _astTypeInt) {
+      throw StateError("Stack type error> not a boolean type: $stackType");
+    }
+
+    out.write(Wasm.ifInstruction(WasmType.voidType),
+        description: "[OP] if ( $condition )");
+
+    generateASTBlock(branch.blockIf, out: out, context: context);
+
+    out.writeByte(Wasm.elseInstruction, description: "[OP] else");
+
+    {
+      final blocksElseIf = branch.blocksElseIf.toList();
+      var blockElse = branch.blockElse;
+
+      if (blocksElseIf.isEmpty) {
+        if (blockElse != null) {
+          generateASTBlock(blockElse, out: out, context: context);
+        }
+      } else {
+        var blocksElseIf0 = blocksElseIf.removeAt(0);
+
+        if (blocksElseIf.length == 1) {
+          generateASTBranchIfElseBlock(
+              ASTBranchIfElseBlock(
+                  blocksElseIf0.condition, blocksElseIf0.block, blockElse),
+              out: out,
+              context: context);
+        } else {
+          generateASTBranchIfElseIfsElseBlock(
+              ASTBranchIfElseIfsElseBlock(blocksElseIf0.condition,
+                  blocksElseIf0.block, blocksElseIf, blockElse),
+              out: out,
+              context: context);
+        }
+      }
+    }
+
+    out.writeByte(Wasm.end, description: "[OP] if else end");
+
+    return out;
   }
 
   @override
@@ -259,17 +371,7 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
 
     var stackLng0 = context.stackLength;
 
-    if (value is ASTValueInt) {
-      out.write(Wasm.i32Const(value.value),
-          description: "[OP] push constant(i32): ${value.value}");
-      context.stackPush(ASTTypeInt.instance, "expression literal value");
-    } else if (value is ASTValueDouble) {
-      out.write(Wasm.f64Const(value.value),
-          description: "[OP] push constant(f64): ${value.value}");
-      context.stackPush(_astTypeDouble, "expression literal value");
-    } else {
-      throw UnsupportedError("Can't handle literal: $value");
-    }
+    generateASTValue(value, out: out, context: context);
 
     context.assertStackLength(
         stackLng0 + 1, "After expression literal value push");
@@ -309,20 +411,20 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       WasmContext context) {
     out.writeBytes(opsOut1);
 
-    if (stackType1 == ASTTypeInt.instance) {
-      out.writeByte(Wasm.f64ConvertI32S,
-          description: "[OP] convert i32 to f64");
+    if (stackType1 == _astTypeInt) {
+      out.writeByte(Wasm64.i64ConvertToF64Signed,
+          description: "[OP] convert i64 to f64 signed");
 
-      context.stackReplaceAt(1, _astTypeDouble, "Convert i32 to f64");
+      context.stackReplaceAt(1, _astTypeDouble, "Convert i64 to f64 signed");
     }
 
-    if (stackType2 == ASTTypeInt.instance) {
+    if (stackType2 == _astTypeInt) {
       out.writeBytes(opsOut2);
 
-      out.writeByte(Wasm.f64ConvertI32S,
-          description: "[OP] convert i32 to f64");
+      out.writeByte(Wasm64.i64ConvertToF64Signed,
+          description: "[OP] convert i64 to f64 signed");
 
-      context.stackReplace(_astTypeDouble, "Convert i32 to f64");
+      context.stackReplace(_astTypeDouble, "Convert i64 to f64 signed");
     } else {
       out.writeBytes(opsOut2);
     }
@@ -404,136 +506,147 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       case ASTExpressionOperator.add:
         {
           writeOperationDoubleOr(
-              _astTypeDouble,
-              Wasm.f64Add,
-              "add(f64)",
-              "f64.add",
-              ASTTypeInt.instance,
-              Wasm.i32Add,
-              "add(i32)",
-              "i32.add");
+            _astTypeDouble,
+            Wasm64.f64Add,
+            "add(f64)",
+            "f64.add",
+            _astTypeInt,
+            Wasm64.i64Add,
+            "add(i64)",
+            "i64.add",
+          );
         }
       case ASTExpressionOperator.subtract:
         {
           writeOperationDoubleOr(
               _astTypeDouble,
-              Wasm.f64Sub,
+              Wasm64.f64Subtract,
               "sub(f64)",
               "f64.sub",
-              ASTTypeInt.instance,
-              Wasm.i32Sub,
-              "sub(i32)",
-              "i32.sub");
+              _astTypeInt,
+              Wasm64.i64Subtract,
+              "sub(i64)",
+              "i64.sub");
         }
       case ASTExpressionOperator.multiply:
         {
           writeOperationDoubleOr(
-              _astTypeDouble,
-              Wasm.f64Mul,
-              "multiply(f64)",
-              "f64.multiply",
-              ASTTypeInt.instance,
-              Wasm.i32Mul,
-              "multiply(i32)",
-              "i32.multiply");
+            _astTypeDouble,
+            Wasm64.f64Multiply,
+            "multiply(f64)",
+            "f64.multiply",
+            _astTypeInt,
+            Wasm64.i64Multiply,
+            "multiply(i64)",
+            "i64.multiply",
+          );
         }
       case ASTExpressionOperator.divide:
         {
-          _checkStackStatusBinaryFloat64(stackType1, stackType2);
+          _checkStackStatusF64(stackType1, stackType2);
 
-          out.writeByte(Wasm.f64Div, description: "[OP] operator: divide(f64)");
-          context.stackOperationBinary(_astTypeDouble, "f64.divide");
+          out.writeByte(Wasm64.f64Divide,
+              description: "[OP] operator: divide(f64)");
+          context.stackOperationBinary(_astTypeDouble, "Wasm64.f64Divide");
         }
       case ASTExpressionOperator.divideAsInt:
         {
-          _checkStackStatusBinaryFloat64(stackType1, stackType2);
+          _checkStackStatusF64(stackType1, stackType2);
 
-          out.writeByte(Wasm.f64Div, description: "[OP] operator: divide(f64)");
-          context.stackOperationBinary(_astTypeDouble, "f64.divide");
+          out.writeByte(Wasm64.f64Divide,
+              description: "[OP] operator: divide(f64)");
+          context.stackOperationBinary(_astTypeDouble, "Wasm64.f64Divide");
 
-          out.writeByte(Wasm.i32TruncF64S,
-              description: "[OP] i32.truncate_f64_signed");
+          out.writeByte(Wasm64.f64TruncateToi64Signed,
+              description: "[OP] Wasm64.f64TruncateToi64Signed");
 
-          context.stackReplace(ASTTypeInt.instance, "i32.truncate_f64_signed");
+          context.stackReplace(_astTypeInt, "i64.truncate_f64_signed");
         }
       case ASTExpressionOperator.divideAsDouble:
         {
-          _checkStackStatusBinaryFloat64(stackType1, stackType2);
+          _checkStackStatusF64(stackType1, stackType2);
 
-          out.writeByte(Wasm.f64Div, description: "[OP] operator: divide(f64)");
-          context.stackOperationBinary(_astTypeDouble, "f64.divide");
+          out.writeByte(Wasm64.f64Divide,
+              description: "[OP] operator: divide(f64)");
+          context.stackOperationBinary(_astTypeDouble, "Wasm64.f64Divide");
         }
       case ASTExpressionOperator.equals:
         {
           writeOperationDoubleOr(
-              ASTTypeInt.instance,
-              Wasm.f64Eq,
-              "equals(f64)",
-              "f64.equals",
-              ASTTypeInt.instance,
-              Wasm.i32Eq,
-              "equals(i32)",
-              "i32.equals");
+            _astTypeInt,
+            Wasm64.f64Equals,
+            "equals(f64)",
+            "f64.equals",
+            _astTypeInt,
+            Wasm64.i64Equals,
+            "equals(i64)",
+            "i64.equals",
+          );
         }
       case ASTExpressionOperator.notEquals:
         {
           writeOperationDoubleOr(
-              ASTTypeInt.instance,
-              Wasm.f64Ne,
-              "notEquals(f64)",
-              "f64.NotEq",
-              ASTTypeInt.instance,
-              Wasm.i32Ne,
-              "notEquals(i32)",
-              "i32.NotEq");
+            _astTypeInt,
+            Wasm64.f64NotEquals,
+            "notEquals(f64)",
+            "f64.NotEq",
+            _astTypeInt,
+            Wasm64.i64NotEquals,
+            "notEquals(i64)",
+            "i64NotEqual",
+          );
         }
       case ASTExpressionOperator.greater:
         {
           writeOperationDoubleOr(
-              ASTTypeInt.instance,
-              Wasm.f64Gt,
-              "greaterThan(f64)",
-              "f64.greaterThan",
-              ASTTypeInt.instance,
-              Wasm.i32GtS,
-              "greaterThan(i32)",
-              "i32.greaterThanSigned");
+            _astTypeInt,
+            Wasm64.f64GreaterThan,
+            "greaterThan(f64)",
+            "f64.greaterThan",
+            _astTypeInt,
+            Wasm64.i64GreaterThanSigned,
+            "greaterThan(i64)",
+            "i64.greaterThanSigned",
+          );
         }
       case ASTExpressionOperator.greaterOrEq:
         {
           writeOperationDoubleOr(
-              ASTTypeInt.instance,
-              Wasm.f64Ge,
-              "greaterEquals(f64)",
-              "f64.greaterEqualsSigned",
-              ASTTypeInt.instance,
-              Wasm.i32GeS,
-              "greaterEquals(i32)",
-              "i32.greaterEqualsSigned");
+            _astTypeInt,
+            Wasm64.f64GreaterThanOrEquals,
+            "greaterEquals(f64)",
+            "f64.greaterOrEqualsSigned",
+            _astTypeInt,
+            Wasm64.i64GreaterThanOrEqualsSigned,
+            "greaterEquals(i64)",
+            "i64.greaterOrEqualsSigned",
+          );
         }
       case ASTExpressionOperator.lower:
         {
           writeOperationDoubleOr(
-              ASTTypeInt.instance,
-              Wasm.f64Lt,
-              "lowerThan(f64)",
-              "f64.lowerThanSigned",
-              ASTTypeInt.instance,
-              Wasm.i32LtS,
-              "lowerThan(i32)",
-              "i32.lowerThanSigned");
+            _astTypeInt,
+            Wasm64.f64LessThan,
+            "lowerThan(f64)",
+            "f64.lowerThanSigned",
+            _astTypeInt,
+            Wasm64.i64LessThanSigned,
+            "lowerThan(i64)",
+            "i64.lowerThanSigned",
+          );
         }
       case ASTExpressionOperator.lowerOrEq:
         {
           writeOperationDoubleOr(
-              ASTTypeInt.instance,
-              Wasm.f64Le,
-              "lowerEquals(f64)",
-              "f64.lowerEqualsSigned",
-              ASTTypeInt.instance,
-              Wasm.i32LeS,
-              "lowerEquals(i32)",
-              "i32.lowerEqualsSigned");
+            _astTypeInt,
+            Wasm64.f64LessThanOrEquals,
+            "lowerEquals(f64)",
+            "f64.lowerOrEqualsSigned",
+            _astTypeInt,
+            Wasm64.i64LessThanOrEqualsSigned,
+            "lowerEquals(i64)",
+            "i64.lowerOrEqualsSigned",
+          );
         }
     }
 
@@ -543,7 +656,7 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     return out;
   }
 
-  void _checkStackStatusBinaryFloat64(ASTType stackType1, ASTType stackType2) {
+  void _checkStackStatusF64(ASTType stackType1, ASTType stackType2) {
     if (stackType1 != _astTypeDouble || stackType2 != _astTypeDouble) {
       throw StateError(
           "Stack status error> `f64.divide` needs 2 f64 values in the top of the stack");
@@ -578,9 +691,49 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
   @override
   BytesOutput generateASTExpressionVariableAssignment(
       ASTExpressionVariableAssignment expression,
-      {BytesOutput? out}) {
-    // TODO: implement generateASTExpressionVariableAssignment
-    throw UnimplementedError();
+      {BytesOutput? out,
+      WasmContext? context}) {
+    out ??= newOutput();
+    context ??= WasmContext();
+
+    var op = expression.operator;
+
+    var variable = expression.variable;
+    var name = variable.name;
+
+    var localVar = _getLocalVariable(context, name);
+
+    final stackLng0 = context.stackLength;
+
+    switch (op) {
+      case ASTAssignmentOperator.set:
+        {
+          generateASTExpression(expression.expression,
+              out: out, context: context);
+        }
+      default:
+        {
+          var expOp = op.asASTExpressionOperator!;
+
+          generateASTExpressionOperation(ASTExpressionOperation(
+              ASTExpressionVariableAccess(variable),
+              expOp,
+              expression.expression));
+        }
+    }
+
+    final stackLng1 = context.assertStackLength(
+        stackLng0 + 1, "After variable assigment expression");
+
+    out.write(Wasm.localSet(localVar.index),
+        description: "[OP] local set: ${localVar.index} \$$name");
+
+    context.assertStackLength(
+        stackLng1, "After variable set: ${localVar.index} \$$name");
+    context.assertStackLength(stackLng0 + 1,
+        "After variable declaration:  ${localVar.index} \$$name");
+
+    return out;
   }
 
   @override
@@ -636,18 +789,20 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
   BytesOutput generateASTStatement(ASTStatement statement,
       {BytesOutput? out, WasmContext? context}) {
     if (statement is ASTStatementExpression) {
-      return generateASTStatementExpression(statement, out: out);
+      return generateASTStatementExpression(statement,
+          out: out, context: context);
     } else if (statement is ASTStatementVariableDeclaration) {
       return generateASTStatementVariableDeclaration(statement,
           out: out, context: context);
     } else if (statement is ASTBranch) {
-      return generateASTBranch(statement, out: out);
+      return generateASTBranch(statement, out: out, context: context);
     } else if (statement is ASTStatementForLoop) {
       return generateASTStatementForLoop(statement, out: out);
     } else if (statement is ASTStatementReturnNull) {
       return generateASTStatementReturnNull(statement, out: out);
     } else if (statement is ASTStatementReturnValue) {
-      return generateASTStatementReturnValue(statement, out: out);
+      return generateASTStatementReturnValue(statement,
+          out: out, context: context);
     } else if (statement is ASTStatementReturnVariable) {
       return generateASTStatementReturnVariable(statement,
           out: out, context: context);
@@ -693,9 +848,13 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
 
   @override
   BytesOutput generateASTStatementExpression(ASTStatementExpression statement,
-      {BytesOutput? out}) {
-    // TODO: implement generateASTStatementExpression
-    throw UnimplementedError();
+      {BytesOutput? out, WasmContext? context}) {
+    out ??= newOutput();
+    context ??= WasmContext();
+
+    generateASTExpression(statement.expression, out: out, context: context);
+
+    return out;
   }
 
   @override
@@ -708,8 +867,11 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
   @override
   BytesOutput generateASTStatementReturn(ASTStatementReturn statement,
       {BytesOutput? out}) {
-    // TODO: implement generateASTStatementReturn
-    throw UnimplementedError();
+    out ??= newOutput();
+
+    out.writeByte(Wasm.functionReturn, description: "[OP] return");
+
+    return out;
   }
 
   @override
@@ -721,9 +883,18 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
 
   @override
   BytesOutput generateASTStatementReturnValue(ASTStatementReturnValue statement,
-      {BytesOutput? out}) {
-    // TODO: implement generateASTStatementReturnValue
-    throw UnimplementedError();
+      {BytesOutput? out, WasmContext? context}) {
+    out ??= newOutput();
+    context ??= WasmContext();
+
+    var value = statement.value;
+
+    generateASTValue(value, out: out, context: context);
+
+    out.writeByte(Wasm.functionReturn,
+        description: "[OP] return value: $value");
+
+    return out;
   }
 
   @override
@@ -744,6 +915,9 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
 
     context.stackPush(
         localVar.type, 'Local get: ${localVar.index} \$$name (return)');
+
+    out.writeByte(Wasm.functionReturn,
+        description: "[OP] return variable: ${localVar.index} \$$name");
 
     return out;
   }
@@ -807,7 +981,8 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       return generateASTExpressionVariableAccess(expression,
           out: out, context: context);
     } else if (expression is ASTExpressionVariableAssignment) {
-      return generateASTExpressionVariableAssignment(expression, out: out);
+      return generateASTExpressionVariableAssignment(expression,
+          out: out, context: context);
     } else if (expression is ASTExpressionVariableEntryAccess) {
       return generateASTExpressionVariableEntryAccess(expression, out: out);
     } else if (expression is ASTExpressionLiteral) {
@@ -859,6 +1034,40 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
   }
 
   @override
+  BytesOutput generateASTValue(ASTValue value,
+      {BytesOutput? out, WasmContext? context}) {
+    if (value is ASTValueString) {
+      return generateASTValueString(value, out: out);
+    } else if (value is ASTValueInt) {
+      return generateASTValueInt(value, out: out, context: context);
+    } else if (value is ASTValueDouble) {
+      return generateASTValueDouble(value, out: out, context: context);
+    } else if (value is ASTValueNull) {
+      return generateASTValueNull(value, out: out);
+    } else if (value is ASTValueVar) {
+      return generateASTValueVar(value, out: out);
+    } else if (value is ASTValueObject) {
+      return generateASTValueObject(value, out: out);
+    } else if (value is ASTValueStatic) {
+      return generateASTValueStatic(value, out: out);
+    } else if (value is ASTValueStringVariable) {
+      return generateASTValueStringVariable(value, out: out);
+    } else if (value is ASTValueStringConcatenation) {
+      return generateASTValueStringConcatenation(value, out: out);
+    } else if (value is ASTValueStringExpression) {
+      return generateASTValueStringExpression(value, out: out);
+    } else if (value is ASTValueArray) {
+      return generateASTValueArray(value, out: out);
+    } else if (value is ASTValueArray2D) {
+      return generateASTValueArray2D(value, out: out);
+    } else if (value is ASTValueArray3D) {
+      return generateASTValueArray3D(value, out: out);
+    }
+
+    throw UnsupportedError("Can't generate value: $value");
+  }
+
+  @override
   BytesOutput generateASTValueArray(ASTValueArray<ASTType, dynamic> value,
       {BytesOutput? out}) {
     // TODO: implement generateASTValueArray
@@ -880,15 +1089,31 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
   }
 
   @override
-  BytesOutput generateASTValueDouble(ASTValueDouble value, {BytesOutput? out}) {
-    // TODO: implement generateASTValueDouble
-    throw UnimplementedError();
+  BytesOutput generateASTValueDouble(ASTValueDouble value,
+      {BytesOutput? out, WasmContext? context}) {
+    out ??= newOutput();
+    context ??= WasmContext();
+
+    var v = value.value;
+
+    out.write(Wasm64.f64Const(v), description: "[OP] push constant(f64): $v");
+    context.stackPush(_astTypeInt, "double literal: $v");
+
+    return out;
   }
 
   @override
-  BytesOutput generateASTValueInt(ASTValueInt value, {BytesOutput? out}) {
-    // TODO: implement generateASTValueInt
-    throw UnimplementedError();
+  BytesOutput generateASTValueInt(ASTValueInt value,
+      {BytesOutput? out, WasmContext? context}) {
+    out ??= newOutput();
+    context ??= WasmContext();
+
+    var v = value.value;
+
+    out.write(Wasm64.i64Const(v), description: "[OP] push constant(i64): $v");
+    context.stackPush(_astTypeInt, "int literal: $v");
+
+    return out;
   }
 
   @override
@@ -1112,11 +1337,10 @@ extension _ASTTypeExtension on ASTType {
   bool get isVoid => this is ASTTypeVoid || name == 'void';
 
   WasmType get wasmType {
-    if (this is ASTTypeString) {
-    } else if (this is ASTTypeInt) {
-      return WasmType.i32Type;
+    if (this is ASTTypeInt) {
+      return WasmType.i64Type;
     } else if (this is ASTTypeDouble) {
-      return WasmType.f32Type;
+      return WasmType.f64Type;
     } else if (this is ASTTypeVoid) {
       return WasmType.voidType;
     } else if (name == 'void') {
@@ -1186,13 +1410,13 @@ extension _ASTStatementExtension on ASTStatement {
     } else if (self is ASTBranchIfElseBlock) {
       return [
         ...self.blockIf.declaredVariables(),
-        ...self.blockElse.declaredVariables()
+        ...?self.blockElse?.declaredVariables()
       ];
     } else if (self is ASTBranchIfElseIfsElseBlock) {
       return [
         ...self.blockIf.declaredVariables(),
         ...self.blocksElseIf.declaredVariables(),
-        ...self.blockElse.declaredVariables()
+        ...?self.blockElse?.declaredVariables()
       ];
     }
 

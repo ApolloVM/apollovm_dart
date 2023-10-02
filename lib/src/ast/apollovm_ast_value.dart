@@ -396,12 +396,29 @@ class ASTValueBool extends ASTValuePrimitive<bool> {
 
 /// [ASTValue] for numbers ([num]).
 abstract class ASTValueNum<T extends num> extends ASTValuePrimitive<T> {
-  ASTValueNum(ASTType<T> type, T value) : super(type, value);
+  final bool negative;
 
-  static ASTValueNum from(dynamic o) {
-    if (o is int) return ASTValueInt(o);
-    if (o is double) return ASTValueDouble(o);
-    if (o is String) return from(parseNum(o.trim()));
+  ASTValueNum(ASTType<T> type, T value, {bool? negative})
+      : negative = negative ?? value.isNegative,
+        super(
+          type,
+          negative != null
+              ? (negative
+                  ? (value.isNegative ? value : (-value as T))
+                  : (value.isNegative ? (-value as T) : value))
+              : value,
+        ) {
+    assert(this.value.isNegative == this.negative);
+  }
+
+  static ASTValueNum from(dynamic o, {bool? negative}) {
+    if (o is int) {
+      return ASTValueInt(o, negative: negative);
+    } else if (o is double) {
+      return ASTValueDouble(o, negative: negative);
+    } else if (o is String) {
+      return from(parseNum(o.trim()), negative: negative);
+    }
     throw StateError("Can't parse number: $o");
   }
 
@@ -505,7 +522,7 @@ abstract class ASTValueNum<T extends num> extends ASTValuePrimitive<T> {
 
 /// [ASTValue] for integer ([int]).
 class ASTValueInt extends ASTValueNum<int> {
-  ASTValueInt(int n) : super(ASTTypeInt.instance, n);
+  ASTValueInt(int n, {super.negative}) : super(ASTTypeInt.instance, n);
 
   @override
   ASTValue operator +(ASTValue other) {
@@ -565,7 +582,7 @@ class ASTValueInt extends ASTValueNum<int> {
 
 /// [ASTValue] for [double].
 class ASTValueDouble extends ASTValueNum<double> {
-  ASTValueDouble(double n) : super(ASTTypeDouble.instance, n);
+  ASTValueDouble(double n, {super.negative}) : super(ASTTypeDouble.instance, n);
 
   @override
   ASTValue operator +(ASTValue other) {
