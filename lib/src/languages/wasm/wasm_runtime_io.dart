@@ -102,6 +102,11 @@ class WasmModuleIO extends WasmModule {
   void dispose() {
     instance.dispose();
   }
+
+  @override
+  Object? resolveReturnedValue(Object? value) {
+    return value;
+  }
 }
 
 WasmRuntime createWasmRuntime() {
