@@ -62,6 +62,23 @@ jobs:
           verbose: true
 
 
+  test_exe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: dart-lang/setup-dart@v1
+      - name: Dart version
+        run: |
+          dart --version
+          uname -a
+      - name: Install dependencies
+        run: dart pub get
+      - name: Upgrade dependencies
+        run: dart pub upgrade
+      - name: Run tests (VM)
+        run: dart test --compiler exe
+
+
   test_chrome:
     runs-on: ubuntu-latest
     steps:
