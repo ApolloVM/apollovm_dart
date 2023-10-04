@@ -1,6 +1,51 @@
+## 0.0.46
+
+- Improve type resolution of `ASTTypeVar`.
+- Optimize some `async` methods.
+
+## 0.0.45
+
+- `ASTBranchIfElseBlock` and `ASTBranchIfElseIfsElseBlock`:
+  - `blockElse`: optional.
+- `ASTParametersDeclaration`:
+  - Added `allParameters`.
+- `ASTTypeInt` and `ASTTypeDouble`:
+  - Added `bits`
+  - Added `ASTTypeInt.instance32` and `ASTTypeInt.instance64`.
+  - Added `ASTTypeDouble.instance32` and `ASTTypeDouble.instance64`.
+- `ASTValueNum`:
+  - Added field `negative`.
+
+- `ApolloGeneratorWasm`:
+  - Changed to 64 bits.
+  - `Wasm`: split in `Wasm32` and `Wasm64` with improved opcodes.
+  - Allow operations with different types (auto casting).
+  - Handle `unreachable` end of function cases.
+  - Implemented:
+    - `generateASTValue`, `generateASTValueDouble`, `generateASTValueInt`.
+    - `generateASTExpressionVariableAssignment`, `generateASTStatementExpression`
+    - `generateASTBranchIfBlock`, `generateASTBranchIfElseBlock`, `generateASTBranchIfElseIfsElseBlock`.
+    - `generateASTStatementReturnWithExpression`, `generateASTStatementReturn`, `generateASTStatementReturnValue`.
+
+- `ApolloParserWasm`:
+  - Identify if an `ASTTypeInt` or `ASTTypeDouble` type is a `32` or `64` bits. 
+
+- `ApolloRunnerWasm`:
+  - Use the parsed Wasm functions (AST) to normalize the parameters before calling the Wasm function.  
+
+- `WasmModule`:
+  - Added `resolveReturnedValue`.
+    - Browser implementation: when the function returns a `f64`, the JS `bigint` needs to be converted to a Dart `BigInt`.
+- New `WasmModuleExecutionError`.
+
+## 0.0.44
+
+- `pubspec.yaml`: update description.
+
 ## 0.0.43
 
-- New `WasmRuntimeIO`.
+- `ApolloRunner`:
+  - `getFunctionCodeUnit`: fix returned codeUnit when `allowClassMethod = true`.
 
 ## 0.0.42
 
@@ -28,7 +73,7 @@
 - crypto: ^3.0.3
 - path: ^1.8.3
 
-## 0.0.42
+## 0.0.42+alpha
 
 - Renamed `ApolloLanguageRunner` to `ApolloRunner`.
 - Organize runners implementation files.

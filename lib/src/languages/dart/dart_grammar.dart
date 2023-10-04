@@ -267,13 +267,12 @@ class DartGrammarDefinition extends DartGrammarLexer {
               char(')').trimHidden() &
               codeBlock() &
               ref0(branchElseIfs).plus() &
-              string('else').trimHidden() &
-              codeBlock())
+              (string('else').trimHidden() & codeBlock()).optional())
           .map((v) {
         var condition = v[2];
         var blockIf = v[4];
         var blockElseIfs = v[5] as List;
-        var blockElse = v[7];
+        var blockElse = v[6]?[1];
 
         return ASTBranchIfElseIfsElseBlock(condition, blockIf,
             blockElseIfs.cast<ASTBranchIfBlock>().toList(), blockElse);
@@ -625,12 +624,15 @@ class DartGrammarDefinition extends DartGrammarLexer {
       .cast<ASTValue>();
 
   Parser<ASTValueBool> literalBool() =>
-      ((string('true') | string('false')).trim()).map((v) {
+      (string('true') | string('false').trim()).map((v) {
         return ASTValueBool(v == 'true');
       });
 
-  Parser<ASTValueNum> literalNum() => (numberLexicalToken().trim()).map((v) {
-        return ASTValueNum.from(v);
+  Parser<ASTValueNum> literalNum() =>
+      (char('-').optional() & numberLexicalToken()).trim().map((v) {
+        var negative = v[0] == '-';
+        var value = v[1];
+        return ASTValueNum.from(value, negative: negative);
       });
 
   Parser<ASTValue<String>> literalString() =>

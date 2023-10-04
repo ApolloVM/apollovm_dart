@@ -29,6 +29,9 @@ class WasmModuleGeneric extends WasmModule {
 
   @override
   F? getFunction<F extends Function>(String functionName) => null;
+
+  @override
+  Object? resolveReturnedValue(Object? value) => value;
 }
 
 WasmRuntime createWasmRuntime() {

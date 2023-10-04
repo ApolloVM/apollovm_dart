@@ -584,12 +584,15 @@ class Java11GrammarDefinition extends Java11GrammarLexer {
       .cast<ASTValue>();
 
   Parser<ASTValueBool> literalBool() =>
-      ((string('true') | string('false')).trim()).map((v) {
+      (string('true') | string('false')).trim().map((v) {
         return ASTValueBool(v == 'true');
       });
 
-  Parser<ASTValueNum> literalNum() => (numberLexicalToken()).map((v) {
-        return ASTValueNum.from(v);
+  Parser<ASTValueNum> literalNum() =>
+      (char('-').optional() & numberLexicalToken()).trim().map((v) {
+        var negative = v[0] == '-';
+        var value = v[1];
+        return ASTValueNum.from(value, negative: negative);
       });
 
   Parser<ASTValueString> literalString() => (stringLexicalToken()).map((v) {

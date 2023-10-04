@@ -18,7 +18,7 @@ import 'apollovm_ast_variable.dart';
 
 /// An AST Type.
 class ASTType<V> implements ASTNode, ASTTypedNode {
-  static ASTType from(dynamic o) {
+  static ASTType from(dynamic o, [VMContext? context]) {
     if (o == null) return ASTTypeNull.instance;
 
     if (o is ASTType) {
@@ -34,11 +34,11 @@ class ASTType<V> implements ASTNode, ASTTypedNode {
     }
 
     if (o is ASTExpressionLiteral) {
-      return ASTType.from(o.value);
+      return ASTType.from(o.value, context);
     }
 
     if (o is ASTTypedNode) {
-      var resolved = o.resolveType(VMContext.getCurrent());
+      var resolved = o.resolveType(context ?? VMContext.getCurrent());
       if (resolved is ASTType) {
         return resolved;
       } else {
@@ -402,7 +402,7 @@ class ASTTypeNum<T extends num> extends ASTTypeNumber<T> {
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      super == other && other is ASTTypeInt && runtimeType == other.runtimeType;
+      super == other && other is ASTTypeNum && runtimeType == other.runtimeType;
 
   @override
   int get hashCode => name.hashCode;
@@ -416,8 +416,13 @@ class ASTTypeNum<T extends num> extends ASTTypeNumber<T> {
 /// [ASTType] for integer ([int]).
 class ASTTypeInt extends ASTTypeNum<int> {
   static final ASTTypeInt instance = ASTTypeInt();
+  static final ASTTypeInt instance32 = ASTTypeInt(bits: 32);
+  static final ASTTypeInt instance64 = ASTTypeInt(bits: 64);
 
-  ASTTypeInt() : super._('int');
+  /// Amount of bits of the `int` (optional).
+  final int? bits;
+
+  ASTTypeInt({this.bits}) : super._('int');
 
   @override
   bool acceptsType(ASTType type) {
@@ -448,24 +453,39 @@ class ASTTypeInt extends ASTTypeNum<int> {
   }
 
   @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      super == other && other is ASTTypeInt && runtimeType == other.runtimeType;
+  bool operator ==(Object other) {
+    if (identical(this, other)) return true;
+
+    if (other is ASTTypeInt && runtimeType == other.runtimeType) {
+      if (bits != null && other.bits != null) {
+        return bits == other.bits;
+      }
+
+      return true;
+    }
+
+    return false;
+  }
 
   @override
   int get hashCode => name.hashCode;
 
   @override
   String toString() {
-    return 'int';
+    return 'int${bits != null ? '($bits)' : ''}';
   }
 }
 
 /// [ASTType] for [double].
 class ASTTypeDouble extends ASTTypeNum<double> {
   static final ASTTypeDouble instance = ASTTypeDouble();
+  static final ASTTypeDouble instance32 = ASTTypeDouble(bits: 32);
+  static final ASTTypeDouble instance64 = ASTTypeDouble(bits: 64);
 
-  ASTTypeDouble() : super._('double');
+  /// Amount of bits of the `float`/`double` (optional).
+  final int? bits;
+
+  ASTTypeDouble({this.bits}) : super._('double');
 
   @override
   bool acceptsType(ASTType type) {
@@ -496,16 +516,26 @@ class ASTTypeDouble extends ASTTypeNum<double> {
   }
 
   @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      super == other && other is ASTTypeInt && runtimeType == other.runtimeType;
+  bool operator ==(Object other) {
+    if (identical(this, other)) return true;
+
+    if (other is ASTTypeDouble && runtimeType == other.runtimeType) {
+      if (bits != null && other.bits != null) {
+        return bits == other.bits;
+      }
+
+      return true;
+    }
+
+    return false;
+  }
 
   @override
   int get hashCode => name.hashCode;
 
   @override
   String toString() {
-    return 'double';
+    return 'double${bits != null ? '($bits)' : ''}';
   }
 }
 
@@ -522,7 +552,7 @@ class ASTTypeString extends ASTTypePrimitive<String> {
   }
 
   @override
-  FutureOr<ASTValueString?> toValue(VMContext context, Object? v) async {
+  FutureOr<ASTValueString?> toValue(VMContext context, Object? v) {
     if (v is ASTValueString) return v;
 
     if (v is ASTValue) {
@@ -566,7 +596,7 @@ class ASTTypeObject extends ASTType<Object> {
   bool acceptsType(ASTType type) => true;
 
   @override
-  FutureOr<ASTValue<Object>?> toValue(VMContext context, Object? v) async {
+  FutureOr<ASTValue<Object>?> toValue(VMContext context, Object? v) {
     if (v is ASTValueObject) return v;
 
     if (v is ASTValueNull) {
@@ -578,12 +608,14 @@ class ASTTypeObject extends ASTType<Object> {
     }
 
     if (v is ASTValue) {
-      var resolved = await v.resolve(context);
-      if (resolved is! ASTValue<Object>) {
-        var vDyn = await resolved.getValue(context);
-        return ASTValueObject(vDyn);
-      }
-      return resolved;
+      return v.resolve(context).resolveMapped((resolved) {
+        if (resolved is! ASTValue<Object>) {
+          return resolved.getValue(context).resolveMapped((vDyn) {
+            return ASTValueObject(vDyn);
+          });
+        }
+        return resolved;
+      });
     }
 
     return v != null ? ASTValueObject(v) : null;
@@ -615,23 +647,20 @@ class ASTTypeVar extends ASTType<dynamic> {
   ASTType? _resolvedType;
 
   @override
-  FutureOr<ASTType> resolveType(VMContext? context) async {
-    if (_resolvedType == null) {
-      if (context != null) {
-        _resolvedType = await _resolveTypeImpl(context);
-        return _resolvedType!;
-      } else {
-        return _resolveTypeImpl(null);
-      }
-    } else {
-      return _resolvedType!;
-    }
+  FutureOr<ASTType> resolveType(VMContext? context) {
+    final resolvedType = _resolvedType;
+    if (resolvedType != null) return resolvedType;
+
+    return _resolveTypeImpl(context).resolveMapped((resolvedType) {
+      _resolvedType = resolvedType;
+      return resolvedType;
+    });
   }
 
-  Future<ASTType> _resolveTypeImpl(VMContext? context) async =>
-      _associatedNode != null
-          ? await _associatedNode!.resolveType(context)
-          : this;
+  FutureOr<ASTType> _resolveTypeImpl(VMContext? context) {
+    var associatedNode = _associatedNode;
+    return associatedNode == null ? this : associatedNode.resolveType(context);
+  }
 
   ASTTypedNode? _associatedNode;
 
@@ -639,11 +668,15 @@ class ASTTypeVar extends ASTType<dynamic> {
   void associateToType(ASTTypedNode node) => _associatedNode = node;
 
   @override
-  FutureOr<ASTValue<dynamic>> toValue(VMContext context, Object? v) async {
-    if (v is ASTValue<dynamic> && v.type == this) return v;
+  FutureOr<ASTValue<dynamic>> toValue(VMContext context, Object? v) {
+    if (v is ASTValue<dynamic> && v.type == this) {
+      return v;
+    }
 
     if (v is ASTValue) {
-      v = await (v).getValue(context);
+      return v.getValue(context).resolveMapped((v) {
+        return ASTValueStatic<dynamic>(this, v);
+      });
     }
 
     return ASTValueStatic<dynamic>(this, v);
@@ -673,11 +706,15 @@ class ASTTypeDynamic extends ASTType<dynamic> {
   bool acceptsType(ASTType type) => true;
 
   @override
-  FutureOr<ASTValue<dynamic>> toValue(VMContext context, Object? v) async {
-    if (v is ASTValue<dynamic> && v.type == this) return v;
+  FutureOr<ASTValue<dynamic>> toValue(VMContext context, Object? v) {
+    if (v is ASTValue && v.type == this) {
+      return v;
+    }
 
     if (v is ASTValue) {
-      v = await (v).getValue(context);
+      return v.getValue(context).resolveMapped((v) {
+        return ASTValue.from(this, v);
+      });
     }
 
     return ASTValue.from(this, v);

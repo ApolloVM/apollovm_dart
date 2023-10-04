@@ -496,21 +496,8 @@ class ASTExpressionOperation extends ASTExpression {
           var retT1 = expression1.resolveType(context);
           var retT2 = expression1.resolveType(context);
 
-          return retT1.resolveBoth(retT2, (t1, t2) {
-            if (_isOneOfType(t1, t2, ASTTypeDouble.instance)) {
-              return ASTTypeDouble.instance;
-            }
-            if (_isOneOfType(t1, t2, ASTTypeInt.instance)) {
-              return ASTTypeInt.instance;
-            }
-            if (_isOneOfType(t1, t2, ASTTypeString.instance)) {
-              return ASTTypeString.instance;
-            }
-            if (_isOneOfType(t1, t2, ASTTypeNum.instance)) {
-              return ASTTypeInt.instance;
-            }
-            return ASTTypeDynamic.instance;
-          });
+          return retT1.resolveBoth(
+              retT2, (t1, t2) => _resolveTypePair(t1, t2, context));
         }
       case ASTExpressionOperator.divideAsInt:
         return ASTTypeInt.instance;
@@ -524,6 +511,61 @@ class ASTExpressionOperation extends ASTExpression {
       case ASTExpressionOperator.lowerOrEq:
         return ASTTypeBool.instance;
     }
+  }
+
+  FutureOr<ASTType> _resolveTypePair(ASTType t1, ASTType t2, VMContext? context,
+      {int resolveDepth = 0}) {
+    if (resolveDepth < 3) {
+      FutureOr<ASTType>? resolve1;
+      FutureOr<ASTType>? resolve2;
+
+      if (t1 is ASTTypeVar || t1 is ASTTypedVariable) {
+        resolve1 = t1.resolveType(context);
+      }
+
+      if (t2 is ASTTypeVar || t2 is ASTTypedVariable) {
+        resolve2 = t2.resolveType(context);
+      }
+
+      if (resolve1 != null && resolve2 != null) {
+        return resolve1.resolveOther(resolve2, (t1, t2) {
+          return _resolveTypePair(t1, t2, context,
+              resolveDepth: resolveDepth + 1);
+        });
+      } else if (resolve1 != null) {
+        return resolve1.resolveMapped((t1) {
+          return _resolveTypePair(t1, t2, context,
+              resolveDepth: resolveDepth + 1);
+        });
+      } else if (resolve2 != null) {
+        return resolve2.resolveMapped((t2) {
+          return _resolveTypePair(t1, t2, context,
+              resolveDepth: resolveDepth + 1);
+        });
+      }
+    }
+
+    if (t1 == t2) {
+      return t1;
+    }
+
+    if (t1 is ASTTypeNum && t2 is ASTTypeNum) {
+      if (_isOneOfType(t1, t2, ASTTypeDouble.instance)) {
+        return ASTTypeDouble.instance;
+      }
+
+      if (_isOneOfType(t1, t2, ASTTypeInt.instance)) {
+        return ASTTypeInt.instance;
+      }
+
+      return ASTTypeNum.instance;
+    }
+
+    if (_isOneOfType(t1, t2, ASTTypeString.instance)) {
+      return ASTTypeString.instance;
+    }
+
+    return ASTTypeDynamic.instance;
   }
 
   static bool _isOneOfType(ASTType t1, ASTType t2, ASTType target) {
@@ -869,15 +911,15 @@ abstract class ASTExpressionFunctionInvocation extends ASTExpression {
   }
 
   @override
-  FutureOr<ASTType> resolveType(VMContext? context) async {
+  FutureOr<ASTType> resolveType(VMContext? context) {
     if (context != null) {
-      var f = await _getFunction(context);
-      return f.resolveType(context);
+      return _getFunction(context).resolveMapped((f) => f.resolveType(context));
     }
 
-    return _associatedNode != null
-        ? await _associatedNode!.resolveType(context)
-        : ASTTypeDynamic.instance;
+    final associatedNode = _associatedNode;
+    return associatedNode == null
+        ? ASTTypeDynamic.instance
+        : associatedNode.resolveType(context);
   }
 
   ASTTypedNode? _associatedNode;

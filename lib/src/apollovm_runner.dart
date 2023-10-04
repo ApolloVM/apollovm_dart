@@ -117,13 +117,19 @@ abstract class ApolloRunner implements VMTypeResolver {
     var codeUnit = codeNamespace.getCodeUnitWithFunction(functionName);
 
     if (codeUnit == null && allowClassMethod) {
-      var classWithMethod = codeNamespace
-          .getCodeUnitWithClassMethod(functionName)
-          ?.root
-          ?.getClassWithMethod(functionName);
+      var codeUnitWithMethod =
+          codeNamespace.getCodeUnitWithClassMethod(functionName);
 
-      if (classWithMethod != null) {
-        return (codeUnit: codeUnit, className: classWithMethod.name);
+      if (codeUnitWithMethod != null) {
+        var classWithMethod =
+            codeUnitWithMethod.root?.getClassWithMethod(functionName);
+
+        if (classWithMethod != null) {
+          return (
+            codeUnit: codeUnitWithMethod,
+            className: classWithMethod.name,
+          );
+        }
       }
     }
 
