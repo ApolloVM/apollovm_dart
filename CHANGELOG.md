@@ -1,3 +1,8 @@
+## 0.0.46
+
+- Improve type resolution of `ASTTypeVar`.
+- Optimize some `async` methods.
+
 ## 0.0.45
 
 - `ASTBranchIfElseBlock` and `ASTBranchIfElseIfsElseBlock`:

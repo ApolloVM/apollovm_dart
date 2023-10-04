@@ -297,6 +297,97 @@ class Foo {
 ]]></source-generated>
 </test>
     '''),
+    TestDefinition('dart_basic_class_function_with_multi_args.test.xml', r'''
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="Basic Class function call with multiple parameters">
+    <source language="dart">
+        <![CDATA[
+
+        class Foo {
+          int x = 0 ;
+          int y = 10 ;
+
+          int getZ() {
+            return y * 2 ;
+          }
+
+          int calcB(int b1 , int b2) {
+            return y * b1 * b2 ;
+          }
+
+          void test(int a) {
+            var z = getZ();
+            var b = calcB(z , 3);
+            var s = '$this > a: $a ; x: $x ; y: $y ; z: $z ; b: $b' ;
+            print(s);
+          }
+        }
+
+        ]]>
+    </source>
+    <call class="Foo" function="test">
+        [123]
+    </call>
+    <output>
+        ["Foo{x: int, y: int} > a: 123 ; x: 0 ; y: 10 ; z: 20 ; b: 600"]
+    </output>
+    <source-generated language="dart"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+class Foo {
+
+  int x = 0;
+  int y = 10;
+
+  int getZ() {
+    return y * 2;
+  }
+
+  int calcB(int b1, int b2) {
+    return y * b1 * b2;
+  }
+
+  void test(int a) {
+    var z = getZ();
+    var b = calcB(z, 3);
+    var s = '$this > a: $a ; x: $x ; y: $y ; z: $z ; b: $b';
+    print(s);
+  }
+
+}
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+
+    <source-generated language="java11"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+class Foo {
+
+  int x = 0;
+  int y = 10;
+
+  int getZ() {
+    return y * 2;
+  }
+
+  int calcB(int b1, int b2) {
+    return y * b1 * b2;
+  }
+
+  void test(int a) {
+    var z = getZ();
+    var b = calcB(z, 3);
+    var s = String.valueOf( this ) + " > a: " + a + " ; x: " + x + " ; y: " + y + " ; z: " + z + " ; b: " + b;
+    print(s);
+  }
+
+}
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+</test>
+    '''),
   ];
 
   await runTestDefinitions(definitions);

@@ -747,20 +747,25 @@ class ASTFunctionSignature implements ASTNode {
 
   static ASTType? toASTType(dynamic o, [VMContext? context]) {
     if (o == null) return null;
-    if (o is ASTType) return o;
+    if (o is ASTType) {
+      var t = o.resolveType(context);
+      return t is ASTType ? t : o;
+    }
 
     if (o is ASTValue) {
       if (context != null) {
         var resolved = o.resolve(context);
         if (resolved is ASTValue) {
-          return resolved.type;
+          return toASTType(resolved.type, context);
         }
       }
       return o.type;
     }
 
-    var t = ASTType.from(o);
-    return t;
+    var t = ASTType.from(o, context);
+
+    var t2 = t.resolveType(context);
+    return t2 is ASTType ? t2 : t;
   }
 
   int get size {

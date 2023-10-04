@@ -2,8 +2,7 @@
 // This code is governed by the Apache License, Version 2.0.
 // Please refer to the LICENSE and AUTHORS files for details.
 
-import 'dart:async';
-
+import 'package:async_extension/async_extension.dart';
 import 'package:collection/collection.dart' show equalsIgnoreAsciiCase;
 
 import '../apollovm_base.dart';
@@ -209,7 +208,9 @@ class ASTBlock extends ASTStatement {
   }
 }
 
-class ASTStatementValue extends ASTStatement {
+abstract class ASTStatementTyped extends ASTStatement implements ASTTypedNode {}
+
+class ASTStatementValue extends ASTStatementTyped {
   ASTValue value;
 
   ASTStatementValue(ASTBlock block, this.value) : super();
@@ -336,7 +337,8 @@ class ASTStatementReturn extends ASTStatement {
 }
 
 /// [ASTStatement] to return null.
-class ASTStatementReturnNull extends ASTStatementReturn {
+class ASTStatementReturnNull extends ASTStatementReturn
+    implements ASTStatementTyped {
   @override
   ASTValue run(VMContext parentContext, ASTRunStatus runStatus) {
     return runStatus.returnNull();
@@ -352,7 +354,8 @@ class ASTStatementReturnNull extends ASTStatementReturn {
 }
 
 /// [ASTStatement] to return a [value].
-class ASTStatementReturnValue extends ASTStatementReturn {
+class ASTStatementReturnValue extends ASTStatementReturn
+    implements ASTStatementTyped {
   ASTValue value;
 
   ASTStatementReturnValue(this.value);
@@ -380,7 +383,8 @@ class ASTStatementReturnValue extends ASTStatementReturn {
 }
 
 /// [ASTStatement] to return a [variable].
-class ASTStatementReturnVariable extends ASTStatementReturn {
+class ASTStatementReturnVariable extends ASTStatementReturn
+    implements ASTStatementTyped {
   ASTVariable variable;
 
   ASTStatementReturnVariable(this.variable);
@@ -409,7 +413,8 @@ class ASTStatementReturnVariable extends ASTStatementReturn {
 }
 
 /// [ASTStatement] to return an [expression].
-class ASTStatementReturnWithExpression extends ASTStatementReturn {
+class ASTStatementReturnWithExpression extends ASTStatementReturn
+    implements ASTStatementTyped {
   ASTExpression expression;
 
   ASTStatementReturnWithExpression(this.expression);
@@ -438,7 +443,7 @@ class ASTStatementReturnWithExpression extends ASTStatementReturn {
 }
 
 /// [ASTStatement] that declares a scope variable.
-class ASTStatementVariableDeclaration<V> extends ASTStatement {
+class ASTStatementVariableDeclaration<V> extends ASTStatementTyped {
   ASTType<V> type;
 
   String name;
@@ -455,32 +460,53 @@ class ASTStatementVariableDeclaration<V> extends ASTStatement {
   }
 
   @override
-  FutureOr<ASTValue> run(
-      VMContext parentContext, ASTRunStatus runStatus) async {
+  FutureOr<ASTValue> run(VMContext parentContext, ASTRunStatus runStatus) {
+    return type
+        .resolveType(parentContext)
+        .resolveMapped((variableResolvedType) {
+      return _runImpl(parentContext, runStatus, variableResolvedType);
+    });
+  }
+
+  Future<ASTValue<dynamic>> _runImpl(VMContext parentContext,
+      ASTRunStatus runStatus, ASTType variableResolvedType) async {
     var value = this.value;
     if (value != null) {
-      var valueResolvedType = await value.resolveType(parentContext);
-      var variableResolvedType = await type.resolveType(parentContext);
-
-      if (!valueResolvedType.canCastToType(variableResolvedType)) {
-        throw ApolloVMRuntimeError(
-            "Can't cast variable type ($variableResolvedType) to type: $type");
-      }
-
-      var initValue = await value.run(parentContext, runStatus);
-
-      if (!(await initValue.isInstanceOfAsync(variableResolvedType))) {
-        throw ApolloVMRuntimeError(
-            "Can't cast initial ($initValue) value to type: $type");
-      }
-
-      parentContext.declareVariableWithValue(type, name, initValue);
-      return initValue;
+      return value
+          .resolveType(parentContext)
+          .resolveMapped((valueResolvedType) {
+        return _runImpl2(parentContext, variableResolvedType, valueResolvedType,
+            runStatus, value);
+      });
     } else {
       var initValue = ASTValueNull.instance;
-      parentContext.declareVariableWithValue(type, name, initValue);
+      parentContext.declareVariableWithValue(
+          variableResolvedType, name, initValue);
       return initValue;
     }
+  }
+
+  Future<ASTValue<dynamic>> _runImpl2(
+      VMContext parentContext,
+      ASTType variableResolvedType,
+      ASTType valueResolvedType,
+      ASTRunStatus runStatus,
+      ASTExpression value) async {
+    if (!valueResolvedType.canCastToType(variableResolvedType)) {
+      throw ApolloVMRuntimeError(
+          "Can't cast variable type ($variableResolvedType) to type: $type");
+    }
+
+    var initValue = await value.run(parentContext, runStatus);
+
+    if (!(await initValue.isInstanceOfAsync(variableResolvedType))) {
+      throw ApolloVMRuntimeError(
+          "Can't cast initial ($initValue) value to type: $type");
+    }
+
+    parentContext.declareVariableWithValue(
+        variableResolvedType, name, initValue);
+    return initValue;
   }
 
   @override
