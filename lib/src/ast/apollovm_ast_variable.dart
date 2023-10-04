@@ -148,6 +148,19 @@ class ASTRuntimeVariable<T> extends ASTTypedVariable<T> {
   }
 
   @override
+  ASTType resolveType(VMContext? context) {
+    if (type is ASTTypeVar) {
+      var t = _value.resolveType(context);
+      if (t is ASTType) {
+        return t;
+      }
+      return _value.type;
+    }
+
+    return type;
+  }
+
+  @override
   ASTVariable resolveVariable(VMContext context) {
     return this;
   }
@@ -161,6 +174,11 @@ class ASTRuntimeVariable<T> extends ASTTypedVariable<T> {
   void setValue(VMContext context, ASTValue value) {
     _value = value;
   }
+
+  @override
+  String toString() {
+    return 'ASTRuntimeVariable{value: $_value}';
+  }
 }
 
 /// [ASTVariable] for a variable visible in a scope context.
@@ -168,7 +186,7 @@ class ASTScopeVariable<T> extends ASTVariable {
   ASTScopeVariable(String name) : super(name);
 
   @override
-  FutureOr<ASTType> resolveType(VMContext? context) async {
+  FutureOr<ASTType> resolveType(VMContext? context) {
     final associatedNode = _associatedNode;
 
     if (associatedNode != null) {
@@ -233,14 +251,16 @@ class ASTThisVariable<T> extends ASTVariable {
   ASTThisVariable() : super('this');
 
   @override
-  FutureOr<ASTType> resolveType(VMContext? context) async {
+  FutureOr<ASTType> resolveType(VMContext? context) {
     if (context is VMClassContext) {
       return context.clazz.type;
     }
 
-    return _associatedNode != null
-        ? await _associatedNode!.resolveType(context)
-        : ASTTypeDynamic.instance;
+    final associatedNode = _associatedNode;
+
+    return associatedNode == null
+        ? ASTTypeDynamic.instance
+        : associatedNode.resolveType(context);
   }
 
   ASTTypedNode? _associatedNode;

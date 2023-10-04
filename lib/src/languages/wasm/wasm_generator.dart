@@ -1491,10 +1491,12 @@ extension _ASTFunctionDeclarationExtension on ASTFunctionDeclaration {
 }
 
 extension _ASTStatementExtension on ASTStatement {
-  List<MapEntry<String, ASTType>> declaredVariables() {
+  List<MapEntry<String, ASTType>> declaredVariablesTypes() {
     final self = this;
     if (self is ASTStatementVariableDeclaration) {
-      return [MapEntry(self.name, self.type)];
+      var resolvedType = self.resolveType(null);
+      var type = resolvedType is ASTType ? resolvedType : self.type;
+      return [MapEntry(self.name, type)];
     } else if (self is ASTBranchIfBlock) {
       return self.block.declaredVariables();
     } else if (self is ASTBranchIfElseBlock) {
@@ -1516,12 +1518,12 @@ extension _ASTStatementExtension on ASTStatement {
 
 extension _IterableASTStatementExtension on Iterable<ASTStatement> {
   List<MapEntry<String, ASTType>> declaredVariables() =>
-      expand((e) => e.declaredVariables()).toList();
+      expand((e) => e.declaredVariablesTypes()).toList();
 }
 
 extension _ASTBlockExtension on ASTBlock {
   List<MapEntry<String, ASTType>> declaredVariables() =>
-      statements.expand((e) => e.declaredVariables()).toList();
+      statements.expand((e) => e.declaredVariablesTypes()).toList();
 }
 
 extension _ASTFunctionParameterDeclarationExtension

@@ -18,7 +18,7 @@ import 'apollovm_ast_variable.dart';
 
 /// An AST Type.
 class ASTType<V> implements ASTNode, ASTTypedNode {
-  static ASTType from(dynamic o) {
+  static ASTType from(dynamic o, [VMContext? context]) {
     if (o == null) return ASTTypeNull.instance;
 
     if (o is ASTType) {
@@ -34,11 +34,11 @@ class ASTType<V> implements ASTNode, ASTTypedNode {
     }
 
     if (o is ASTExpressionLiteral) {
-      return ASTType.from(o.value);
+      return ASTType.from(o.value, context);
     }
 
     if (o is ASTTypedNode) {
-      var resolved = o.resolveType(VMContext.getCurrent());
+      var resolved = o.resolveType(context ?? VMContext.getCurrent());
       if (resolved is ASTType) {
         return resolved;
       } else {
@@ -552,7 +552,7 @@ class ASTTypeString extends ASTTypePrimitive<String> {
   }
 
   @override
-  FutureOr<ASTValueString?> toValue(VMContext context, Object? v) async {
+  FutureOr<ASTValueString?> toValue(VMContext context, Object? v) {
     if (v is ASTValueString) return v;
 
     if (v is ASTValue) {
@@ -596,7 +596,7 @@ class ASTTypeObject extends ASTType<Object> {
   bool acceptsType(ASTType type) => true;
 
   @override
-  FutureOr<ASTValue<Object>?> toValue(VMContext context, Object? v) async {
+  FutureOr<ASTValue<Object>?> toValue(VMContext context, Object? v) {
     if (v is ASTValueObject) return v;
 
     if (v is ASTValueNull) {
@@ -608,12 +608,14 @@ class ASTTypeObject extends ASTType<Object> {
     }
 
     if (v is ASTValue) {
-      var resolved = await v.resolve(context);
-      if (resolved is! ASTValue<Object>) {
-        var vDyn = await resolved.getValue(context);
-        return ASTValueObject(vDyn);
-      }
-      return resolved;
+      return v.resolve(context).resolveMapped((resolved) {
+        if (resolved is! ASTValue<Object>) {
+          return resolved.getValue(context).resolveMapped((vDyn) {
+            return ASTValueObject(vDyn);
+          });
+        }
+        return resolved;
+      });
     }
 
     return v != null ? ASTValueObject(v) : null;
@@ -645,23 +647,20 @@ class ASTTypeVar extends ASTType<dynamic> {
   ASTType? _resolvedType;
 
   @override
-  FutureOr<ASTType> resolveType(VMContext? context) async {
-    if (_resolvedType == null) {
-      if (context != null) {
-        _resolvedType = await _resolveTypeImpl(context);
-        return _resolvedType!;
-      } else {
-        return _resolveTypeImpl(null);
-      }
-    } else {
-      return _resolvedType!;
-    }
+  FutureOr<ASTType> resolveType(VMContext? context) {
+    final resolvedType = _resolvedType;
+    if (resolvedType != null) return resolvedType;
+
+    return _resolveTypeImpl(context).resolveMapped((resolvedType) {
+      _resolvedType = resolvedType;
+      return resolvedType;
+    });
   }
 
-  Future<ASTType> _resolveTypeImpl(VMContext? context) async =>
-      _associatedNode != null
-          ? await _associatedNode!.resolveType(context)
-          : this;
+  FutureOr<ASTType> _resolveTypeImpl(VMContext? context) {
+    var associatedNode = _associatedNode;
+    return associatedNode == null ? this : associatedNode.resolveType(context);
+  }
 
   ASTTypedNode? _associatedNode;
 
@@ -669,11 +668,15 @@ class ASTTypeVar extends ASTType<dynamic> {
   void associateToType(ASTTypedNode node) => _associatedNode = node;
 
   @override
-  FutureOr<ASTValue<dynamic>> toValue(VMContext context, Object? v) async {
-    if (v is ASTValue<dynamic> && v.type == this) return v;
+  FutureOr<ASTValue<dynamic>> toValue(VMContext context, Object? v) {
+    if (v is ASTValue<dynamic> && v.type == this) {
+      return v;
+    }
 
     if (v is ASTValue) {
-      v = await (v).getValue(context);
+      return v.getValue(context).resolveMapped((v) {
+        return ASTValueStatic<dynamic>(this, v);
+      });
     }
 
     return ASTValueStatic<dynamic>(this, v);
@@ -703,11 +706,15 @@ class ASTTypeDynamic extends ASTType<dynamic> {
   bool acceptsType(ASTType type) => true;
 
   @override
-  FutureOr<ASTValue<dynamic>> toValue(VMContext context, Object? v) async {
-    if (v is ASTValue<dynamic> && v.type == this) return v;
+  FutureOr<ASTValue<dynamic>> toValue(VMContext context, Object? v) {
+    if (v is ASTValue && v.type == this) {
+      return v;
+    }
 
     if (v is ASTValue) {
-      v = await (v).getValue(context);
+      return v.getValue(context).resolveMapped((v) {
+        return ASTValue.from(this, v);
+      });
     }
 
     return ASTValue.from(this, v);
