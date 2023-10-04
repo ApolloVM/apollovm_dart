@@ -322,30 +322,6 @@ Future<void> _testWasm(
     return;
   }
 
-  print(">> Running code...");
-
-  var dartRunner = vm.createRunner('dart')!;
-
-  // Map the `print` function in the VM:
-  dartRunner.externalPrintFunction = (o) => print("» $o");
-
-  for (var e in executions.entries) {
-    var parameters = e.key;
-    var expectedResult = e.value;
-
-    print('<<<<<<<<<<<<<<<<<<<<<<<<<<<<');
-    print('EXECUTE AST> $parameters -> $expectedResult');
-
-    var astValue = await dartRunner.executeFunction('', functionName,
-        positionalParameters: parameters);
-
-    var result = astValue.getValueNoContext();
-    print('Result: $result');
-
-    expect(result, expectedResult);
-    print('>>>>>>>>>>>>>>>>>>>>>>>>>>>>');
-  }
-
   print('------------------------------------------------------------------');
 
   print(">> Regenerating `$language` code ...\n");
@@ -395,6 +371,34 @@ Future<void> _testWasm(
   }
 
   expect(compiledWasm, isNotNull);
+
+  print('------------------------------------------------------------------');
+
+  {
+    print(">> Running code...");
+
+    var dartRunner = vm.createRunner('dart')!;
+
+    // Map the `print` function in the VM:
+    dartRunner.externalPrintFunction = (o) => print("» $o");
+
+    for (var e in executions.entries) {
+      var parameters = e.key;
+      var expectedResult = e.value;
+
+      print('<<<<<<<<<<<<<<<<<<<<<<<<<<<<');
+      print('EXECUTE AST> $parameters -> $expectedResult');
+
+      var astValue = await dartRunner.executeFunction('', functionName,
+          positionalParameters: parameters);
+
+      var result = astValue.getValueNoContext();
+      print('Result: $result');
+
+      expect(result, expectedResult);
+      print('>>>>>>>>>>>>>>>>>>>>>>>>>>>>');
+    }
+  }
 
   print('------------------------------------------------------------------');
 

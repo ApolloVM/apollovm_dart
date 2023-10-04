@@ -510,8 +510,14 @@ class ASTStatementVariableDeclaration<V> extends ASTStatementTyped {
   }
 
   @override
-  FutureOr<ASTType> resolveType(VMContext? context) =>
-      type.resolveType(context);
+  FutureOr<ASTType> resolveType(VMContext? context) {
+    final value = this.value;
+    if (value != null && type is ASTTypeVar) {
+      return value.resolveType(context);
+    }
+
+    return type.resolveType(context);
+  }
 
   @override
   String toString() {

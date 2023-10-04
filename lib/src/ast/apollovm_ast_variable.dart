@@ -194,6 +194,17 @@ class ASTScopeVariable<T> extends ASTVariable {
     }
 
     if (context == null) {
+      var parentNode = _parentNode;
+      if (parentNode != null) {
+        var node = parentNode.getNodeIdentifier(name);
+
+        if (node is ASTTypedNode) {
+          var typedNode = node as ASTTypedNode;
+          var t = typedNode.resolveType(null);
+          if (t is ASTType) return t;
+        }
+      }
+
       return ASTTypeDynamic.instance;
     }
 

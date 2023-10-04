@@ -666,12 +666,18 @@ class ASTRoot extends ASTEntryPointBlock {
 }
 
 /// An AST Parameter declaration.
-class ASTParameterDeclaration<T> implements ASTNode {
+class ASTParameterDeclaration<T> implements ASTNode, ASTTypedNode {
   final ASTType<T> type;
 
   final String name;
 
   ASTParameterDeclaration(this.type, this.name);
+
+  @override
+  void associateToType(ASTTypedNode node) {}
+
+  @override
+  FutureOr<ASTType> resolveType(VMContext? context) => type;
 
   FutureOr<ASTValue<T>?> toValue(VMContext context, Object? v) =>
       type.toValue(context, v);

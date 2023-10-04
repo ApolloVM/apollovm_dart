@@ -1,3 +1,7 @@
+## 0.0.47
+
+- Improve variable type resolution while compiling to Wasm.
+
 ## 0.0.46
 
 - Improve type resolution of `ASTTypeVar`.

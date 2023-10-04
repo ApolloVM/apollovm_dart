@@ -1437,7 +1437,7 @@ extension _ASTTypeExtension on ASTType {
       return WasmType.voidType;
     }
 
-    throw StateError("Can;t handle type: $this");
+    throw StateError("Can't handle type: $this");
   }
 
   int get wasmCode => wasmType.value;

@@ -129,6 +129,13 @@ class ASTExpressionVariableAccess extends ASTExpression {
   ASTExpressionVariableAccess(this.variable);
 
   @override
+  void resolveNode(ASTNode? parentNode) {
+    super.resolveNode(parentNode);
+
+    variable.resolveNode(this);
+  }
+
+  @override
   FutureOr<ASTType> resolveType(VMContext? context) =>
       variable.resolveType(context);
 
@@ -486,6 +493,14 @@ class ASTExpressionOperation extends ASTExpression {
   ASTExpressionOperation(this.expression1, this.operator, this.expression2);
 
   @override
+  void resolveNode(ASTNode? parentNode) {
+    super.resolveNode(parentNode);
+
+    expression1.resolveNode(this);
+    expression2.resolveNode(this);
+  }
+
+  @override
   FutureOr<ASTType> resolveType(VMContext? context) {
     switch (operator) {
       case ASTExpressionOperator.add:
@@ -494,7 +509,7 @@ class ASTExpressionOperation extends ASTExpression {
       case ASTExpressionOperator.divide:
         {
           var retT1 = expression1.resolveType(context);
-          var retT2 = expression1.resolveType(context);
+          var retT2 = expression2.resolveType(context);
 
           return retT1.resolveBoth(
               retT2, (t1, t2) => _resolveTypePair(t1, t2, context));
