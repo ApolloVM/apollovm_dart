@@ -13,7 +13,7 @@ import 'apollovm_ast_type.dart';
 import 'apollovm_ast_value.dart';
 
 /// Base class for variable reference.
-abstract class ASTVariable implements ASTNode, ASTTypedNode {
+abstract class ASTVariable with ASTNode implements ASTTypedNode {
   final String name;
 
   ASTVariable(this.name);
@@ -58,11 +58,13 @@ abstract class ASTVariable implements ASTNode, ASTTypedNode {
   @override
   void resolveNode(ASTNode? parentNode) {
     _parentNode = parentNode;
+
+    cacheDescendantChildren();
   }
 
   @override
-  ASTNode? getNodeIdentifier(String name) =>
-      parentNode?.getNodeIdentifier(name);
+  ASTNode? getNodeIdentifier(String name, {ASTNode? requester}) =>
+      parentNode?.getNodeIdentifier(name, requester: requester);
 
   @override
   String toString() {
@@ -97,6 +99,9 @@ abstract class ASTTypedVariable<T> extends ASTVariable {
 class ASTClassField<T> extends ASTTypedVariable<T> {
   ASTClassField(ASTType<T> type, String name, bool finalValue)
       : super(type, name, finalValue);
+
+  @override
+  Iterable<ASTNode> get children => [];
 
   @override
   ASTVariable resolveVariable(VMContext context) {
@@ -139,6 +144,9 @@ class ASTRuntimeVariable<T> extends ASTTypedVariable<T> {
   ASTRuntimeVariable(ASTType<T> type, String name, [ASTValue? value])
       : _value = value ?? ASTValueNull.instance,
         super(type, name, false);
+
+  @override
+  Iterable<ASTNode> get children => [_value];
 
   @override
   void resolveNode(ASTNode? parentNode) {
@@ -186,6 +194,9 @@ class ASTScopeVariable<T> extends ASTVariable {
   ASTScopeVariable(String name) : super(name);
 
   @override
+  Iterable<ASTNode> get children => [];
+
+  @override
   FutureOr<ASTType> resolveType(VMContext? context) {
     final associatedNode = _associatedNode;
 
@@ -196,7 +207,7 @@ class ASTScopeVariable<T> extends ASTVariable {
     if (context == null) {
       var parentNode = _parentNode;
       if (parentNode != null) {
-        var node = parentNode.getNodeIdentifier(name);
+        var node = parentNode.getNodeIdentifier(name, requester: this);
 
         if (node is ASTTypedNode) {
           var typedNode = node as ASTTypedNode;
@@ -244,7 +255,8 @@ class ASTScopeVariable<T> extends ASTVariable {
   void resolveNode(ASTNode? parentNode) {
     super.resolveNode(parentNode);
 
-    resolvedIdentifier = this.parentNode!.getNodeIdentifier(name);
+    resolvedIdentifier =
+        this.parentNode!.getNodeIdentifier(name, requester: this);
   }
 
   @override
@@ -260,6 +272,9 @@ class ASTScopeVariable<T> extends ASTVariable {
 /// [ASTVariable] for `this`/`self` reference.
 class ASTThisVariable<T> extends ASTVariable {
   ASTThisVariable() : super('this');
+
+  @override
+  Iterable<ASTNode> get children => [];
 
   @override
   FutureOr<ASTType> resolveType(VMContext? context) {
@@ -296,6 +311,9 @@ class ASTStaticClassAccessorVariable<T> extends ASTVariable {
   late final ASTClassStaticAccessor<ASTClass<T>, T> staticAccessor;
 
   ASTStaticClassAccessorVariable(this.clazz) : super(clazz.name);
+
+  @override
+  Iterable<ASTNode> get children => [staticAccessor];
 
   void setAccessor(ASTClassStaticAccessor<ASTClass<T>, T> accessor) {
     staticAccessor = accessor;
