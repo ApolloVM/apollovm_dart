@@ -14,7 +14,7 @@ import 'apollovm_ast_value.dart';
 import 'apollovm_ast_variable.dart';
 
 /// An AST Statement.
-abstract class ASTStatement implements ASTCodeRunner, ASTNode {
+abstract class ASTStatement with ASTNode implements ASTCodeRunner {
   ASTNode? _parentNode;
 
   @override
@@ -23,11 +23,13 @@ abstract class ASTStatement implements ASTCodeRunner, ASTNode {
   @override
   void resolveNode(ASTNode? parentNode) {
     _parentNode = parentNode;
+
+    cacheDescendantChildren();
   }
 
   @override
-  ASTNode? getNodeIdentifier(String name) =>
-      parentNode?.getNodeIdentifier(name);
+  ASTNode? getNodeIdentifier(String name, {ASTNode? requester}) =>
+      parentNode?.getNodeIdentifier(name, requester: requester);
 
   @override
   VMContext defineRunContext(VMContext parentContext) {
@@ -45,6 +47,9 @@ class ASTBlock extends ASTStatement {
   ASTBlock(this.parentBlock);
 
   @override
+  Iterable<ASTNode> get children => [..._functions.values, ..._statements];
+
+  @override
   void resolveNode(ASTNode? parentNode) {
     super.resolveNode(parentNode);
 
@@ -58,11 +63,11 @@ class ASTBlock extends ASTStatement {
   }
 
   @override
-  ASTNode? getNodeIdentifier(String name) {
+  ASTNode? getNodeIdentifier(String name, {ASTNode? requester}) {
     var f = _functions[name];
     if (f != null) return f;
 
-    return parentNode?.getNodeIdentifier(name);
+    return parentNode?.getNodeIdentifier(name, requester: requester);
   }
 
   final Map<String, ASTFunctionSet> _functions = {};
@@ -216,6 +221,9 @@ class ASTStatementValue extends ASTStatementTyped {
   ASTStatementValue(ASTBlock block, this.value) : super();
 
   @override
+  Iterable<ASTNode> get children => [value];
+
+  @override
   void resolveNode(ASTNode? parentNode) {
     super.resolveNode(parentNode);
 
@@ -298,6 +306,9 @@ class ASTStatementExpression extends ASTStatement {
   ASTStatementExpression(this.expression);
 
   @override
+  Iterable<ASTNode> get children => [expression];
+
+  @override
   void resolveNode(ASTNode? parentNode) {
     super.resolveNode(parentNode);
 
@@ -323,6 +334,9 @@ class ASTStatementExpression extends ASTStatement {
 /// [ASTStatement] to return void.
 class ASTStatementReturn extends ASTStatement {
   @override
+  Iterable<ASTNode> get children => [];
+
+  @override
   FutureOr<ASTValue> run(VMContext parentContext, ASTRunStatus runStatus) {
     return runStatus.returnVoid();
   }
@@ -339,6 +353,9 @@ class ASTStatementReturn extends ASTStatement {
 /// [ASTStatement] to return null.
 class ASTStatementReturnNull extends ASTStatementReturn
     implements ASTStatementTyped {
+  @override
+  Iterable<ASTNode> get children => [];
+
   @override
   ASTValue run(VMContext parentContext, ASTRunStatus runStatus) {
     return runStatus.returnNull();
@@ -359,6 +376,9 @@ class ASTStatementReturnValue extends ASTStatementReturn
   ASTValue value;
 
   ASTStatementReturnValue(this.value);
+
+  @override
+  Iterable<ASTNode> get children => [value];
 
   @override
   void resolveNode(ASTNode? parentNode) {
@@ -390,6 +410,9 @@ class ASTStatementReturnVariable extends ASTStatementReturn
   ASTStatementReturnVariable(this.variable);
 
   @override
+  Iterable<ASTNode> get children => [variable];
+
+  @override
   void resolveNode(ASTNode? parentNode) {
     super.resolveNode(parentNode);
 
@@ -418,6 +441,9 @@ class ASTStatementReturnWithExpression extends ASTStatementReturn
   ASTExpression expression;
 
   ASTStatementReturnWithExpression(this.expression);
+
+  @override
+  Iterable<ASTNode> get children => [expression];
 
   @override
   void resolveNode(ASTNode? parentNode) {
@@ -451,6 +477,9 @@ class ASTStatementVariableDeclaration<V> extends ASTStatementTyped {
   ASTExpression? value;
 
   ASTStatementVariableDeclaration(this.type, this.name, this.value);
+
+  @override
+  Iterable<ASTNode> get children => [type, if (value != null) value!];
 
   @override
   void resolveNode(ASTNode? parentNode) {
@@ -556,6 +585,9 @@ class ASTBranchIfBlock extends ASTBranch {
   ASTBranchIfBlock(this.condition, this.block);
 
   @override
+  Iterable<ASTNode> get children => [condition, block];
+
+  @override
   void resolveNode(ASTNode? parentNode) {
     super.resolveNode(parentNode);
 
@@ -589,6 +621,10 @@ class ASTBranchIfElseBlock extends ASTBranch {
   ASTBlock? blockElse;
 
   ASTBranchIfElseBlock(this.condition, this.blockIf, this.blockElse);
+
+  @override
+  Iterable<ASTNode> get children =>
+      [condition, blockIf, if (blockElse != null) blockElse!];
 
   @override
   void resolveNode(ASTNode? parentNode) {
@@ -629,6 +665,10 @@ class ASTBranchIfElseIfsElseBlock extends ASTBranch {
 
   ASTBranchIfElseIfsElseBlock(
       this.condition, this.blockIf, this.blocksElseIf, this.blockElse);
+
+  @override
+  Iterable<ASTNode> get children =>
+      [condition, ...blocksElseIf, if (blockElse != null) blockElse!];
 
   @override
   void resolveNode(ASTNode? parentNode) {
@@ -695,6 +735,10 @@ class ASTStatementForLoop extends ASTStatement {
 
   ASTStatementForLoop(this.initStatement, this.conditionExpression,
       this.continueExpression, this.loopBlock);
+
+  @override
+  Iterable<ASTNode> get children =>
+      [initStatement, conditionExpression, continueExpression, loopBlock];
 
   @override
   void resolveNode(ASTNode? parentNode) {

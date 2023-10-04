@@ -4,12 +4,15 @@
 
 import 'apollovm_ast_base.dart';
 
-class ASTAnnotation implements ASTNode {
+class ASTAnnotation with ASTNode {
   String name;
 
   Map<String, ASTAnnotationParameter>? parameters;
 
   ASTAnnotation(this.name, [this.parameters]);
+
+  @override
+  Iterable<ASTNode> get children => [...?parameters?.values];
 
   ASTNode? _parentNode;
 
@@ -19,14 +22,16 @@ class ASTAnnotation implements ASTNode {
   @override
   void resolveNode(ASTNode? parentNode) {
     _parentNode = parentNode;
+
+    cacheDescendantChildren();
   }
 
   @override
-  ASTNode? getNodeIdentifier(String name) =>
-      parentNode?.getNodeIdentifier(name);
+  ASTNode? getNodeIdentifier(String name, {ASTNode? requester}) =>
+      parentNode?.getNodeIdentifier(name, requester: requester);
 }
 
-class ASTAnnotationParameter implements ASTNode {
+class ASTAnnotationParameter with ASTNode {
   String name;
 
   String value;
@@ -36,6 +41,9 @@ class ASTAnnotationParameter implements ASTNode {
   ASTAnnotationParameter(this.name, this.value,
       [this.defaultParameter = false]);
 
+  @override
+  Iterable<ASTNode> get children => [];
+
   ASTNode? _parentNode;
 
   @override
@@ -44,9 +52,11 @@ class ASTAnnotationParameter implements ASTNode {
   @override
   void resolveNode(ASTNode? parentNode) {
     _parentNode = parentNode;
+
+    cacheDescendantChildren();
   }
 
   @override
-  ASTNode? getNodeIdentifier(String name) =>
-      parentNode?.getNodeIdentifier(name);
+  ASTNode? getNodeIdentifier(String name, {ASTNode? requester}) =>
+      parentNode?.getNodeIdentifier(name, requester: requester);
 }

@@ -4,7 +4,7 @@
 
 import 'package:async_extension/async_extension.dart';
 import 'package:collection/collection.dart'
-    show IterableExtension, equalsIgnoreAsciiCase;
+    show IterableExtension, IterableNullableExtension, equalsIgnoreAsciiCase;
 
 import '../apollovm_base.dart';
 import '../core/apollovm_core_base.dart';
@@ -281,10 +281,10 @@ class ASTClassPrimitive<T> extends ASTClass<T> {
   }
 
   @override
-  ASTNode? getNodeIdentifier(String name) {
+  ASTNode? getNodeIdentifier(String name, {ASTNode? requester}) {
     var f = fields.where((e) => e.name == name).firstOrNull;
     if (f != null) return f;
-    return super.getNodeIdentifier(name);
+    return super.getNodeIdentifier(name, requester: requester);
   }
 
   @override
@@ -379,10 +379,10 @@ class ASTClassNormal extends ASTClass<VMObject> {
   }
 
   @override
-  ASTNode? getNodeIdentifier(String name) {
+  ASTNode? getNodeIdentifier(String name, {ASTNode? requester}) {
     var f = _fields[name];
     if (f != null) return f;
-    return super.getNodeIdentifier(name);
+    return super.getNodeIdentifier(name, requester: requester);
   }
 
   @override
@@ -597,8 +597,8 @@ class ASTRoot extends ASTEntryPointBlock {
   }
 
   @override
-  ASTNode? getNodeIdentifier(String name) {
-    var identifier = super.getNodeIdentifier(name);
+  ASTNode? getNodeIdentifier(String name, {ASTNode? requester}) {
+    var identifier = super.getNodeIdentifier(name, requester: requester);
     if (identifier != null) return identifier;
 
     var clazz = ApolloVMCore.getClass(name);
@@ -666,12 +666,15 @@ class ASTRoot extends ASTEntryPointBlock {
 }
 
 /// An AST Parameter declaration.
-class ASTParameterDeclaration<T> implements ASTNode, ASTTypedNode {
+class ASTParameterDeclaration<T> with ASTNode implements ASTTypedNode {
   final ASTType<T> type;
 
   final String name;
 
   ASTParameterDeclaration(this.type, this.name);
+
+  @override
+  Iterable<ASTNode> get children => [type];
 
   @override
   void associateToType(ASTTypedNode node) {}
@@ -690,11 +693,13 @@ class ASTParameterDeclaration<T> implements ASTNode, ASTTypedNode {
   @override
   void resolveNode(ASTNode? parentNode) {
     _parentNode = parentNode;
+
+    cacheDescendantChildren();
   }
 
   @override
-  ASTNode? getNodeIdentifier(String name) =>
-      parentNode?.getNodeIdentifier(name);
+  ASTNode? getNodeIdentifier(String name, {ASTNode? requester}) =>
+      parentNode?.getNodeIdentifier(name, requester: requester);
 
   @override
   String toString() {
@@ -714,12 +719,17 @@ class ASTFunctionParameterDeclaration<T> extends ASTParameterDeclaration<T> {
 }
 
 /// An AST Function Signature.
-class ASTFunctionSignature implements ASTNode {
+class ASTFunctionSignature with ASTNode {
   List<ASTType?>? positionalTypes;
 
   Map<String, ASTType?>? namedTypes;
 
   ASTFunctionSignature(this.positionalTypes, this.namedTypes);
+
+  @override
+  Iterable<ASTNode> get children => [
+        ...?positionalTypes?.whereNotNull(),
+      ];
 
   static ASTFunctionSignature from(
       List? positionalParameters, Map? namedParameters) {
@@ -804,11 +814,13 @@ class ASTFunctionSignature implements ASTNode {
   @override
   void resolveNode(ASTNode? parentNode) {
     _parentNode = parentNode;
+
+    cacheDescendantChildren();
   }
 
   @override
-  ASTNode? getNodeIdentifier(String name) =>
-      parentNode?.getNodeIdentifier(name);
+  ASTNode? getNodeIdentifier(String name, {ASTNode? requester}) =>
+      parentNode?.getNodeIdentifier(name, requester: requester);
 
   @override
   String toString() {
@@ -838,7 +850,7 @@ class ASTFunctionSignature implements ASTNode {
 }
 
 /// An AST Function Set.
-abstract class ASTFunctionSet implements ASTNode {
+abstract class ASTFunctionSet with ASTNode {
   String get name => firstFunction.name;
 
   List<ASTFunctionDeclaration> get functions;
@@ -856,6 +868,9 @@ class ASTFunctionSetSingle extends ASTFunctionSet {
   final ASTFunctionDeclaration f;
 
   ASTFunctionSetSingle(this.f);
+
+  @override
+  Iterable<ASTNode> get children => [f];
 
   @override
   ASTFunctionDeclaration get firstFunction => f;
@@ -892,16 +907,21 @@ class ASTFunctionSetSingle extends ASTFunctionSet {
     _parentNode = parentNode;
 
     f.resolveNode(parentNode);
+
+    cacheDescendantChildren();
   }
 
   @override
-  ASTNode? getNodeIdentifier(String name) =>
-      parentNode?.getNodeIdentifier(name);
+  ASTNode? getNodeIdentifier(String name, {ASTNode? requester}) =>
+      parentNode?.getNodeIdentifier(name, requester: requester);
 }
 
 /// [ASTFunctionSet] implementation, with multiple entries.
 class ASTFunctionSetMultiple extends ASTFunctionSet {
   final List<ASTFunctionDeclaration> _functions = <ASTFunctionDeclaration>[];
+
+  @override
+  Iterable<ASTNode> get children => [..._functions];
 
   @override
   ASTFunctionDeclaration get firstFunction => _functions.first;
@@ -957,11 +977,13 @@ class ASTFunctionSetMultiple extends ASTFunctionSet {
     for (var f in _functions) {
       f.resolveNode(parentNode);
     }
+
+    cacheDescendantChildren();
   }
 
   @override
-  ASTNode? getNodeIdentifier(String name) =>
-      parentNode?.getNodeIdentifier(name);
+  ASTNode? getNodeIdentifier(String name, {ASTNode? requester}) =>
+      parentNode?.getNodeIdentifier(name, requester: requester);
 }
 
 /// An AST Parameters Declaration
@@ -1194,11 +1216,33 @@ class ASTFunctionDeclaration<T> extends ASTBlock {
   }
 
   @override
-  ASTNode? getNodeIdentifier(String name) {
+  ASTNode? getNodeIdentifier(String name, {ASTNode? requester}) {
+    var allChildren = descendantChildren;
+
+    var limit = allChildren.length;
+
+    if (requester != null) {
+      var idx = allChildren.indexWhere((e) => identical(e, requester));
+
+      if (idx >= 0) {
+        limit = idx + 1;
+      }
+    }
+
+    for (var i = limit - 1; i >= 0; --i) {
+      var child = allChildren[i];
+
+      if (child is ASTStatementVariableDeclaration && child.name == name) {
+        return child;
+      } else if (child is ASTFunctionDeclaration && child.name == name) {
+        return child;
+      }
+    }
+
     var p = _parameters.getParameterByName(name);
     if (p != null) return p;
 
-    return super.getNodeIdentifier(name);
+    return super.getNodeIdentifier(name, requester: requester);
   }
 
   ASTParametersDeclaration get parameters => _parameters;

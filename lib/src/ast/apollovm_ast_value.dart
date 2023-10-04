@@ -16,7 +16,7 @@ import 'apollovm_ast_type.dart';
 import 'apollovm_ast_variable.dart';
 
 /// Base class for AST values.
-abstract class ASTValue<T> implements ASTNode, ASTTypedNode {
+abstract class ASTValue<T> with ASTNode implements ASTTypedNode {
   factory ASTValue.from(ASTType<T> type, T value) {
     if (value is ASTValue) {
       return value as ASTValue<T>;
@@ -122,17 +122,23 @@ abstract class ASTValue<T> implements ASTNode, ASTTypedNode {
       ? v.getValue(context) as FutureOr<T>
       : v.getValueNoContext() as FutureOr<T>;
 
+  T? _getValueSafe(VMContext? context, ASTValue v) {
+    try {
+      var val = _getValue(context, v);
+      return val is Future ? null : val;
+    } catch (_) {
+      return null;
+    }
+  }
+
   @override
   bool operator ==(Object other) {
     if (identical(this, other)) return true;
 
     if (other is ASTValue) {
       var context = VMContext.getCurrent();
-      var v1 = _getValue(context, this);
-      var v2 = _getValue(context, other);
-      if (v1 is Future || v2 is Future) {
-        throw StateError("Can't compare Future");
-      }
+      var v1 = _getValueSafe(context, this);
+      var v2 = _getValueSafe(context, other);
       return v1 == v2;
     }
     return false;
@@ -141,10 +147,7 @@ abstract class ASTValue<T> implements ASTNode, ASTTypedNode {
   @override
   int get hashCode {
     var context = VMContext.getCurrent();
-    var v1 = _getValue(context, this);
-    if (v1 is Future) {
-      throw StateError("Can't hashCode Future");
-    }
+    var v1 = _getValueSafe(context, this);
     return v1.hashCode;
   }
 
@@ -224,11 +227,13 @@ abstract class ASTValue<T> implements ASTNode, ASTTypedNode {
   @override
   void resolveNode(ASTNode? parentNode) {
     _parentNode = parentNode;
+
+    cacheDescendantChildren();
   }
 
   @override
-  ASTNode? getNodeIdentifier(String name) =>
-      parentNode?.getNodeIdentifier(name);
+  ASTNode? getNodeIdentifier(String name, {ASTNode? requester}) =>
+      parentNode?.getNodeIdentifier(name, requester: requester);
 
   @override
   String toString();
@@ -239,6 +244,12 @@ class ASTValueStatic<T> extends ASTValue<T> {
   T value;
 
   ASTValueStatic(ASTType<T> type, this.value) : super(type);
+
+  @override
+  Iterable<ASTNode> get children {
+    final value = this.value;
+    return [if (value is ASTNode) value];
+  }
 
   @override
   T getValue(VMContext context) => value;
@@ -336,6 +347,9 @@ class ASTValueStatic<T> extends ASTValue<T> {
 /// [ASTValue] for primitive types.
 abstract class ASTValuePrimitive<T> extends ASTValueStatic<T> {
   ASTValuePrimitive(ASTType<T> type, T value) : super(type, value);
+
+  @override
+  Iterable<ASTNode> get children => [];
 
   @override
   bool operator ==(Object other) {
@@ -444,10 +458,19 @@ abstract class ASTValueNum<T extends num> extends ASTValuePrimitive<T> {
       return value == other.value;
     } else if (other is ASTValue) {
       var context = VMContext.getCurrent();
-      var v2 = _getValue(context, other);
+
+      var t1 = resolveType(context);
+      var t2 = other.resolveType(context);
+
+      if (t1 != t2 && t1 is ASTType && t2 is ASTType && !t1.acceptsType(t2)) {
+        return false;
+      }
+
+      var v2 = _getValueSafe(context, other);
       if (v2 is num) {
         return value == v2;
       }
+
       throw UnsupportedError(
           "Can't perform operation '==' in non number values: $value > $v2");
     }
@@ -827,6 +850,9 @@ class ASTValueAsString<T> extends ASTValue<String> {
   ASTValueAsString(this.value) : super(ASTTypeString.instance);
 
   @override
+  Iterable<ASTNode> get children => [value];
+
+  @override
   FutureOr<String> getValue(VMContext context) {
     return value.getValue(context).resolveMapped((v) => '$v');
   }
@@ -847,6 +873,9 @@ class ASTValuesListAsString extends ASTValue<String> {
   List<ASTValue> values;
 
   ASTValuesListAsString(this.values) : super(ASTTypeString.instance);
+
+  @override
+  Iterable<ASTNode> get children => [...values];
 
   @override
   FutureOr<String> getValue(VMContext context) {
@@ -875,6 +904,9 @@ class ASTValueStringExpression<T> extends ASTValue<String> {
   final ASTExpression expression;
 
   ASTValueStringExpression(this.expression) : super(ASTTypeString.instance);
+
+  @override
+  Iterable<ASTNode> get children => [expression];
 
   @override
   FutureOr<String> getValue(VMContext context) {
@@ -907,6 +939,9 @@ class ASTValueStringVariable<T> extends ASTValue<String> {
   ASTValueStringVariable(this.variable) : super(ASTTypeString.instance);
 
   @override
+  Iterable<ASTNode> get children => [];
+
+  @override
   FutureOr<String> getValue(VMContext context) {
     return variable.getValue(context).resolveMapped((value) {
       return value.getValue(context).resolveMapped((v) => '$v');
@@ -935,6 +970,9 @@ class ASTValueStringConcatenation extends ASTValue<String> {
   final List<ASTValue<String>> values;
 
   ASTValueStringConcatenation(this.values) : super(ASTTypeString.instance);
+
+  @override
+  Iterable<ASTNode> get children => [...values];
 
   @override
   FutureOr<String> getValue(VMContext context) {
@@ -966,6 +1004,9 @@ class ASTValueReadIndex<T> extends ASTValue<T> {
   final Object _index;
 
   ASTValueReadIndex(ASTType<T> type, this.variable, this._index) : super(type);
+
+  @override
+  Iterable<ASTNode> get children => [variable];
 
   @override
   FutureOr<ASTType> resolveType(VMContext? context) {
@@ -1019,6 +1060,9 @@ class ASTValueReadKey<T> extends ASTValue<T> {
   final Object _key;
 
   ASTValueReadKey(ASTType<T> type, this.variable, this._key) : super(type);
+
+  @override
+  Iterable<ASTNode> get children => [variable];
 
   @override
   FutureOr<ASTType> resolveType(VMContext? context) {
@@ -1077,6 +1121,9 @@ class ASTClassInstance<V extends ASTValue> extends ASTValue<V> {
       throw StateError('Incompatible class with type: $clazz != $type');
     }
   }
+
+  @override
+  Iterable<ASTNode> get children => [_object];
 
   @override
   ASTType resolveType(VMContext? context) => clazz.type;
@@ -1141,6 +1188,9 @@ class ASTClassStaticAccessor<C extends ASTClass<V>, V> extends ASTValue<V> {
   }
 
   @override
+  Iterable<ASTNode> get children => [staticClassAccessorVariable];
+
+  @override
   ASTType resolveType(VMContext? context) => clazz.type;
 
   @override
@@ -1193,6 +1243,9 @@ class ASTValueFuture<T extends ASTType<V>, V> extends ASTValue<Future<V>> {
       : super(type is ASTTypeFuture
             ? type as ASTTypeFuture<T, V>
             : ASTTypeFuture<T, V>(type as T));
+
+  @override
+  Iterable<ASTNode> get children => [];
 
   @override
   Future<V> getValue(VMContext context) => future;

@@ -13,7 +13,7 @@ import 'apollovm_ast_value.dart';
 import 'apollovm_ast_variable.dart';
 
 /// Base for AST expressions.
-abstract class ASTExpression implements ASTCodeRunner, ASTNode {
+abstract class ASTExpression with ASTNode implements ASTCodeRunner {
   static FutureOr<ASTType> typeFromExpressions(
       Iterable<ASTExpression> expressions,
       {VMContext? context}) {
@@ -42,11 +42,13 @@ abstract class ASTExpression implements ASTCodeRunner, ASTNode {
   @override
   void resolveNode(ASTNode? parentNode) {
     _parentNode = parentNode;
+
+    cacheDescendantChildren();
   }
 
   @override
-  ASTNode? getNodeIdentifier(String name) =>
-      parentNode?.getNodeIdentifier(name);
+  ASTNode? getNodeIdentifier(String name, {ASTNode? requester}) =>
+      parentNode?.getNodeIdentifier(name, requester: requester);
 
   @override
   VMContext defineRunContext(VMContext parentContext) {
@@ -129,6 +131,9 @@ class ASTExpressionVariableAccess extends ASTExpression {
   ASTExpressionVariableAccess(this.variable);
 
   @override
+  Iterable<ASTNode> get children => [variable];
+
+  @override
   void resolveNode(ASTNode? parentNode) {
     super.resolveNode(parentNode);
 
@@ -140,8 +145,8 @@ class ASTExpressionVariableAccess extends ASTExpression {
       variable.resolveType(context);
 
   @override
-  ASTNode? getNodeIdentifier(String name) =>
-      parentNode?.getNodeIdentifier(name);
+  ASTNode? getNodeIdentifier(String name, {ASTNode? requester}) =>
+      parentNode?.getNodeIdentifier(name, requester: requester);
 
   @override
   FutureOr<ASTValue> run(VMContext parentContext, ASTRunStatus runStatus) {
@@ -162,12 +167,15 @@ class ASTExpressionLiteral extends ASTExpression {
   ASTExpressionLiteral(this.value);
 
   @override
+  Iterable<ASTNode> get children => [value];
+
+  @override
   FutureOr<ASTType> resolveType(VMContext? context) =>
       value.resolveType(context);
 
   @override
-  ASTNode? getNodeIdentifier(String name) =>
-      parentNode?.getNodeIdentifier(name);
+  ASTNode? getNodeIdentifier(String name, {ASTNode? requester}) =>
+      parentNode?.getNodeIdentifier(name, requester: requester);
 
   @override
   FutureOr<ASTValue> run(VMContext parentContext, ASTRunStatus runStatus) {
@@ -189,12 +197,16 @@ class ASTExpressionListLiteral extends ASTExpression {
   ASTExpressionListLiteral(this.type, this.valuesExpressions);
 
   @override
+  Iterable<ASTNode> get children =>
+      [if (type != null) type!, ...valuesExpressions];
+
+  @override
   FutureOr<ASTType> resolveType(VMContext? context) =>
       ASTExpression.typeFromExpressions(valuesExpressions);
 
   @override
-  ASTNode? getNodeIdentifier(String name) =>
-      parentNode?.getNodeIdentifier(name);
+  ASTNode? getNodeIdentifier(String name, {ASTNode? requester}) =>
+      parentNode?.getNodeIdentifier(name, requester: requester);
 
   @override
   FutureOr<ASTValue> run(VMContext parentContext, ASTRunStatus runStatus) {
@@ -238,6 +250,13 @@ class ASTExpressionMapLiteral extends ASTExpression {
   ASTExpressionMapLiteral(
       this.keyType, this.valueType, this.entriesExpressions);
 
+  @override
+  Iterable<ASTNode> get children => [
+        if (keyType != null) keyType!,
+        if (valueType != null) valueType!,
+        ...entriesExpressions.expand((e) => [e.key, e.value]),
+      ];
+
   FutureOr<ASTType> resolveKeyType(VMContext? context) =>
       ASTExpression.typeFromExpressions(entriesExpressions.map((e) => e.key));
 
@@ -249,8 +268,8 @@ class ASTExpressionMapLiteral extends ASTExpression {
       resolveValueType(context);
 
   @override
-  ASTNode? getNodeIdentifier(String name) =>
-      parentNode?.getNodeIdentifier(name);
+  ASTNode? getNodeIdentifier(String name, {ASTNode? requester}) =>
+      parentNode?.getNodeIdentifier(name, requester: requester);
 
   @override
   FutureOr<ASTValue> run(VMContext parentContext, ASTRunStatus runStatus) {
@@ -303,6 +322,9 @@ class ASTExpressionVariableEntryAccess extends ASTExpression {
   ASTExpressionVariableEntryAccess(this.variable, this.expression);
 
   @override
+  Iterable<ASTNode> get children => [variable, expression];
+
+  @override
   FutureOr<ASTType> resolveType(VMContext? context) =>
       variable.resolveType(context).resolveMapped((variableType) {
         if (variableType is ASTTypeArray) {
@@ -323,8 +345,8 @@ class ASTExpressionVariableEntryAccess extends ASTExpression {
   }
 
   @override
-  ASTNode? getNodeIdentifier(String name) =>
-      parentNode?.getNodeIdentifier(name);
+  ASTNode? getNodeIdentifier(String name, {ASTNode? requester}) =>
+      parentNode?.getNodeIdentifier(name, requester: requester);
 
   @override
   FutureOr<ASTValue> run(
@@ -445,6 +467,9 @@ class ASTExpressionNegation extends ASTExpression {
   ASTExpressionNegation(this.expression);
 
   @override
+  Iterable<ASTNode> get children => [expression];
+
+  @override
   FutureOr<ASTType> resolveType(VMContext? context) => ASTTypeBool.instance;
 
   @override
@@ -491,6 +516,9 @@ class ASTExpressionOperation extends ASTExpression {
   ASTExpression expression2;
 
   ASTExpressionOperation(this.expression1, this.operator, this.expression2);
+
+  @override
+  Iterable<ASTNode> get children => [expression1, expression2];
 
   @override
   void resolveNode(ASTNode? parentNode) {
@@ -860,6 +888,9 @@ class ASTExpressionVariableAssignment extends ASTExpression {
       this.variable, this.operator, this.expression);
 
   @override
+  Iterable<ASTNode> get children => [variable, expression];
+
+  @override
   FutureOr<ASTType> resolveType(VMContext? context) =>
       expression.resolveType(context);
 
@@ -915,6 +946,9 @@ abstract class ASTExpressionFunctionInvocation extends ASTExpression {
   List<ASTExpression> arguments;
 
   ASTExpressionFunctionInvocation(this.name, this.arguments);
+
+  @override
+  Iterable<ASTNode> get children => arguments;
 
   @override
   void resolveNode(ASTNode? parentNode) {
@@ -1007,6 +1041,9 @@ class ASTExpressionObjectFunctionInvocation
   ASTExpressionObjectFunctionInvocation(
       this.variable, String name, List<ASTExpression> arguments)
       : super(name, arguments);
+
+  @override
+  Iterable<ASTNode> get children => [variable];
 
   @override
   void resolveNode(ASTNode? parentNode) {

@@ -1,3 +1,24 @@
+## 0.0.48
+
+- `ASTNode`: 
+  - Now is a mixin.
+  - `getNodeIdentifier`: added optional parameter `requester`.
+  - Added `children` and `descendantChildren`.
+- `ASTFunctionDeclaration`:
+  - `getNodeIdentifier`: now can also resolve identifiers inside statements.
+ 
+- Wasm:
+  - Encode function names with UTF-8.
+  - `Wasm64`: added `i64WrapToi32`.
+- `WasmContext`:
+  - Added `returns` state. 
+- `ApolloGeneratorWasm`:
+  - Added `_autoConvertStackTypes`.
+  - `generateASTStatementReturnValue` and `generateASTStatementReturnVariable`:
+    - Auto cast returning types. 
+
+- Dart CI: added job `test_exe`.
+
 ## 0.0.47
 
 - Improve variable type resolution while compiling to Wasm.
