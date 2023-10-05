@@ -986,7 +986,7 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     var stack0Type = context.stackGet(0)!.type;
     var returnType = context.returnsGet(0)!.type;
 
-    _autoConvertStackTypes(stack0Type, returnType, out: out);
+    _autoConvertStackTypes(stack0Type, returnType, out: out, context: context);
 
     out.writeByte(Wasm.functionReturn,
         description: "[OP] return value: $value");
@@ -1609,7 +1609,7 @@ extension _ASTTypeExtension on ASTType {
 extension _ASTTypeNumExtension on ASTTypeNum {
   bool get isBits32 => bits == 32;
 
-  bool get isBits64 => bits == null || bits == 32;
+  bool get isBits64 => bits == null || bits == 64;
 }
 
 extension on Iterable<ASTFunctionParameterDeclaration> {

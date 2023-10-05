@@ -1,3 +1,9 @@
+## 0.0.49
+
+- `wasm_generator.dart`:
+  - Fix `isBits64`.
+- Improve Wasm test coverage.
+
 ## 0.0.48
 
 - `ASTNode`: 
