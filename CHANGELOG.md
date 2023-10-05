@@ -1,5 +1,7 @@
 ## 0.0.49
 
+- `ASTTypeDouble`:
+  - `acceptsType`: now also accepts an `ASTTypeInt`.
 - `wasm_generator.dart`:
   - Fix `isBits64`.
 - Improve Wasm test coverage.

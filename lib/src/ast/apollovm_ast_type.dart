@@ -506,6 +506,9 @@ class ASTTypeDouble extends ASTTypeNum<double> {
   @override
   bool acceptsType(ASTType type) {
     if (type == this) return true;
+    if (type is ASTTypeInt) {
+      return true;
+    }
     return false;
   }
 
