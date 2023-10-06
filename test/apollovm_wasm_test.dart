@@ -395,6 +395,78 @@ void main() async {
                 '0061736D0100000001080160037E7C7E017E03020100070E010A6F7065726174696F6E3200000A1E011C01017C2000B92001A2210320032002B964044042000F0B2003B00F0B',
           }),
     );
+
+    test(
+      'f\$10',
+      () => _testWasm(
+          language: 'dart',
+          code: r'''
+      
+          int f$10( int a, double b , double c ) {
+            var x = a * b;
+            var y = x / c ;
+            return y ;
+          }
+          
+        ''',
+          functionName: 'f\$10',
+          executions: {
+            [10, 5, 2]: 25,
+            [10, 5, 3]: 16,
+          },
+          expecteWasm: {
+            'test':
+                '0061736D0100000001080160037E7C7C017E03020100070801046624313000000A1B011902017C017C2000B92001A2210320032002A321042004B00F0B',
+          }),
+    );
+
+    test(
+      'f\$11',
+      () => _testWasm(
+          language: 'dart',
+          code: r'''
+      
+          double f$11( int a, double b , double c ) {
+            var x = a * b;
+            var y = x / c ;
+            return y ;
+          }
+          
+        ''',
+          functionName: 'f\$11',
+          executions: {
+            [10, 5, 2]: 25,
+            [11, 3, 2]: 16.5,
+          },
+          expecteWasm: {
+            'test':
+                '0061736D0100000001080160037E7C7C017C03020100070801046624313100000A1A011802017C017C2000B92001A2210320032002A3210420040F0B',
+          }),
+    );
+
+    test(
+      'f\$12',
+      () => _testWasm(
+          language: 'dart',
+          code: r'''
+      
+          double f$12( int a, double b , double c ) {
+            var x = a * b;
+            var y = x ~/ c ;
+            return y ;
+          }
+          
+        ''',
+          functionName: 'f\$12',
+          executions: {
+            [10, 5, 2]: 25,
+            [11, 3, 2]: 16
+          },
+          expecteWasm: {
+            'test':
+                '0061736D0100000001080160037E7C7C017C03020100070801046624313200000A1C011A02017C017E2000B92001A2210320032002A3B021042004B90F0B',
+          }),
+    );
   });
 }
 
