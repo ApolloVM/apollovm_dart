@@ -38,7 +38,7 @@ abstract mixin class ASTNode {
 
   bool _cacheDescendantChildren = false;
 
-  /// Mark that this node can cache it's [descendantChildren].
+  /// Mark that this node can cache its [descendantChildren].
   void cacheDescendantChildren() {
     _cacheDescendantChildren = true;
   }
