@@ -75,7 +75,7 @@ jobs:
         run: dart pub get
       - name: Upgrade dependencies
         run: dart pub upgrade
-      - name: Run tests (VM)
+      - name: Run tests (exe)
         run: dart test --compiler exe
 
 
