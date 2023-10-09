@@ -46,7 +46,12 @@ class WasmRuntimeIO extends WasmRuntime {
 
   @override
   bool get isSupported {
-    boot();
+    try {
+      boot();
+    } catch (e, s) {
+      print(e);
+      print(s);
+    }
     return _wasmRunDynLibLoaded;
   }
 
