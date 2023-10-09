@@ -1,11 +1,11 @@
 import 'dart:typed_data';
 
+import '../../ast/apollovm_ast_toplevel.dart';
 import 'package:async_extension/async_extension.dart';
 
 import 'wasm_runtime_generic.dart'
     if (dart.library.html) 'wasm_runtime_browser.dart'
-// if (dart.library.io) 'wasm_runtime_io.dart'
-    ;
+    if (dart.library.io) 'wasm_runtime_io.dart';
 
 /// A WebAssembly (Wasm) Runtime.
 abstract class WasmRuntime {
@@ -63,7 +63,7 @@ abstract class WasmModule {
   F? getFunction<F extends Function>(String functionName);
 
   /// Resolves the returned [value] from a called module function.
-  Object? resolveReturnedValue(Object? value);
+  Object? resolveReturnedValue(Object? value, ASTFunctionDeclaration? f);
 
   /// Disposes this module instance.
   FutureOr<void> dispose() {}

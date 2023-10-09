@@ -3,8 +3,11 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
-import 'package:wasm_run/wasm_run.dart' as wasm_run;
 import 'package:path/path.dart' as pack_path;
+import 'package:wasm_run/wasm_run.dart' as wasm_run;
+
+import '../../ast/apollovm_ast_toplevel.dart';
+import '../../ast/apollovm_ast_type.dart';
 import 'wasm_runtime.dart';
 
 /// [WasmRuntime] implementation for Dart VM.
@@ -104,7 +107,11 @@ class WasmModuleIO extends WasmModule {
   }
 
   @override
-  Object? resolveReturnedValue(Object? value) {
+  Object? resolveReturnedValue(Object? value, ASTFunctionDeclaration? f) {
+    if (f?.returnType is ASTTypeVoid) {
+      return null;
+    }
+
     return value;
   }
 }
