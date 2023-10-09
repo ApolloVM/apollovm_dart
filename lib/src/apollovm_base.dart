@@ -35,7 +35,7 @@ import 'languages/wasm/wasm_runner.dart';
 /// The Apollo VM.
 class ApolloVM implements VMTypeResolver {
   // ignore: non_constant_identifier_names
-  static final String VERSION = '0.0.46';
+  static final String VERSION = '0.0.49';
 
   static int _idCount = 0;
 
@@ -941,6 +941,9 @@ class VMObject extends ASTValue<dynamic> {
   final int id = ++_idCount;
 
   VMObject._(ASTType type) : super(type);
+
+  @override
+  Iterable<ASTNode> get children => [type];
 
   static VMObject createInstance(VMContext context, ASTType type) {
     return VMObject._(type);

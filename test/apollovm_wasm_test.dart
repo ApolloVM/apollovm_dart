@@ -116,7 +116,7 @@ void main() async {
           },
           expecteWasm: {
             'test':
-                '0061736D0100000001080160037E7E7E017E03020100070801046164643500000A2A012803017E017E017E20002001420A7C7C21032002B94202B9A3B02104200320047D2105200520057E0B',
+                '0061736D0100000001080160037E7E7E017E03020100070801046164643500000A2B012903017E017E017E20002001420A7C7C21032002B94202B9A3B02104200320047D2105200520057E0F0B',
           }),
     );
 
@@ -291,6 +291,182 @@ void main() async {
                 '0061736D0100000001060160017E017E0302010007090105616464313100000A10010E01017E2000420A7C210120010F0B',
           }),
     );
+
+    test(
+      'add12',
+      () => _testWasm(
+          language: 'dart',
+          code: r'''
+      
+          double add12( int a, int b ) {
+            double c = b / 2;
+            var sumAC = a + c ;
+            return sumAC;
+          }
+          
+        ''',
+          functionName: 'add12',
+          executions: {
+            [100, 31]: 115.5,
+          },
+          expecteWasm: {
+            'test':
+                '0061736D0100000001070160027E7E017C0302010007090105616464313200000A1C011A02017C017C2001B94202B9A321022000B92002A0210320030F0B',
+          }),
+    );
+
+    test(
+      'add13',
+      () => _testWasm(
+          language: 'dart',
+          code: r'''
+      
+          double add13(int a) {
+            var x = a + 10 ;
+            return x ;
+          }
+          
+        ''',
+          functionName: 'add13',
+          executions: {
+            [100]: 110,
+          },
+          expecteWasm: {
+            'test':
+                '0061736D0100000001060160017E017C0302010007090105616464313300000A11010F01017E2000420A7C21012001B90F0B',
+          }),
+    );
+
+    test(
+      'operation1',
+      () => _testWasm(
+          language: 'dart',
+          code: r'''
+      
+          double operation1( int v, double r, int balance ) {
+            var total = v * r ;
+          
+            if ( total > balance ) {
+              return 0;
+            }
+            
+            return total ;
+          }
+          
+        ''',
+          functionName: 'operation1',
+          executions: {
+            [50, 0.33, 1000]: 16.5,
+            [50, 30.0, 1000]: 0.0,
+            [50, 30.0, 2000]: 1500.0,
+            [50, 30, 2000]: 1500.0,
+          },
+          expecteWasm: {
+            'test':
+                '0061736D0100000001080160037E7C7E017C03020100070E010A6F7065726174696F6E3100000A1E011C01017C2000B92001A2210320032002B96404404200B90F0B20030F0B',
+          }),
+    );
+
+    test(
+      'operation2',
+      () => _testWasm(
+          language: 'dart',
+          code: r'''
+      
+          int operation2( int v, double r, int balance ) {
+            var total = v * r ;
+          
+            if ( total > balance ) {
+              return 0;
+            }
+            
+            return total ;
+          }
+          
+        ''',
+          functionName: 'operation2',
+          executions: {
+            [50, 0.33, 1000]: 16.0,
+            [50, 30.0, 1000]: 0.0,
+            [50, 30.0, 2000]: 1500.0,
+          },
+          expecteWasm: {
+            'test':
+                '0061736D0100000001080160037E7C7E017E03020100070E010A6F7065726174696F6E3200000A1E011C01017C2000B92001A2210320032002B964044042000F0B2003B00F0B',
+          }),
+    );
+
+    test(
+      'f\$10',
+      () => _testWasm(
+          language: 'dart',
+          code: r'''
+      
+          int f$10( int a, double b , double c ) {
+            var x = a * b;
+            var y = x / c ;
+            return y ;
+          }
+          
+        ''',
+          functionName: 'f\$10',
+          executions: {
+            [10, 5, 2]: 25,
+            [10, 5, 3]: 16,
+          },
+          expecteWasm: {
+            'test':
+                '0061736D0100000001080160037E7C7C017E03020100070801046624313000000A1B011902017C017C2000B92001A2210320032002A321042004B00F0B',
+          }),
+    );
+
+    test(
+      'f\$11',
+      () => _testWasm(
+          language: 'dart',
+          code: r'''
+      
+          double f$11( int a, double b , double c ) {
+            var x = a * b;
+            var y = x / c ;
+            return y ;
+          }
+          
+        ''',
+          functionName: 'f\$11',
+          executions: {
+            [10, 5, 2]: 25,
+            [11, 3, 2]: 16.5,
+          },
+          expecteWasm: {
+            'test':
+                '0061736D0100000001080160037E7C7C017C03020100070801046624313100000A1A011802017C017C2000B92001A2210320032002A3210420040F0B',
+          }),
+    );
+
+    test(
+      'f\$12',
+      () => _testWasm(
+          language: 'dart',
+          code: r'''
+      
+          double f$12( int a, double b , double c ) {
+            var x = a * b;
+            var y = x ~/ c ;
+            return y ;
+          }
+          
+        ''',
+          functionName: 'f\$12',
+          executions: {
+            [10, 5, 2]: 25,
+            [11, 3, 2]: 16
+          },
+          expecteWasm: {
+            'test':
+                '0061736D0100000001080160037E7C7C017C03020100070801046624313200000A1C011A02017C017E2000B92001A2210320032002A3B021042004B90F0B',
+          }),
+    );
   });
 }
 
@@ -320,30 +496,6 @@ Future<void> _testWasm(
   if (!loadOK) {
     print("Can't load source code in `$language`!");
     return;
-  }
-
-  print(">> Running code...");
-
-  var dartRunner = vm.createRunner('dart')!;
-
-  // Map the `print` function in the VM:
-  dartRunner.externalPrintFunction = (o) => print("» $o");
-
-  for (var e in executions.entries) {
-    var parameters = e.key;
-    var expectedResult = e.value;
-
-    print('<<<<<<<<<<<<<<<<<<<<<<<<<<<<');
-    print('EXECUTE AST> $parameters -> $expectedResult');
-
-    var astValue = await dartRunner.executeFunction('', functionName,
-        positionalParameters: parameters);
-
-    var result = astValue.getValueNoContext();
-    print('Result: $result');
-
-    expect(result, expectedResult);
-    print('>>>>>>>>>>>>>>>>>>>>>>>>>>>>');
   }
 
   print('------------------------------------------------------------------');
@@ -395,6 +547,34 @@ Future<void> _testWasm(
   }
 
   expect(compiledWasm, isNotNull);
+
+  print('------------------------------------------------------------------');
+
+  {
+    print(">> Running code...");
+
+    var dartRunner = vm.createRunner('dart')!;
+
+    // Map the `print` function in the VM:
+    dartRunner.externalPrintFunction = (o) => print("» $o");
+
+    for (var e in executions.entries) {
+      var parameters = e.key;
+      var expectedResult = e.value;
+
+      print('<<<<<<<<<<<<<<<<<<<<<<<<<<<<');
+      print('EXECUTE AST> $parameters -> $expectedResult');
+
+      var astValue = await dartRunner.executeFunction('', functionName,
+          positionalParameters: parameters);
+
+      var result = astValue.getValueNoContext();
+      print('Result: $result');
+
+      expect(result, expectedResult);
+      print('>>>>>>>>>>>>>>>>>>>>>>>>>>>>');
+    }
+  }
 
   print('------------------------------------------------------------------');
 

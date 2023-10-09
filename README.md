@@ -368,8 +368,11 @@ AST trees is currently under development.*
 
 Example of Dart code compiled to Wasm:
 ```dart
-int main( int a , int b ) {
-  int x = (a + b) + 10 ;
+int main( int a , double b ) {
+  var x = (a + b) / 2 ;
+  if (x > 1000) {
+    return -1;
+  }
   return x ;
 }
 ```
@@ -382,8 +385,11 @@ import 'package:apollovm/apollovm.dart';
 void main() async {
   var wasmBytes = await compileToWasm('dart', '''
     
-    int main( int a , int b ) {
-      int x = (a + b) + 10 ;
+    int main( int a , double b ) {
+      var x = (a + b) / 2 ;
+      if (x > 1000) {
+        return -1;
+      }
       return x ;
     }
     
@@ -443,7 +449,7 @@ Generated `Wasm` bytes with description:
           ## Type: function:
           [96]
           ## Parameters types:
-          [2 126 126]
+          [2 126 124]
           ## Return value:
           [1 126]
   ## Section: Function:
@@ -472,39 +478,63 @@ Generated `Wasm` bytes with description:
       ## Section Code ID:
       [10]
       ## Bytes block length:
-      [19]
+      [35]
       ## Functions bodies:
         ## Bodies count:
         [1]
           ## Bytes block length:
-          [17]
+          [33]
           ## Function body:
               ## Local variables count:
               [1]
               ## Declared variable count:
               [1]
-              ## Declared variable type(i64):
-              [126]
+              ## Declared variable type(f64):
+              [124]
                   ## [OP] local get: 0 $a:
                   [32 0]
+                ## [OP] convert i64 to f64 signed:
+                [185]
                   ## [OP] local get: 1 $b:
                   [32 1]
-                ## [OP] operator: add(i64):
-                [124]
-                ## [OP] push constant(i64): 10:
-                [66 10]
-              ## [OP] operator: add(i64):
-              [124]
+                ## [OP] operator: add(f64):
+                [160]
+                ## [OP] push constant(i64): 2:
+                [66 2]
+              ## [OP] convert i64 to f64 signed:
+              [185]
+              ## [OP] operator: divide(f64):
+              [163]
               ## [OP] local set: 2 $x:
               [33 2]
+                ## [OP] local get: 2 $x:
+                [32 2]
+                ## [OP] push constant(i64): 1000:
+                [66 232 7]
+              ## [OP] convert i64 to f64 signed:
+              [185]
+              ## [OP] operator: greaterThan(f64):
+              [100]
+              ## [OP] if ( x > (int) 1000 ):
+              [4 64]
+              ## [OP] push constant(i64): -1:
+              [66 127]
+              ## [OP] return value: (int) -1:
+              [15]
+              ## [OP] if end:
+              [11]
               ## [OP] local get: 2 $x (return):
               [32 2]
+              ## f64TruncateToI64Signed:
+              [176]
               ## [OP] return variable: 2 $x:
               [15]
               ## Code body end:
               [11]
 
 ```
+
+- NOTE: *When compiling to WebAssembly, ApolloVM keeps track of the stack and performs automatic type casting to facilitate operations between different types or return values.*
 
 -----------------------------
 

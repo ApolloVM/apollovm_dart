@@ -3,19 +3,67 @@
 // Please refer to the LICENSE and AUTHORS files for details.
 
 import 'dart:async';
+import 'dart:collection';
 
 import '../apollovm_base.dart';
 import 'apollovm_ast_type.dart';
 import 'apollovm_ast_value.dart';
 
 /// An AST (Abstract Syntax Tree) Node.
-abstract class ASTNode {
+abstract mixin class ASTNode {
   ASTNode? get parentNode;
 
   void resolveNode(ASTNode? parentNode);
 
-  ASTNode? getNodeIdentifier(String name) =>
-      parentNode?.getNodeIdentifier(name);
+  ASTNode? getNodeIdentifier(String name, {ASTNode? requester}) =>
+      parentNode?.getNodeIdentifier(name, requester: requester);
+
+  /// The children nodes of this node.
+  Iterable<ASTNode> get children;
+
+  UnmodifiableListView<ASTNode>? _descendantChildren;
+
+  /// Return the [children] and it's descendant children (unmodifiable).
+  List<ASTNode> get descendantChildren {
+    var descendantChildren = _descendantChildren;
+    if (descendantChildren != null) return descendantChildren;
+
+    if (_cacheDescendantChildren) {
+      return _descendantChildren =
+          UnmodifiableListView(_computeDescendantChildren());
+    } else {
+      return _computeDescendantChildren();
+    }
+  }
+
+  bool _cacheDescendantChildren = false;
+
+  /// Mark that this node can cache its [descendantChildren].
+  void cacheDescendantChildren() {
+    _cacheDescendantChildren = true;
+  }
+
+  /// Compute [descendantChildren] in DFS order.
+  List<ASTNode> _computeDescendantChildren() {
+    final processed = <ASTNode>{};
+    final queue = ListQueue<ASTNode>()..add(this);
+
+    while (queue.isNotEmpty) {
+      var node = queue.removeFirst();
+
+      if (processed.add(node)) {
+        var children = node.children.toList(growable: false);
+
+        for (var e in children.reversed) {
+          queue.addFirst(e);
+        }
+      }
+    }
+
+    processed.remove(this);
+
+    return processed.toList();
+  }
 }
 
 /// The runtime status of execution.

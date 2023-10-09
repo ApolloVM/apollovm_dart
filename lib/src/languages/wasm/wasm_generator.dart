@@ -224,7 +224,7 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     var condition = branch.condition;
     generateASTExpression(condition, out: out, context: context);
 
-    context.assertStackLength(stackLng0 + 1, "After expression (return)");
+    context.assertStackLength(stackLng0 + 1, "After if expression");
     var stackType = context.stackGet(0)!.type;
     if (stackType != _astTypeInt32) {
       throw StateError("Stack type error> not a boolean type: $stackType");
@@ -252,7 +252,7 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     var condition = branch.condition;
     generateASTExpression(condition, out: out, context: context);
 
-    context.assertStackLength(stackLng0 + 1, "After expression (return)");
+    context.assertStackLength(stackLng0 + 1, "After if expression");
     var stackType = context.stackGet(0)!.type;
     if (stackType != _astTypeInt32) {
       throw StateError("Stack type error> not a boolean type: $stackType");
@@ -289,7 +289,7 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     var condition = branch.condition;
     generateASTExpression(condition, out: out, context: context);
 
-    context.assertStackLength(stackLng0 + 1, "After expression (return)");
+    context.assertStackLength(stackLng0 + 1, "After if expression");
     var stackType = context.stackGet(0)!.type;
     if (stackType != _astTypeInt32) {
       throw StateError("Stack type error> not a boolean type: $stackType");
@@ -613,7 +613,7 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
               description: "[OP] operator: divide(f64)");
           context.stackOperationBinary(_astTypeDouble64, "Wasm64.f64Divide");
 
-          out.writeByte(Wasm64.f64TruncateToi64Signed,
+          out.writeByte(Wasm64.f64TruncateToI64Signed,
               description: "[OP] Wasm64.f64TruncateToi64Signed");
 
           context.stackReplace(_astTypeInt64, "i64.truncate_f64_signed");
@@ -808,6 +808,11 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
 
     var outBody = newOutput();
 
+    var return0 = context.returnsLength;
+    context.returnsPush(
+        f.returnType, "Function `${f.name}` return: ${f.returnType}");
+    context.assertReturnsLength(return0 + 1);
+
     var parametersVariables = f.parameters.declaredVariables();
 
     for (var v in parametersVariables) {
@@ -850,6 +855,10 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       }
     }
 
+    context.assertReturnsLength(return0 + 1);
+    context.returnsDrop(f.returnType);
+    context.assertReturnsLength(return0);
+
     outBody.writeByte(Wasm.end, description: "Code body end");
 
     out.writeBytesLeb128Block([outBody], description: "Function body");
@@ -882,7 +891,7 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       return generateASTStatementReturnWithExpression(statement,
           out: out, context: context);
     } else if (statement is ASTStatementReturn) {
-      return generateASTStatementReturn(statement, out: out);
+      return generateASTStatementReturn(statement, out: out, context: context);
     }
 
     throw UnsupportedError("Can't handle statement: $statement");
@@ -938,8 +947,15 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
 
   @override
   BytesOutput generateASTStatementReturn(ASTStatementReturn statement,
-      {BytesOutput? out}) {
+      {BytesOutput? out, WasmContext? context}) {
     out ??= newOutput();
+    context ??= WasmContext();
+
+    var stack0 = context.stackGet(0);
+
+    if (stack0 != null && stack0.type is! ASTTypeVoid) {
+      throw StateError("Returning with pushed element in stack: $stack0");
+    }
 
     out.writeByte(Wasm.functionReturn, description: "[OP] return");
 
@@ -961,7 +977,16 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
 
     var value = statement.value;
 
+    var stackLength0 = context.stackLength;
+
     generateASTValue(value, out: out, context: context);
+
+    context.assertStackLength(stackLength0 + 1, "Return value: $value");
+
+    var stack0Type = context.stackGet(0)!.type;
+    var returnType = context.returnsGet(0)!.type;
+
+    _autoConvertStackTypes(stack0Type, returnType, out: out, context: context);
 
     out.writeByte(Wasm.functionReturn,
         description: "[OP] return value: $value");
@@ -983,11 +1008,20 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
 
     var localVar = _getLocalVariable(context, name);
 
+    var stackLength0 = context.stackLength;
+
     out.write(Wasm.localGet(localVar.index),
         description: "[OP] local get: ${localVar.index} \$$name (return)");
 
     context.stackPush(
         localVar.type, 'Local get: ${localVar.index} \$$name (return)');
+
+    context.assertStackLength(stackLength0 + 1, "Return variable: $name");
+
+    var stack0Type = context.stackGet(0)!.type;
+    var returnType = context.returnsGet(0)!.type;
+
+    _autoConvertStackTypes(stack0Type, returnType, out: out, context: context);
 
     out.writeByte(Wasm.functionReturn,
         description: "[OP] return variable: ${localVar.index} \$$name");
@@ -1006,9 +1040,81 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
 
     final stackLng0 = context.stackLength;
 
-    generateASTExpression(statement.expression, out: out, context: context);
+    var expression = statement.expression;
+
+    generateASTExpression(expression, out: out, context: context);
 
     context.assertStackLength(stackLng0 + 1, "After expression (return)");
+
+    var stack0Type = context.stackGet(0)!.type;
+    var returnType = context.returnsGet(0)!.type;
+
+    _autoConvertStackTypes(stack0Type, returnType, out: out);
+
+    out.writeByte(Wasm.functionReturn,
+        description: "[OP] return expression: $expression");
+    context.stackDrop();
+
+    return out;
+  }
+
+  BytesOutput _autoConvertStackTypes(ASTType stackType, ASTType targetType,
+      {BytesOutput? out, WasmContext? context}) {
+    out ??= newOutput();
+    context ??= WasmContext();
+
+    if (stackType == targetType) return out;
+
+    if (stackType is ASTTypeNum) {
+      final stackType32 = stackType.isBits32;
+      final stackType64 = stackType.isBits64;
+
+      if (targetType is ASTTypeNum) {
+        final targetType32 = targetType.isBits32;
+        final targetType64 = targetType.isBits64;
+
+        if (stackType is ASTTypeInt) {
+          if (targetType is ASTTypeInt) {
+            if (stackType32 && targetType64) {
+              out.writeByte(Wasm32.i32ExtendToI64Signed,
+                  description: "i32ExtendToI64Signed");
+            } else if (stackType64 && targetType32) {
+              out.writeByte(Wasm64.i64WrapToi32, description: "i64WrapToi32");
+            }
+          } else if (targetType is ASTTypeDouble) {
+            if (stackType32 && targetType32) {
+              out.writeByte(Wasm32.i32ConvertToF32Signed,
+                  description: "i32ConvertToF32Signed");
+            } else if (stackType32 && targetType64) {
+              out.writeByte(Wasm32.i32ConvertToF64Signed,
+                  description: "i32ConvertToF64Signed");
+            } else if (stackType64 && targetType32) {
+              out.writeByte(Wasm64.i64ConvertToF32Signed,
+                  description: "i64ConvertToF32Signed");
+            } else if (stackType64 && targetType64) {
+              out.writeByte(Wasm64.i64ConvertToF64Signed,
+                  description: "i64ConvertToF64Signed");
+            }
+          }
+        } else if (stackType is ASTTypeDouble) {
+          if (targetType is ASTTypeInt) {
+            if (stackType32 && targetType32) {
+              out.writeByte(Wasm32.f32TruncateToI32Signed,
+                  description: "f32TruncateToI32Signed");
+            } else if (stackType32 && targetType64) {
+              out.writeByte(Wasm32.f32TruncateToI64Signed,
+                  description: "f32TruncateToI64Signed");
+            } else if (stackType64 && targetType32) {
+              out.writeByte(Wasm64.f64TruncateToI32Signed,
+                  description: "f64TruncateToI32Signed");
+            } else if (stackType64 && targetType64) {
+              out.writeByte(Wasm64.f64TruncateToI64Signed,
+                  description: "f64TruncateToI64Signed");
+            }
+          }
+        }
+      }
+    }
 
     return out;
   }
@@ -1417,6 +1523,63 @@ class WasmContext {
     return null;
   }
 
+  final ListQueue<({ASTType type, String description})> _returns = ListQueue();
+
+  /// The length of expected returns.
+  int get returnsLength => _returns.length;
+
+  /// Asserts the stack length.
+  int assertReturnsLength([int? expectedLength, String? description]) {
+    var currentLength = returnsLength;
+
+    if (currentLength != expectedLength) {
+      throw StateError(
+          "Invalid returns length> returnsLength: $returnsLength != expected: $expectedLength${description != null ? ' ($description)' : ''}");
+    }
+
+    return currentLength;
+  }
+
+  /// Notify a returns push.
+  void returnsPush(ASTType type, String description) {
+    _returns.add((type: type, description: description));
+  }
+
+  /// Notify a returns drop.
+  ({ASTType type, String description}) returnsDrop([ASTType? expectedType]) {
+    if (_returns.isEmpty) {
+      throw StateError(
+          "Drop from returns error> Empty returns! Expected type: $expectedType");
+    }
+
+    var entry = _returns.removeLast();
+    if (expectedType != null && entry.type != expectedType) {
+      throw StateError(
+          "Drop from returns error> Not expected type: returns.drop:${entry.type} != expected:$expectedType");
+    }
+    return entry;
+  }
+
+  /// Gets the returns entry.
+  /// - [index] is in reverse order, from last added to first added (`0` is the top of the returns stack).
+  ({ASTType type, String description})? returnsGet(int index) {
+    if (_returns.isEmpty) return null;
+
+    if (index == 0) {
+      return _returns.last;
+    }
+
+    var i = _returns.length - 1;
+    for (var s in _returns) {
+      if (i == index) {
+        return s;
+      }
+      --i;
+    }
+
+    return null;
+  }
+
   @override
   String toString() {
     return 'WasmContext{localVariables: ${_localVariables.length}, stack: ${_stack.length}}';
@@ -1437,10 +1600,16 @@ extension _ASTTypeExtension on ASTType {
       return WasmType.voidType;
     }
 
-    throw StateError("Can;t handle type: $this");
+    throw StateError("Can't handle type: $this");
   }
 
   int get wasmCode => wasmType.value;
+}
+
+extension _ASTTypeNumExtension on ASTTypeNum {
+  bool get isBits32 => bits == 32;
+
+  bool get isBits64 => bits == null || bits == 64;
 }
 
 extension on Iterable<ASTFunctionParameterDeclaration> {

@@ -64,7 +64,7 @@ class Wasm {
   static List<int> globalSet(int i) => <int>[0x24, ...Leb128.encodeUnsigned(i)];
 
   static List<int> encodeString(String s) {
-    var strBs = latin1.encode(s);
+    var strBs = utf8.encode(s);
     return Uint8List.fromList(
         [...Leb128.encodeUnsigned(strBs.length), ...strBs]);
   }
@@ -141,8 +141,8 @@ class Wasm32 {
   static const int f32TruncateToF32Signed = 0x8F;
   static const int f32TruncateToI32Signed = 0xA8;
   static const int f32TruncateToI32Unsigned = 0xA9;
-  static const int f32TruncateToi64Signed = 0xAE;
-  static const int f32TruncateToi64Unsigned = 0xAF;
+  static const int f32TruncateToI64Signed = 0xAE;
+  static const int f32TruncateToI64Unsigned = 0xAF;
 
   static Uint8List encodeF32(double d) {
     final arr = Uint8List(4);
@@ -225,8 +225,10 @@ class Wasm64 {
   static const int f64TruncateToF64Signed = 0x9D;
   static const int f64TruncateToI32Signed = 0xAA;
   static const int f64TruncateToI32Unsigned = 0xAB;
-  static const int f64TruncateToi64Signed = 0xB0;
-  static const int f64TruncateToi64Unsigned = 0xB1;
+  static const int f64TruncateToI64Signed = 0xB0;
+  static const int f64TruncateToI64Unsigned = 0xB1;
+
+  static const int i64WrapToi32 = 0xA7;
 
   static Uint8List encodeF64(double d) {
     final arr = Uint8List(8);

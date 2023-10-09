@@ -17,7 +17,7 @@ import 'apollovm_ast_value.dart';
 import 'apollovm_ast_variable.dart';
 
 /// An AST Type.
-class ASTType<V> implements ASTNode, ASTTypedNode {
+class ASTType<V> with ASTNode implements ASTTypedNode {
   static ASTType from(dynamic o, [VMContext? context]) {
     if (o == null) return ASTTypeNull.instance;
 
@@ -148,6 +148,10 @@ class ASTType<V> implements ASTNode, ASTTypedNode {
 
   ASTType(this.name, {this.generics, this.superType, this.annotations});
 
+  @override
+  Iterable<ASTNode> get children =>
+      [...?generics, ...?annotations, if (superType != null) superType!];
+
   ASTClass<V>? _class;
 
   void setClass(ASTClass<V> clazz) {
@@ -251,11 +255,15 @@ class ASTType<V> implements ASTNode, ASTTypedNode {
           generics == other.generics &&
           superType == other.superType;
 
+  static final ListEquality<ASTType> _listEquality = ListEquality();
+
   @override
   int get hashCode {
+    final generics = this.generics;
+
     return name.hashCode ^
         (superType?.hashCode ?? 0) ^
-        (generics?.hashCode ?? 0);
+        (generics != null ? _listEquality.hash(generics) : 0);
   }
 
   ASTNode? _parentNode;
@@ -266,11 +274,13 @@ class ASTType<V> implements ASTNode, ASTTypedNode {
   @override
   void resolveNode(ASTNode? parentNode) {
     _parentNode = parentNode;
+
+    cacheDescendantChildren();
   }
 
   @override
-  ASTNode? getNodeIdentifier(String name) =>
-      parentNode?.getNodeIdentifier(name);
+  ASTNode? getNodeIdentifier(String name, {ASTNode? requester}) =>
+      parentNode?.getNodeIdentifier(name, requester: requester);
 
   @override
   String toString() {
@@ -287,6 +297,9 @@ class ASTTypeInterface<V> extends ASTType<V> {
             generics: generics,
             superType: superInterface,
             annotations: annotations);
+
+  @override
+  Iterable<ASTNode> get children => [];
 }
 
 /// Base [ASTType] for primitives.
@@ -302,6 +315,9 @@ class ASTTypeBool extends ASTTypePrimitive<bool> {
   static final ASTTypeBool instance = ASTTypeBool();
 
   ASTTypeBool() : super('bool');
+
+  @override
+  Iterable<ASTNode> get children => [];
 
   @override
   bool acceptsType(ASTType type) {
@@ -363,9 +379,15 @@ abstract class ASTTypeNumber<T> extends ASTTypePrimitive<T> {
 class ASTTypeNum<T extends num> extends ASTTypeNumber<T> {
   static final ASTTypeNum instance = ASTTypeNum();
 
-  ASTTypeNum._(String name) : super(name);
+  /// Amount of bits of the `num` (optional).
+  final int? bits;
+
+  ASTTypeNum._(String name, {this.bits}) : super(name);
 
   ASTTypeNum() : this._('num');
+
+  @override
+  Iterable<ASTNode> get children => [];
 
   @override
   bool acceptsType(ASTType type) {
@@ -419,10 +441,7 @@ class ASTTypeInt extends ASTTypeNum<int> {
   static final ASTTypeInt instance32 = ASTTypeInt(bits: 32);
   static final ASTTypeInt instance64 = ASTTypeInt(bits: 64);
 
-  /// Amount of bits of the `int` (optional).
-  final int? bits;
-
-  ASTTypeInt({this.bits}) : super._('int');
+  ASTTypeInt({super.bits}) : super._('int');
 
   @override
   bool acceptsType(ASTType type) {
@@ -482,14 +501,14 @@ class ASTTypeDouble extends ASTTypeNum<double> {
   static final ASTTypeDouble instance32 = ASTTypeDouble(bits: 32);
   static final ASTTypeDouble instance64 = ASTTypeDouble(bits: 64);
 
-  /// Amount of bits of the `float`/`double` (optional).
-  final int? bits;
-
-  ASTTypeDouble({this.bits}) : super._('double');
+  ASTTypeDouble({super.bits}) : super._('double');
 
   @override
   bool acceptsType(ASTType type) {
     if (type == this) return true;
+    if (type is ASTTypeInt) {
+      return true;
+    }
     return false;
   }
 
@@ -546,6 +565,9 @@ class ASTTypeString extends ASTTypePrimitive<String> {
   ASTTypeString() : super('String');
 
   @override
+  Iterable<ASTNode> get children => [];
+
+  @override
   bool acceptsType(ASTType type) {
     if (type == this) return true;
     return false;
@@ -591,6 +613,9 @@ class ASTTypeObject extends ASTType<Object> {
   static final ASTTypeObject instance = ASTTypeObject();
 
   ASTTypeObject() : super('Object');
+
+  @override
+  Iterable<ASTNode> get children => [];
 
   @override
   bool acceptsType(ASTType type) => true;
@@ -640,6 +665,9 @@ class ASTTypeVar extends ASTType<dynamic> {
   static final ASTTypeVar instance = ASTTypeVar();
 
   ASTTypeVar() : super('var');
+
+  @override
+  Iterable<ASTNode> get children => [];
 
   @override
   bool acceptsType(ASTType type) => true;
@@ -703,6 +731,9 @@ class ASTTypeDynamic extends ASTType<dynamic> {
   ASTTypeDynamic() : super('dynamic');
 
   @override
+  Iterable<ASTNode> get children => [];
+
+  @override
   bool acceptsType(ASTType type) => true;
 
   @override
@@ -742,6 +773,9 @@ class ASTTypeNull extends ASTType<Null> {
   ASTTypeNull() : super('Null');
 
   @override
+  Iterable<ASTNode> get children => [];
+
+  @override
   bool acceptsType(ASTType type) {
     if (type == this) return true;
     return false;
@@ -772,6 +806,9 @@ class ASTTypeVoid extends ASTType<void> {
   static final ASTTypeVoid instance = ASTTypeVoid();
 
   ASTTypeVoid() : super('void');
+
+  @override
+  Iterable<ASTNode> get children => [];
 
   @override
   bool acceptsType(ASTType type) {
@@ -805,6 +842,9 @@ class ASTTypeGenericVariable extends ASTType<Object> {
   final ASTType? type;
 
   ASTTypeGenericVariable(this.variableName, [this.type]) : super(variableName);
+
+  @override
+  Iterable<ASTNode> get children => [if (type != null) type!];
 
   @override
   ASTType<Object> resolveType(VMContext? context) =>
@@ -851,6 +891,9 @@ class ASTTypeArray<T extends ASTType<V>, V> extends ASTType<List<V>> {
   ASTType get elementType => componentType;
 
   ASTTypeArray(this.componentType) : super('List', generics: [componentType]);
+
+  @override
+  Iterable<ASTNode> get children => [componentType];
 
   @override
   FutureOr<ASTValueArray<T, V>?> toValue(VMContext context, Object? v) {
@@ -977,6 +1020,9 @@ class ASTTypeMap<TK extends ASTType<K>, TV extends ASTType<V>, K, V>
       : super('Map', generics: [keyType, valueType]);
 
   @override
+  Iterable<ASTNode> get children => [keyType, valueType];
+
+  @override
   FutureOr<ASTValue<Map<K, V>>?> toValue(VMContext context, Object? v) {
     if (v == null) return null;
     if (v is ASTValueMap) return v as ASTValueMap<TK, TV, K, V>;
@@ -1027,6 +1073,9 @@ class ASTTypeMap<TK extends ASTType<K>, TV extends ASTType<V>, K, V>
 /// [ASTType] a for a [Future].
 class ASTTypeFuture<T extends ASTType<V>, V> extends ASTType<Future<V>> {
   ASTTypeFuture(T type) : super('Future', generics: [type]);
+
+  @override
+  Iterable<ASTNode> get children => [];
 
   @override
   ASTValueFuture<T, V>? toValue(VMContext context, Object? v) {
