@@ -80,7 +80,7 @@ class WasmRuntimeIO extends WasmRuntime {
   }
 
   String _computeBinarySignatureHex(Uint8List wasmModuleBinary) =>
-      sha512.convert(wasmModuleBinary).toString();
+      sha256.convert(wasmModuleBinary).toString();
 }
 
 /// [WasmModule] implementation for Dart VM.
