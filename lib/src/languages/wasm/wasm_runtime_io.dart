@@ -20,6 +20,12 @@ class WasmRuntimeIO extends WasmRuntime {
     if (_boot) return;
     _boot = true;
 
+    if (wasm_run.WasmRunLibrary.isReachable()) {
+      print('** Loading `wasm_run` dynamic library with default resolver.');
+      _wasmRunDynLibLoaded = true;
+      return;
+    }
+
     var libPath = _wasmRunLibraryFilePath();
 
     if (libPath == null) {

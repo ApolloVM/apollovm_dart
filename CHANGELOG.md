@@ -1,8 +1,9 @@
 ## 0.0.50
 
 - `WasmRuntime`: new VM implementation.
-- `wasm_runtime_io.dart`: 
-- wasm_run: ^0.0.1+2
+- `wasm_runtime_io.dart`:
+- Dart CI: wasm_run:setup (install dynamic library)
+- wasm_run: ^0.0.1+3
 
 ## 0.0.49
 
