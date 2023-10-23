@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 
+import '../../ast/apollovm_ast_toplevel.dart';
 import 'wasm_runtime.dart';
 
 class WasmRuntimeGeneric extends WasmRuntime {
@@ -31,7 +32,8 @@ class WasmModuleGeneric extends WasmModule {
   F? getFunction<F extends Function>(String functionName) => null;
 
   @override
-  Object? resolveReturnedValue(Object? value) => value;
+  Object? resolveReturnedValue(Object? value, ASTFunctionDeclaration? f) =>
+      value;
 }
 
 WasmRuntime createWasmRuntime() {

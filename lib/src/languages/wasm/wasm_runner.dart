@@ -62,7 +62,7 @@ class ApolloRunnerWasm extends ApolloRunner {
 
     var astFunction = _getASTFunction(codeUnit, functionName, allParams);
     if (astFunction != null) {
-      _resolveWamCallParameters(astFunction, allParams);
+      _resolveWasmCallParameters(astFunction, allParams);
     }
 
     dynamic res;
@@ -73,7 +73,7 @@ class ApolloRunnerWasm extends ApolloRunner {
           parameters: allParams, function: f, cause: e);
     }
 
-    res = module.resolveReturnedValue(res);
+    res = module.resolveReturnedValue(res, astFunction);
 
     var astValue =
         res == null ? ASTValueNull.instance : ASTValue.fromValue(res);
@@ -81,7 +81,7 @@ class ApolloRunnerWasm extends ApolloRunner {
     return astValue;
   }
 
-  void _resolveWamCallParameters(
+  void _resolveWasmCallParameters(
       ASTFunctionDeclaration astFunction, List parameters) {
     var astParameters = astFunction.parameters.allParameters;
     var limit = math.min(parameters.length, astParameters.length);

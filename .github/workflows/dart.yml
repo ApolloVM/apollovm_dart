@@ -44,6 +44,8 @@ jobs:
         run: dart pub get
       - name: Upgrade dependencies
         run: dart pub upgrade
+      - name: wasm_run:setup (install dynamic library)
+        run: dart run wasm_run:setup
       - name: Run tests (VM)
         run: dart test --platform vm --coverage=./coverage
       - name: Generate coverage report
@@ -75,6 +77,8 @@ jobs:
         run: dart pub get
       - name: Upgrade dependencies
         run: dart pub upgrade
+      - name: wasm_run:setup (install dynamic library)
+        run: dart run wasm_run:setup
       - name: Run tests (exe)
         run: dart test --compiler exe
 

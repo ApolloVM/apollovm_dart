@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:wasm_interop/wasm_interop.dart' as browser_wasm;
 
+import '../../ast/apollovm_ast_toplevel.dart';
 import 'wasm_runtime.dart';
 
 /// [WasmRuntime] implementation for the Browser.
@@ -49,7 +50,7 @@ class WasmModuleBrowser extends WasmModule {
   }
 
   @override
-  Object? resolveReturnedValue(Object? value) {
+  Object? resolveReturnedValue(Object? value, ASTFunctionDeclaration? f) {
     if (value == null) return null;
 
     if (browser_wasm.JsBigInt.isJsBigInt(value)) {
