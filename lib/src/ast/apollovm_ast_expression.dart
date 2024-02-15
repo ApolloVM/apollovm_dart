@@ -1015,9 +1015,7 @@ Future<List<ASTValue>> _resolveArgumentsValues(VMContext parentContext,
 /// [ASTExpression] to call a local context function.
 class ASTExpressionLocalFunctionInvocation
     extends ASTExpressionFunctionInvocation {
-  ASTExpressionLocalFunctionInvocation(
-      String name, List<ASTExpression> arguments)
-      : super(name, arguments);
+  ASTExpressionLocalFunctionInvocation(super.name, super.arguments);
 
   @override
   ASTFunctionDeclaration _getFunction(VMContext parentContext) {

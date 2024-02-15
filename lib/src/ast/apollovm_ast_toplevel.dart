@@ -16,7 +16,7 @@ import 'apollovm_ast_variable.dart';
 
 /// An [ASTBlock] that can have an entry-point method/function.
 class ASTEntryPointBlock extends ASTBlock {
-  ASTEntryPointBlock(ASTBlock? parentBlock) : super(parentBlock);
+  ASTEntryPointBlock(super.parentBlock);
 
   FutureOr<ASTValue> execute(
     String entryFunctionName,
@@ -351,8 +351,7 @@ class ASTClassPrimitive<T> extends ASTClass<T> {
 
 /// AST of a normal VM Class.
 class ASTClassNormal extends ASTClass<VMObject> {
-  ASTClassNormal(String name, ASTType<VMObject> type, ASTBlock? parentBlock)
-      : super(name, type, parentBlock);
+  ASTClassNormal(super.name, super.type, super.parentBlock);
 
   @override
   void set(ASTBlock? other) {
@@ -714,8 +713,7 @@ class ASTFunctionParameterDeclaration<T> extends ASTParameterDeclaration<T> {
   final bool optional;
 
   ASTFunctionParameterDeclaration(
-      ASTType<T> type, String name, this.index, this.optional)
-      : super(type, name);
+      super.type, super.name, this.index, this.optional);
 }
 
 /// An AST Function Signature.
@@ -1382,10 +1380,9 @@ class ASTExternalFunction<T> extends ASTFunctionDeclaration<T> {
 
   final ParameterValueResolver? parameterResolver;
 
-  ASTExternalFunction(String name, ASTParametersDeclaration parameters,
-      ASTType<T> returnType, this.externalFunction,
-      [this.parameterResolver])
-      : super(name, parameters, returnType);
+  ASTExternalFunction(
+      super.name, super.parameters, super.returnType, this.externalFunction,
+      [this.parameterResolver]);
 
   FutureOr<dynamic> resolveParameterValue<V>(
       ASTValue<V>? paramVal, VMContext context) {
@@ -1474,14 +1471,9 @@ class ASTExternalClassFunction<T> extends ASTClassFunctionDeclaration<T> {
 
   final ParameterValueResolver? parameterResolver;
 
-  ASTExternalClassFunction(
-      ASTClass clazz,
-      String name,
-      ASTParametersDeclaration parameters,
-      ASTType<T> returnType,
-      this.externalFunction,
-      [this.parameterResolver])
-      : super(clazz, name, parameters, returnType);
+  ASTExternalClassFunction(ASTClass super.clazz, super.name, super.parameters,
+      super.returnType, this.externalFunction,
+      [this.parameterResolver]);
 
   FutureOr<dynamic> resolveParameterValue<V>(
       ASTValue<V>? paramVal, VMContext context) {

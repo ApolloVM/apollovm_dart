@@ -97,8 +97,7 @@ abstract class ASTTypedVariable<T> extends ASTVariable {
 
 /// [ASTVariable] for class fields.
 class ASTClassField<T> extends ASTTypedVariable<T> {
-  ASTClassField(ASTType<T> type, String name, bool finalValue)
-      : super(type, name, finalValue);
+  ASTClassField(super.type, super.name, super.finalValue);
 
   @override
   Iterable<ASTNode> get children => [];
@@ -191,7 +190,7 @@ class ASTRuntimeVariable<T> extends ASTTypedVariable<T> {
 
 /// [ASTVariable] for a variable visible in a scope context.
 class ASTScopeVariable<T> extends ASTVariable {
-  ASTScopeVariable(String name) : super(name);
+  ASTScopeVariable(super.name);
 
   @override
   Iterable<ASTNode> get children => [];

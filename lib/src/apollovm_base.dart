@@ -940,7 +940,7 @@ class VMObject extends ASTValue<dynamic> {
 
   final int id = ++_idCount;
 
-  VMObject._(ASTType type) : super(type);
+  VMObject._(super.type);
 
   @override
   Iterable<ASTNode> get children => [type];

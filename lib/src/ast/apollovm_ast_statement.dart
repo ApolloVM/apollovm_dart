@@ -193,9 +193,7 @@ class ASTBlock extends ASTStatement {
   ASTType resolveType(VMContext? context) => ASTTypeDynamic.instance;
 
   ASTClassField? getField(String name, {bool caseInsensitive = false}) =>
-      parentBlock != null
-          ? parentBlock!.getField(name, caseInsensitive: caseInsensitive)
-          : null;
+      parentBlock?.getField(name, caseInsensitive: caseInsensitive);
 
   @override
   String toString() {

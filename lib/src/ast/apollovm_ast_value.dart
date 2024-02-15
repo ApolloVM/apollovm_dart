@@ -243,7 +243,7 @@ abstract class ASTValue<T> with ASTNode implements ASTTypedNode {
 class ASTValueStatic<T> extends ASTValue<T> {
   T value;
 
-  ASTValueStatic(ASTType<T> type, this.value) : super(type);
+  ASTValueStatic(super.type, this.value);
 
   @override
   Iterable<ASTNode> get children {
@@ -346,7 +346,7 @@ class ASTValueStatic<T> extends ASTValue<T> {
 
 /// [ASTValue] for primitive types.
 abstract class ASTValuePrimitive<T> extends ASTValueStatic<T> {
-  ASTValuePrimitive(ASTType<T> type, T value) : super(type, value);
+  ASTValuePrimitive(super.type, super.value);
 
   @override
   Iterable<ASTNode> get children => [];
@@ -1003,7 +1003,7 @@ class ASTValueReadIndex<T> extends ASTValue<T> {
   final ASTVariable variable;
   final Object _index;
 
-  ASTValueReadIndex(ASTType<T> type, this.variable, this._index) : super(type);
+  ASTValueReadIndex(super.type, this.variable, this._index);
 
   @override
   Iterable<ASTNode> get children => [variable];
@@ -1023,9 +1023,9 @@ class ASTValueReadIndex<T> extends ASTValue<T> {
 
   int getIndex(VMContext context) {
     if (_index is int) {
-      return _index as int;
+      return _index;
     } else if (_index is ASTValue) {
-      var idx = (_index as ASTValue).getValue(context);
+      var idx = (_index).getValue(context);
       return parseInt(idx)!;
     } else {
       return parseInt(_index)!;
@@ -1059,7 +1059,7 @@ class ASTValueReadKey<T> extends ASTValue<T> {
   final ASTVariable variable;
   final Object _key;
 
-  ASTValueReadKey(ASTType<T> type, this.variable, this._key) : super(type);
+  ASTValueReadKey(super.type, this.variable, this._key);
 
   @override
   Iterable<ASTNode> get children => [variable];
@@ -1080,9 +1080,7 @@ class ASTValueReadKey<T> extends ASTValue<T> {
 
   FutureOr<Object> getKey(VMContext context) {
     if (_key is ASTValue) {
-      return (_key as ASTValue)
-          .getValue(context)
-          .resolveMapped((v) => v as Object);
+      return (_key).getValue(context).resolveMapped((v) => v as Object);
     } else {
       return _key;
     }

@@ -289,14 +289,9 @@ class ASTType<V> with ASTNode implements ASTTypedNode {
 }
 
 class ASTTypeInterface<V> extends ASTType<V> {
-  ASTTypeInterface(String name,
-      {List<ASTType>? generics,
-      ASTType? superInterface,
-      List<ASTAnnotation>? annotations})
-      : super(name,
-            generics: generics,
-            superType: superInterface,
-            annotations: annotations);
+  ASTTypeInterface(super.name,
+      {super.generics, ASTType? superInterface, super.annotations})
+      : super(superType: superInterface);
 
   @override
   Iterable<ASTNode> get children => [];
@@ -304,7 +299,7 @@ class ASTTypeInterface<V> extends ASTType<V> {
 
 /// Base [ASTType] for primitives.
 abstract class ASTTypePrimitive<T> extends ASTType<T> {
-  ASTTypePrimitive(String name) : super(name);
+  ASTTypePrimitive(super.name);
 
   @override
   bool acceptsType(ASTType type);
@@ -369,7 +364,7 @@ enum ASTNumType {
 
 /// Base [ASTType] for primitive numbers.
 abstract class ASTTypeNumber<T> extends ASTTypePrimitive<T> {
-  ASTTypeNumber(String name) : super(name);
+  ASTTypeNumber(super.name);
 
   @override
   bool acceptsType(ASTType type);
@@ -382,7 +377,7 @@ class ASTTypeNum<T extends num> extends ASTTypeNumber<T> {
   /// Amount of bits of the `num` (optional).
   final int? bits;
 
-  ASTTypeNum._(String name, {this.bits}) : super(name);
+  ASTTypeNum._(super.name, {this.bits});
 
   ASTTypeNum() : this._('num');
 
@@ -925,7 +920,7 @@ class ASTTypeArray<T extends ASTType<V>, V> extends ASTType<List<V>> {
 /// [ASTType] a for a 2D array/List.
 class ASTTypeArray2D<T extends ASTType<V>, V>
     extends ASTTypeArray<ASTTypeArray<T, V>, List<V>> {
-  ASTTypeArray2D(ASTTypeArray<T, V> type) : super(type);
+  ASTTypeArray2D(super.type);
 
   factory ASTTypeArray2D.fromElementType(ASTType<V> elementType) {
     var a1 = ASTTypeArray<T, V>(elementType as T);
@@ -961,7 +956,7 @@ class ASTTypeArray2D<T extends ASTType<V>, V>
 /// [ASTType] a for a 3D array/List.
 class ASTTypeArray3D<T extends ASTType<V>, V>
     extends ASTTypeArray2D<ASTTypeArray<T, V>, List<V>> {
-  ASTTypeArray3D(ASTTypeArray2D<T, V> type) : super(type);
+  ASTTypeArray3D(ASTTypeArray2D<T, V> super.type);
 
   factory ASTTypeArray3D.fromElementType(ASTType<V> elementType) {
     var a1 = ASTTypeArray<T, V>(elementType as T);

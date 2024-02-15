@@ -1,3 +1,17 @@
+## 0.0.51
+
+- sdk: '>=3.3.0 <4.0.0'
+
+- swiss_knife: ^3.2.0
+- data_serializer: ^1.1.0
+- petitparser: ^6.0.2
+- path: ^1.9.0
+
+- lints: ^3.0.0
+- dependency_validator: ^3.2.3
+- test: ^1.25.2
+- xml: ^6.5.0
+
 ## 0.0.50
 
 - `WasmRuntime`: new VM implementation.
