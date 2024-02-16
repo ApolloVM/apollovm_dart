@@ -341,20 +341,20 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
   @override
   BytesOutput generateASTClass(ASTClassNormal clazz, {BytesOutput? out}) {
     // TODO: implement generateASTClass
-    throw UnimplementedError();
+    throw UnimplementedError('generateASTClass');
   }
 
   @override
   BytesOutput generateASTClassField(ASTClassField field, {BytesOutput? out}) {
     // TODO: implement generateASTClassField
-    throw UnimplementedError();
+    throw UnimplementedError('generateASTClassField');
   }
 
   @override
   BytesOutput generateASTClassFunctionDeclaration(ASTClassFunctionDeclaration f,
       {BytesOutput? out}) {
     // TODO: implement generateASTClassFunctionDeclaration
-    throw UnimplementedError();
+    throw UnimplementedError('generateASTClassField');
   }
 
   @override
@@ -362,7 +362,7 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       ASTExpressionObjectFunctionInvocation expression,
       {BytesOutput? out}) {
     // TODO: implement generateASTExpressionFunctionInvocation
-    throw UnimplementedError();
+    throw UnimplementedError('generateASTExpressionFunctionInvocation');
   }
 
   @override
@@ -370,7 +370,7 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       ASTExpressionListLiteral expression,
       {BytesOutput? out}) {
     // TODO: implement generateASTExpressionListLiteral
-    throw UnimplementedError();
+    throw UnimplementedError('generateASTExpressionListLiteral');
   }
 
   @override
@@ -396,7 +396,7 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       ASTExpressionLocalFunctionInvocation expression,
       {BytesOutput? out}) {
     // TODO: implement generateASTExpressionLocalFunctionInvocation
-    throw UnimplementedError();
+    throw UnimplementedError('generateASTExpressionLocalFunctionInvocation');
   }
 
   @override
@@ -404,14 +404,14 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       ASTExpressionMapLiteral expression,
       {BytesOutput? out}) {
     // TODO: implement generateASTExpressionMapLiteral
-    throw UnimplementedError();
+    throw UnimplementedError('generateASTExpressionMapLiteral');
   }
 
   @override
   BytesOutput generateASTExpressionNegation(ASTExpressionNegation expression,
       {BytesOutput? out}) {
     // TODO: implement generateASTExpressionNegation
-    throw UnimplementedError();
+    throw UnimplementedError('generateASTExpressionNegation');
   }
 
   ASTTypeDouble _fixStackOpsAsFloat64(
@@ -939,7 +939,7 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       ASTExpressionVariableEntryAccess expression,
       {BytesOutput? out}) {
     // TODO: implement generateASTExpressionVariableEntryAccess
-    throw UnimplementedError();
+    throw UnimplementedError('generateASTExpressionVariableEntryAccess');
   }
 
   @override
@@ -1045,14 +1045,14 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       ASTFunctionParameterDeclaration parameter,
       {BytesOutput? out}) {
     // TODO: implement generateASTFunctionParameterDeclaration
-    throw UnimplementedError();
+    throw UnimplementedError('generateASTFunctionParameterDeclaration');
   }
 
   @override
   BytesOutput generateASTParameterDeclaration(ASTParameterDeclaration parameter,
       {BytesOutput? out}) {
     // TODO: implement generateASTParameterDeclaration
-    throw UnimplementedError();
+    throw UnimplementedError('generateASTParameterDeclaration');
   }
 
   @override
@@ -1060,14 +1060,14 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       ASTParametersDeclaration parameters,
       {BytesOutput? out}) {
     // TODO: implement generateASTParametersDeclaration
-    throw UnimplementedError();
+    throw UnimplementedError('generateASTParametersDeclaration');
   }
 
   @override
   BytesOutput generateASTScopeVariable(ASTScopeVariable variable,
       {String? callingFunction, BytesOutput? out}) {
     // TODO: implement generateASTScopeVariable
-    throw UnimplementedError();
+    throw UnimplementedError('generateASTScopeVariable');
   }
 
   @override
@@ -1085,7 +1085,7 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
   BytesOutput generateASTStatementForLoop(ASTStatementForLoop forLoop,
       {BytesOutput? out}) {
     // TODO: implement generateASTStatementForLoop
-    throw UnimplementedError();
+    throw UnimplementedError('generateASTStatementForLoop');
   }
 
   @override
@@ -1109,7 +1109,7 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
   BytesOutput generateASTStatementReturnNull(ASTStatementReturnNull statement,
       {BytesOutput? out}) {
     // TODO: implement generateASTStatementReturnNull
-    throw UnimplementedError();
+    throw UnimplementedError('generateASTStatementReturnNull');
   }
 
   @override
@@ -1334,27 +1334,27 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
   BytesOutput generateASTTypeArray(ASTTypeArray<ASTType, dynamic> type,
       {BytesOutput? out}) {
     // TODO: implement generateASTTypeArray
-    throw UnimplementedError();
+    throw UnimplementedError('generateASTTypeArray');
   }
 
   @override
   BytesOutput generateASTTypeArray2D(ASTTypeArray2D<ASTType, dynamic> type,
       {BytesOutput? out}) {
     // TODO: implement generateASTTypeArray2D
-    throw UnimplementedError();
+    throw UnimplementedError('generateASTTypeArray2D');
   }
 
   @override
   BytesOutput generateASTTypeArray3D(ASTTypeArray3D<ASTType, dynamic> type,
       {BytesOutput? out}) {
     // TODO: implement generateASTTypeArray3D
-    throw UnimplementedError();
+    throw UnimplementedError('generateASTTypeArray3D');
   }
 
   @override
   BytesOutput generateASTTypeDefault(ASTType type, {BytesOutput? out}) {
     // TODO: implement generateASTTypeDefault
-    throw UnimplementedError();
+    throw UnimplementedError('generateASTTypeDefault');
   }
 
   @override
@@ -1395,21 +1395,21 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
   BytesOutput generateASTValueArray(ASTValueArray<ASTType, dynamic> value,
       {BytesOutput? out}) {
     // TODO: implement generateASTValueArray
-    throw UnimplementedError();
+    throw UnimplementedError('generateASTValueArray');
   }
 
   @override
   BytesOutput generateASTValueArray2D(ASTValueArray2D<ASTType, dynamic> value,
       {BytesOutput? out}) {
     // TODO: implement generateASTValueArray2D
-    throw UnimplementedError();
+    throw UnimplementedError('generateASTValueArray2D');
   }
 
   @override
   BytesOutput generateASTValueArray3D(ASTValueArray3D<ASTType, dynamic> value,
       {BytesOutput? out}) {
     // TODO: implement generateASTValueArray3D
-    throw UnimplementedError();
+    throw UnimplementedError('generateASTValueArray3D');
   }
 
   @override
@@ -1443,25 +1443,25 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
   @override
   BytesOutput generateASTValueNull(ASTValueNull value, {BytesOutput? out}) {
     // TODO: implement generateASTValueNull
-    throw UnimplementedError();
+    throw UnimplementedError('generateASTValueNull');
   }
 
   @override
   BytesOutput generateASTValueObject(ASTValueObject value, {BytesOutput? out}) {
     // TODO: implement generateASTValueObject
-    throw UnimplementedError();
+    throw UnimplementedError('generateASTValueObject');
   }
 
   @override
   BytesOutput generateASTValueStatic(ASTValueStatic value, {BytesOutput? out}) {
     // TODO: implement generateASTValueStatic
-    throw UnimplementedError();
+    throw UnimplementedError('generateASTValueStatic');
   }
 
   @override
   BytesOutput generateASTValueString(ASTValueString value, {BytesOutput? out}) {
     // TODO: implement generateASTValueString
-    throw UnimplementedError();
+    throw UnimplementedError('generateASTValueString');
   }
 
   @override
@@ -1469,48 +1469,48 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       ASTValueStringConcatenation value,
       {BytesOutput? out}) {
     // TODO: implement generateASTValueStringConcatenation
-    throw UnimplementedError();
+    throw UnimplementedError('generateASTValueStringConcatenation');
   }
 
   @override
   BytesOutput generateASTValueStringExpression(ASTValueStringExpression value,
       {BytesOutput? out}) {
     // TODO: implement generateASTValueStringExpression
-    throw UnimplementedError();
+    throw UnimplementedError('generateASTValueStringExpression');
   }
 
   @override
   BytesOutput generateASTValueStringVariable(ASTValueStringVariable value,
       {BytesOutput? out, bool precededByString = false}) {
     // TODO: implement generateASTValueStringVariable
-    throw UnimplementedError();
+    throw UnimplementedError('generateASTValueStringVariable');
   }
 
   @override
   BytesOutput generateASTValueVar(ASTValueVar value, {BytesOutput? out}) {
     // TODO: implement generateASTValueVar
-    throw UnimplementedError();
+    throw UnimplementedError('generateASTValueVar');
   }
 
   @override
   BytesOutput generateASTVariable(ASTVariable variable,
       {String? callingFunction, BytesOutput? out}) {
     // TODO: implement generateASTVariable
-    throw UnimplementedError();
+    throw UnimplementedError('generateASTVariable');
   }
 
   @override
   BytesOutput generateASTVariableGeneric(ASTVariable variable,
       {String? callingFunction, BytesOutput? out}) {
     // TODO: implement generateASTVariableGeneric
-    throw UnimplementedError();
+    throw UnimplementedError('generateASTVariableGeneric');
   }
 
   @override
   String resolveASTExpressionOperatorText(ASTExpressionOperator operator,
       ASTNumType aNumType, ASTNumType bNumType) {
     // TODO: implement resolveASTExpressionOperatorText
-    throw UnimplementedError();
+    throw UnimplementedError('resolveASTExpressionOperatorText');
   }
 }
 
