@@ -19,7 +19,7 @@ import '../../ast/apollovm_ast_value.dart';
 import '../../ast/apollovm_ast_variable.dart';
 import 'wasm.dart';
 
-//final _astTypeInt = ASTTypeInt.instance;
+final _astTypeInt = ASTTypeInt.instance;
 final _astTypeInt32 = ASTTypeInt.instance32;
 final _astTypeInt64 = ASTTypeInt.instance64;
 
@@ -414,7 +414,7 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     throw UnimplementedError();
   }
 
-  void _fixStackOpsAsFloat64(
+  ASTTypeDouble _fixStackOpsAsFloat64(
       ASTType stackType1,
       ASTType stackType2,
       BytesOutput opsOut1,
@@ -423,43 +423,88 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       WasmContext context) {
     out.writeBytes(opsOut1);
 
-    if (stackType1 == _astTypeInt64) {
+    if (stackType1.equalsStrict(_astTypeInt64) ||
+        stackType1.equalsStrict(_astTypeInt)) {
       out.writeByte(Wasm64.i64ConvertToF64Signed,
           description: "[OP] convert i64 to f64 signed");
 
       context.stackReplaceAt(1, _astTypeDouble64, "Convert i64 to f64 signed");
-    } else if (stackType1 == _astTypeInt32) {
+    } else if (stackType1.equalsStrict(_astTypeInt32)) {
       out.writeByte(Wasm32.i32ConvertToF64Signed,
           description: "[OP] convert i32 to f64 signed");
 
       context.stackReplaceAt(1, _astTypeDouble64, "Convert i32 to f64 signed");
     }
 
-    if (stackType2 == _astTypeInt64) {
-      out.writeBytes(opsOut2);
+    out.writeBytes(opsOut2);
 
+    if (stackType2.equalsStrict(_astTypeInt64) ||
+        stackType2.equalsStrict(_astTypeInt)) {
       out.writeByte(Wasm64.i64ConvertToF64Signed,
           description: "[OP] convert i64 to f64 signed");
 
       context.stackReplace(_astTypeDouble64, "Convert i64 to f64 signed");
-    } else if (stackType2 == _astTypeInt32) {
-      out.writeBytes(opsOut2);
-
+    } else if (stackType2.equalsStrict(_astTypeInt32)) {
       out.writeByte(Wasm32.i32ConvertToF64Signed,
           description: "[OP] convert i32 to f64 signed");
 
       context.stackReplace(_astTypeDouble64, "Convert i32 to f64 signed");
-    } else {
-      out.writeBytes(opsOut2);
     }
+
+    return _astTypeDouble64;
   }
 
-  ASTTypeDouble? _getOperationType(ASTExpressionOperation expression) {
+  ASTType _fixStackOpsAsInt(
+      ASTType stackType1,
+      ASTType stackType2,
+      BytesOutput opsOut1,
+      BytesOutput opsOut2,
+      BytesOutput out,
+      WasmContext context) {
+    assert(stackType1 == _astTypeInt, stackType1);
+    assert(stackType2 == _astTypeInt, stackType2);
+
+    if (stackType1.equalsStrict(stackType2)) {
+      out.writeBytes(opsOut1);
+      out.writeBytes(opsOut2);
+      return stackType1;
+    }
+
+    out.writeBytes(opsOut1);
+
+    if (stackType1.equalsStrict(_astTypeInt32)) {
+      out.writeByte(Wasm32.i32ExtendToI64Signed,
+          description: "[OP] convert i32 to i64 signed");
+
+      context.stackReplaceAt(1, _astTypeInt64, "Convert i32 to i64 signed");
+    }
+
+    out.writeBytes(opsOut2);
+
+    if (stackType2.equalsStrict(_astTypeInt32)) {
+      out.writeByte(Wasm32.i32ExtendToI64Signed,
+          description: "[OP] convert i32 to i64 signed");
+
+      context.stackReplace(_astTypeInt64, "Convert i32 to i64 signed");
+    }
+
+    return _astTypeInt64;
+  }
+
+  ASTType? _getOperationType(ASTExpressionOperation expression,
+      ASTType<dynamic> stackType1, ASTType<dynamic> stackType2) {
     return switch (expression.operator) {
       ASTExpressionOperator.divide ||
       ASTExpressionOperator.divideAsDouble ||
       ASTExpressionOperator.divideAsInt =>
-        _astTypeDouble64,
+        _astTypeDouble64 as ASTType,
+      ASTExpressionOperator.greater ||
+      ASTExpressionOperator.greaterOrEq ||
+      ASTExpressionOperator.lower ||
+      ASTExpressionOperator.lowerOrEq =>
+        ((stackType1 == _astTypeDouble || stackType2 == _astTypeDouble)
+            ? _astTypeDouble64
+            : _astTypeInt64) as ASTType,
       _ => null,
     };
   }
@@ -523,18 +568,32 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     var stackType1 = stack1.type;
     var stackType2 = stack2.type;
 
-    var operationType = _getOperationType(expression);
+    var operationType = _getOperationType(expression, stackType1, stackType2);
 
     if (operationType == _astTypeDouble ||
         (stackType1 == _astTypeDouble || stackType2 == _astTypeDouble)) {
-      _fixStackOpsAsFloat64(
+      operationType = _fixStackOpsAsFloat64(
           stackType1, stackType2, exp1Out, exp2Out, out, context);
-      stackType1 = stackType2 = _astTypeDouble64;
 
-      context.assertStackLength(stackLng2, "After stack fix for Float64");
+      stackType1 = stackType2 = operationType;
+
+      context.assertStackLength(
+          stackLng2, "After stack fix for Float64 operation.");
+    } else if (operationType == _astTypeInt ||
+        (stackType1 == _astTypeInt || stackType2 == _astTypeInt)) {
+      operationType = _fixStackOpsAsInt(
+          stackType1, stackType2, exp1Out, exp2Out, out, context);
+
+      stackType1 = stackType2 = operationType;
+
+      context.assertStackLength(
+          stackLng2, "After stack fix for int operation.");
     } else {
       out.writeBytes(exp1Out);
       out.writeBytes(exp2Out);
+
+      context.assertStackLength(
+          stackLng2, "After push stack values for operation.");
     }
 
     void writeOperation(ASTType type, int op, String desc, String opDesc) {
@@ -558,6 +617,8 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       }
     }
 
+    final opInt32 = operationType?.equalsStrict(_astTypeInt32) ?? false;
+
     switch (expression.operator) {
       case ASTExpressionOperator.add:
         {
@@ -567,22 +628,23 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
             "add(f64)",
             "f64.add",
             _astTypeInt64,
-            Wasm64.i64Add,
-            "add(i64)",
-            "i64.add",
+            opInt32 ? Wasm32.i32Add : Wasm64.i64Add,
+            opInt32 ? "add(i32)" : "add(i64)",
+            opInt32 ? "i32.add" : "i64.add",
           );
         }
       case ASTExpressionOperator.subtract:
         {
           writeOperationDoubleOr(
-              _astTypeDouble64,
-              Wasm64.f64Subtract,
-              "sub(f64)",
-              "f64.sub",
-              _astTypeInt64,
-              Wasm64.i64Subtract,
-              "sub(i64)",
-              "i64.sub");
+            _astTypeDouble64,
+            Wasm64.f64Subtract,
+            "sub(f64)",
+            "f64.sub",
+            _astTypeInt64,
+            opInt32 ? Wasm32.i32Subtract : Wasm64.i64Subtract,
+            opInt32 ? "sub(i32)" : "sub(i64)",
+            opInt32 ? "i32.sub" : "i64.sub",
+          );
         }
       case ASTExpressionOperator.multiply:
         {
@@ -592,9 +654,9 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
             "multiply(f64)",
             "f64.multiply",
             _astTypeInt64,
-            Wasm64.i64Multiply,
-            "multiply(i64)",
-            "i64.multiply",
+            opInt32 ? Wasm32.i32Multiply : Wasm64.i64Multiply,
+            opInt32 ? "multiply(i32)" : "multiply(i64)",
+            opInt32 ? "i32.multiply" : "i64.multiply",
           );
         }
       case ASTExpressionOperator.divide:
@@ -634,9 +696,9 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
             "equals(f64)",
             "f64.equals",
             _astTypeInt32,
-            Wasm64.i64Equals,
+            opInt32 ? Wasm32.i32Equals : Wasm64.i64Equals,
             "equals(i64)",
-            "i64.equals",
+            opInt32 ? "i32.equals" : "i64.equals",
           );
         }
       case ASTExpressionOperator.notEquals:
@@ -647,9 +709,9 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
             "notEquals(f64)",
             "f64.NotEq",
             _astTypeInt32,
-            Wasm64.i64NotEquals,
+            opInt32 ? Wasm32.i32NotEquals : Wasm64.i64NotEquals,
             "notEquals(i64)",
-            "i64NotEqual",
+            opInt32 ? "i32NotEqual" : "i64NotEqual",
           );
         }
       case ASTExpressionOperator.greater:
@@ -733,8 +795,7 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
 
     final stackLng0 = context.stackLength;
 
-    out.write(Wasm.localGet(localVar.index),
-        description: "[OP] local get: ${localVar.index} \$$name");
+    _localVariableGet(out, context, localVar.index, name);
 
     context.stackPush(localVar.type, 'Local get: ${localVar.index} \$$name');
 
@@ -781,8 +842,7 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     final stackLng1 = context.assertStackLength(
         stackLng0 + 1, "After variable assigment expression");
 
-    out.write(Wasm.localSet(localVar.index),
-        description: "[OP] local set: ${localVar.index} \$$name");
+    _localVariableSet(out, context, localVar.index, name);
 
     context.assertStackLength(
         stackLng1, "After variable set: ${localVar.index} \$$name");
@@ -790,6 +850,88 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
         "After variable declaration:  ${localVar.index} \$$name");
 
     return out;
+  }
+
+  @override
+  BytesOutput generateASTExpressionVariableDirectOperation(
+      ASTExpressionVariableDirectOperation expression,
+      {BytesOutput? out,
+      WasmContext? context}) {
+    out ??= newOutput();
+    context ??= WasmContext();
+
+    var op = expression.operator;
+
+    var variable = expression.variable;
+    var name = variable.name;
+
+    var localVar = _getLocalVariable(context, name);
+
+    final stackLng0 = context.stackLength;
+
+    var expOp = op.asASTExpressionOperator!;
+
+    if (!expression.preOperation) {
+      //throw UnsupportedError("Not supported: $name++ or $name--");
+      _localVariableGet(out, context, localVar.index, name);
+    }
+
+    generateASTExpressionOperation(
+      ASTExpressionOperation(
+        ASTExpressionVariableAccess(variable),
+        expOp,
+        ASTExpressionLiteral(ASTValueInt(1)),
+      ),
+      out: out,
+      context: context,
+    );
+
+    final stackLng1 = context.assertStackLength(
+        stackLng0 + 1, "After variable assigment expression");
+
+    _localVariableSet(out, context, localVar.index, name);
+
+    context.assertStackLength(
+        stackLng1, "After variable set: ${localVar.index} \$$name");
+    context.assertStackLength(stackLng0 + 1,
+        "After variable declaration:  ${localVar.index} \$$name");
+
+    if (expression.preOperation) {
+      _localVariableGet(out, context, localVar.index, name);
+    }
+
+    return out;
+  }
+
+  void _localVariableGet(
+      BytesOutput out, WasmContext? context, int localVarIndex, String name,
+      [String? desc]) {
+    out.write(
+      Wasm.localGet(localVarIndex),
+      description: "[OP] local get: #$localVarIndex \$$name"
+          "${desc != null ? ' $desc' : ''}",
+    );
+  }
+
+  void _localVariableSet(BytesOutput out, WasmContext? context,
+      int localVarIndex, String localVarName) {
+    if (context != null) {
+      var localVar = context.getLocalVariableByIndex(localVarIndex);
+      var stackValue = context.stackGet(localVarIndex);
+
+      if (localVar != null && stackValue != null) {
+        var localVarType = stackValue.type;
+        var stackValueType = stackValue.type;
+
+        if (!localVarType.equalsStrict(stackValueType)) {
+          throw StateError(
+              "Setting local variable#$localVarIndex `$localVarName` with wrong type> localVar:$localVarType != stackValue:$stackValueType");
+        }
+      }
+    }
+
+    out.write(Wasm.localSet(localVarIndex),
+        description: "[OP] local set: #$localVarIndex \$$localVarName");
   }
 
   @override
@@ -832,7 +974,8 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       outBody.write(Leb128.encodeUnsigned(1),
           description: "Declared variable count");
       outBody.writeByte(astType.wasmCode,
-          description: "Declared variable type(${astType.wasmType.name})");
+          description:
+              "Declared variable `${v.key}` type(${astType.wasmType.name})");
     }
 
     for (var stm in f.statements) {
@@ -1010,8 +1153,7 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
 
     var stackLength0 = context.stackLength;
 
-    out.write(Wasm.localGet(localVar.index),
-        description: "[OP] local get: ${localVar.index} \$$name (return)");
+    _localVariableGet(out, context, localVar.index, name, '(return)');
 
     context.stackPush(
         localVar.type, 'Local get: ${localVar.index} \$$name (return)');
@@ -1143,8 +1285,7 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     final stackLng1 = context.assertStackLength(
         stackLng0 + 1, "After variable declaration expression");
 
-    out.write(Wasm.localSet(localVar.index),
-        description: "[OP] local set: ${localVar.index} \$$name");
+    _localVariableSet(out, context, localVar.index, name);
 
     context.assertStackLength(
         stackLng1, "After variable set: ${localVar.index} \$$name");
@@ -1162,6 +1303,9 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
           out: out, context: context);
     } else if (expression is ASTExpressionVariableAssignment) {
       return generateASTExpressionVariableAssignment(expression,
+          out: out, context: context);
+    } else if (expression is ASTExpressionVariableDirectOperation) {
+      return generateASTExpressionVariableDirectOperation(expression,
           out: out, context: context);
     } else if (expression is ASTExpressionVariableEntryAccess) {
       return generateASTExpressionVariableEntryAccess(expression, out: out);
@@ -1383,12 +1527,15 @@ class WasmContext {
     return _localVariables[name]?.type;
   }
 
-  /// Returns the type of a local variable by [index].
-  ASTType? getLocalVariableTypeByIndex(int index) {
-    return _localVariables.values
-        .firstWhereOrNull((e) => e.index == index)
-        ?.type;
+  /// Returns the local variable by [index].
+  ({int index, ASTType type})? getLocalVariableByIndex(int index) {
+    return _localVariables.values.firstWhereOrNull((e) => e.index == index);
   }
+
+  /// Returns the type of a local variable by [index].
+  /// See [getLocalVariableByIndex].
+  ASTType? getLocalVariableTypeByIndex(int index) =>
+      getLocalVariableByIndex(index)?.type;
 
   /// Returns the index of a local variable with [name].
   int getLocalVariableIndex(String name) {
@@ -1582,7 +1729,10 @@ class WasmContext {
 
   @override
   String toString() {
-    return 'WasmContext{localVariables: ${_localVariables.length}, stack: ${_stack.length}}';
+    return 'WasmContext{'
+        'localVariables: ${_localVariables.length}${_localVariables.entries.map((e) => '${e.value.index}:${e.value.type} ${e.key}').toList()}, '
+        'stack: ${_stack.length}'
+        '}';
   }
 }
 
@@ -1643,7 +1793,7 @@ extension _ASTFunctionDeclarationExtension on ASTFunctionDeclaration {
     if (allParameters.isNotEmpty) {
       out.write(
           [...Leb128.encodeUnsigned(allParameters.length), ...allParameters],
-          description: "Parameters types");
+          description: "Parameters: $parameters");
     } else {
       out.writeByte(0, description: "No parameters");
     }
