@@ -298,6 +298,30 @@ String getASTAssignmentOperatorText(ASTAssignmentOperator op) {
   }
 }
 
+ASTAssignmentOperator getASTAssignmentDirectOperator(String op) {
+  op = op.trim();
+
+  switch (op) {
+    case '++':
+      return ASTAssignmentOperator.sum;
+    case '--':
+      return ASTAssignmentOperator.subtract;
+    default:
+      throw UnsupportedError(op);
+  }
+}
+
+String getASTAssignmentDirectOperatorText(ASTAssignmentOperator op) {
+  switch (op) {
+    case ASTAssignmentOperator.sum:
+      return '++';
+    case ASTAssignmentOperator.subtract:
+      return '--';
+    default:
+      throw UnsupportedError('$op');
+  }
+}
+
 class ASTStatementExpression extends ASTStatement {
   ASTExpression expression;
 

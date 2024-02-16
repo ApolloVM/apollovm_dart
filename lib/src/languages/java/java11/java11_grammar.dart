@@ -341,6 +341,7 @@ class Java11GrammarDefinition extends Java11GrammarLexer {
           expressionListEmptyLiteral() |
           expressionMapLiteral() |
           expressionMapEmptyLiteral() |
+          expressionVariableDirectOperation() |
           expressionVariableAssigment() |
           expressionFunctionInvocation() |
           expressionVariableEntryAccess() |
@@ -508,6 +509,30 @@ class Java11GrammarDefinition extends Java11GrammarLexer {
 
         return ASTExpressionMapLiteral(keyType, valueType, entries);
       });
+
+  Parser<ASTExpressionVariableDirectOperation>
+      expressionVariableDirectOperation() =>
+          (expressionVariableDirectPosOperation() |
+                  expressionVariableDirectPreOperation())
+              .cast<ASTExpressionVariableDirectOperation>();
+
+  Parser<ASTExpressionVariableDirectOperation>
+      expressionVariableDirectPosOperation() =>
+          (variable() & (string('++') | string('--'))).map((v) {
+            var variable = v[0];
+            var operator = getASTAssignmentDirectOperator(v[1]);
+            return ASTExpressionVariableDirectOperation(
+                variable, operator, false);
+          });
+
+  Parser<ASTExpressionVariableDirectOperation>
+      expressionVariableDirectPreOperation() =>
+          ((string('++') | string('--')) & variable()).map((v) {
+            var operator = getASTAssignmentDirectOperator(v[0]);
+            var variable = v[1];
+            return ASTExpressionVariableDirectOperation(
+                variable, operator, true);
+          });
 
   Parser<ASTExpressionVariableAssignment> expressionVariableAssigment() =>
       (variable() & assigmentOperator() & ref0(expression)).map((v) {

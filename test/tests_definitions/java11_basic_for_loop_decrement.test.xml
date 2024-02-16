@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="Basic main(List<String>) for loop decrement">
+    <source language="java11">
+        <![CDATA[
+          class Foo {
+            static public void main(Object[] args) {
+              var title = args[0];
+              var init = args[1];
+              var end = args[2];
+
+              print(title);
+
+              for (var i = init ; i >= end; i--) {
+                print(i);
+              }
+            }
+          }
+        ]]>
+    </source>
+    <call class="Foo" function="main">
+        [
+          ["For loop:", 20, 10]
+        ]
+    </call>
+    <output>
+        ["For loop:", 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10]
+    </output>
+    <source-generated language="dart"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+class Foo {
+
+  static void main(List<Object> args) {
+    var title = args[0];
+    var init = args[1];
+    var end = args[2];
+    print(title);
+    for (var i = init; i >= end ; i--) {
+      print(i);
+    }
+  }
+
+}
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+    <source-generated language="java11"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+class Foo {
+
+  static void main(Object[] args) {
+    var title = args[0];
+    var init = args[1];
+    var end = args[2];
+    print(title);
+    for (var i = init; i >= end ; i--) {
+      print(i);
+    }
+  }
+
+}
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+</test>

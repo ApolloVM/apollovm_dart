@@ -14,6 +14,8 @@ Future<void> main() async {
   var envVars = Platform.environment;
   var singleTest = envVars['SINGLE_TEST'];
 
+  // ENV: SINGLE_TEST=java11_basic_for_loop_increment.test.xml
+
   if (singleTest != null) {
     print('SINGLE_TEST: $singleTest');
   }

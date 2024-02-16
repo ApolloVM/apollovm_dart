@@ -288,6 +288,26 @@ class ASTType<V> with ASTNode implements ASTTypedNode {
   }
 }
 
+mixin StrictType {
+  @override
+  bool operator ==(Object other) => equals(other);
+
+  bool equals(Object other, {bool strict = false});
+}
+
+extension ASTTypeExtension on ASTType {
+  bool equalsStrict(ASTType other) {
+    final self = this;
+    if (self is StrictType) {
+      return (self as StrictType).equals(other, strict: true);
+    } else if (other is StrictType) {
+      return (other as StrictType).equals(self, strict: true);
+    } else {
+      return self == other;
+    }
+  }
+}
+
 class ASTTypeInterface<V> extends ASTType<V> {
   ASTTypeInterface(super.name,
       {super.generics, ASTType? superInterface, super.annotations})
@@ -431,7 +451,7 @@ class ASTTypeNum<T extends num> extends ASTTypeNumber<T> {
 }
 
 /// [ASTType] for integer ([int]).
-class ASTTypeInt extends ASTTypeNum<int> {
+class ASTTypeInt extends ASTTypeNum<int> with StrictType {
   static final ASTTypeInt instance = ASTTypeInt();
   static final ASTTypeInt instance32 = ASTTypeInt(bits: 32);
   static final ASTTypeInt instance64 = ASTTypeInt(bits: 64);
@@ -467,11 +487,11 @@ class ASTTypeInt extends ASTTypeNum<int> {
   }
 
   @override
-  bool operator ==(Object other) {
+  bool equals(Object other, {bool strict = false}) {
     if (identical(this, other)) return true;
 
     if (other is ASTTypeInt && runtimeType == other.runtimeType) {
-      if (bits != null && other.bits != null) {
+      if (strict || (bits != null && other.bits != null)) {
         return bits == other.bits;
       }
 
@@ -480,6 +500,9 @@ class ASTTypeInt extends ASTTypeNum<int> {
 
     return false;
   }
+
+  @override
+  bool operator ==(Object other) => equals(other);
 
   @override
   int get hashCode => name.hashCode;
@@ -491,7 +514,7 @@ class ASTTypeInt extends ASTTypeNum<int> {
 }
 
 /// [ASTType] for [double].
-class ASTTypeDouble extends ASTTypeNum<double> {
+class ASTTypeDouble extends ASTTypeNum<double> with StrictType {
   static final ASTTypeDouble instance = ASTTypeDouble();
   static final ASTTypeDouble instance32 = ASTTypeDouble(bits: 32);
   static final ASTTypeDouble instance64 = ASTTypeDouble(bits: 64);
@@ -530,11 +553,11 @@ class ASTTypeDouble extends ASTTypeNum<double> {
   }
 
   @override
-  bool operator ==(Object other) {
+  bool equals(Object other, {bool strict = false}) {
     if (identical(this, other)) return true;
 
     if (other is ASTTypeDouble && runtimeType == other.runtimeType) {
-      if (bits != null && other.bits != null) {
+      if (strict || (bits != null && other.bits != null)) {
         return bits == other.bits;
       }
 
@@ -543,6 +566,9 @@ class ASTTypeDouble extends ASTTypeNum<double> {
 
     return false;
   }
+
+  @override
+  bool operator ==(Object other) => equals(other);
 
   @override
   int get hashCode => name.hashCode;
