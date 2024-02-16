@@ -936,7 +936,60 @@ class ASTExpressionVariableAssignment extends ASTExpression {
 
     await variable.setValue(context, await result);
 
-    return value;
+    return result;
+  }
+}
+
+/// [ASTExpression] to directly apply a change to a variable.
+/// - Operators examples: `++` and `--`
+class ASTExpressionVariableDirectOperation extends ASTExpression {
+  ASTVariable variable;
+
+  ASTAssignmentOperator operator;
+
+  bool preOperation;
+
+  ASTExpressionVariableDirectOperation(
+      this.variable, this.operator, this.preOperation);
+
+  @override
+  Iterable<ASTNode> get children => [variable];
+
+  @override
+  FutureOr<ASTType> resolveType(VMContext? context) =>
+      variable.resolveType(context);
+
+  @override
+  FutureOr<ASTValue> run(
+      VMContext parentContext, ASTRunStatus runStatus) async {
+    var context = defineRunContext(parentContext);
+
+    var variableValue = await variable.getValue(context);
+
+    var value = variableValue is ASTValueDouble
+        ? ASTValueDouble(1.0) as ASTValueNum<num>
+        : ASTValueInt(1) as ASTValueNum<num>;
+
+    FutureOr<ASTValue> result;
+
+    switch (operator) {
+      case ASTAssignmentOperator.sum:
+        {
+          result = variableValue + value;
+          break;
+        }
+      case ASTAssignmentOperator.subtract:
+        {
+          result = variableValue - value;
+          break;
+        }
+      default:
+        throw UnsupportedError('operator: $operator');
+    }
+
+    await variable.setValue(context, await result);
+
+    return preOperation ? result : variableValue;
   }
 }
 

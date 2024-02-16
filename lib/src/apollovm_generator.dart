@@ -165,6 +165,10 @@ abstract class ApolloGenerator<O extends Object,
       ASTExpressionVariableAssignment expression,
       {O? out});
 
+  O generateASTExpressionVariableDirectOperation(
+      ASTExpressionVariableDirectOperation expression,
+      {O? out});
+
   O generateASTStatementReturn(ASTStatementReturn statement, {O? out});
 
   O generateASTStatementReturnNull(ASTStatementReturnNull statement, {O? out});
