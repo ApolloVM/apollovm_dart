@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="Basic main(List<String>) variable decrement">
+    <source language="java11">
+        <![CDATA[
+
+        class Foo {
+
+          void main(int[] args) {
+            var a = args[0];
+            var b = args[1] ;
+
+            print("a: " + a);
+            print("b: " + b);
+
+            var a2 = --a;
+            var b2 = --b;
+
+            print("a2: " + a2);
+            print("b2: " + b2);
+
+            var a3 = a--;
+            var b3 = b--;
+
+            print("a3: " + a3);
+            print("b3: " + b3);
+
+            print("a: " + a);
+            print("b: " + b);
+          }
+
+        }
+        ]]>
+    </source>
+    <call class="Foo" function="main">
+        [ [10, 20] ]
+    </call>
+    <output>
+        ["a: 10", "b: 20", "a2: 9", "b2: 19", "a3: 9", "b3: 19", "a: 8", "b: 18"]
+    </output>
+    <source-generated language="dart"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+class Foo {
+
+  void main(List<int> args) {
+    var a = args[0];
+    var b = args[1];
+    print('a: $a');
+    print('b: $b');
+    var a2 = --a;
+    var b2 = --b;
+    print('a2: $a2');
+    print('b2: $b2');
+    var a3 = a--;
+    var b3 = b--;
+    print('a3: $a3');
+    print('b3: $b3');
+    print('a: $a');
+    print('b: $b');
+  }
+
+}
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+
+    <source-generated language="java11"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+class Foo {
+
+  void main(int[] args) {
+    var a = args[0];
+    var b = args[1];
+    print("a: " + a);
+    print("b: " + b);
+    var a2 = --a;
+    var b2 = --b;
+    print("a2: " + a2);
+    print("b2: " + b2);
+    var a3 = a--;
+    var b3 = b--;
+    print("a3: " + a3);
+    print("b3: " + b3);
+    print("a: " + a);
+    print("b: " + b);
+  }
+
+}
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+</test>

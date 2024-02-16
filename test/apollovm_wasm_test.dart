@@ -338,6 +338,278 @@ void main() async {
     );
 
     test(
+      'increment1',
+      () => _testWasm(
+          language: 'dart',
+          code: r'''
+      
+          int increment1(int a) {
+            int x = a++;
+            return x;
+          }
+          
+        ''',
+          functionName: 'increment1',
+          executions: {
+            [100]: 100,
+          },
+          expecteWasm: {
+            'test':
+                '0061736D0100000001060160017E017E03020100070E010A696E6372656D656E743100000A14011201017E2000200042017C2100210120010F0B',
+          }),
+    );
+
+    test(
+      'increment2',
+      () => _testWasm(
+          language: 'dart',
+          code: r'''
+      
+          int increment2(int a) {
+            a++;
+            int x = a++;
+            return x;
+          }
+          
+        ''',
+          functionName: 'increment2',
+          executions: {
+            [100]: 101,
+          },
+          expecteWasm: {
+            'test':
+                '0061736D0100000001060160017E017E03020100070E010A696E6372656D656E743200000A1D011B01017E2000200042017C21002000200042017C2100210120010F0B',
+          }),
+    );
+
+    test(
+      'increment3',
+      () => _testWasm(
+          language: 'dart',
+          code: r'''
+      
+          int increment3(int a) {
+            a++;
+            int x = a++;
+            return a;
+          }
+          
+        ''',
+          functionName: 'increment3',
+          executions: {
+            [100]: 102,
+          },
+          expecteWasm: {
+            'test':
+                '0061736D0100000001060160017E017E03020100070E010A696E6372656D656E743300000A1D011B01017E2000200042017C21002000200042017C2100210120000F0B',
+          }),
+    );
+
+    test(
+      'preIncrement1',
+      () => _testWasm(
+          language: 'dart',
+          code: r'''
+      
+          int preIncrement1(int a) {
+            int x = ++a;
+            return x;
+          }
+          
+        ''',
+          functionName: 'preIncrement1',
+          executions: {
+            [100]: 101,
+          },
+          expecteWasm: {
+            'test':
+                '0061736D0100000001060160017E017E030201000711010D707265496E6372656D656E743100000A14011201017E200042017C21002000210120010F0B',
+          }),
+    );
+
+    test(
+      'preIncrement2',
+      () => _testWasm(
+          language: 'dart',
+          code: r'''
+      
+          int preIncrement2(int a) {
+            ++a;
+            int x = ++a;
+            return x;
+          }
+          
+        ''',
+          functionName: 'preIncrement2',
+          executions: {
+            [100]: 102,
+          },
+          expecteWasm: {
+            'test':
+                '0061736D0100000001060160017E017E030201000711010D707265496E6372656D656E743200000A1D011B01017E200042017C21002000200042017C21002000210120010F0B',
+          }),
+    );
+
+    test(
+      'preIncrement3',
+      () => _testWasm(
+          language: 'dart',
+          code: r'''
+      
+          int preIncrement3(int a) {
+            ++a;
+            int x = ++a;
+            return a;
+          }
+          
+        ''',
+          functionName: 'preIncrement3',
+          executions: {
+            [100]: 102,
+          },
+          expecteWasm: {
+            'test':
+                '0061736D0100000001060160017E017E030201000711010D707265496E6372656D656E743300000A1D011B01017E200042017C21002000200042017C21002000210120000F0B',
+          }),
+    );
+
+    test(
+      'decrement1',
+      () => _testWasm(
+          language: 'dart',
+          code: r'''
+      
+          int decrement1(int a) {
+            int x = a--;
+            return x;
+          }
+          
+        ''',
+          functionName: 'decrement1',
+          executions: {
+            [100]: 100,
+          },
+          expecteWasm: {
+            'test':
+                '0061736D0100000001060160017E017E03020100070E010A64656372656D656E743100000A14011201017E2000200042017D2100210120010F0B',
+          }),
+    );
+
+    test(
+      'decrement2',
+      () => _testWasm(
+          language: 'dart',
+          code: r'''
+      
+          int decrement2(int a) {
+            a--;
+            int x = a--;
+            return x;
+          }
+          
+        ''',
+          functionName: 'decrement2',
+          executions: {
+            [100]: 99,
+          },
+          expecteWasm: {
+            'test':
+                '0061736D0100000001060160017E017E03020100070E010A64656372656D656E743200000A1D011B01017E2000200042017D21002000200042017D2100210120010F0B',
+          }),
+    );
+
+    test(
+      'decrement3',
+      () => _testWasm(
+          language: 'dart',
+          code: r'''
+      
+          int decrement3(int a) {
+            a--;
+            int x = a--;
+            return a;
+          }
+          
+        ''',
+          functionName: 'decrement3',
+          executions: {
+            [100]: 98,
+          },
+          expecteWasm: {
+            'test':
+                '0061736D0100000001060160017E017E03020100070E010A64656372656D656E743300000A1D011B01017E2000200042017D21002000200042017D2100210120000F0B',
+          }),
+    );
+
+    test(
+      'preDecrement1',
+      () => _testWasm(
+          language: 'dart',
+          code: r'''
+      
+          int preDecrement1(int a) {
+            int x = --a;
+            return x;
+          }
+          
+        ''',
+          functionName: 'preDecrement1',
+          executions: {
+            [100]: 99,
+          },
+          expecteWasm: {
+            'test':
+                '0061736D0100000001060160017E017E030201000711010D70726544656372656D656E743100000A14011201017E200042017D21002000210120010F0B',
+          }),
+    );
+
+    test(
+      'preDecrement2',
+      () => _testWasm(
+          language: 'dart',
+          code: r'''
+      
+          int preDecrement2(int a) {
+            --a;
+            int x = --a;
+            return x;
+          }
+          
+        ''',
+          functionName: 'preDecrement2',
+          executions: {
+            [100]: 98,
+          },
+          expecteWasm: {
+            'test':
+                '0061736D0100000001060160017E017E030201000711010D70726544656372656D656E743200000A1D011B01017E200042017D21002000200042017D21002000210120010F0B',
+          }),
+    );
+
+    test(
+      'preDecrement3',
+      () => _testWasm(
+          language: 'dart',
+          code: r'''
+      
+          int preDecrement3(int a) {
+            --a;
+            int x = --a;
+            return a;
+          }
+          
+        ''',
+          functionName: 'preDecrement3',
+          executions: {
+            [100]: 98,
+          },
+          expecteWasm: {
+            'test':
+                '0061736D0100000001060160017E017E030201000711010D70726544656372656D656E743300000A1D011B01017E200042017D21002000200042017D21002000210120000F0B',
+          }),
+    );
+
+    test(
       'operation1',
       () => _testWasm(
           language: 'dart',
@@ -603,8 +875,34 @@ Future<void> _testWasm(
       print('<<<<<<<<<<<<<<<<<<<<<<<<<<<<');
       print('EXECUTE WASM> $parameters -> $expectedResult');
 
-      var wasmAstValue = await wasmRunner.executeFunction('', functionName,
-          positionalParameters: parameters);
+      ASTValue wasmAstValue;
+
+      try {
+        wasmAstValue = await wasmRunner.executeFunction('', functionName,
+            positionalParameters: parameters);
+      } catch (e) {
+        print(e);
+
+        var matchOffset =
+            RegExp(r'Invalid input WebAssembly code at offset (\d+)')
+                .firstMatch('$e');
+
+        if (matchOffset != null) {
+          var offset = int.tryParse(matchOffset.group(1) ?? '');
+          if (offset != null) {
+            var output = compiledWasm.output();
+
+            var codeBefore = output.sublist(0, offset);
+            var codeAfter = output.sublist(offset);
+
+            print('CODE ERROR AT:');
+            print(codeBefore);
+            print(codeAfter);
+          }
+        }
+
+        rethrow;
+      }
 
       var wasmResult = wasmAstValue.getValueNoContext();
       print('Wasm Result: $wasmResult');
@@ -620,7 +918,10 @@ Future<void> _testWasm(
 
   print('<< EXPECTED WASM: HEX>>\n${hex.encode(expectedWasmBytes!)}');
 
-  expect(compiledWasm?.output(), expectedWasmBytes);
+  var output = compiledWasm?.output();
+  print('<< GENERATED WASM: HEX>>\n${hex.encode(output!)}');
+
+  expect(output, expectedWasmBytes);
 }
 
 /*
