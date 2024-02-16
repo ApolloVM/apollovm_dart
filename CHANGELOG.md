@@ -1,3 +1,13 @@
+## 0.0.52
+
+- New `ASTExpressionVariableDirectOperation` (`++` and `--` operators).
+
+- New `StrictType` interface for `equalsStrict` over `ASTTypeInt` and `ASTTypeDouble`.
+
+- `ApolloGeneratorWasm`:
+  - Improve auto casting to int32/int64 and float32/float64.
+  - Implemented `generateASTExpressionVariableDirectOperation`.
+
 ## 0.0.51
 
 - sdk: '>=3.3.0 <4.0.0'
