@@ -1,3 +1,7 @@
+## 0.0.53
+
+- wasm_run: ^0.1.0
+
 ## 0.0.52
 
 - New `ASTExpressionVariableDirectOperation` (`++` and `--` operators).
