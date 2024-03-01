@@ -26,7 +26,7 @@ dependencies:
   collection: ^1.18.0
   args: ^2.4.2
   wasm_interop: ^2.0.1
-  wasm_run: ^0.1.0
+  wasm_run: ^0.1.0+1
   crypto: ^3.0.3
   path: ^1.9.0
 
