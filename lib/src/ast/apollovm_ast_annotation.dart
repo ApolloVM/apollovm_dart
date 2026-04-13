@@ -38,8 +38,11 @@ class ASTAnnotationParameter with ASTNode {
 
   bool defaultParameter;
 
-  ASTAnnotationParameter(this.name, this.value,
-      [this.defaultParameter = false]);
+  ASTAnnotationParameter(
+    this.name,
+    this.value, [
+    this.defaultParameter = false,
+  ]);
 
   @override
   Iterable<ASTNode> get children => [];

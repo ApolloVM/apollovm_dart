@@ -93,34 +93,44 @@ class ASTType<V> with ASTNode implements ASTTypedNode {
         return ASTTypeArray.instanceOfObject;
       } else if (o is List<List<String>>) {
         return ASTTypeArray2D<ASTTypeString, String>.fromElementType(
-            ASTTypeString.instance);
+          ASTTypeString.instance,
+        );
       } else if (o is List<List<int>>) {
         return ASTTypeArray2D<ASTTypeInt, int>.fromElementType(
-            ASTTypeInt.instance);
+          ASTTypeInt.instance,
+        );
       } else if (o is List<List<double>>) {
         return ASTTypeArray2D<ASTTypeDouble, double>.fromElementType(
-            ASTTypeDouble.instance);
+          ASTTypeDouble.instance,
+        );
       } else if (o is List<List<Object>>) {
         return ASTTypeArray2D<ASTTypeObject, Object>.fromElementType(
-            ASTTypeObject.instance);
+          ASTTypeObject.instance,
+        );
       } else if (o is List<List<dynamic>>) {
         return ASTTypeArray2D<ASTTypeDynamic, dynamic>.fromElementType(
-            ASTTypeDynamic.instance);
+          ASTTypeDynamic.instance,
+        );
       } else if (o is List<List<List<String>>>) {
         return ASTTypeArray3D<ASTTypeString, String>.fromElementType(
-            ASTTypeString.instance);
+          ASTTypeString.instance,
+        );
       } else if (o is List<List<List<int>>>) {
         return ASTTypeArray3D<ASTTypeInt, int>.fromElementType(
-            ASTTypeInt.instance);
+          ASTTypeInt.instance,
+        );
       } else if (o is List<List<List<double>>>) {
         return ASTTypeArray3D<ASTTypeDouble, double>.fromElementType(
-            ASTTypeDouble.instance);
+          ASTTypeDouble.instance,
+        );
       } else if (o is List<List<List<Object>>>) {
         return ASTTypeArray3D<ASTTypeObject, Object>.fromElementType(
-            ASTTypeObject.instance);
+          ASTTypeObject.instance,
+        );
       } else if (o is List<List<List<dynamic>>>) {
         return ASTTypeArray3D<ASTTypeDynamic, dynamic>.fromElementType(
-            ASTTypeDynamic.instance);
+          ASTTypeDynamic.instance,
+        );
       }
 
       var genericType = o.genericType;
@@ -149,8 +159,11 @@ class ASTType<V> with ASTNode implements ASTTypedNode {
   ASTType(this.name, {this.generics, this.superType, this.annotations});
 
   @override
-  Iterable<ASTNode> get children =>
-      [...?generics, ...?annotations, if (superType != null) superType!];
+  Iterable<ASTNode> get children => [
+    ...?generics,
+    ...?annotations,
+    if (superType != null) superType!,
+  ];
 
   ASTClass<V>? _class;
 
@@ -309,9 +322,12 @@ extension ASTTypeExtension on ASTType {
 }
 
 class ASTTypeInterface<V> extends ASTType<V> {
-  ASTTypeInterface(super.name,
-      {super.generics, ASTType? superInterface, super.annotations})
-      : super(superType: superInterface);
+  ASTTypeInterface(
+    super.name, {
+    super.generics,
+    ASTType? superInterface,
+    super.annotations,
+  }) : super(superType: superInterface);
 
   @override
   Iterable<ASTNode> get children => [];
@@ -375,12 +391,7 @@ class ASTTypeBool extends ASTTypePrimitive<bool> {
   }
 }
 
-enum ASTNumType {
-  nan,
-  num,
-  int,
-  double,
-}
+enum ASTNumType { nan, num, int, double }
 
 /// Base [ASTType] for primitive numbers.
 abstract class ASTTypeNumber<T> extends ASTTypePrimitive<T> {
@@ -408,7 +419,9 @@ class ASTTypeNum<T extends num> extends ASTTypeNumber<T> {
   bool acceptsType(ASTType type) {
     if (type == this ||
         type == ASTTypeDouble.instance ||
-        type == ASTTypeInt.instance) return true;
+        type == ASTTypeInt.instance) {
+      return true;
+    }
     return false;
   }
 
@@ -1020,25 +1033,31 @@ class ASTTypeArray3D<T extends ASTType<V>, V>
 class ASTTypeMap<TK extends ASTType<K>, TV extends ASTType<V>, K, V>
     extends ASTType<Map<K, V>> {
   static final ASTTypeMap<ASTTypeString, ASTTypeDynamic, String, dynamic>
-      instanceOfStringOfDynamic =
+  instanceOfStringOfDynamic =
       ASTTypeMap<ASTTypeString, ASTTypeDynamic, String, dynamic>(
-          ASTTypeString.instance, ASTTypeDynamic.instance);
+        ASTTypeString.instance,
+        ASTTypeDynamic.instance,
+      );
 
   static final ASTTypeMap<ASTTypeString, ASTTypeString, String, String>
-      instanceOfStringOfString =
+  instanceOfStringOfString =
       ASTTypeMap<ASTTypeString, ASTTypeString, String, String>(
-          ASTTypeString.instance, ASTTypeString.instance);
+        ASTTypeString.instance,
+        ASTTypeString.instance,
+      );
 
   static final ASTTypeMap<ASTTypeDynamic, ASTTypeDynamic, dynamic, dynamic>
-      instanceOfDynamicOfDynamic =
+  instanceOfDynamicOfDynamic =
       ASTTypeMap<ASTTypeDynamic, ASTTypeDynamic, dynamic, dynamic>(
-          ASTTypeDynamic.instance, ASTTypeDynamic.instance);
+        ASTTypeDynamic.instance,
+        ASTTypeDynamic.instance,
+      );
 
   final TK keyType;
   final TV valueType;
 
   ASTTypeMap(this.keyType, this.valueType)
-      : super('Map', generics: [keyType, valueType]);
+    : super('Map', generics: [keyType, valueType]);
 
   @override
   Iterable<ASTNode> get children => [keyType, valueType];
@@ -1080,11 +1099,13 @@ class ASTTypeMap<TK extends ASTType<K>, TV extends ASTType<V>, K, V>
 
     map ??= {};
 
-    var map2 = Map<K, V>.fromEntries(map.entries.map((e) {
-      var k = e.key;
-      var v = e.value;
-      return k is K && v is V ? MapEntry(k, v) : null;
-    }).whereNotNull());
+    var map2 = Map<K, V>.fromEntries(
+      map.entries.map((e) {
+        var k = e.key;
+        var v = e.value;
+        return k is K && v is V ? MapEntry(k, v) : null;
+      }).nonNulls,
+    );
 
     var value = ASTValueMap<TK, TV, K, V>(keyType, valueType, map2);
     return value;

@@ -97,8 +97,10 @@ class ASTBlock extends ASTStatement {
     }
   }
 
-  ASTFunctionSet? getFunctionWithName(String name,
-      {bool caseInsensitive = false}) {
+  ASTFunctionSet? getFunctionWithName(
+    String name, {
+    bool caseInsensitive = false,
+  }) {
     var f = _functions[name];
 
     if (f == null && caseInsensitive) {
@@ -127,15 +129,19 @@ class ASTBlock extends ASTStatement {
     var set = getFunctionWithName(fName, caseInsensitive: caseInsensitive);
     if (set != null) return set.get(parametersSignature, false);
 
-    var fExternal =
-        context.getMappedExternalFunction(fName, parametersSignature);
+    var fExternal = context.getMappedExternalFunction(
+      fName,
+      parametersSignature,
+    );
 
     return fExternal;
   }
 
-  ASTType<T>? getFunctionReturnType<T>(String name,
-          ASTFunctionSignature parametersTypes, VMContext context) =>
-      getFunction(name, parametersTypes, context)?.returnType as ASTType<T>?;
+  ASTType<T>? getFunctionReturnType<T>(
+    String name,
+    ASTFunctionSignature parametersTypes,
+    VMContext context,
+  ) => getFunction(name, parametersTypes, context)?.returnType as ASTType<T>?;
 
   final List<ASTStatement> _statements = [];
 
@@ -171,7 +177,9 @@ class ASTBlock extends ASTStatement {
 
   @override
   FutureOr<ASTValue> run(
-      VMContext parentContext, ASTRunStatus runStatus) async {
+    VMContext parentContext,
+    ASTRunStatus runStatus,
+  ) async {
     var blockContext = defineRunContext(parentContext);
 
     FutureOr<ASTValue> returnValue = ASTValueVoid.instance;
@@ -293,8 +301,6 @@ String getASTAssignmentOperatorText(ASTAssignmentOperator op) {
       return '+=';
     case ASTAssignmentOperator.subtract:
       return '-=';
-    default:
-      throw UnsupportedError('$op');
   }
 }
 
@@ -512,51 +518,68 @@ class ASTStatementVariableDeclaration<V> extends ASTStatementTyped {
 
   @override
   FutureOr<ASTValue> run(VMContext parentContext, ASTRunStatus runStatus) {
-    return type
-        .resolveType(parentContext)
-        .resolveMapped((variableResolvedType) {
+    return type.resolveType(parentContext).resolveMapped((
+      variableResolvedType,
+    ) {
       return _runImpl(parentContext, runStatus, variableResolvedType);
     });
   }
 
-  Future<ASTValue<dynamic>> _runImpl(VMContext parentContext,
-      ASTRunStatus runStatus, ASTType variableResolvedType) async {
+  Future<ASTValue<dynamic>> _runImpl(
+    VMContext parentContext,
+    ASTRunStatus runStatus,
+    ASTType variableResolvedType,
+  ) async {
     var value = this.value;
     if (value != null) {
-      return value
-          .resolveType(parentContext)
-          .resolveMapped((valueResolvedType) {
-        return _runImpl2(parentContext, variableResolvedType, valueResolvedType,
-            runStatus, value);
+      return value.resolveType(parentContext).resolveMapped((
+        valueResolvedType,
+      ) {
+        return _runImpl2(
+          parentContext,
+          variableResolvedType,
+          valueResolvedType,
+          runStatus,
+          value,
+        );
       });
     } else {
       var initValue = ASTValueNull.instance;
       parentContext.declareVariableWithValue(
-          variableResolvedType, name, initValue);
+        variableResolvedType,
+        name,
+        initValue,
+      );
       return initValue;
     }
   }
 
   Future<ASTValue<dynamic>> _runImpl2(
-      VMContext parentContext,
-      ASTType variableResolvedType,
-      ASTType valueResolvedType,
-      ASTRunStatus runStatus,
-      ASTExpression value) async {
+    VMContext parentContext,
+    ASTType variableResolvedType,
+    ASTType valueResolvedType,
+    ASTRunStatus runStatus,
+    ASTExpression value,
+  ) async {
     if (!valueResolvedType.canCastToType(variableResolvedType)) {
       throw ApolloVMRuntimeError(
-          "Can't cast variable type ($variableResolvedType) to type: $type");
+        "Can't cast variable type ($variableResolvedType) to type: $type",
+      );
     }
 
     var initValue = await value.run(parentContext, runStatus);
 
     if (!(await initValue.isInstanceOfAsync(variableResolvedType))) {
       throw ApolloVMRuntimeError(
-          "Can't cast initial ($initValue) value to type: $type");
+        "Can't cast initial ($initValue) value to type: $type",
+      );
     }
 
     parentContext.declareVariableWithValue(
-        variableResolvedType, name, initValue);
+      variableResolvedType,
+      name,
+      initValue,
+    );
     return initValue;
   }
 
@@ -582,14 +605,18 @@ class ASTStatementVariableDeclaration<V> extends ASTStatementTyped {
 
 /// [ASTStatement] base for branches.
 abstract class ASTBranch extends ASTStatement {
-  FutureOr<bool> evaluateCondition(VMContext parentContext,
-      ASTRunStatus runStatus, ASTExpression condition) async {
+  FutureOr<bool> evaluateCondition(
+    VMContext parentContext,
+    ASTRunStatus runStatus,
+    ASTExpression condition,
+  ) async {
     var evaluation = await condition.run(parentContext, runStatus);
     var evalValue = await evaluation.getValue(parentContext);
 
     if (evalValue is! bool) {
       throw ApolloVMRuntimeError(
-          'A branch condition should return a boolean: $evalValue');
+        'A branch condition should return a boolean: $evalValue',
+      );
     }
 
     return evalValue;
@@ -619,9 +646,14 @@ class ASTBranchIfBlock extends ASTBranch {
 
   @override
   FutureOr<ASTValue> run(
-      VMContext parentContext, ASTRunStatus runStatus) async {
-    var evalValue =
-        await evaluateCondition(parentContext, runStatus, condition);
+    VMContext parentContext,
+    ASTRunStatus runStatus,
+  ) async {
+    var evalValue = await evaluateCondition(
+      parentContext,
+      runStatus,
+      condition,
+    );
 
     if (evalValue) {
       await block.run(parentContext, runStatus);
@@ -645,8 +677,11 @@ class ASTBranchIfElseBlock extends ASTBranch {
   ASTBranchIfElseBlock(this.condition, this.blockIf, this.blockElse);
 
   @override
-  Iterable<ASTNode> get children =>
-      [condition, blockIf, if (blockElse != null) blockElse!];
+  Iterable<ASTNode> get children => [
+    condition,
+    blockIf,
+    if (blockElse != null) blockElse!,
+  ];
 
   @override
   void resolveNode(ASTNode? parentNode) {
@@ -659,9 +694,14 @@ class ASTBranchIfElseBlock extends ASTBranch {
 
   @override
   FutureOr<ASTValue> run(
-      VMContext parentContext, ASTRunStatus runStatus) async {
-    var evalValue =
-        await evaluateCondition(parentContext, runStatus, condition);
+    VMContext parentContext,
+    ASTRunStatus runStatus,
+  ) async {
+    var evalValue = await evaluateCondition(
+      parentContext,
+      runStatus,
+      condition,
+    );
 
     if (evalValue) {
       await blockIf.run(parentContext, runStatus);
@@ -686,11 +726,18 @@ class ASTBranchIfElseIfsElseBlock extends ASTBranch {
   ASTBlock? blockElse;
 
   ASTBranchIfElseIfsElseBlock(
-      this.condition, this.blockIf, this.blocksElseIf, this.blockElse);
+    this.condition,
+    this.blockIf,
+    this.blocksElseIf,
+    this.blockElse,
+  );
 
   @override
-  Iterable<ASTNode> get children =>
-      [condition, ...blocksElseIf, if (blockElse != null) blockElse!];
+  Iterable<ASTNode> get children => [
+    condition,
+    ...blocksElseIf,
+    if (blockElse != null) blockElse!,
+  ];
 
   @override
   void resolveNode(ASTNode? parentNode) {
@@ -709,16 +756,24 @@ class ASTBranchIfElseIfsElseBlock extends ASTBranch {
 
   @override
   FutureOr<ASTValue> run(
-      VMContext parentContext, ASTRunStatus runStatus) async {
-    var evalValue =
-        await evaluateCondition(parentContext, runStatus, condition);
+    VMContext parentContext,
+    ASTRunStatus runStatus,
+  ) async {
+    var evalValue = await evaluateCondition(
+      parentContext,
+      runStatus,
+      condition,
+    );
     if (evalValue) {
       await blockIf.run(parentContext, runStatus);
       return ASTValueVoid.instance;
     } else {
       for (var branch in blocksElseIf) {
-        evalValue =
-            await evaluateCondition(parentContext, runStatus, branch.condition);
+        evalValue = await evaluateCondition(
+          parentContext,
+          runStatus,
+          branch.condition,
+        );
 
         if (evalValue) {
           await branch.block.run(parentContext, runStatus);
@@ -755,12 +810,20 @@ class ASTStatementForLoop extends ASTStatement {
 
   final ASTBlock loopBlock;
 
-  ASTStatementForLoop(this.initStatement, this.conditionExpression,
-      this.continueExpression, this.loopBlock);
+  ASTStatementForLoop(
+    this.initStatement,
+    this.conditionExpression,
+    this.continueExpression,
+    this.loopBlock,
+  );
 
   @override
-  Iterable<ASTNode> get children =>
-      [initStatement, conditionExpression, continueExpression, loopBlock];
+  Iterable<ASTNode> get children => [
+    initStatement,
+    conditionExpression,
+    continueExpression,
+    loopBlock,
+  ];
 
   @override
   void resolveNode(ASTNode? parentNode) {
@@ -780,7 +843,9 @@ class ASTStatementForLoop extends ASTStatement {
 
   @override
   FutureOr<ASTValue> run(
-      VMContext parentContext, ASTRunStatus runStatus) async {
+    VMContext parentContext,
+    ASTRunStatus runStatus,
+  ) async {
     var context = VMContext(parentContext.block, parent: parentContext);
     var runStatus = ASTRunStatus();
 
@@ -800,7 +865,8 @@ class ASTStatementForLoop extends ASTStatement {
             if (!condOK) break;
           } else {
             throw ApolloVMRuntimeError(
-                'Condition not returning a boolean: $condOK');
+              'Condition not returning a boolean: $condOK',
+            );
           }
         }
 

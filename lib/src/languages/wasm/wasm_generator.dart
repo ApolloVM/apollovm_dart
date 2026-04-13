@@ -74,15 +74,19 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
   }
 
   BytesOutput generateSectionExport(
-      ASTBlock block, List<ASTFunctionDeclaration> functions,
-      {BytesOutput? out}) {
+    ASTBlock block,
+    List<ASTFunctionDeclaration> functions, {
+    BytesOutput? out,
+  }) {
     out ??= newOutput();
 
-    var functionsIndexed =
-        functions.mapIndexed((i, f) => MapEntry(f, i)).toList();
+    var functionsIndexed = functions
+        .mapIndexed((i, f) => MapEntry(f, i))
+        .toList();
 
-    var publicFunctions =
-        functionsIndexed.where((e) => !e.key.modifiers.isPrivate).toList();
+    var publicFunctions = functionsIndexed
+        .where((e) => !e.key.modifiers.isPrivate)
+        .toList();
 
     var entries = publicFunctions.map((f) {
       var fName = f.key.name;
@@ -91,23 +95,26 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       return BytesOutput(
         data: [
           BytesOutput(
-              data: Wasm.encodeString(fName),
-              description: "Function name(`$fName`)"),
+            data: Wasm.encodeString(fName),
+            description: "Function name(`$fName`)",
+          ),
           BytesOutput(data: 0x00, description: "Export type(function)"),
           BytesOutput(
-              data: Leb128.encodeUnsigned(fIndex),
-              description: "Type index($fIndex)"),
+            data: Leb128.encodeUnsigned(fIndex),
+            description: "Type index($fIndex)",
+          ),
         ],
         description: "Export function",
       );
     }).toList();
 
     entries.insert(
-        0,
-        BytesOutput(
-          data: Leb128.encodeUnsigned(entries.length),
-          description: "Exported types count",
-        ));
+      0,
+      BytesOutput(
+        data: Leb128.encodeUnsigned(entries.length),
+        description: "Exported types count",
+      ),
+    );
 
     out.writeByte(0x07, description: "Section Export ID");
     out.writeBytesLeb128Block(entries, description: "Exported types");
@@ -116,17 +123,19 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
   }
 
   ({BytesOutput bytes, List<ASTFunctionDeclaration> functions})
-      generateSectionType(ASTBlock block, {BytesOutput? out}) {
+  generateSectionType(ASTBlock block, {BytesOutput? out}) {
     out ??= newOutput();
 
     var functions = block.functions.expand((fs) => fs.functions).toList();
 
     var entries = functions.map((f) => f.wasmSignature()).toList();
     entries.insert(
-        0,
-        BytesOutput(
-            data: Leb128.encodeUnsigned(entries.length),
-            description: "Types count"));
+      0,
+      BytesOutput(
+        data: Leb128.encodeUnsigned(entries.length),
+        description: "Types count",
+      ),
+    );
 
     out.writeByte(0x01, description: "Section Type ID");
     out.writeBytesLeb128Block(entries, description: "Functions signatures");
@@ -135,12 +144,15 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
   }
 
   BytesOutput generateSectionFunction(
-      ASTBlock block, List<ASTFunctionDeclaration> functions,
-      {BytesOutput? out}) {
+    ASTBlock block,
+    List<ASTFunctionDeclaration> functions, {
+    BytesOutput? out,
+  }) {
     out ??= newOutput();
 
-    var indexes =
-        functions.mapIndexed((i, e) => Leb128.encodeUnsigned(i)).toList();
+    var indexes = functions
+        .mapIndexed((i, e) => Leb128.encodeUnsigned(i))
+        .toList();
 
     indexes.insert(0, Leb128.encodeUnsigned(indexes.length));
 
@@ -151,18 +163,23 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
   }
 
   BytesOutput generateSectionCode(
-      ASTBlock block, List<ASTFunctionDeclaration<dynamic>> functions,
-      {BytesOutput? out}) {
+    ASTBlock block,
+    List<ASTFunctionDeclaration<dynamic>> functions, {
+    BytesOutput? out,
+  }) {
     out ??= newOutput();
 
-    var entries =
-        functions.map((f) => generateASTFunctionDeclaration(f)).toList();
+    var entries = functions
+        .map((f) => generateASTFunctionDeclaration(f))
+        .toList();
 
     entries.insert(
-        0,
-        BytesOutput(
-            data: Leb128.encodeUnsigned(entries.length),
-            description: "Bodies count"));
+      0,
+      BytesOutput(
+        data: Leb128.encodeUnsigned(entries.length),
+        description: "Bodies count",
+      ),
+    );
 
     out.writeByte(0x0A, description: "Section Code ID");
     out.writeBytesLeb128Block(entries, description: "Functions bodies");
@@ -171,14 +188,19 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
   }
 
   ({ASTType type, int index}) _getLocalVariable(
-      WasmContext? context, String name) {
+    WasmContext? context,
+    String name,
+  ) {
     return context?.getLocalVariable(name) ??
         (throw StateError("Can't find local variable `$name` in context."));
   }
 
   @override
-  BytesOutput generateASTBlock(ASTBlock block,
-      {BytesOutput? out, WasmContext? context}) {
+  BytesOutput generateASTBlock(
+    ASTBlock block, {
+    BytesOutput? out,
+    WasmContext? context,
+  }) {
     out ??= newOutput();
 
     for (var set in block.functions) {
@@ -199,23 +221,33 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
   }
 
   @override
-  BytesOutput generateASTBranch(ASTBranch branch,
-      {BytesOutput? out, WasmContext? context}) {
+  BytesOutput generateASTBranch(
+    ASTBranch branch, {
+    BytesOutput? out,
+    WasmContext? context,
+  }) {
     if (branch is ASTBranchIfBlock) {
       return generateASTBranchIfBlock(branch, out: out, context: context);
     } else if (branch is ASTBranchIfElseBlock) {
       return generateASTBranchIfElseBlock(branch, out: out, context: context);
     } else if (branch is ASTBranchIfElseIfsElseBlock) {
-      return generateASTBranchIfElseIfsElseBlock(branch,
-          out: out, context: context);
+      return generateASTBranchIfElseIfsElseBlock(
+        branch,
+        out: out,
+        context: context,
+      );
     }
 
     throw UnsupportedError("Can't handle branch: $branch");
   }
 
   @override
-  BytesOutput generateASTBranchIfBlock(ASTBranchIfBlock branch,
-      {BytesOutput? out, WasmContext? context, int ifElseDepth = 0}) {
+  BytesOutput generateASTBranchIfBlock(
+    ASTBranchIfBlock branch, {
+    BytesOutput? out,
+    WasmContext? context,
+    int ifElseDepth = 0,
+  }) {
     out ??= newOutput();
     context ??= WasmContext();
 
@@ -230,8 +262,10 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       throw StateError("Stack type error> not a boolean type: $stackType");
     }
 
-    out.write(Wasm.ifInstruction(WasmType.voidType),
-        description: "[OP] if ( $condition )");
+    out.write(
+      Wasm.ifInstruction(WasmType.voidType),
+      description: "[OP] if ( $condition )",
+    );
     context.stackDrop(_astTypeInt32);
 
     generateASTBlock(branch.block, out: out, context: context);
@@ -242,8 +276,12 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
   }
 
   @override
-  BytesOutput generateASTBranchIfElseBlock(ASTBranchIfElseBlock branch,
-      {BytesOutput? out, WasmContext? context, int ifElseDepth = 0}) {
+  BytesOutput generateASTBranchIfElseBlock(
+    ASTBranchIfElseBlock branch, {
+    BytesOutput? out,
+    WasmContext? context,
+    int ifElseDepth = 0,
+  }) {
     out ??= newOutput();
     context ??= WasmContext();
 
@@ -258,8 +296,10 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       throw StateError("Stack type error> not a boolean type: $stackType");
     }
 
-    out.write(Wasm.ifInstruction(WasmType.voidType),
-        description: "[OP] if ( $condition )");
+    out.write(
+      Wasm.ifInstruction(WasmType.voidType),
+      description: "[OP] if ( $condition )",
+    );
     context.stackDrop(_astTypeInt32);
 
     generateASTBlock(branch.blockIf, out: out, context: context);
@@ -277,10 +317,11 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
 
   @override
   BytesOutput generateASTBranchIfElseIfsElseBlock(
-      ASTBranchIfElseIfsElseBlock branch,
-      {BytesOutput? out,
-      WasmContext? context,
-      int ifElseDepth = 0}) {
+    ASTBranchIfElseIfsElseBlock branch, {
+    BytesOutput? out,
+    WasmContext? context,
+    int ifElseDepth = 0,
+  }) {
     out ??= newOutput();
     context ??= WasmContext();
 
@@ -295,8 +336,10 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       throw StateError("Stack type error> not a boolean type: $stackType");
     }
 
-    out.write(Wasm.ifInstruction(WasmType.voidType),
-        description: "[OP] if ( $condition )");
+    out.write(
+      Wasm.ifInstruction(WasmType.voidType),
+      description: "[OP] if ( $condition )",
+    );
     context.stackDrop(_astTypeInt32);
 
     generateASTBlock(branch.blockIf, out: out, context: context);
@@ -317,18 +360,27 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
 
         if (blocksElseIf.isEmpty) {
           generateASTBranchIfElseBlock(
-              ASTBranchIfElseBlock(
-                  blocksElseIf0.condition, blocksElseIf0.block, blockElse),
-              out: out,
-              context: context,
-              ifElseDepth: ifElseDepth + 1);
+            ASTBranchIfElseBlock(
+              blocksElseIf0.condition,
+              blocksElseIf0.block,
+              blockElse,
+            ),
+            out: out,
+            context: context,
+            ifElseDepth: ifElseDepth + 1,
+          );
         } else {
           generateASTBranchIfElseIfsElseBlock(
-              ASTBranchIfElseIfsElseBlock(blocksElseIf0.condition,
-                  blocksElseIf0.block, blocksElseIf, blockElse),
-              out: out,
-              context: context,
-              ifElseDepth: ifElseDepth + 1);
+            ASTBranchIfElseIfsElseBlock(
+              blocksElseIf0.condition,
+              blocksElseIf0.block,
+              blocksElseIf,
+              blockElse,
+            ),
+            out: out,
+            context: context,
+            ifElseDepth: ifElseDepth + 1,
+          );
         }
       }
     }
@@ -351,31 +403,38 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
   }
 
   @override
-  BytesOutput generateASTClassFunctionDeclaration(ASTClassFunctionDeclaration f,
-      {BytesOutput? out}) {
+  BytesOutput generateASTClassFunctionDeclaration(
+    ASTClassFunctionDeclaration f, {
+    BytesOutput? out,
+  }) {
     // TODO: implement generateASTClassFunctionDeclaration
     throw UnimplementedError('generateASTClassField');
   }
 
   @override
   BytesOutput generateASTExpressionFunctionInvocation(
-      ASTExpressionObjectFunctionInvocation expression,
-      {BytesOutput? out}) {
+    ASTExpressionObjectFunctionInvocation expression, {
+    BytesOutput? out,
+  }) {
     // TODO: implement generateASTExpressionFunctionInvocation
     throw UnimplementedError('generateASTExpressionFunctionInvocation');
   }
 
   @override
   BytesOutput generateASTExpressionListLiteral(
-      ASTExpressionListLiteral expression,
-      {BytesOutput? out}) {
+    ASTExpressionListLiteral expression, {
+    BytesOutput? out,
+  }) {
     // TODO: implement generateASTExpressionListLiteral
     throw UnimplementedError('generateASTExpressionListLiteral');
   }
 
   @override
-  BytesOutput generateASTExpressionLiteral(ASTExpressionLiteral expression,
-      {BytesOutput? out, WasmContext? context}) {
+  BytesOutput generateASTExpressionLiteral(
+    ASTExpressionLiteral expression, {
+    BytesOutput? out,
+    WasmContext? context,
+  }) {
     out ??= newOutput();
     context ??= WasmContext();
 
@@ -386,52 +445,63 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     generateASTValue(value, out: out, context: context);
 
     context.assertStackLength(
-        stackLng0 + 1, "After expression literal value push");
+      stackLng0 + 1,
+      "After expression literal value push",
+    );
 
     return out;
   }
 
   @override
   BytesOutput generateASTExpressionLocalFunctionInvocation(
-      ASTExpressionLocalFunctionInvocation expression,
-      {BytesOutput? out}) {
+    ASTExpressionLocalFunctionInvocation expression, {
+    BytesOutput? out,
+  }) {
     // TODO: implement generateASTExpressionLocalFunctionInvocation
     throw UnimplementedError('generateASTExpressionLocalFunctionInvocation');
   }
 
   @override
   BytesOutput generateASTExpressionMapLiteral(
-      ASTExpressionMapLiteral expression,
-      {BytesOutput? out}) {
+    ASTExpressionMapLiteral expression, {
+    BytesOutput? out,
+  }) {
     // TODO: implement generateASTExpressionMapLiteral
     throw UnimplementedError('generateASTExpressionMapLiteral');
   }
 
   @override
-  BytesOutput generateASTExpressionNegation(ASTExpressionNegation expression,
-      {BytesOutput? out}) {
+  BytesOutput generateASTExpressionNegation(
+    ASTExpressionNegation expression, {
+    BytesOutput? out,
+  }) {
     // TODO: implement generateASTExpressionNegation
     throw UnimplementedError('generateASTExpressionNegation');
   }
 
   ASTTypeDouble _fixStackOpsAsFloat64(
-      ASTType stackType1,
-      ASTType stackType2,
-      BytesOutput opsOut1,
-      BytesOutput opsOut2,
-      BytesOutput out,
-      WasmContext context) {
+    ASTType stackType1,
+    ASTType stackType2,
+    BytesOutput opsOut1,
+    BytesOutput opsOut2,
+    BytesOutput out,
+    WasmContext context,
+  ) {
     out.writeBytes(opsOut1);
 
     if (stackType1.equalsStrict(_astTypeInt64) ||
         stackType1.equalsStrict(_astTypeInt)) {
-      out.writeByte(Wasm64.i64ConvertToF64Signed,
-          description: "[OP] convert i64 to f64 signed");
+      out.writeByte(
+        Wasm64.i64ConvertToF64Signed,
+        description: "[OP] convert i64 to f64 signed",
+      );
 
       context.stackReplaceAt(1, _astTypeDouble64, "Convert i64 to f64 signed");
     } else if (stackType1.equalsStrict(_astTypeInt32)) {
-      out.writeByte(Wasm32.i32ConvertToF64Signed,
-          description: "[OP] convert i32 to f64 signed");
+      out.writeByte(
+        Wasm32.i32ConvertToF64Signed,
+        description: "[OP] convert i32 to f64 signed",
+      );
 
       context.stackReplaceAt(1, _astTypeDouble64, "Convert i32 to f64 signed");
     }
@@ -440,13 +510,17 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
 
     if (stackType2.equalsStrict(_astTypeInt64) ||
         stackType2.equalsStrict(_astTypeInt)) {
-      out.writeByte(Wasm64.i64ConvertToF64Signed,
-          description: "[OP] convert i64 to f64 signed");
+      out.writeByte(
+        Wasm64.i64ConvertToF64Signed,
+        description: "[OP] convert i64 to f64 signed",
+      );
 
       context.stackReplace(_astTypeDouble64, "Convert i64 to f64 signed");
     } else if (stackType2.equalsStrict(_astTypeInt32)) {
-      out.writeByte(Wasm32.i32ConvertToF64Signed,
-          description: "[OP] convert i32 to f64 signed");
+      out.writeByte(
+        Wasm32.i32ConvertToF64Signed,
+        description: "[OP] convert i32 to f64 signed",
+      );
 
       context.stackReplace(_astTypeDouble64, "Convert i32 to f64 signed");
     }
@@ -455,12 +529,13 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
   }
 
   ASTType _fixStackOpsAsInt(
-      ASTType stackType1,
-      ASTType stackType2,
-      BytesOutput opsOut1,
-      BytesOutput opsOut2,
-      BytesOutput out,
-      WasmContext context) {
+    ASTType stackType1,
+    ASTType stackType2,
+    BytesOutput opsOut1,
+    BytesOutput opsOut2,
+    BytesOutput out,
+    WasmContext context,
+  ) {
     assert(stackType1 == _astTypeInt, stackType1);
     assert(stackType2 == _astTypeInt, stackType2);
 
@@ -473,8 +548,10 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     out.writeBytes(opsOut1);
 
     if (stackType1.equalsStrict(_astTypeInt32)) {
-      out.writeByte(Wasm32.i32ExtendToI64Signed,
-          description: "[OP] convert i32 to i64 signed");
+      out.writeByte(
+        Wasm32.i32ExtendToI64Signed,
+        description: "[OP] convert i32 to i64 signed",
+      );
 
       context.stackReplaceAt(1, _astTypeInt64, "Convert i32 to i64 signed");
     }
@@ -482,8 +559,10 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     out.writeBytes(opsOut2);
 
     if (stackType2.equalsStrict(_astTypeInt32)) {
-      out.writeByte(Wasm32.i32ExtendToI64Signed,
-          description: "[OP] convert i32 to i64 signed");
+      out.writeByte(
+        Wasm32.i32ExtendToI64Signed,
+        description: "[OP] convert i32 to i64 signed",
+      );
 
       context.stackReplace(_astTypeInt64, "Convert i32 to i64 signed");
     }
@@ -491,28 +570,32 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     return _astTypeInt64;
   }
 
-  ASTType? _getOperationType(ASTExpressionOperation expression,
-      ASTType<dynamic> stackType1, ASTType<dynamic> stackType2) {
+  ASTType? _getOperationType(
+    ASTExpressionOperation expression,
+    ASTType<dynamic> stackType1,
+    ASTType<dynamic> stackType2,
+  ) {
     return switch (expression.operator) {
       ASTExpressionOperator.divide ||
       ASTExpressionOperator.divideAsDouble ||
-      ASTExpressionOperator.divideAsInt =>
-        _astTypeDouble64 as ASTType,
+      ASTExpressionOperator.divideAsInt => _astTypeDouble64 as ASTType,
       ASTExpressionOperator.greater ||
       ASTExpressionOperator.greaterOrEq ||
       ASTExpressionOperator.lower ||
       ASTExpressionOperator.lowerOrEq =>
         ((stackType1 == _astTypeDouble || stackType2 == _astTypeDouble)
-            ? _astTypeDouble64
-            : _astTypeInt64) as ASTType,
+                ? _astTypeDouble64
+                : _astTypeInt64)
+            as ASTType,
       _ => null,
     };
   }
 
   BytesOutput generateASTExpressionOperationEqualsToZero(
-      ASTExpression expression,
-      {BytesOutput? out,
-      WasmContext? context}) {
+    ASTExpression expression, {
+    BytesOutput? out,
+    WasmContext? context,
+  }) {
     out ??= newOutput();
     context ??= WasmContext();
 
@@ -521,10 +604,14 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     generateASTExpression(expression, out: out, context: context);
 
     final stackLng1 = context.assertStackLength(
-        stackLng0 + 1, "After operation expression (left)");
+      stackLng0 + 1,
+      "After operation expression (left)",
+    );
 
-    out.writeByte(Wasm64.i64EqualsToZero,
-        description: "[OP] operator: equals to zero");
+    out.writeByte(
+      Wasm64.i64EqualsToZero,
+      description: "[OP] operator: equals to zero",
+    );
     context.stackOperationUnary(_astTypeInt32, 'f64.eqToZero');
 
     context.assertStackLength(stackLng1, "After operation result (eqZero)");
@@ -533,8 +620,11 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
   }
 
   @override
-  BytesOutput generateASTExpressionOperation(ASTExpressionOperation expression,
-      {BytesOutput? out, WasmContext? context}) {
+  BytesOutput generateASTExpressionOperation(
+    ASTExpressionOperation expression, {
+    BytesOutput? out,
+    WasmContext? context,
+  }) {
     out ??= newOutput();
     context ??= WasmContext();
 
@@ -544,8 +634,11 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     if (expression2 is ASTExpressionLiteral) {
       var expression2Value = expression2.value;
       if (expression2Value is ASTValueInt && expression2Value.isZero) {
-        return generateASTExpressionOperationEqualsToZero(expression1,
-            out: out, context: context);
+        return generateASTExpressionOperationEqualsToZero(
+          expression1,
+          out: out,
+          context: context,
+        );
       }
     }
 
@@ -554,14 +647,18 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     var exp1Out = generateASTExpression(expression1, context: context);
 
     final stackLng1 = context.assertStackLength(
-        stackLng0 + 1, "After operation expression (left)");
+      stackLng0 + 1,
+      "After operation expression (left)",
+    );
 
     final stack1 = context.stackGet(0)!;
 
     var exp2Out = generateASTExpression(expression2, context: context);
 
     final stackLng2 = context.assertStackLength(
-        stackLng1 + 1, "After operation expression (right)");
+      stackLng1 + 1,
+      "After operation expression (right)",
+    );
 
     final stack2 = context.stackGet(0)!;
 
@@ -573,27 +670,45 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     if (operationType == _astTypeDouble ||
         (stackType1 == _astTypeDouble || stackType2 == _astTypeDouble)) {
       operationType = _fixStackOpsAsFloat64(
-          stackType1, stackType2, exp1Out, exp2Out, out, context);
+        stackType1,
+        stackType2,
+        exp1Out,
+        exp2Out,
+        out,
+        context,
+      );
 
       stackType1 = stackType2 = operationType;
 
       context.assertStackLength(
-          stackLng2, "After stack fix for Float64 operation.");
+        stackLng2,
+        "After stack fix for Float64 operation.",
+      );
     } else if (operationType == _astTypeInt ||
         (stackType1 == _astTypeInt || stackType2 == _astTypeInt)) {
       operationType = _fixStackOpsAsInt(
-          stackType1, stackType2, exp1Out, exp2Out, out, context);
+        stackType1,
+        stackType2,
+        exp1Out,
+        exp2Out,
+        out,
+        context,
+      );
 
       stackType1 = stackType2 = operationType;
 
       context.assertStackLength(
-          stackLng2, "After stack fix for int operation.");
+        stackLng2,
+        "After stack fix for int operation.",
+      );
     } else {
       out.writeBytes(exp1Out);
       out.writeBytes(exp2Out);
 
       context.assertStackLength(
-          stackLng2, "After push stack values for operation.");
+        stackLng2,
+        "After push stack values for operation.",
+      );
     }
 
     void writeOperation(ASTType type, int op, String desc, String opDesc) {
@@ -602,14 +717,15 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     }
 
     void writeOperationDoubleOr(
-        ASTType typeDouble,
-        int opDouble,
-        String descDouble,
-        String opDescDouble,
-        ASTType type,
-        int op,
-        String desc,
-        String opDesc) {
+      ASTType typeDouble,
+      int opDouble,
+      String descDouble,
+      String opDescDouble,
+      ASTType type,
+      int op,
+      String desc,
+      String opDesc,
+    ) {
       if (stackType2 == _astTypeDouble) {
         writeOperation(typeDouble, opDouble, descDouble, opDescDouble);
       } else {
@@ -663,20 +779,26 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
         {
           _checkStackStatusF64(stackType1, stackType2);
 
-          out.writeByte(Wasm64.f64Divide,
-              description: "[OP] operator: divide(f64)");
+          out.writeByte(
+            Wasm64.f64Divide,
+            description: "[OP] operator: divide(f64)",
+          );
           context.stackOperationBinary(_astTypeDouble64, "Wasm64.f64Divide");
         }
       case ASTExpressionOperator.divideAsInt:
         {
           _checkStackStatusF64(stackType1, stackType2);
 
-          out.writeByte(Wasm64.f64Divide,
-              description: "[OP] operator: divide(f64)");
+          out.writeByte(
+            Wasm64.f64Divide,
+            description: "[OP] operator: divide(f64)",
+          );
           context.stackOperationBinary(_astTypeDouble64, "Wasm64.f64Divide");
 
-          out.writeByte(Wasm64.f64TruncateToI64Signed,
-              description: "[OP] Wasm64.f64TruncateToi64Signed");
+          out.writeByte(
+            Wasm64.f64TruncateToI64Signed,
+            description: "[OP] Wasm64.f64TruncateToi64Signed",
+          );
 
           context.stackReplace(_astTypeInt64, "i64.truncate_f64_signed");
         }
@@ -684,8 +806,10 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
         {
           _checkStackStatusF64(stackType1, stackType2);
 
-          out.writeByte(Wasm64.f64Divide,
-              description: "[OP] operator: divide(f64)");
+          out.writeByte(
+            Wasm64.f64Divide,
+            description: "[OP] operator: divide(f64)",
+          );
           context.stackOperationBinary(_astTypeDouble64, "Wasm64.f64Divide");
         }
       case ASTExpressionOperator.equals:
@@ -777,15 +901,17 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
   void _checkStackStatusF64(ASTType stackType1, ASTType stackType2) {
     if (stackType1 != _astTypeDouble || stackType2 != _astTypeDouble) {
       throw StateError(
-          "Stack status error> `f64.divide` needs 2 f64 values in the top of the stack");
+        "Stack status error> `f64.divide` needs 2 f64 values in the top of the stack",
+      );
     }
   }
 
   @override
   BytesOutput generateASTExpressionVariableAccess(
-      ASTExpressionVariableAccess expression,
-      {BytesOutput? out,
-      WasmContext? context}) {
+    ASTExpressionVariableAccess expression, {
+    BytesOutput? out,
+    WasmContext? context,
+  }) {
     out ??= newOutput();
     context ??= WasmContext();
 
@@ -800,16 +926,19 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     context.stackPush(localVar.type, 'Local get: ${localVar.index} \$$name');
 
     context.assertStackLength(
-        stackLng0 + 1, "After variable push: ${localVar.index} \$$name");
+      stackLng0 + 1,
+      "After variable push: ${localVar.index} \$$name",
+    );
 
     return out;
   }
 
   @override
   BytesOutput generateASTExpressionVariableAssignment(
-      ASTExpressionVariableAssignment expression,
-      {BytesOutput? out,
-      WasmContext? context}) {
+    ASTExpressionVariableAssignment expression, {
+    BytesOutput? out,
+    WasmContext? context,
+  }) {
     out ??= newOutput();
     context ??= WasmContext();
 
@@ -825,38 +954,51 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     switch (op) {
       case ASTAssignmentOperator.set:
         {
-          generateASTExpression(expression.expression,
-              out: out, context: context);
+          generateASTExpression(
+            expression.expression,
+            out: out,
+            context: context,
+          );
         }
       default:
         {
           var expOp = op.asASTExpressionOperator!;
 
-          generateASTExpressionOperation(ASTExpressionOperation(
+          generateASTExpressionOperation(
+            ASTExpressionOperation(
               ASTExpressionVariableAccess(variable),
               expOp,
-              expression.expression));
+              expression.expression,
+            ),
+          );
         }
     }
 
     final stackLng1 = context.assertStackLength(
-        stackLng0 + 1, "After variable assigment expression");
+      stackLng0 + 1,
+      "After variable assigment expression",
+    );
 
     _localVariableSet(out, context, localVar.index, name);
 
     context.assertStackLength(
-        stackLng1, "After variable set: ${localVar.index} \$$name");
-    context.assertStackLength(stackLng0 + 1,
-        "After variable declaration:  ${localVar.index} \$$name");
+      stackLng1,
+      "After variable set: ${localVar.index} \$$name",
+    );
+    context.assertStackLength(
+      stackLng0 + 1,
+      "After variable declaration:  ${localVar.index} \$$name",
+    );
 
     return out;
   }
 
   @override
   BytesOutput generateASTExpressionVariableDirectOperation(
-      ASTExpressionVariableDirectOperation expression,
-      {BytesOutput? out,
-      WasmContext? context}) {
+    ASTExpressionVariableDirectOperation expression, {
+    BytesOutput? out,
+    WasmContext? context,
+  }) {
     out ??= newOutput();
     context ??= WasmContext();
 
@@ -887,14 +1029,20 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     );
 
     final stackLng1 = context.assertStackLength(
-        stackLng0 + 1, "After variable assigment expression");
+      stackLng0 + 1,
+      "After variable assigment expression",
+    );
 
     _localVariableSet(out, context, localVar.index, name);
 
     context.assertStackLength(
-        stackLng1, "After variable set: ${localVar.index} \$$name");
-    context.assertStackLength(stackLng0 + 1,
-        "After variable declaration:  ${localVar.index} \$$name");
+      stackLng1,
+      "After variable set: ${localVar.index} \$$name",
+    );
+    context.assertStackLength(
+      stackLng0 + 1,
+      "After variable declaration:  ${localVar.index} \$$name",
+    );
 
     if (expression.preOperation) {
       _localVariableGet(out, context, localVar.index, name);
@@ -904,17 +1052,26 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
   }
 
   void _localVariableGet(
-      BytesOutput out, WasmContext? context, int localVarIndex, String name,
-      [String? desc]) {
+    BytesOutput out,
+    WasmContext? context,
+    int localVarIndex,
+    String name, [
+    String? desc,
+  ]) {
     out.write(
       Wasm.localGet(localVarIndex),
-      description: "[OP] local get: #$localVarIndex \$$name"
+      description:
+          "[OP] local get: #$localVarIndex \$$name"
           "${desc != null ? ' $desc' : ''}",
     );
   }
 
-  void _localVariableSet(BytesOutput out, WasmContext? context,
-      int localVarIndex, String localVarName) {
+  void _localVariableSet(
+    BytesOutput out,
+    WasmContext? context,
+    int localVarIndex,
+    String localVarName,
+  ) {
     if (context != null) {
       var localVar = context.getLocalVariableByIndex(localVarIndex);
       var stackValue = context.stackGet(localVarIndex);
@@ -925,26 +1082,33 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
 
         if (!localVarType.equalsStrict(stackValueType)) {
           throw StateError(
-              "Setting local variable#$localVarIndex `$localVarName` with wrong type> localVar:$localVarType != stackValue:$stackValueType");
+            "Setting local variable#$localVarIndex `$localVarName` with wrong type> localVar:$localVarType != stackValue:$stackValueType",
+          );
         }
       }
     }
 
-    out.write(Wasm.localSet(localVarIndex),
-        description: "[OP] local set: #$localVarIndex \$$localVarName");
+    out.write(
+      Wasm.localSet(localVarIndex),
+      description: "[OP] local set: #$localVarIndex \$$localVarName",
+    );
   }
 
   @override
   BytesOutput generateASTExpressionVariableEntryAccess(
-      ASTExpressionVariableEntryAccess expression,
-      {BytesOutput? out}) {
+    ASTExpressionVariableEntryAccess expression, {
+    BytesOutput? out,
+  }) {
     // TODO: implement generateASTExpressionVariableEntryAccess
     throw UnimplementedError('generateASTExpressionVariableEntryAccess');
   }
 
   @override
-  BytesOutput generateASTFunctionDeclaration(ASTFunctionDeclaration f,
-      {BytesOutput? out, WasmContext? context}) {
+  BytesOutput generateASTFunctionDeclaration(
+    ASTFunctionDeclaration f, {
+    BytesOutput? out,
+    WasmContext? context,
+  }) {
     out ??= newOutput();
     context ??= WasmContext();
 
@@ -952,7 +1116,9 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
 
     var return0 = context.returnsLength;
     context.returnsPush(
-        f.returnType, "Function `${f.name}` return: ${f.returnType}");
+      f.returnType,
+      "Function `${f.name}` return: ${f.returnType}",
+    );
     context.assertReturnsLength(return0 + 1);
 
     var parametersVariables = f.parameters.declaredVariables();
@@ -963,19 +1129,25 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
 
     var localVariables = f.statements.declaredVariables();
 
-    outBody.write(Leb128.encodeUnsigned(localVariables.length),
-        description: "Local variables count");
+    outBody.write(
+      Leb128.encodeUnsigned(localVariables.length),
+      description: "Local variables count",
+    );
 
     for (var v in localVariables) {
       var astType = v.value;
 
       context.addLocalVariable(v.key, astType);
 
-      outBody.write(Leb128.encodeUnsigned(1),
-          description: "Declared variable count");
-      outBody.writeByte(astType.wasmCode,
-          description:
-              "Declared variable `${v.key}` type(${astType.wasmType.name})");
+      outBody.write(
+        Leb128.encodeUnsigned(1),
+        description: "Declared variable count",
+      );
+      outBody.writeByte(
+        astType.wasmCode,
+        description:
+            "Declared variable `${v.key}` type(${astType.wasmType.name})",
+      );
     }
 
     for (var stm in f.statements) {
@@ -986,15 +1158,21 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
 
     if (!returnType.isVoid && context.stackLength == 0) {
       // Notify that the function can't reach the end.
-      outBody.writeByte(Wasm.unreachable,
-          description: "[OP] Unreachable function end");
+      outBody.writeByte(
+        Wasm.unreachable,
+        description: "[OP] Unreachable function end",
+      );
 
       if (returnType is ASTTypeInt) {
-        outBody.write(Wasm64.i64Const(0),
-            description: "Unreachable default return");
+        outBody.write(
+          Wasm64.i64Const(0),
+          description: "Unreachable default return",
+        );
       } else if (returnType is ASTTypeDouble) {
-        outBody.write(Wasm64.f64Const(0),
-            description: "Unreachable default return");
+        outBody.write(
+          Wasm64.f64Const(0),
+          description: "Unreachable default return",
+        );
       }
     }
 
@@ -1010,14 +1188,23 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
   }
 
   @override
-  BytesOutput generateASTStatement(ASTStatement statement,
-      {BytesOutput? out, WasmContext? context}) {
+  BytesOutput generateASTStatement(
+    ASTStatement statement, {
+    BytesOutput? out,
+    WasmContext? context,
+  }) {
     if (statement is ASTStatementExpression) {
-      return generateASTStatementExpression(statement,
-          out: out, context: context);
+      return generateASTStatementExpression(
+        statement,
+        out: out,
+        context: context,
+      );
     } else if (statement is ASTStatementVariableDeclaration) {
-      return generateASTStatementVariableDeclaration(statement,
-          out: out, context: context);
+      return generateASTStatementVariableDeclaration(
+        statement,
+        out: out,
+        context: context,
+      );
     } else if (statement is ASTBranch) {
       return generateASTBranch(statement, out: out, context: context);
     } else if (statement is ASTStatementForLoop) {
@@ -1025,14 +1212,23 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     } else if (statement is ASTStatementReturnNull) {
       return generateASTStatementReturnNull(statement, out: out);
     } else if (statement is ASTStatementReturnValue) {
-      return generateASTStatementReturnValue(statement,
-          out: out, context: context);
+      return generateASTStatementReturnValue(
+        statement,
+        out: out,
+        context: context,
+      );
     } else if (statement is ASTStatementReturnVariable) {
-      return generateASTStatementReturnVariable(statement,
-          out: out, context: context);
+      return generateASTStatementReturnVariable(
+        statement,
+        out: out,
+        context: context,
+      );
     } else if (statement is ASTStatementReturnWithExpression) {
-      return generateASTStatementReturnWithExpression(statement,
-          out: out, context: context);
+      return generateASTStatementReturnWithExpression(
+        statement,
+        out: out,
+        context: context,
+      );
     } else if (statement is ASTStatementReturn) {
       return generateASTStatementReturn(statement, out: out, context: context);
     }
@@ -1042,37 +1238,47 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
 
   @override
   BytesOutput generateASTFunctionParameterDeclaration(
-      ASTFunctionParameterDeclaration parameter,
-      {BytesOutput? out}) {
+    ASTFunctionParameterDeclaration parameter, {
+    BytesOutput? out,
+  }) {
     // TODO: implement generateASTFunctionParameterDeclaration
     throw UnimplementedError('generateASTFunctionParameterDeclaration');
   }
 
   @override
-  BytesOutput generateASTParameterDeclaration(ASTParameterDeclaration parameter,
-      {BytesOutput? out}) {
+  BytesOutput generateASTParameterDeclaration(
+    ASTParameterDeclaration parameter, {
+    BytesOutput? out,
+  }) {
     // TODO: implement generateASTParameterDeclaration
     throw UnimplementedError('generateASTParameterDeclaration');
   }
 
   @override
   BytesOutput generateASTParametersDeclaration(
-      ASTParametersDeclaration parameters,
-      {BytesOutput? out}) {
+    ASTParametersDeclaration parameters, {
+    BytesOutput? out,
+  }) {
     // TODO: implement generateASTParametersDeclaration
     throw UnimplementedError('generateASTParametersDeclaration');
   }
 
   @override
-  BytesOutput generateASTScopeVariable(ASTScopeVariable variable,
-      {String? callingFunction, BytesOutput? out}) {
+  BytesOutput generateASTScopeVariable(
+    ASTScopeVariable variable, {
+    String? callingFunction,
+    BytesOutput? out,
+  }) {
     // TODO: implement generateASTScopeVariable
     throw UnimplementedError('generateASTScopeVariable');
   }
 
   @override
-  BytesOutput generateASTStatementExpression(ASTStatementExpression statement,
-      {BytesOutput? out, WasmContext? context}) {
+  BytesOutput generateASTStatementExpression(
+    ASTStatementExpression statement, {
+    BytesOutput? out,
+    WasmContext? context,
+  }) {
     out ??= newOutput();
     context ??= WasmContext();
 
@@ -1082,15 +1288,20 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
   }
 
   @override
-  BytesOutput generateASTStatementForLoop(ASTStatementForLoop forLoop,
-      {BytesOutput? out}) {
+  BytesOutput generateASTStatementForLoop(
+    ASTStatementForLoop forLoop, {
+    BytesOutput? out,
+  }) {
     // TODO: implement generateASTStatementForLoop
     throw UnimplementedError('generateASTStatementForLoop');
   }
 
   @override
-  BytesOutput generateASTStatementReturn(ASTStatementReturn statement,
-      {BytesOutput? out, WasmContext? context}) {
+  BytesOutput generateASTStatementReturn(
+    ASTStatementReturn statement, {
+    BytesOutput? out,
+    WasmContext? context,
+  }) {
     out ??= newOutput();
     context ??= WasmContext();
 
@@ -1106,15 +1317,20 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
   }
 
   @override
-  BytesOutput generateASTStatementReturnNull(ASTStatementReturnNull statement,
-      {BytesOutput? out}) {
+  BytesOutput generateASTStatementReturnNull(
+    ASTStatementReturnNull statement, {
+    BytesOutput? out,
+  }) {
     // TODO: implement generateASTStatementReturnNull
     throw UnimplementedError('generateASTStatementReturnNull');
   }
 
   @override
-  BytesOutput generateASTStatementReturnValue(ASTStatementReturnValue statement,
-      {BytesOutput? out, WasmContext? context}) {
+  BytesOutput generateASTStatementReturnValue(
+    ASTStatementReturnValue statement, {
+    BytesOutput? out,
+    WasmContext? context,
+  }) {
     out ??= newOutput();
     context ??= WasmContext();
 
@@ -1131,8 +1347,10 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
 
     _autoConvertStackTypes(stack0Type, returnType, out: out, context: context);
 
-    out.writeByte(Wasm.functionReturn,
-        description: "[OP] return value: $value");
+    out.writeByte(
+      Wasm.functionReturn,
+      description: "[OP] return value: $value",
+    );
     context.stackDrop();
 
     return out;
@@ -1140,9 +1358,10 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
 
   @override
   BytesOutput generateASTStatementReturnVariable(
-      ASTStatementReturnVariable statement,
-      {BytesOutput? out,
-      WasmContext? context}) {
+    ASTStatementReturnVariable statement, {
+    BytesOutput? out,
+    WasmContext? context,
+  }) {
     out ??= newOutput();
     context ??= WasmContext();
 
@@ -1156,7 +1375,9 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     _localVariableGet(out, context, localVar.index, name, '(return)');
 
     context.stackPush(
-        localVar.type, 'Local get: ${localVar.index} \$$name (return)');
+      localVar.type,
+      'Local get: ${localVar.index} \$$name (return)',
+    );
 
     context.assertStackLength(stackLength0 + 1, "Return variable: $name");
 
@@ -1165,8 +1386,10 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
 
     _autoConvertStackTypes(stack0Type, returnType, out: out, context: context);
 
-    out.writeByte(Wasm.functionReturn,
-        description: "[OP] return variable: ${localVar.index} \$$name");
+    out.writeByte(
+      Wasm.functionReturn,
+      description: "[OP] return variable: ${localVar.index} \$$name",
+    );
     context.stackDrop();
 
     return out;
@@ -1174,9 +1397,10 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
 
   @override
   BytesOutput generateASTStatementReturnWithExpression(
-      ASTStatementReturnWithExpression statement,
-      {BytesOutput? out,
-      WasmContext? context}) {
+    ASTStatementReturnWithExpression statement, {
+    BytesOutput? out,
+    WasmContext? context,
+  }) {
     out ??= newOutput();
     context ??= WasmContext();
 
@@ -1193,15 +1417,21 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
 
     _autoConvertStackTypes(stack0Type, returnType, out: out);
 
-    out.writeByte(Wasm.functionReturn,
-        description: "[OP] return expression: $expression");
+    out.writeByte(
+      Wasm.functionReturn,
+      description: "[OP] return expression: $expression",
+    );
     context.stackDrop();
 
     return out;
   }
 
-  BytesOutput _autoConvertStackTypes(ASTType stackType, ASTType targetType,
-      {BytesOutput? out, WasmContext? context}) {
+  BytesOutput _autoConvertStackTypes(
+    ASTType stackType,
+    ASTType targetType, {
+    BytesOutput? out,
+    WasmContext? context,
+  }) {
     out ??= newOutput();
     context ??= WasmContext();
 
@@ -1218,40 +1448,58 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
         if (stackType is ASTTypeInt) {
           if (targetType is ASTTypeInt) {
             if (stackType32 && targetType64) {
-              out.writeByte(Wasm32.i32ExtendToI64Signed,
-                  description: "i32ExtendToI64Signed");
+              out.writeByte(
+                Wasm32.i32ExtendToI64Signed,
+                description: "i32ExtendToI64Signed",
+              );
             } else if (stackType64 && targetType32) {
               out.writeByte(Wasm64.i64WrapToi32, description: "i64WrapToi32");
             }
           } else if (targetType is ASTTypeDouble) {
             if (stackType32 && targetType32) {
-              out.writeByte(Wasm32.i32ConvertToF32Signed,
-                  description: "i32ConvertToF32Signed");
+              out.writeByte(
+                Wasm32.i32ConvertToF32Signed,
+                description: "i32ConvertToF32Signed",
+              );
             } else if (stackType32 && targetType64) {
-              out.writeByte(Wasm32.i32ConvertToF64Signed,
-                  description: "i32ConvertToF64Signed");
+              out.writeByte(
+                Wasm32.i32ConvertToF64Signed,
+                description: "i32ConvertToF64Signed",
+              );
             } else if (stackType64 && targetType32) {
-              out.writeByte(Wasm64.i64ConvertToF32Signed,
-                  description: "i64ConvertToF32Signed");
+              out.writeByte(
+                Wasm64.i64ConvertToF32Signed,
+                description: "i64ConvertToF32Signed",
+              );
             } else if (stackType64 && targetType64) {
-              out.writeByte(Wasm64.i64ConvertToF64Signed,
-                  description: "i64ConvertToF64Signed");
+              out.writeByte(
+                Wasm64.i64ConvertToF64Signed,
+                description: "i64ConvertToF64Signed",
+              );
             }
           }
         } else if (stackType is ASTTypeDouble) {
           if (targetType is ASTTypeInt) {
             if (stackType32 && targetType32) {
-              out.writeByte(Wasm32.f32TruncateToI32Signed,
-                  description: "f32TruncateToI32Signed");
+              out.writeByte(
+                Wasm32.f32TruncateToI32Signed,
+                description: "f32TruncateToI32Signed",
+              );
             } else if (stackType32 && targetType64) {
-              out.writeByte(Wasm32.f32TruncateToI64Signed,
-                  description: "f32TruncateToI64Signed");
+              out.writeByte(
+                Wasm32.f32TruncateToI64Signed,
+                description: "f32TruncateToI64Signed",
+              );
             } else if (stackType64 && targetType32) {
-              out.writeByte(Wasm64.f64TruncateToI32Signed,
-                  description: "f64TruncateToI32Signed");
+              out.writeByte(
+                Wasm64.f64TruncateToI32Signed,
+                description: "f64TruncateToI32Signed",
+              );
             } else if (stackType64 && targetType64) {
-              out.writeByte(Wasm64.f64TruncateToI64Signed,
-                  description: "f64TruncateToI64Signed");
+              out.writeByte(
+                Wasm64.f64TruncateToI64Signed,
+                description: "f64TruncateToI64Signed",
+              );
             }
           }
         }
@@ -1263,9 +1511,10 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
 
   @override
   BytesOutput generateASTStatementVariableDeclaration(
-      ASTStatementVariableDeclaration statement,
-      {BytesOutput? out,
-      WasmContext? context}) {
+    ASTStatementVariableDeclaration statement, {
+    BytesOutput? out,
+    WasmContext? context,
+  }) {
     out ??= newOutput();
     context ??= WasmContext();
 
@@ -1283,35 +1532,56 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     generateASTExpression(value, out: out, context: context);
 
     final stackLng1 = context.assertStackLength(
-        stackLng0 + 1, "After variable declaration expression");
+      stackLng0 + 1,
+      "After variable declaration expression",
+    );
 
     _localVariableSet(out, context, localVar.index, name);
 
     context.assertStackLength(
-        stackLng1, "After variable set: ${localVar.index} \$$name");
-    context.assertStackLength(stackLng0 + 1,
-        "After variable declaration:  ${localVar.index} \$$name");
+      stackLng1,
+      "After variable set: ${localVar.index} \$$name",
+    );
+    context.assertStackLength(
+      stackLng0 + 1,
+      "After variable declaration:  ${localVar.index} \$$name",
+    );
 
     return out;
   }
 
   @override
-  BytesOutput generateASTExpression(ASTExpression expression,
-      {BytesOutput? out, WasmContext? context}) {
+  BytesOutput generateASTExpression(
+    ASTExpression expression, {
+    BytesOutput? out,
+    WasmContext? context,
+  }) {
     if (expression is ASTExpressionVariableAccess) {
-      return generateASTExpressionVariableAccess(expression,
-          out: out, context: context);
+      return generateASTExpressionVariableAccess(
+        expression,
+        out: out,
+        context: context,
+      );
     } else if (expression is ASTExpressionVariableAssignment) {
-      return generateASTExpressionVariableAssignment(expression,
-          out: out, context: context);
+      return generateASTExpressionVariableAssignment(
+        expression,
+        out: out,
+        context: context,
+      );
     } else if (expression is ASTExpressionVariableDirectOperation) {
-      return generateASTExpressionVariableDirectOperation(expression,
-          out: out, context: context);
+      return generateASTExpressionVariableDirectOperation(
+        expression,
+        out: out,
+        context: context,
+      );
     } else if (expression is ASTExpressionVariableEntryAccess) {
       return generateASTExpressionVariableEntryAccess(expression, out: out);
     } else if (expression is ASTExpressionLiteral) {
-      return generateASTExpressionLiteral(expression,
-          out: out, context: context);
+      return generateASTExpressionLiteral(
+        expression,
+        out: out,
+        context: context,
+      );
     } else if (expression is ASTExpressionListLiteral) {
       return generateASTExpressionListLiteral(expression, out: out);
     } else if (expression is ASTExpressionMapLiteral) {
@@ -1323,30 +1593,39 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     } else if (expression is ASTExpressionObjectFunctionInvocation) {
       return generateASTExpressionFunctionInvocation(expression, out: out);
     } else if (expression is ASTExpressionOperation) {
-      return generateASTExpressionOperation(expression,
-          out: out, context: context);
+      return generateASTExpressionOperation(
+        expression,
+        out: out,
+        context: context,
+      );
     }
 
     throw UnsupportedError("Can't generate expression: $expression");
   }
 
   @override
-  BytesOutput generateASTTypeArray(ASTTypeArray<ASTType, dynamic> type,
-      {BytesOutput? out}) {
+  BytesOutput generateASTTypeArray(
+    ASTTypeArray<ASTType, dynamic> type, {
+    BytesOutput? out,
+  }) {
     // TODO: implement generateASTTypeArray
     throw UnimplementedError('generateASTTypeArray');
   }
 
   @override
-  BytesOutput generateASTTypeArray2D(ASTTypeArray2D<ASTType, dynamic> type,
-      {BytesOutput? out}) {
+  BytesOutput generateASTTypeArray2D(
+    ASTTypeArray2D<ASTType, dynamic> type, {
+    BytesOutput? out,
+  }) {
     // TODO: implement generateASTTypeArray2D
     throw UnimplementedError('generateASTTypeArray2D');
   }
 
   @override
-  BytesOutput generateASTTypeArray3D(ASTTypeArray3D<ASTType, dynamic> type,
-      {BytesOutput? out}) {
+  BytesOutput generateASTTypeArray3D(
+    ASTTypeArray3D<ASTType, dynamic> type, {
+    BytesOutput? out,
+  }) {
     // TODO: implement generateASTTypeArray3D
     throw UnimplementedError('generateASTTypeArray3D');
   }
@@ -1358,8 +1637,11 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
   }
 
   @override
-  BytesOutput generateASTValue(ASTValue value,
-      {BytesOutput? out, WasmContext? context}) {
+  BytesOutput generateASTValue(
+    ASTValue value, {
+    BytesOutput? out,
+    WasmContext? context,
+  }) {
     if (value is ASTValueString) {
       return generateASTValueString(value, out: out);
     } else if (value is ASTValueInt) {
@@ -1392,29 +1674,38 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
   }
 
   @override
-  BytesOutput generateASTValueArray(ASTValueArray<ASTType, dynamic> value,
-      {BytesOutput? out}) {
+  BytesOutput generateASTValueArray(
+    ASTValueArray<ASTType, dynamic> value, {
+    BytesOutput? out,
+  }) {
     // TODO: implement generateASTValueArray
     throw UnimplementedError('generateASTValueArray');
   }
 
   @override
-  BytesOutput generateASTValueArray2D(ASTValueArray2D<ASTType, dynamic> value,
-      {BytesOutput? out}) {
+  BytesOutput generateASTValueArray2D(
+    ASTValueArray2D<ASTType, dynamic> value, {
+    BytesOutput? out,
+  }) {
     // TODO: implement generateASTValueArray2D
     throw UnimplementedError('generateASTValueArray2D');
   }
 
   @override
-  BytesOutput generateASTValueArray3D(ASTValueArray3D<ASTType, dynamic> value,
-      {BytesOutput? out}) {
+  BytesOutput generateASTValueArray3D(
+    ASTValueArray3D<ASTType, dynamic> value, {
+    BytesOutput? out,
+  }) {
     // TODO: implement generateASTValueArray3D
     throw UnimplementedError('generateASTValueArray3D');
   }
 
   @override
-  BytesOutput generateASTValueDouble(ASTValueDouble value,
-      {BytesOutput? out, WasmContext? context}) {
+  BytesOutput generateASTValueDouble(
+    ASTValueDouble value, {
+    BytesOutput? out,
+    WasmContext? context,
+  }) {
     out ??= newOutput();
     context ??= WasmContext();
 
@@ -1427,8 +1718,11 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
   }
 
   @override
-  BytesOutput generateASTValueInt(ASTValueInt value,
-      {BytesOutput? out, WasmContext? context}) {
+  BytesOutput generateASTValueInt(
+    ASTValueInt value, {
+    BytesOutput? out,
+    WasmContext? context,
+  }) {
     out ??= newOutput();
     context ??= WasmContext();
 
@@ -1466,22 +1760,28 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
 
   @override
   BytesOutput generateASTValueStringConcatenation(
-      ASTValueStringConcatenation value,
-      {BytesOutput? out}) {
+    ASTValueStringConcatenation value, {
+    BytesOutput? out,
+  }) {
     // TODO: implement generateASTValueStringConcatenation
     throw UnimplementedError('generateASTValueStringConcatenation');
   }
 
   @override
-  BytesOutput generateASTValueStringExpression(ASTValueStringExpression value,
-      {BytesOutput? out}) {
+  BytesOutput generateASTValueStringExpression(
+    ASTValueStringExpression value, {
+    BytesOutput? out,
+  }) {
     // TODO: implement generateASTValueStringExpression
     throw UnimplementedError('generateASTValueStringExpression');
   }
 
   @override
-  BytesOutput generateASTValueStringVariable(ASTValueStringVariable value,
-      {BytesOutput? out, bool precededByString = false}) {
+  BytesOutput generateASTValueStringVariable(
+    ASTValueStringVariable value, {
+    BytesOutput? out,
+    bool precededByString = false,
+  }) {
     // TODO: implement generateASTValueStringVariable
     throw UnimplementedError('generateASTValueStringVariable');
   }
@@ -1493,22 +1793,31 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
   }
 
   @override
-  BytesOutput generateASTVariable(ASTVariable variable,
-      {String? callingFunction, BytesOutput? out}) {
+  BytesOutput generateASTVariable(
+    ASTVariable variable, {
+    String? callingFunction,
+    BytesOutput? out,
+  }) {
     // TODO: implement generateASTVariable
     throw UnimplementedError('generateASTVariable');
   }
 
   @override
-  BytesOutput generateASTVariableGeneric(ASTVariable variable,
-      {String? callingFunction, BytesOutput? out}) {
+  BytesOutput generateASTVariableGeneric(
+    ASTVariable variable, {
+    String? callingFunction,
+    BytesOutput? out,
+  }) {
     // TODO: implement generateASTVariableGeneric
     throw UnimplementedError('generateASTVariableGeneric');
   }
 
   @override
-  String resolveASTExpressionOperatorText(ASTExpressionOperator operator,
-      ASTNumType aNumType, ASTNumType bNumType) {
+  String resolveASTExpressionOperatorText(
+    ASTExpressionOperator operator,
+    ASTNumType aNumType,
+    ASTNumType bNumType,
+  ) {
     // TODO: implement resolveASTExpressionOperatorText
     throw UnimplementedError('resolveASTExpressionOperatorText');
   }
@@ -1551,7 +1860,8 @@ class WasmContext {
 
       if (prevType != type) {
         throw StateError(
-            "Variable `$name` ($type) already defined with a different type: $prevType");
+          "Variable `$name` ($type) already defined with a different type: $prevType",
+        );
       } else {
         return prev.index;
       }
@@ -1573,7 +1883,8 @@ class WasmContext {
 
     if (currentLength != expectedLength) {
       throw StateError(
-          "Invalid stack length> stackLength: $stackLength != expected: $expectedLength${description != null ? ' ($description)' : ''}");
+        "Invalid stack length> stackLength: $stackLength != expected: $expectedLength${description != null ? ' ($description)' : ''}",
+      );
     }
 
     return currentLength;
@@ -1588,13 +1899,15 @@ class WasmContext {
   ({ASTType type, String description}) stackDrop([ASTType? expectedType]) {
     if (_stack.isEmpty) {
       throw StateError(
-          "Drop from stack error> Empty stack! Expected type: $expectedType");
+        "Drop from stack error> Empty stack! Expected type: $expectedType",
+      );
     }
 
     var entry = _stack.removeLast();
     if (expectedType != null && entry.type != expectedType) {
       throw StateError(
-          "Drop from stack error> Not expected type: stack.drop:${entry.type} != expected:$expectedType");
+        "Drop from stack error> Not expected type: stack.drop:${entry.type} != expected:$expectedType",
+      );
     }
     return entry;
   }
@@ -1623,15 +1936,22 @@ class WasmContext {
   }
 
   /// Replaces the top stack entry.
-  void stackReplace(ASTType type, String description,
-      [ASTType? expectedType1]) {
+  void stackReplace(
+    ASTType type,
+    String description, [
+    ASTType? expectedType1,
+  ]) {
     stackDrop(expectedType1);
     stackPush(type, description);
   }
 
   /// Replaces a stack entry at [index].
-  void stackReplaceAt(int index, ASTType type, String description,
-      [ASTType? expectedType1]) {
+  void stackReplaceAt(
+    int index,
+    ASTType type,
+    String description, [
+    ASTType? expectedType1,
+  ]) {
     var prev = ListQueue<({ASTType type, String description})>();
 
     for (var i = 0; i <= index; ++i) {
@@ -1647,7 +1967,8 @@ class WasmContext {
     }
 
     throw StateError(
-        "Can't find stack index: $index (stack length: $stackLength");
+      "Can't find stack index: $index (stack length: $stackLength",
+    );
   }
 
   /// Gets the stack entry.
@@ -1681,7 +2002,8 @@ class WasmContext {
 
     if (currentLength != expectedLength) {
       throw StateError(
-          "Invalid returns length> returnsLength: $returnsLength != expected: $expectedLength${description != null ? ' ($description)' : ''}");
+        "Invalid returns length> returnsLength: $returnsLength != expected: $expectedLength${description != null ? ' ($description)' : ''}",
+      );
     }
 
     return currentLength;
@@ -1696,13 +2018,15 @@ class WasmContext {
   ({ASTType type, String description}) returnsDrop([ASTType? expectedType]) {
     if (_returns.isEmpty) {
       throw StateError(
-          "Drop from returns error> Empty returns! Expected type: $expectedType");
+        "Drop from returns error> Empty returns! Expected type: $expectedType",
+      );
     }
 
     var entry = _returns.removeLast();
     if (expectedType != null && entry.type != expectedType) {
       throw StateError(
-          "Drop from returns error> Not expected type: returns.drop:${entry.type} != expected:$expectedType");
+        "Drop from returns error> Not expected type: returns.drop:${entry.type} != expected:$expectedType",
+      );
     }
     return entry;
   }
@@ -1791,16 +2115,19 @@ extension _ASTFunctionDeclarationExtension on ASTFunctionDeclaration {
     var allParameters = parametersTypesWasmCode;
 
     if (allParameters.isNotEmpty) {
-      out.write(
-          [...Leb128.encodeUnsigned(allParameters.length), ...allParameters],
-          description: "Parameters: $parameters");
+      out.write([
+        ...Leb128.encodeUnsigned(allParameters.length),
+        ...allParameters,
+      ], description: "Parameters: $parameters");
     } else {
       out.writeByte(0, description: "No parameters");
     }
 
     if (!returnType.isVoid) {
-      out.write([...Leb128.encodeUnsigned(1), returnType.wasmCode],
-          description: "Return value");
+      out.write([
+        ...Leb128.encodeUnsigned(1),
+        returnType.wasmCode,
+      ], description: "Return value");
     } else {
       out.writeByte(0, description: "No return value");
     }
@@ -1821,13 +2148,13 @@ extension _ASTStatementExtension on ASTStatement {
     } else if (self is ASTBranchIfElseBlock) {
       return [
         ...self.blockIf.declaredVariables(),
-        ...?self.blockElse?.declaredVariables()
+        ...?self.blockElse?.declaredVariables(),
       ];
     } else if (self is ASTBranchIfElseIfsElseBlock) {
       return [
         ...self.blockIf.declaredVariables(),
         ...self.blocksElseIf.declaredVariables(),
-        ...?self.blockElse?.declaredVariables()
+        ...?self.blockElse?.declaredVariables(),
       ];
     }
 
@@ -1847,8 +2174,9 @@ extension _ASTBlockExtension on ASTBlock {
 
 extension _ASTFunctionParameterDeclarationExtension
     on ASTFunctionParameterDeclaration {
-  List<MapEntry<String, ASTType>> declaredVariables() =>
-      [MapEntry<String, ASTType>(name, type)];
+  List<MapEntry<String, ASTType>> declaredVariables() => [
+    MapEntry<String, ASTType>(name, type),
+  ];
 }
 
 extension _IterableASTFunctionParameterDeclarationExtension
@@ -1859,8 +2187,8 @@ extension _IterableASTFunctionParameterDeclarationExtension
 
 extension _ASTParametersDeclarationExtension on ASTParametersDeclaration {
   List<MapEntry<String, ASTType>> declaredVariables() => [
-        ...?positionalParameters?.declaredVariables(),
-        ...?optionalParameters?.declaredVariables(),
-        ...?namedParameters?.declaredVariables(),
-      ];
+    ...?positionalParameters?.declaredVariables(),
+    ...?optionalParameters?.declaredVariables(),
+    ...?namedParameters?.declaredVariables(),
+  ];
 }

@@ -66,10 +66,11 @@ class ApolloBinaryCodeStorageMemory extends ApolloBinaryCodeStorage {
 /// The implementation can be a local file system, a memory storage or a remote repository.
 abstract class ApolloSourceCodeStorage extends ApolloCodeUnitStorage<String> {
   /// Write all code unit sources.
-  Future<StringBuffer> writeAllSources(
-      {String commentPrefix = '<<<<',
-      String commentSuffix = '>>>>',
-      String nsSeparator = '/'}) async {
+  Future<StringBuffer> writeAllSources({
+    String commentPrefix = '<<<<',
+    String commentSuffix = '>>>>',
+    String nsSeparator = '/',
+  }) async {
     var s = StringBuffer();
 
     s.write(commentPrefix);

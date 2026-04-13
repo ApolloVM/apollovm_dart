@@ -1,3 +1,4 @@
+// ignore: deprecated_member_use
 import 'dart:html';
 import 'dart:typed_data';
 
@@ -18,14 +19,19 @@ class WasmRuntimeBrowser extends WasmRuntime {
 
   @override
   Future<WasmModuleBrowser> loadModuleImpl(
-      String moduleName, Uint8List wasmModuleBinary) async {
+    String moduleName,
+    Uint8List wasmModuleBinary,
+  ) async {
     try {
-      final moduleInstance =
-          await browser_wasm.Instance.fromBytesAsync(wasmModuleBinary);
+      final moduleInstance = await browser_wasm.Instance.fromBytesAsync(
+        wasmModuleBinary,
+      );
       return WasmModuleBrowser(moduleName, moduleInstance);
     } catch (e) {
-      throw WasmModuleLoadError("Can't load wasm module: $moduleName",
-          cause: e);
+      throw WasmModuleLoadError(
+        "Can't load wasm module: $moduleName",
+        cause: e,
+      );
     }
   }
 }
@@ -39,8 +45,9 @@ class WasmModuleBrowser extends WasmModule {
   Future<WasmModuleBrowser> copy({String? name}) async {
     name ??= this.name;
 
-    var instance2 =
-        await browser_wasm.Instance.fromModuleAsync(instance.module);
+    var instance2 = await browser_wasm.Instance.fromModuleAsync(
+      instance.module,
+    );
     return WasmModuleBrowser(name, instance2);
   }
 

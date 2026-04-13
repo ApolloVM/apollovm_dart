@@ -140,15 +140,16 @@ abstract class DartGrammarLexer extends GrammarDefinition {
       string('0x') & ref0(hexDigitLexicalToken).plus() |
       string('0X') & ref0(hexDigitLexicalToken).plus();
 
-  Parser numberLexicalToken() => ((ref0(digitLexicalToken).plus() &
-              ref0(numberOptFractionalPartLexicalToken) &
-              ref0(exponentLexicalToken).optional() &
-              ref0(numberOptIllegalEndLexicalToken)) |
-          (char('.') &
-              ref0(digitLexicalToken).plus() &
-              ref0(exponentLexicalToken).optional() &
-              ref0(numberOptIllegalEndLexicalToken)))
-      .flatten();
+  Parser numberLexicalToken() =>
+      ((ref0(digitLexicalToken).plus() &
+                  ref0(numberOptFractionalPartLexicalToken) &
+                  ref0(exponentLexicalToken).optional() &
+                  ref0(numberOptIllegalEndLexicalToken)) |
+              (char('.') &
+                  ref0(digitLexicalToken).plus() &
+                  ref0(exponentLexicalToken).optional() &
+                  ref0(numberOptIllegalEndLexicalToken)))
+          .flatten();
 
   Parser numberOptFractionalPartLexicalToken() =>
       char('.') & ref0(digitLexicalToken).plus() | epsilon();
@@ -213,12 +214,12 @@ abstract class DartGrammarLexer extends GrammarDefinition {
                   .starLazy(string("'''")) &
               string("'''"))
           .map((v) {
-        var list = v[1] as List;
-        var list2 = list
-            .map((e) => e is ParsedString ? e : ParsedString.literal(e))
-            .toList();
-        return list2.length == 1 ? list2[0] : ParsedString.list(list2);
-      });
+            var list = v[1] as List;
+            var list2 = list
+                .map((e) => e is ParsedString ? e : ParsedString.literal(e))
+                .toList();
+            return list2.length == 1 ? list2[0] : ParsedString.list(list2);
+          });
 
   Parser<ParsedString> multiLineDoubleQuotedStringLexicalToken() =>
       (string('"""') &
@@ -228,12 +229,12 @@ abstract class DartGrammarLexer extends GrammarDefinition {
                   .starLazy(string('"""')) &
               string('"""'))
           .map((v) {
-        var list = v[1] as List;
-        var list2 = list
-            .map((e) => e is ParsedString ? e : ParsedString.literal(e))
-            .toList();
-        return list2.length == 1 ? list2[0] : ParsedString.list(list2);
-      });
+            var list = v[1] as List;
+            var list2 = list
+                .map((e) => e is ParsedString ? e : ParsedString.literal(e))
+                .toList();
+            return list2.length == 1 ? list2[0] : ParsedString.list(list2);
+          });
 
   Parser<ParsedString> singleLineRawStringLexicalToken() =>
       (singleLineRawStringSingleQuotedLexicalToken() |
@@ -265,12 +266,12 @@ abstract class DartGrammarLexer extends GrammarDefinition {
                   .star() &
               char("'"))
           .map((v) {
-        var list = v[1] as List;
-        var list2 = list
-            .map((e) => e is ParsedString ? e : ParsedString.literal(e))
-            .toList();
-        return list2.length == 1 ? list2[0] : ParsedString.list(list2);
-      });
+            var list = v[1] as List;
+            var list2 = list
+                .map((e) => e is ParsedString ? e : ParsedString.literal(e))
+                .toList();
+            return list2.length == 1 ? list2[0] : ParsedString.list(list2);
+          });
 
   Parser<ParsedString> singleLineStringDoubleQuotedLexicalToken() =>
       (char('"') &
@@ -280,26 +281,28 @@ abstract class DartGrammarLexer extends GrammarDefinition {
                   .star() &
               char('"'))
           .map((v) {
-        var list = v[1] as List;
-        var list2 = list
-            .map((e) => e is ParsedString ? e : ParsedString.literal(e))
-            .toList();
-        return list2.length == 1 ? list2[0] : ParsedString.list(list2);
-      });
+            var list = v[1] as List;
+            var list2 = list
+                .map((e) => e is ParsedString ? e : ParsedString.literal(e))
+                .toList();
+            return list2.length == 1 ? list2[0] : ParsedString.list(list2);
+          });
 
   Parser<ParsedString> stringVariable() =>
-      (char(r'$') & ((char('_') | letter()) & word().star()).flatten())
-          .map((v) {
+      (char(r'$') & ((char('_') | letter()) & word().star()).flatten()).map((
+        v,
+      ) {
         return ParsedString.variable(v[1]);
       });
 
   Parser<ParsedString> parseExpressionInString();
 
   Parser<ParsedString> stringExpression() =>
-      (string(r'${') & (ref0(() => parseExpressionInString())) & char('}'))
-          .map((v) {
-        return v[1];
-      });
+      (string(r'${') & (ref0(() => parseExpressionInString())) & char('}')).map(
+        (v) {
+          return v[1];
+        },
+      );
 
   Parser<String> stringContentSingleQuotedLexicalToken() =>
       (stringContentSingleQuotedLexicalTokenUnescaped() |
@@ -317,7 +320,8 @@ abstract class DartGrammarLexer extends GrammarDefinition {
   Parser<String> stringContentDoubleQuotedLexicalTokenUnescaped() =>
       pattern('^\\"\n\r\$').plus().flatten();
 
-  Parser<String> stringContentQuotedLexicalTokenEscaped() => (char('\\') &
+  Parser<String> stringContentQuotedLexicalTokenEscaped() =>
+      (char('\\') &
               (char('n').map((_) => '\n') |
                   char('r').map((_) => '\r') |
                   char('"').map((_) => '"') |
@@ -327,15 +331,16 @@ abstract class DartGrammarLexer extends GrammarDefinition {
                   char('b').map((_) => '\b') |
                   char('\\').map((_) => '\\')))
           .map((v) {
-        return v[1] as String;
-      });
+            return v[1] as String;
+          });
 
   static Parser<String> newlineLexicalToken() => pattern('\n\r');
 
-  Parser<String> hashbangLexicalToken() => (string('#!') &
-          pattern('^\n\r').star() &
-          ref0(newlineLexicalToken).optional())
-      .flatten();
+  Parser<String> hashbangLexicalToken() =>
+      (string('#!') &
+              pattern('^\n\r').star() &
+              ref0(newlineLexicalToken).optional())
+          .flatten();
 
   // -----------------------------------------------------------------
   // Whitespace and comments.

@@ -31,56 +31,68 @@ abstract class CoreClassPrimitive<T> extends ASTClassPrimitive<T> {
   }
 
   ASTExternalClassFunction<R> _externalClassFunctionArgs0<R>(
-      String name, ASTType<R> returnType, Function externalFunction,
-      [ParameterValueResolver? parameterValueResolver]) {
+    String name,
+    ASTType<R> returnType,
+    Function externalFunction, [
+    ParameterValueResolver? parameterValueResolver,
+  ]) {
     return ASTExternalClassFunction<R>(
-        this,
-        name,
-        ASTParametersDeclaration(null, null, null),
-        returnType,
-        externalFunction,
-        parameterValueResolver);
+      this,
+      name,
+      ASTParametersDeclaration(null, null, null),
+      returnType,
+      externalFunction,
+      parameterValueResolver,
+    );
   }
 
   ASTExternalClassFunction<R> _externalClassFunctionArgs1<R>(
-      String name,
-      ASTType<R> returnType,
-      ASTFunctionParameterDeclaration param1,
-      Function externalFunction,
-      [ParameterValueResolver? parameterValueResolver]) {
+    String name,
+    ASTType<R> returnType,
+    ASTFunctionParameterDeclaration param1,
+    Function externalFunction, [
+    ParameterValueResolver? parameterValueResolver,
+  ]) {
     return ASTExternalClassFunction<R>(
-        this,
-        name,
-        ASTParametersDeclaration([param1], null, null),
-        returnType,
-        externalFunction,
-        parameterValueResolver);
+      this,
+      name,
+      ASTParametersDeclaration([param1], null, null),
+      returnType,
+      externalFunction,
+      parameterValueResolver,
+    );
   }
 
   // ignore: unused_element
   ASTExternalFunction<R> _externalStaticFunctionArgs0<R>(
-      String name, ASTType<R> returnType, Function externalFunction,
-      [ParameterValueResolver? parameterValueResolver]) {
+    String name,
+    ASTType<R> returnType,
+    Function externalFunction, [
+    ParameterValueResolver? parameterValueResolver,
+  ]) {
     return ASTExternalFunction<R>(
-        name,
-        ASTParametersDeclaration(null, null, null),
-        returnType,
-        externalFunction,
-        parameterValueResolver);
+      name,
+      ASTParametersDeclaration(null, null, null),
+      returnType,
+      externalFunction,
+      parameterValueResolver,
+    );
   }
 
   ASTExternalFunction<R> _externalStaticFunctionArgs1<R>(
-      String name,
-      ASTType<R> returnType,
-      ASTFunctionParameterDeclaration param1,
-      Function externalFunction,
-      [ParameterValueResolver? parameterValueResolver]) {
+    String name,
+    ASTType<R> returnType,
+    ASTFunctionParameterDeclaration param1,
+    Function externalFunction, [
+    ParameterValueResolver? parameterValueResolver,
+  ]) {
     return ASTExternalFunction<R>(
-        name,
-        ASTParametersDeclaration([param1], null, null),
-        returnType,
-        externalFunction,
-        parameterValueResolver);
+      name,
+      ASTParametersDeclaration([param1], null, null),
+      returnType,
+      externalFunction,
+      parameterValueResolver,
+    );
   }
 }
 
@@ -137,8 +149,11 @@ class CoreClassString extends CoreClassPrimitive<String> {
 
   @override
   ASTFunctionDeclaration? getFunction(
-      String fName, ASTFunctionSignature parametersSignature, VMContext context,
-      {bool caseInsensitive = false}) {
+    String fName,
+    ASTFunctionSignature parametersSignature,
+    VMContext context, {
+    bool caseInsensitive = false,
+  }) {
     switch (fName) {
       case 'contains':
         return _functionContains;
@@ -150,7 +165,8 @@ class CoreClassString extends CoreClassPrimitive<String> {
         return _functionValueOf;
     }
     throw StateError(
-        "Can't find core function: $coreName.$fName( $parametersSignature )");
+      "Can't find core function: $coreName.$fName( $parametersSignature )",
+    );
   }
 }
 
@@ -179,8 +195,11 @@ class CoreClassInt extends CoreClassPrimitive<int> {
 
   @override
   ASTFunctionDeclaration? getFunction(
-      String fName, ASTFunctionSignature parametersSignature, VMContext context,
-      {bool caseInsensitive = false}) {
+    String fName,
+    ASTFunctionSignature parametersSignature,
+    VMContext context, {
+    bool caseInsensitive = false,
+  }) {
     switch (fName) {
       case 'parseInt':
       case 'parse':
@@ -189,6 +208,7 @@ class CoreClassInt extends CoreClassPrimitive<int> {
         return _functionValueOf;
     }
     throw StateError(
-        "Can't find core function: $coreName.$fName( $parametersSignature )");
+      "Can't find core function: $coreName.$fName( $parametersSignature )",
+    );
   }
 }

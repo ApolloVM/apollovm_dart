@@ -41,8 +41,13 @@ abstract class ApolloRunner implements VMTypeResolver {
   ApolloExternalFunctionMapper? createDefaultApolloExternalFunctionMapper() {
     var externalFunctionMapper = ApolloExternalFunctionMapper();
 
-    externalFunctionMapper.mapExternalFunction1(ASTTypeVoid.instance, 'print',
-        ASTTypeObject.instance, 'o', (o) => externalPrintFunction(o));
+    externalFunctionMapper.mapExternalFunction1(
+      ASTTypeVoid.instance,
+      'print',
+      ASTTypeObject.instance,
+      'o',
+      (o) => externalPrintFunction(o),
+    );
 
     return externalFunctionMapper;
   }
@@ -60,11 +65,14 @@ abstract class ApolloRunner implements VMTypeResolver {
   /// - [positionalParameters] Positional parameters to pass to the method.
   /// - [namedParameters] Named parameters to pass to the method.
   FutureOr<ASTValue> executeClassMethod(
-      String namespace, String className, String methodName,
-      {List? positionalParameters,
-      Map? namedParameters,
-      VMObject? classInstanceObject,
-      Map<String, ASTValue>? classInstanceFields}) async {
+    String namespace,
+    String className,
+    String methodName, {
+    List? positionalParameters,
+    Map? namedParameters,
+    VMObject? classInstanceObject,
+    Map<String, ASTValue>? classInstanceFields,
+  }) async {
     var codeNamespace = _languageNamespaces.get(namespace);
 
     var codeUnit = codeNamespace.getCodeUnitWithClass(className);
@@ -75,23 +83,33 @@ abstract class ApolloRunner implements VMTypeResolver {
     var clazz = codeUnit.root!.getClass(className);
     if (clazz == null) {
       throw StateError(
-          "Can't find class method to execute: $className->$methodName");
+        "Can't find class method to execute: $className->$methodName",
+      );
     }
 
     var result = await clazz.execute(
-        methodName, positionalParameters, namedParameters,
-        classInstanceObject: classInstanceObject,
-        classInstanceFields: classInstanceFields,
-        externalFunctionMapper: externalFunctionMapper,
-        typeResolver: this);
+      methodName,
+      positionalParameters,
+      namedParameters,
+      classInstanceObject: classInstanceObject,
+      classInstanceFields: classInstanceFields,
+      externalFunctionMapper: externalFunctionMapper,
+      typeResolver: this,
+    );
     return result;
   }
 
   /// Returns an [ASTClassNormal] for [className] in [namespace] (optional).
-  FutureOr<ASTClassNormal?> getClass(String className,
-      {String? namespace, bool caseInsensitive = false}) {
-    return _languageNamespaces.getClass(className,
-        namespace: namespace, caseInsensitive: caseInsensitive);
+  FutureOr<ASTClassNormal?> getClass(
+    String className, {
+    String? namespace,
+    bool caseInsensitive = false,
+  }) {
+    return _languageNamespaces.getClass(
+      className,
+      namespace: namespace,
+      caseInsensitive: caseInsensitive,
+    );
   }
 
   /// Returns a class method.
@@ -99,30 +117,42 @@ abstract class ApolloRunner implements VMTypeResolver {
   /// - [positionalParameters] and [namedParameters] are used to
   /// determine the method parameters signature.
   FutureOr<ASTFunctionDeclaration?> getClassMethod(
-      String namespace, String className, String methodName,
-      [dynamic positionalParameters, dynamic namedParameters]) async {
+    String namespace,
+    String className,
+    String methodName, [
+    dynamic positionalParameters,
+    dynamic namedParameters,
+  ]) async {
     var clazz = await getClass(className, namespace: namespace);
     if (clazz == null) return null;
 
     return clazz.getFunctionWithParameters(
-        methodName, positionalParameters, namedParameters,
-        externalFunctionMapper: externalFunctionMapper, typeResolver: this);
+      methodName,
+      positionalParameters,
+      namedParameters,
+      externalFunctionMapper: externalFunctionMapper,
+      typeResolver: this,
+    );
   }
 
   FutureOr<({CodeUnit? codeUnit, String? className})> getFunctionCodeUnit(
-      String namespace, String functionName,
-      {bool allowClassMethod = false}) {
+    String namespace,
+    String functionName, {
+    bool allowClassMethod = false,
+  }) {
     var codeNamespace = _languageNamespaces.get(namespace);
 
     var codeUnit = codeNamespace.getCodeUnitWithFunction(functionName);
 
     if (codeUnit == null && allowClassMethod) {
-      var codeUnitWithMethod =
-          codeNamespace.getCodeUnitWithClassMethod(functionName);
+      var codeUnitWithMethod = codeNamespace.getCodeUnitWithClassMethod(
+        functionName,
+      );
 
       if (codeUnitWithMethod != null) {
-        var classWithMethod =
-            codeUnitWithMethod.root?.getClassWithMethod(functionName);
+        var classWithMethod = codeUnitWithMethod.root?.getClassWithMethod(
+          functionName,
+        );
 
         if (classWithMethod != null) {
           return (
@@ -140,29 +170,44 @@ abstract class ApolloRunner implements VMTypeResolver {
   ///
   /// - [positionalParameters] Positional parameters to pass to the function.
   /// - [namedParameters] Named parameters to pass to the function.
-  Future<ASTValue> executeFunction(String namespace, String functionName,
-      {List? positionalParameters,
-      Map? namedParameters,
-      bool allowClassMethod = false}) async {
-    var r = await getFunctionCodeUnit(namespace, functionName,
-        allowClassMethod: allowClassMethod);
+  Future<ASTValue> executeFunction(
+    String namespace,
+    String functionName, {
+    List? positionalParameters,
+    Map? namedParameters,
+    bool allowClassMethod = false,
+  }) async {
+    var r = await getFunctionCodeUnit(
+      namespace,
+      functionName,
+      allowClassMethod: allowClassMethod,
+    );
 
     var codeUnit = r.codeUnit;
     if (codeUnit == null) {
       throw StateError(
-          "Can't find function to execute> functionName: $functionName ; language: $language");
+        "Can't find function to execute> functionName: $functionName ; language: $language",
+      );
     }
 
     var className = r.className;
     if (className != null) {
-      return executeClassMethod(namespace, className, functionName,
-          positionalParameters: positionalParameters,
-          namedParameters: namedParameters);
+      return executeClassMethod(
+        namespace,
+        className,
+        functionName,
+        positionalParameters: positionalParameters,
+        namedParameters: namedParameters,
+      );
     }
 
     var result = await codeUnit.root!.execute(
-        functionName, positionalParameters, namedParameters,
-        externalFunctionMapper: externalFunctionMapper, typeResolver: this);
+      functionName,
+      positionalParameters,
+      namedParameters,
+      externalFunctionMapper: externalFunctionMapper,
+      typeResolver: this,
+    );
 
     return result;
   }
@@ -172,101 +217,161 @@ abstract class ApolloRunner implements VMTypeResolver {
   /// - [positionalParameters] and [namedParameters] are used to
   /// determine the function parameters signature.
   FutureOr<ASTFunctionDeclaration?> getFunction(
-      String namespace, String functionName,
-      [List? positionalParameters, Map? namedParameters]) async {
+    String namespace,
+    String functionName, [
+    List? positionalParameters,
+    Map? namedParameters,
+  ]) async {
     var codeNamespace = _languageNamespaces.get(namespace);
 
     var codeUnit = codeNamespace.getCodeUnitWithFunction(functionName);
     if (codeUnit == null) return null;
 
     return await codeUnit.root!.getFunctionWithParameters(
-        functionName, positionalParameters, namedParameters,
-        externalFunctionMapper: externalFunctionMapper, typeResolver: this);
+      functionName,
+      positionalParameters,
+      namedParameters,
+      externalFunctionMapper: externalFunctionMapper,
+      typeResolver: this,
+    );
   }
 
   /// Tries to execute a function with variations of [positionalParameters].
-  Future<ASTValue?> tryExecuteFunction(String namespace, String functionName,
-      [List? positionalParameters]) async {
+  Future<ASTValue?> tryExecuteFunction(
+    String namespace,
+    String functionName, [
+    List? positionalParameters,
+  ]) async {
     positionalParameters ??= [];
 
     if (await getFunction(namespace, functionName, positionalParameters) !=
         null) {
-      return await executeFunction(namespace, functionName,
-          positionalParameters: positionalParameters);
-    } else if (await getFunction(
-            namespace, functionName, [positionalParameters]) !=
+      return await executeFunction(
+        namespace,
+        functionName,
+        positionalParameters: positionalParameters,
+      );
+    } else if (await getFunction(namespace, functionName, [
+          positionalParameters,
+        ]) !=
         null) {
-      return await executeFunction(namespace, functionName,
-          positionalParameters: [positionalParameters]);
-    } else if (await getFunction(
-            namespace, functionName, [ASTTypeArray.instanceOfString]) !=
+      return await executeFunction(
+        namespace,
+        functionName,
+        positionalParameters: [positionalParameters],
+      );
+    } else if (await getFunction(namespace, functionName, [
+          ASTTypeArray.instanceOfString,
+        ]) !=
         null) {
-      return await executeFunction(namespace, functionName,
-          positionalParameters: [
-            positionalParameters.map((e) => '$e').toList()
-          ]);
-    } else if (await getFunction(
-            namespace, functionName, [ASTTypeArray.instanceOfDynamic]) !=
+      return await executeFunction(
+        namespace,
+        functionName,
+        positionalParameters: [positionalParameters.map((e) => '$e').toList()],
+      );
+    } else if (await getFunction(namespace, functionName, [
+          ASTTypeArray.instanceOfDynamic,
+        ]) !=
         null) {
-      return await executeFunction(namespace, functionName,
-          positionalParameters: [positionalParameters]);
+      return await executeFunction(
+        namespace,
+        functionName,
+        positionalParameters: [positionalParameters],
+      );
     }
     return null;
   }
 
   /// Tries to execute a class function with variations of [positionalParameters].
   Future<ASTValue?> tryExecuteClassFunction(
-      String namespace, String className, String functionName,
-      [List? positionalParameters]) async {
+    String namespace,
+    String className,
+    String functionName, [
+    List? positionalParameters,
+  ]) async {
     positionalParameters ??= [];
 
     if (await getClassMethod(
-            namespace, className, functionName, positionalParameters) !=
+          namespace,
+          className,
+          functionName,
+          positionalParameters,
+        ) !=
         null) {
-      return await executeClassMethod(namespace, className, functionName,
-          positionalParameters: positionalParameters);
-    } else if (await getClassMethod(
-            namespace, className, functionName, [positionalParameters]) !=
+      return await executeClassMethod(
+        namespace,
+        className,
+        functionName,
+        positionalParameters: positionalParameters,
+      );
+    } else if (await getClassMethod(namespace, className, functionName, [
+          positionalParameters,
+        ]) !=
         null) {
-      return await executeClassMethod(namespace, className, functionName,
-          positionalParameters: [positionalParameters]);
-    } else if (await getClassMethod(namespace, className, functionName,
-            [ASTTypeArray.instanceOfString]) !=
+      return await executeClassMethod(
+        namespace,
+        className,
+        functionName,
+        positionalParameters: [positionalParameters],
+      );
+    } else if (await getClassMethod(namespace, className, functionName, [
+          ASTTypeArray.instanceOfString,
+        ]) !=
         null) {
-      return await executeClassMethod(namespace, className, functionName,
-          positionalParameters: [
-            positionalParameters.map((e) => '$e').toList()
-          ]);
-    } else if (await getClassMethod(namespace, className, functionName,
-            [ASTTypeArray.instanceOfDynamic]) !=
+      return await executeClassMethod(
+        namespace,
+        className,
+        functionName,
+        positionalParameters: [positionalParameters.map((e) => '$e').toList()],
+      );
+    } else if (await getClassMethod(namespace, className, functionName, [
+          ASTTypeArray.instanceOfDynamic,
+        ]) !=
         null) {
-      return await executeClassMethod(namespace, className, functionName,
-          positionalParameters: [positionalParameters]);
+      return await executeClassMethod(
+        namespace,
+        className,
+        functionName,
+        positionalParameters: [positionalParameters],
+      );
     }
     return null;
   }
 
   @override
-  FutureOr<ASTType?> resolveType(String typeName,
-      {String? namespace, String? language, bool caseInsensitive = false}) {
+  FutureOr<ASTType?> resolveType(
+    String typeName, {
+    String? namespace,
+    String? language,
+    bool caseInsensitive = false,
+  }) {
     if (language != null) {
       if (this.language == language) {
-        var ret = getClass(typeName,
-            namespace: namespace, caseInsensitive: caseInsensitive);
+        var ret = getClass(
+          typeName,
+          namespace: namespace,
+          caseInsensitive: caseInsensitive,
+        );
 
-        return ret.resolveMapped((clazz) =>
-            clazz?.type ??
-            apolloVM.resolveCoreType(typeName,
+        return ret.resolveMapped(
+          (clazz) =>
+              clazz?.type ??
+              apolloVM.resolveCoreType(
+                typeName,
                 namespace: namespace,
                 language: language,
-                caseInsensitive: caseInsensitive));
+                caseInsensitive: caseInsensitive,
+              ),
+        );
       }
     }
 
-    return apolloVM.resolveType(typeName,
-        namespace: namespace,
-        language: language,
-        caseInsensitive: caseInsensitive);
+    return apolloVM.resolveType(
+      typeName,
+      namespace: namespace,
+      language: language,
+      caseInsensitive: caseInsensitive,
+    );
   }
 
   void reset() {

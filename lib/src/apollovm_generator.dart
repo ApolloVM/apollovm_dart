@@ -14,8 +14,11 @@ import 'ast/apollovm_ast_variable.dart';
 /// Base class for generators.
 ///
 /// An [ASTRoot] loaded in [ApolloVM] can be converted to another representation.
-abstract class ApolloGenerator<O extends Object,
-    S extends ApolloCodeUnitStorage<D>, D extends Object> {
+abstract class ApolloGenerator<
+  O extends Object,
+  S extends ApolloCodeUnitStorage<D>,
+  D extends Object
+> {
   /// Target programming language of this code generator implementation.
   final String language;
 
@@ -23,7 +26,7 @@ abstract class ApolloGenerator<O extends Object,
   final S codeStorage;
 
   ApolloGenerator(String language, this.codeStorage)
-      : language = language.trim().toLowerCase();
+    : language = language.trim().toLowerCase();
 
   D toStorageData(O out);
 
@@ -69,20 +72,27 @@ abstract class ApolloGenerator<O extends Object,
 
   O generateASTClassField(ASTClassField field, {O? out});
 
-  O generateASTClassFunctionDeclaration(ASTClassFunctionDeclaration f,
-      {O? out});
+  O generateASTClassFunctionDeclaration(
+    ASTClassFunctionDeclaration f, {
+    O? out,
+  });
 
   O generateASTFunctionDeclaration(ASTFunctionDeclaration f, {O? out});
 
-  O generateASTParametersDeclaration(ASTParametersDeclaration parameters,
-      {O? out});
+  O generateASTParametersDeclaration(
+    ASTParametersDeclaration parameters, {
+    O? out,
+  });
 
   O generateASTFunctionParameterDeclaration(
-      ASTFunctionParameterDeclaration parameter,
-      {O? out});
+    ASTFunctionParameterDeclaration parameter, {
+    O? out,
+  });
 
-  O generateASTParameterDeclaration(ASTParameterDeclaration parameter,
-      {O? out});
+  O generateASTParameterDeclaration(
+    ASTParameterDeclaration parameter, {
+    O? out,
+  });
 
   O generateASTType(ASTType type, {O? out}) {
     if (type is ASTTypeArray) {
@@ -152,36 +162,46 @@ abstract class ApolloGenerator<O extends Object,
 
   O generateASTBranchIfElseBlock(ASTBranchIfElseBlock branch, {O? out});
 
-  O generateASTBranchIfElseIfsElseBlock(ASTBranchIfElseIfsElseBlock branch,
-      {O? out});
+  O generateASTBranchIfElseIfsElseBlock(
+    ASTBranchIfElseIfsElseBlock branch, {
+    O? out,
+  });
 
   O generateASTStatementExpression(ASTStatementExpression statement, {O? out});
 
   O generateASTStatementVariableDeclaration(
-      ASTStatementVariableDeclaration statement,
-      {O? out});
+    ASTStatementVariableDeclaration statement, {
+    O? out,
+  });
 
   O generateASTExpressionVariableAssignment(
-      ASTExpressionVariableAssignment expression,
-      {O? out});
+    ASTExpressionVariableAssignment expression, {
+    O? out,
+  });
 
   O generateASTExpressionVariableDirectOperation(
-      ASTExpressionVariableDirectOperation expression,
-      {O? out});
+    ASTExpressionVariableDirectOperation expression, {
+    O? out,
+  });
 
   O generateASTStatementReturn(ASTStatementReturn statement, {O? out});
 
   O generateASTStatementReturnNull(ASTStatementReturnNull statement, {O? out});
 
-  O generateASTStatementReturnValue(ASTStatementReturnValue statement,
-      {O? out});
+  O generateASTStatementReturnValue(
+    ASTStatementReturnValue statement, {
+    O? out,
+  });
 
-  O generateASTStatementReturnVariable(ASTStatementReturnVariable statement,
-      {O? out});
+  O generateASTStatementReturnVariable(
+    ASTStatementReturnVariable statement, {
+    O? out,
+  });
 
   O generateASTStatementReturnWithExpression(
-      ASTStatementReturnWithExpression statement,
-      {O? out});
+    ASTStatementReturnWithExpression statement, {
+    O? out,
+  });
 
   O generateASTExpression(ASTExpression expression, {O? out}) {
     if (expression is ASTExpressionVariableAccess) {
@@ -212,41 +232,62 @@ abstract class ApolloGenerator<O extends Object,
   O generateASTExpressionOperation(ASTExpressionOperation expression, {O? out});
 
   String resolveASTExpressionOperatorText(
-      ASTExpressionOperator operator, ASTNumType aNumType, ASTNumType bNumType);
+    ASTExpressionOperator operator,
+    ASTNumType aNumType,
+    ASTNumType bNumType,
+  );
 
   O generateASTExpressionLiteral(ASTExpressionLiteral expression, {O? out});
 
-  O generateASTExpressionListLiteral(ASTExpressionListLiteral expression,
-      {O? out});
+  O generateASTExpressionListLiteral(
+    ASTExpressionListLiteral expression, {
+    O? out,
+  });
 
-  O generateASTExpressionMapLiteral(ASTExpressionMapLiteral expression,
-      {O? out});
+  O generateASTExpressionMapLiteral(
+    ASTExpressionMapLiteral expression, {
+    O? out,
+  });
 
   O generateASTExpressionNegation(ASTExpressionNegation expression, {O? out});
 
   O generateASTExpressionFunctionInvocation(
-      ASTExpressionObjectFunctionInvocation expression,
-      {O? out});
+    ASTExpressionObjectFunctionInvocation expression, {
+    O? out,
+  });
 
   O generateASTExpressionLocalFunctionInvocation(
-      ASTExpressionLocalFunctionInvocation expression,
-      {O? out});
+    ASTExpressionLocalFunctionInvocation expression, {
+    O? out,
+  });
 
-  O generateASTExpressionVariableAccess(ASTExpressionVariableAccess expression,
-      {O? out});
+  O generateASTExpressionVariableAccess(
+    ASTExpressionVariableAccess expression, {
+    O? out,
+  });
 
   O generateASTExpressionVariableEntryAccess(
-      ASTExpressionVariableEntryAccess expression,
-      {O? out});
+    ASTExpressionVariableEntryAccess expression, {
+    O? out,
+  });
 
-  O generateASTVariable(ASTVariable variable,
-      {String? callingFunction, O? out});
+  O generateASTVariable(
+    ASTVariable variable, {
+    String? callingFunction,
+    O? out,
+  });
 
-  O generateASTScopeVariable(ASTScopeVariable variable,
-      {String? callingFunction, O? out});
+  O generateASTScopeVariable(
+    ASTScopeVariable variable, {
+    String? callingFunction,
+    O? out,
+  });
 
-  O generateASTVariableGeneric(ASTVariable variable,
-      {String? callingFunction, O? out});
+  O generateASTVariableGeneric(
+    ASTVariable variable, {
+    String? callingFunction,
+    O? out,
+  });
 
   O generateASTValue(ASTValue value, {O? out}) {
     if (value is ASTValueString) {
@@ -280,11 +321,16 @@ abstract class ApolloGenerator<O extends Object,
     throw UnsupportedError("Can't generate value: $value");
   }
 
-  O generateASTValueStringConcatenation(ASTValueStringConcatenation value,
-      {O? out});
+  O generateASTValueStringConcatenation(
+    ASTValueStringConcatenation value, {
+    O? out,
+  });
 
-  O generateASTValueStringVariable(ASTValueStringVariable value,
-      {O? out, bool precededByString = false});
+  O generateASTValueStringVariable(
+    ASTValueStringVariable value, {
+    O? out,
+    bool precededByString = false,
+  });
 
   O generateASTValueStringExpression(ASTValueStringExpression value, {O? out});
 

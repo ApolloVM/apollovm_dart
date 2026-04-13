@@ -29,8 +29,9 @@ abstract mixin class ASTNode {
     if (descendantChildren != null) return descendantChildren;
 
     if (_cacheDescendantChildren) {
-      return _descendantChildren =
-          UnmodifiableListView(_computeDescendantChildren());
+      return _descendantChildren = UnmodifiableListView(
+        _computeDescendantChildren(),
+      );
     } else {
       return _computeDescendantChildren();
     }
@@ -130,8 +131,10 @@ class ASTModifiers {
   static final ASTModifiers modifiersNone = ASTModifiers();
   static final ASTModifiers modifierStatic = ASTModifiers(isStatic: true);
   static final ASTModifiers modifierFinal = ASTModifiers(isFinal: true);
-  static final ASTModifiers modifiersStaticFinal =
-      ASTModifiers(isStatic: true, isFinal: true);
+  static final ASTModifiers modifiersStaticFinal = ASTModifiers(
+    isStatic: true,
+    isFinal: true,
+  );
 
   final bool isStatic;
 
@@ -141,18 +144,23 @@ class ASTModifiers {
 
   final bool isPublic;
 
-  ASTModifiers(
-      {this.isStatic = false,
-      this.isFinal = false,
-      this.isPrivate = false,
-      this.isPublic = false}) {
+  ASTModifiers({
+    this.isStatic = false,
+    this.isFinal = false,
+    this.isPrivate = false,
+    this.isPublic = false,
+  }) {
     if (isPrivate && isPublic) {
       throw StateError("Can't be private and public at the same time!");
     }
   }
 
-  ASTModifiers copyWith(
-      {bool? isStatic, bool? isFinal, bool? isPrivate, bool? isPublic}) {
+  ASTModifiers copyWith({
+    bool? isStatic,
+    bool? isFinal,
+    bool? isPrivate,
+    bool? isPublic,
+  }) {
     return ASTModifiers(
       isStatic: isStatic ?? this.isStatic,
       isFinal: isFinal ?? this.isFinal,
@@ -162,11 +170,11 @@ class ASTModifiers {
   }
 
   List<String> get modifiers => [
-        if (isPublic) 'public',
-        if (isPrivate) 'private',
-        if (isStatic) 'static',
-        if (isFinal) 'final',
-      ];
+    if (isPublic) 'public',
+    if (isPrivate) 'private',
+    if (isStatic) 'static',
+    if (isFinal) 'final',
+  ];
 
   @override
   String toString() {
