@@ -16,6 +16,10 @@
 
 - Reformatted code for Dart 3.10+
 
+- `lib/src/languages/wasm/wasm_runtime_browser.dart`
+  - Suppress deprecated `dart:html` usage warning with
+    `// ignore: deprecated_member_use` import directive
+
 ## 0.0.53
 
 - wasm_run: ^0.1.0+1
