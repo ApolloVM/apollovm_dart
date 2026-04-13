@@ -21,7 +21,8 @@ abstract class ApolloCodeParser<T extends Object> {
   void check(CodeUnit codeUnit) {
     if (!acceptsLanguage(codeUnit.language)) {
       throw StateError(
-          "This parser is for the language '$language'. Trying to parse a CodeUnit of language: '${codeUnit.language}'");
+        "This parser is for the language '$language'. Trying to parse a CodeUnit of language: '${codeUnit.language}'",
+      );
     }
   }
 
@@ -60,10 +61,12 @@ abstract class ApolloSourceCodeParser extends ApolloCodeParser<String> {
           .map((e) => parseInt(e)!)
           .toList();
 
-      return ParseResult(codeUnit,
-          errorMessage: result.message,
-          errorPosition: result.position,
-          errorLineAndColumn: lineAndColumn);
+      return ParseResult(
+        codeUnit,
+        errorMessage: result.message,
+        errorPosition: result.position,
+        errorLineAndColumn: lineAndColumn,
+      );
     }
 
     var root = result.value;
@@ -110,11 +113,13 @@ class ParseResult<T> {
     return null;
   }
 
-  ParseResult(this.codeUnit,
-      {this.root,
-      this.errorMessage,
-      this.errorPosition,
-      this.errorLineAndColumn});
+  ParseResult(
+    this.codeUnit, {
+    this.root,
+    this.errorMessage,
+    this.errorPosition,
+    this.errorLineAndColumn,
+  });
 
   /// Returns the [errorMessage] with the error line information.
   String get errorMessageExtended {
@@ -172,13 +177,13 @@ class UnsupportedTypeError extends UnsupportedError {
 /// Unsupported syntax [Error] while parsing.
 class UnsupportedSyntaxError extends UnsupportedError {
   UnsupportedSyntaxError(String message)
-      : super('[Unsupported Syntax] $message');
+    : super('[Unsupported Syntax] $message');
 }
 
 /// Unsupported value operation [Error] while parsing.
 class UnsupportedValueOperationError extends UnsupportedError {
   UnsupportedValueOperationError(String message)
-      : super('[Unsupported Value operation] $message');
+    : super('[Unsupported Value operation] $message');
 }
 
 extension ListTypedExtension<T> on List<T> {

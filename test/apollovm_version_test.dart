@@ -1,5 +1,4 @@
 @TestOn('vm')
-
 import 'package:pubspec/pubspec.dart';
 import 'package:swiss_knife/swiss_knife_vm.dart';
 import 'package:test/test.dart';
@@ -25,8 +24,9 @@ void main() {
       print('PubSpec.name: ${pubSpec.name}');
       print('PubSpec.version: ${pubSpec.version}');
 
-      var srcFile =
-          File(path.join(projectDirectory.path, 'lib/src/apollovm_base.dart'));
+      var srcFile = File(
+        path.join(projectDirectory.path, 'lib/src/apollovm_base.dart'),
+      );
 
       print(srcFile);
 
@@ -38,9 +38,12 @@ void main() {
 
       print('srcVersion: $srcVersion');
 
-      expect(pubSpec.version.toString(), equals(srcVersion),
-          reason:
-              'ApolloVM.VERSION[$srcVersion] != PubSpec.version[${pubSpec.version}]');
+      expect(
+        pubSpec.version.toString(),
+        equals(srcVersion),
+        reason:
+            'ApolloVM.VERSION[$srcVersion] != PubSpec.version[${pubSpec.version}]',
+      );
     });
   });
 }

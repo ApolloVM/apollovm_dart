@@ -1,3 +1,21 @@
+## 0.0.54
+
+- Updated minimum Dart SDK constraint to `>=3.10.0 <4.0.0`.
+- Dependency updates:
+  - `swiss_knife`: ^3.3.14
+  - `async_extension`: ^1.2.22
+  - `data_serializer`: ^1.2.1
+  - `petitparser`: ^6.1.0
+  - `collection`: ^1.19.1
+  - `args`: ^2.7.0
+  - `wasm_run`: ^0.1.0+2
+  - `crypto`: ^3.0.7
+  - `path`: ^1.9.1
+  - `test`: ^1.31.0
+
+
+- Reformatted code for Dart 3.10+
+
 ## 0.0.53
 
 - wasm_run: ^0.1.0+1

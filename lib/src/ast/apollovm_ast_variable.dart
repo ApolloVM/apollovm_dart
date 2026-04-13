@@ -116,14 +116,19 @@ class ASTClassField<T> extends ASTTypedVariable<T> {
 class ASTClassFieldWithInitialValue<T> extends ASTClassField<T> {
   final ASTExpression _initialValueExpression;
 
-  ASTClassFieldWithInitialValue(ASTType<T> type, String name,
-      this._initialValueExpression, bool finalValue)
-      : super(type, name, finalValue);
+  ASTClassFieldWithInitialValue(
+    ASTType<T> type,
+    String name,
+    this._initialValueExpression,
+    bool finalValue,
+  ) : super(type, name, finalValue);
 
   ASTExpression get initialValue => _initialValueExpression;
 
   FutureOr<ASTValue> getInitialValue(
-      VMContext context, ASTRunStatus runStatus) {
+    VMContext context,
+    ASTRunStatus runStatus,
+  ) {
     return _initialValueExpression.run(context, runStatus);
   }
 
@@ -141,8 +146,8 @@ class ASTRuntimeVariable<T> extends ASTTypedVariable<T> {
   ASTValue _value;
 
   ASTRuntimeVariable(ASTType<T> type, String name, [ASTValue? value])
-      : _value = value ?? ASTValueNull.instance,
-        super(type, name, false);
+    : _value = value ?? ASTValueNull.instance,
+      super(type, name, false);
 
   @override
   Iterable<ASTNode> get children => [_value];
@@ -254,8 +259,10 @@ class ASTScopeVariable<T> extends ASTVariable {
   void resolveNode(ASTNode? parentNode) {
     super.resolveNode(parentNode);
 
-    resolvedIdentifier =
-        this.parentNode!.getNodeIdentifier(name, requester: this);
+    resolvedIdentifier = this.parentNode!.getNodeIdentifier(
+      name,
+      requester: this,
+    );
   }
 
   @override
@@ -298,7 +305,8 @@ class ASTThisVariable<T> extends ASTVariable {
     var obj = context.getClassInstance();
     if (obj == null) {
       throw ApolloVMRuntimeError(
-          "Can't determine 'this'! No ASTObjectInstance defined!");
+        "Can't determine 'this'! No ASTObjectInstance defined!",
+      );
     }
     return ASTRuntimeVariable(obj.type, 'this', obj);
   }

@@ -14,7 +14,7 @@ import '../../../ast/apollovm_ast_variable.dart';
 /// Java11 implementation of an [ApolloCodeGenerator].
 class ApolloCodeGeneratorJava11 extends ApolloCodeGenerator {
   ApolloCodeGeneratorJava11(ApolloSourceCodeStorage codeStorage)
-      : super('java11', codeStorage);
+    : super('java11', codeStorage);
 
   @override
   String normalizeTypeName(String typeName, [String? callingFunction]) {
@@ -48,12 +48,18 @@ class ApolloCodeGeneratorJava11 extends ApolloCodeGenerator {
   }
 
   @override
-  StringBuffer generateASTClass(ASTClassNormal clazz,
-      {StringBuffer? out, String indent = ''}) {
+  StringBuffer generateASTClass(
+    ASTClassNormal clazz, {
+    StringBuffer? out,
+    String indent = '',
+  }) {
     out ??= newOutput();
 
-    var code =
-        generateASTBlock(clazz, withBrackets: true, withBlankHeadLine: true);
+    var code = generateASTBlock(
+      clazz,
+      withBrackets: true,
+      withBlankHeadLine: true,
+    );
 
     out.write('class ');
     out.write(clazz.name);
@@ -64,8 +70,11 @@ class ApolloCodeGeneratorJava11 extends ApolloCodeGenerator {
   }
 
   @override
-  StringBuffer generateASTClassField(ASTClassField field,
-      {StringBuffer? out, String indent = ''}) {
+  StringBuffer generateASTClassField(
+    ASTClassField field, {
+    StringBuffer? out,
+    String indent = '',
+  }) {
     out ??= newOutput();
 
     var typeCode = generateASTType(field.type);
@@ -81,8 +90,11 @@ class ApolloCodeGeneratorJava11 extends ApolloCodeGenerator {
     out.write(field.name);
 
     if (field is ASTClassFieldWithInitialValue) {
-      var initialValueCode = generateASTExpression(field.initialValue,
-          indent: "$indent  ", headIndented: false);
+      var initialValueCode = generateASTExpression(
+        field.initialValue,
+        indent: "$indent  ",
+        headIndented: false,
+      );
       out.write(' = ');
       out.write(initialValueCode);
     }
@@ -93,16 +105,20 @@ class ApolloCodeGeneratorJava11 extends ApolloCodeGenerator {
   }
 
   @override
-  StringBuffer generateASTFunctionDeclaration(ASTFunctionDeclaration f,
-      {StringBuffer? out, String indent = ''}) {
+  StringBuffer generateASTFunctionDeclaration(
+    ASTFunctionDeclaration f, {
+    StringBuffer? out,
+    String indent = '',
+  }) {
     throw UnsupportedSyntaxError('All functions in Java are from a class: $f');
   }
 
   @override
   StringBuffer generateASTClassFunctionDeclaration(
-      ASTClassFunctionDeclaration f,
-      {StringBuffer? out,
-      String indent = ''}) {
+    ASTClassFunctionDeclaration f, {
+    StringBuffer? out,
+    String indent = '',
+  }) {
     out ??= newOutput();
 
     var typeCode = generateASTType(f.returnType);
@@ -138,9 +154,10 @@ class ApolloCodeGeneratorJava11 extends ApolloCodeGenerator {
 
   @override
   StringBuffer generateASTParametersDeclaration(
-      ASTParametersDeclaration parameters,
-      {StringBuffer? out,
-      String indent = ''}) {
+    ASTParametersDeclaration parameters, {
+    StringBuffer? out,
+    String indent = '',
+  }) {
     out ??= newOutput();
 
     var positionalParameters = parameters.positionalParameters;
@@ -175,15 +192,19 @@ class ApolloCodeGeneratorJava11 extends ApolloCodeGenerator {
 
   @override
   StringBuffer generateASTFunctionParameterDeclaration(
-      ASTFunctionParameterDeclaration parameter,
-      {StringBuffer? out,
-      String indent = ''}) {
+    ASTFunctionParameterDeclaration parameter, {
+    StringBuffer? out,
+    String indent = '',
+  }) {
     return generateASTParameterDeclaration(parameter, out: out, indent: indent);
   }
 
   @override
-  String resolveASTExpressionOperatorText(ASTExpressionOperator operator,
-      ASTNumType aNumType, ASTNumType bNumType) {
+  String resolveASTExpressionOperatorText(
+    ASTExpressionOperator operator,
+    ASTNumType aNumType,
+    ASTNumType bNumType,
+  ) {
     if (operator == ASTExpressionOperator.divideAsInt) {
       return getASTExpressionOperatorText(ASTExpressionOperator.divide);
     }
@@ -192,10 +213,11 @@ class ApolloCodeGeneratorJava11 extends ApolloCodeGenerator {
 
   @override
   StringBuffer generateASTExpressionListLiteral(
-      ASTExpressionListLiteral expression,
-      {StringBuffer? out,
-      String indent = '',
-      bool headIndented = true}) {
+    ASTExpressionListLiteral expression, {
+    StringBuffer? out,
+    String indent = '',
+    bool headIndented = true,
+  }) {
     out ??= newOutput();
 
     if (headIndented) out.write(indent);
@@ -230,10 +252,11 @@ class ApolloCodeGeneratorJava11 extends ApolloCodeGenerator {
 
   @override
   StringBuffer generateASTExpressionMapLiteral(
-      ASTExpressionMapLiteral expression,
-      {String indent = '',
-      StringBuffer? out,
-      bool headIndented = true}) {
+    ASTExpressionMapLiteral expression, {
+    String indent = '',
+    StringBuffer? out,
+    bool headIndented = true,
+  }) {
     out ??= newOutput();
 
     if (headIndented) out.write(indent);
@@ -272,8 +295,11 @@ class ApolloCodeGeneratorJava11 extends ApolloCodeGenerator {
   }
 
   @override
-  StringBuffer generateASTTypeArray(ASTTypeArray type,
-      {StringBuffer? out, String indent = ''}) {
+  StringBuffer generateASTTypeArray(
+    ASTTypeArray type, {
+    StringBuffer? out,
+    String indent = '',
+  }) {
     out ??= newOutput();
     out.write(indent);
     generateASTType(type.elementType, out: out);
@@ -282,8 +308,11 @@ class ApolloCodeGeneratorJava11 extends ApolloCodeGenerator {
   }
 
   @override
-  StringBuffer generateASTTypeArray2D(ASTTypeArray2D type,
-      {StringBuffer? out, String indent = ''}) {
+  StringBuffer generateASTTypeArray2D(
+    ASTTypeArray2D type, {
+    StringBuffer? out,
+    String indent = '',
+  }) {
     out ??= newOutput();
     out.write(indent);
     generateASTType(type.elementType, out: out);
@@ -292,8 +321,11 @@ class ApolloCodeGeneratorJava11 extends ApolloCodeGenerator {
   }
 
   @override
-  StringBuffer generateASTTypeArray3D(ASTTypeArray3D type,
-      {StringBuffer? out, String indent = ''}) {
+  StringBuffer generateASTTypeArray3D(
+    ASTTypeArray3D type, {
+    StringBuffer? out,
+    String indent = '',
+  }) {
     out ??= newOutput();
     out.write(indent);
     generateASTType(type.elementType, out: out);
@@ -302,8 +334,12 @@ class ApolloCodeGeneratorJava11 extends ApolloCodeGenerator {
   }
 
   @override
-  StringBuffer generateASTValueString(ASTValueString value,
-      {StringBuffer? out, String indent = '', bool headIndented = true}) {
+  StringBuffer generateASTValueString(
+    ASTValueString value, {
+    StringBuffer? out,
+    String indent = '',
+    bool headIndented = true,
+  }) {
     out ??= newOutput();
 
     if (headIndented) out.write(indent);
@@ -326,16 +362,19 @@ class ApolloCodeGeneratorJava11 extends ApolloCodeGenerator {
 
   @override
   StringBuffer generateASTValueStringConcatenation(
-      ASTValueStringConcatenation value,
-      {StringBuffer? out,
-      String indent = ''}) {
+    ASTValueStringConcatenation value, {
+    StringBuffer? out,
+    String indent = '',
+  }) {
     var list = <dynamic>[];
 
     var prevIsString = false;
     for (var v in value.values) {
       if (v is ASTValueStringVariable) {
-        var s2 =
-            generateASTValueStringVariable(v, precededByString: prevIsString);
+        var s2 = generateASTValueStringVariable(
+          v,
+          precededByString: prevIsString,
+        );
         list.add(s2);
         prevIsString = !prevIsString;
       } else if (v is ASTValueStringExpression) {
@@ -379,8 +418,12 @@ class ApolloCodeGeneratorJava11 extends ApolloCodeGenerator {
   }
 
   @override
-  StringBuffer generateASTValueStringVariable(ASTValueStringVariable value,
-      {StringBuffer? out, String indent = '', bool precededByString = false}) {
+  StringBuffer generateASTValueStringVariable(
+    ASTValueStringVariable value, {
+    StringBuffer? out,
+    String indent = '',
+    bool precededByString = false,
+  }) {
     out ??= newOutput();
 
     if (precededByString) {
@@ -393,8 +436,11 @@ class ApolloCodeGeneratorJava11 extends ApolloCodeGenerator {
   }
 
   @override
-  StringBuffer generateASTValueStringExpression(ASTValueStringExpression value,
-      {StringBuffer? out, String indent = ''}) {
+  StringBuffer generateASTValueStringExpression(
+    ASTValueStringExpression value, {
+    StringBuffer? out,
+    String indent = '',
+  }) {
     out ??= newOutput();
 
     var exp = generateASTExpression(value.expression).toString();
@@ -404,24 +450,36 @@ class ApolloCodeGeneratorJava11 extends ApolloCodeGenerator {
   }
 
   @override
-  StringBuffer generateASTValueArray(ASTValueArray value,
-      {StringBuffer? out, String indent = '', bool headIndented = true}) {
+  StringBuffer generateASTValueArray(
+    ASTValueArray value, {
+    StringBuffer? out,
+    String indent = '',
+    bool headIndented = true,
+  }) {
     out ??= newOutput();
     out.write(value.value);
     return out;
   }
 
   @override
-  StringBuffer generateASTValueArray2D(ASTValueArray2D value,
-      {StringBuffer? out, String indent = '', bool headIndented = true}) {
+  StringBuffer generateASTValueArray2D(
+    ASTValueArray2D value, {
+    StringBuffer? out,
+    String indent = '',
+    bool headIndented = true,
+  }) {
     out ??= newOutput();
     out.write(value.value);
     return out;
   }
 
   @override
-  StringBuffer generateASTValueArray3D(ASTValueArray3D value,
-      {StringBuffer? out, String indent = '', bool headIndented = true}) {
+  StringBuffer generateASTValueArray3D(
+    ASTValueArray3D value, {
+    StringBuffer? out,
+    String indent = '',
+    bool headIndented = true,
+  }) {
     out ??= newOutput();
     out.write(value.value);
     return out;

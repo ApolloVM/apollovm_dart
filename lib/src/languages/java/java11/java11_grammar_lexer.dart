@@ -136,15 +136,16 @@ abstract class Java11GrammarLexer extends GrammarDefinition {
       string('0x') & ref0(hexDigitLexicalToken).plus() |
       string('0X') & ref0(hexDigitLexicalToken).plus();
 
-  Parser numberLexicalToken() => ((ref0(digitLexicalToken).plus() &
-              ref0(numberOptFractionalPartLexicalToken) &
-              ref0(exponentLexicalToken).optional() &
-              ref0(numberOptIllegalEndLexicalToken)) |
-          (char('.') &
-              ref0(digitLexicalToken).plus() &
-              ref0(exponentLexicalToken).optional() &
-              ref0(numberOptIllegalEndLexicalToken)))
-      .flatten();
+  Parser numberLexicalToken() =>
+      ((ref0(digitLexicalToken).plus() &
+                  ref0(numberOptFractionalPartLexicalToken) &
+                  ref0(exponentLexicalToken).optional() &
+                  ref0(numberOptIllegalEndLexicalToken)) |
+              (char('.') &
+                  ref0(digitLexicalToken).plus() &
+                  ref0(exponentLexicalToken).optional() &
+                  ref0(numberOptIllegalEndLexicalToken)))
+          .flatten();
 
   Parser numberOptFractionalPartLexicalToken() =>
       char('.') & ref0(digitLexicalToken).plus() | epsilon();
@@ -171,13 +172,14 @@ abstract class Java11GrammarLexer extends GrammarDefinition {
 
   Parser<String> stringLexicalToken() => singleLineStringLexicalToken().trim();
 
-  Parser<String> singleLineStringLexicalToken() => (char('"') &
+  Parser<String> singleLineStringLexicalToken() =>
+      (char('"') &
               ref0(stringContentDoubleQuotedLexicalToken).star() &
               char('"'))
           .map((v) {
-        var list = v[1] as List;
-        return list.length == 1 ? list[0] : list.join('');
-      });
+            var list = v[1] as List;
+            return list.length == 1 ? list[0] : list.join('');
+          });
 
   Parser<String> stringContentDoubleQuotedLexicalToken() =>
       (stringContentDoubleQuotedLexicalTokenUnescaped() |
@@ -187,7 +189,8 @@ abstract class Java11GrammarLexer extends GrammarDefinition {
   Parser<String> stringContentDoubleQuotedLexicalTokenUnescaped() =>
       pattern('^\\"\n\r').plus().flatten();
 
-  Parser<String> stringContentQuotedLexicalTokenEscaped() => (char('\\') &
+  Parser<String> stringContentQuotedLexicalTokenEscaped() =>
+      (char('\\') &
               (char('n').map((_) => '\n') |
                   char('r').map((_) => '\r') |
                   char('"').map((_) => '"') |
@@ -196,8 +199,8 @@ abstract class Java11GrammarLexer extends GrammarDefinition {
                   char('b').map((_) => '\b') |
                   char('\\').map((_) => '\\')))
           .map((v) {
-        return v[1] as String;
-      });
+            return v[1] as String;
+          });
 
   static Parser<String> newlineLexicalToken() => pattern('\n\r');
 

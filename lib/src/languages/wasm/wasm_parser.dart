@@ -92,7 +92,9 @@ class ApolloParserWasm extends ApolloCodeParser<Uint8List> {
   }
 
   List<ASTFunctionDeclaration> _parseSectionExport(
-      Uint8List block, List<_TypeFunction>? typeFunctions) {
+    Uint8List block,
+    List<_TypeFunction>? typeFunctions,
+  ) {
     typeFunctions ??= [];
 
     var bytes = BytesBuffer.from(block);
@@ -112,11 +114,15 @@ class ApolloParserWasm extends ApolloCodeParser<Uint8List> {
 
         var astParameters = typeFunction.toASTParametersDeclaration();
 
-        var astReturn = typeFunction.results.toASTTypes().firstOrNull ??
+        var astReturn =
+            typeFunction.results.toASTTypes().firstOrNull ??
             ASTTypeVoid.instance;
 
-        var astFunction =
-            ASTFunctionDeclaration(name, astParameters, astReturn);
+        var astFunction = ASTFunctionDeclaration(
+          name,
+          astParameters,
+          astReturn,
+        );
 
         functions.add(astFunction);
       }
@@ -135,8 +141,10 @@ class _TypeFunction {
 
   List<ASTFunctionParameterDeclaration> toASTFunctionParameterDeclaration() =>
       parameters
-          .mapIndexed((i, p) =>
-              ASTFunctionParameterDeclaration(p.toASTType(), 'p$i', i, false))
+          .mapIndexed(
+            (i, p) =>
+                ASTFunctionParameterDeclaration(p.toASTType(), 'p$i', i, false),
+          )
           .toList();
 
   ASTParametersDeclaration toASTParametersDeclaration() =>

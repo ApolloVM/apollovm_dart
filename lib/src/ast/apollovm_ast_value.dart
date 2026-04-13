@@ -172,7 +172,8 @@ abstract class ASTValue<T> with ASTNode implements ASTTypedNode {
         return v1 > v2;
       }
       throw UnsupportedError(
-          "Can't perform operation '>' in non number values: $v1 > $v2");
+        "Can't perform operation '>' in non number values: $v1 > $v2",
+      );
     }
     return false;
   }
@@ -186,7 +187,8 @@ abstract class ASTValue<T> with ASTNode implements ASTTypedNode {
         return v1 < v2;
       }
       throw UnsupportedError(
-          "Can't perform operation '<' in non number values: $v1 < $v2");
+        "Can't perform operation '<' in non number values: $v1 < $v2",
+      );
     }
     return false;
   }
@@ -200,7 +202,8 @@ abstract class ASTValue<T> with ASTNode implements ASTTypedNode {
         return v1 >= v2;
       }
       throw UnsupportedError(
-          "Can't perform operation '>=' in non number values: $v1 >= $v2");
+        "Can't perform operation '>=' in non number values: $v1 >= $v2",
+      );
     }
     return false;
   }
@@ -214,7 +217,8 @@ abstract class ASTValue<T> with ASTNode implements ASTTypedNode {
         return v1 <= v2;
       }
       throw UnsupportedError(
-          "Can't perform operation '<=' in non number values: $v1 <= $v2");
+        "Can't perform operation '<=' in non number values: $v1 <= $v2",
+      );
     }
     return false;
   }
@@ -276,7 +280,8 @@ class ASTValueStatic<T> extends ASTValue<T> {
     }
 
     throw ApolloVMNullPointerException(
-        "Can't read index '$index': type: $type ; value: $value");
+      "Can't read index '$index': type: $type ; value: $value",
+    );
   }
 
   @override
@@ -293,7 +298,8 @@ class ASTValueStatic<T> extends ASTValue<T> {
     }
 
     throw ApolloVMNullPointerException(
-        "Can't read key '$key': type: $type ; value: $value");
+      "Can't read key '$key': type: $type ; value: $value",
+    );
   }
 
   @override
@@ -413,15 +419,15 @@ abstract class ASTValueNum<T extends num> extends ASTValuePrimitive<T> {
   final bool negative;
 
   ASTValueNum(ASTType<T> type, T value, {bool? negative})
-      : negative = negative ?? value.isNegative,
-        super(
-          type,
-          negative != null
-              ? (negative
+    : negative = negative ?? value.isNegative,
+      super(
+        type,
+        negative != null
+            ? (negative
                   ? (value.isNegative ? value : (-value as T))
                   : (value.isNegative ? (-value as T) : value))
-              : value,
-        ) {
+            : value,
+      ) {
     assert(this.value.isNegative == this.negative);
   }
 
@@ -472,7 +478,8 @@ abstract class ASTValueNum<T extends num> extends ASTValuePrimitive<T> {
       }
 
       throw UnsupportedError(
-          "Can't perform operation '==' in non number values: $value > $v2");
+        "Can't perform operation '==' in non number values: $value > $v2",
+      );
     }
     return false;
   }
@@ -559,7 +566,8 @@ class ASTValueInt extends ASTValueNum<int> {
       return ASTValueString('$value${other.value}');
     } else {
       throw UnsupportedValueOperationError(
-          "Can't do '+' operation with: $other");
+        "Can't do '+' operation with: $other",
+      );
     }
   }
 
@@ -571,7 +579,8 @@ class ASTValueInt extends ASTValueNum<int> {
       return ASTValueDouble(value - other.value);
     } else {
       throw UnsupportedValueOperationError(
-          "Can't do '-' operation with: $other");
+        "Can't do '-' operation with: $other",
+      );
     }
   }
 
@@ -583,7 +592,8 @@ class ASTValueInt extends ASTValueNum<int> {
       return ASTValueDouble(value / other.value);
     } else {
       throw UnsupportedValueOperationError(
-          "Can't do '/' operation with: $other");
+        "Can't do '/' operation with: $other",
+      );
     }
   }
 
@@ -595,7 +605,8 @@ class ASTValueInt extends ASTValueNum<int> {
       return ASTValueDouble(value * other.value);
     } else {
       throw UnsupportedValueOperationError(
-          "Can't do '*' operation with: $other");
+        "Can't do '*' operation with: $other",
+      );
     }
   }
 
@@ -619,7 +630,8 @@ class ASTValueDouble extends ASTValueNum<double> {
       return ASTValueString('$value${other.value}');
     } else {
       throw UnsupportedValueOperationError(
-          "Can't do '+' operation with: $other");
+        "Can't do '+' operation with: $other",
+      );
     }
   }
 
@@ -631,7 +643,8 @@ class ASTValueDouble extends ASTValueNum<double> {
       return ASTValueDouble(value - other.value);
     } else {
       throw UnsupportedValueOperationError(
-          "Can't do '-' operation with: $other");
+        "Can't do '-' operation with: $other",
+      );
     }
   }
 
@@ -643,7 +656,8 @@ class ASTValueDouble extends ASTValueNum<double> {
       return ASTValueDouble(value / other.value);
     } else {
       throw UnsupportedValueOperationError(
-          "Can't do '/' operation with: $other");
+        "Can't do '/' operation with: $other",
+      );
     }
   }
 
@@ -655,7 +669,8 @@ class ASTValueDouble extends ASTValueNum<double> {
       return ASTValueDouble(value * other.value);
     } else {
       throw UnsupportedValueOperationError(
-          "Can't do '*' operation with: $other");
+        "Can't do '*' operation with: $other",
+      );
     }
   }
 
@@ -672,25 +687,29 @@ class ASTValueString extends ASTValuePrimitive<String> {
   @override
   bool operator >(Object other) {
     throw UnsupportedError(
-        "Can't perform operation '>' in non number values: $this > $other");
+      "Can't perform operation '>' in non number values: $this > $other",
+    );
   }
 
   @override
   bool operator <(Object other) {
     throw UnsupportedError(
-        "Can't perform operation '<' in non number values: $this > $other");
+      "Can't perform operation '<' in non number values: $this > $other",
+    );
   }
 
   @override
   bool operator >=(Object other) {
     throw UnsupportedError(
-        "Can't perform operation '>=' in non number values: $this > $other");
+      "Can't perform operation '>=' in non number values: $this > $other",
+    );
   }
 
   @override
   bool operator <=(Object other) {
     throw UnsupportedError(
-        "Can't perform operation '<=' in non number values: $this > $other");
+      "Can't perform operation '<=' in non number values: $this > $other",
+    );
   }
 
   @override
@@ -783,7 +802,7 @@ class ASTValueArray<T extends ASTType<V>, V> extends ASTValueStatic<List<V>> {
 class ASTValueArray2D<T extends ASTType<V>, V>
     extends ASTValueArray<ASTTypeArray<T, V>, List<V>> {
   ASTValueArray2D(T type, List<List<V>> value)
-      : super(ASTTypeArray<T, V>(type), value);
+    : super(ASTTypeArray<T, V>(type), value);
 
   static final DeepCollectionEquality _listEquality =
       const DeepCollectionEquality();
@@ -813,14 +832,14 @@ class ASTValueArray2D<T extends ASTType<V>, V>
 class ASTValueArray3D<T extends ASTType<V>, V>
     extends ASTValueArray2D<ASTTypeArray<T, V>, List<V>> {
   ASTValueArray3D(T type, List<List<List<V>>> value)
-      : super(ASTTypeArray<T, V>(type), value);
+    : super(ASTTypeArray<T, V>(type), value);
 }
 
 /// [ASTValue] for a [Map].
 class ASTValueMap<TK extends ASTType<K>, TV extends ASTType<V>, K, V>
     extends ASTValueStatic<Map<K, V>> {
   ASTValueMap(TK keyType, TV valueType, Map<K, V> value)
-      : super(ASTTypeMap<TK, TV, K, V>(keyType, valueType), value);
+    : super(ASTTypeMap<TK, TV, K, V>(keyType, valueType), value);
 
   static final MapEquality _mapEquality = const MapEquality();
 
@@ -919,7 +938,8 @@ class ASTValueStringExpression<T> extends ASTValue<String> {
 
   @override
   FutureOr<String> getValueNoContext() => throw UnsupportedError(
-      "Can't define an expression value without a context!");
+    "Can't define an expression value without a context!",
+  );
 
   @override
   FutureOr<ASTValueString> resolve(VMContext context) {
@@ -950,7 +970,8 @@ class ASTValueStringVariable<T> extends ASTValue<String> {
 
   @override
   String getValueNoContext() => throw UnsupportedError(
-      "Can't define an variable value without a context!");
+    "Can't define an variable value without a context!",
+  );
 
   @override
   FutureOr<ASTValue<String>> resolve(VMContext context) {
@@ -1140,27 +1161,56 @@ class ASTClassInstance<V extends ASTValue> extends ASTValue<V> {
     return this;
   }
 
-  FutureOr<ASTValue?> getField(VMClassContext context, String name,
-          {bool caseInsensitive = false}) =>
-      clazz.getInstanceFieldValue(context, ASTRunStatus(), this, name,
-          caseInsensitive: caseInsensitive);
+  FutureOr<ASTValue?> getField(
+    VMClassContext context,
+    String name, {
+    bool caseInsensitive = false,
+  }) => clazz.getInstanceFieldValue(
+    context,
+    ASTRunStatus(),
+    this,
+    name,
+    caseInsensitive: caseInsensitive,
+  );
 
   FutureOr<ASTValue?> setField(
-          VMClassContext context, String name, ASTValue value,
-          {bool caseInsensitive = false}) =>
-      clazz.setInstanceFieldValue(context, ASTRunStatus(), this, name, value,
-          caseInsensitive: caseInsensitive);
+    VMClassContext context,
+    String name,
+    ASTValue value, {
+    bool caseInsensitive = false,
+  }) => clazz.setInstanceFieldValue(
+    context,
+    ASTRunStatus(),
+    this,
+    name,
+    value,
+    caseInsensitive: caseInsensitive,
+  );
 
-  FutureOr<ASTValue?> removeField(VMClassContext context, String name,
-          {bool caseInsensitive = false}) =>
-      clazz.removeInstanceFieldValue(context, ASTRunStatus(), this, name,
-          caseInsensitive: caseInsensitive);
+  FutureOr<ASTValue?> removeField(
+    VMClassContext context,
+    String name, {
+    bool caseInsensitive = false,
+  }) => clazz.removeInstanceFieldValue(
+    context,
+    ASTRunStatus(),
+    this,
+    name,
+    caseInsensitive: caseInsensitive,
+  );
 
-  void setFields(VMClassContext context, Map<String, ASTValue> fieldsValues,
-      {bool caseInsensitive = false}) {
+  void setFields(
+    VMClassContext context,
+    Map<String, ASTValue> fieldsValues, {
+    bool caseInsensitive = false,
+  }) {
     for (var entry in fieldsValues.entries) {
-      setField(context, entry.key, entry.value,
-          caseInsensitive: caseInsensitive);
+      setField(
+        context,
+        entry.key,
+        entry.value,
+        caseInsensitive: caseInsensitive,
+      );
     }
   }
 
@@ -1177,8 +1227,8 @@ class ASTClassStaticAccessor<C extends ASTClass<V>, V> extends ASTValue<V> {
   final ASTStaticClassAccessorVariable<V> staticClassAccessorVariable;
 
   ASTClassStaticAccessor(this.clazz)
-      : staticClassAccessorVariable = ASTStaticClassAccessorVariable(clazz),
-        super(clazz.type) {
+    : staticClassAccessorVariable = ASTStaticClassAccessorVariable(clazz),
+      super(clazz.type) {
     if (type.name != clazz.name) {
       throw StateError('Incompatible class with type: $clazz != $type');
     }
@@ -1203,27 +1253,56 @@ class ASTClassStaticAccessor<C extends ASTClass<V>, V> extends ASTValue<V> {
     return this;
   }
 
-  FutureOr<ASTValue?> getField(VMClassContext context, String name,
-          {bool caseInsensitive = false}) =>
-      clazz.getInstanceFieldValue(context, ASTRunStatus(), this, name,
-          caseInsensitive: caseInsensitive);
+  FutureOr<ASTValue?> getField(
+    VMClassContext context,
+    String name, {
+    bool caseInsensitive = false,
+  }) => clazz.getInstanceFieldValue(
+    context,
+    ASTRunStatus(),
+    this,
+    name,
+    caseInsensitive: caseInsensitive,
+  );
 
   FutureOr<ASTValue?> setField(
-          VMClassContext context, String name, ASTValue value,
-          {bool caseInsensitive = false}) =>
-      clazz.setInstanceFieldValue(context, ASTRunStatus(), this, name, value,
-          caseInsensitive: caseInsensitive);
+    VMClassContext context,
+    String name,
+    ASTValue value, {
+    bool caseInsensitive = false,
+  }) => clazz.setInstanceFieldValue(
+    context,
+    ASTRunStatus(),
+    this,
+    name,
+    value,
+    caseInsensitive: caseInsensitive,
+  );
 
-  FutureOr<ASTValue?> removeField(VMClassContext context, String name,
-          {bool caseInsensitive = false}) =>
-      clazz.removeInstanceFieldValue(context, ASTRunStatus(), this, name,
-          caseInsensitive: caseInsensitive);
+  FutureOr<ASTValue?> removeField(
+    VMClassContext context,
+    String name, {
+    bool caseInsensitive = false,
+  }) => clazz.removeInstanceFieldValue(
+    context,
+    ASTRunStatus(),
+    this,
+    name,
+    caseInsensitive: caseInsensitive,
+  );
 
-  void setFields(VMClassContext context, Map<String, ASTValue> fieldsValues,
-      {bool caseInsensitive = false}) {
+  void setFields(
+    VMClassContext context,
+    Map<String, ASTValue> fieldsValues, {
+    bool caseInsensitive = false,
+  }) {
     for (var entry in fieldsValues.entries) {
-      setField(context, entry.key, entry.value,
-          caseInsensitive: caseInsensitive);
+      setField(
+        context,
+        entry.key,
+        entry.value,
+        caseInsensitive: caseInsensitive,
+      );
     }
   }
 
@@ -1238,9 +1317,11 @@ class ASTValueFuture<T extends ASTType<V>, V> extends ASTValue<Future<V>> {
   Future<V> future;
 
   ASTValueFuture(ASTType type, this.future)
-      : super(type is ASTTypeFuture
+    : super(
+        type is ASTTypeFuture
             ? type as ASTTypeFuture<T, V>
-            : ASTTypeFuture<T, V>(type as T));
+            : ASTTypeFuture<T, V>(type as T),
+      );
 
   @override
   Iterable<ASTNode> get children => [];

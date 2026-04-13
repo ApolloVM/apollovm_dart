@@ -4,7 +4,7 @@
 
 import 'package:async_extension/async_extension.dart';
 import 'package:collection/collection.dart'
-    show IterableExtension, IterableNullableExtension, equalsIgnoreAsciiCase;
+    show IterableExtension, equalsIgnoreAsciiCase;
 
 import '../apollovm_base.dart';
 import '../core/apollovm_core_base.dart';
@@ -27,8 +27,10 @@ class ASTEntryPointBlock extends ASTBlock {
     Map<String, ASTValue>? classInstanceFields,
     VMTypeResolver? typeResolver,
   }) async {
-    var rootContext =
-        await _initializeEntryPointBlock(externalFunctionMapper, typeResolver);
+    var rootContext = await _initializeEntryPointBlock(
+      externalFunctionMapper,
+      typeResolver,
+    );
 
     ApolloExternalFunctionMapper? prevExternalFunctionMapper;
     if (externalFunctionMapper != null) {
@@ -38,14 +40,21 @@ class ASTEntryPointBlock extends ASTBlock {
 
     var prevContext = VMContext.setCurrent(rootContext);
     try {
-      var fSignature =
-          ASTFunctionSignature.from(positionalParameters, namedParameters);
+      var fSignature = ASTFunctionSignature.from(
+        positionalParameters,
+        namedParameters,
+      );
 
-      var f = getFunction(entryFunctionName, fSignature, rootContext,
-          caseInsensitive: true);
+      var f = getFunction(
+        entryFunctionName,
+        fSignature,
+        rootContext,
+        caseInsensitive: true,
+      );
       if (f == null) {
         throw ApolloVMRuntimeError(
-            "Can't find entry function: $entryFunctionName");
+          "Can't find entry function: $entryFunctionName",
+        );
       }
 
       var context = rootContext;
@@ -54,47 +63,65 @@ class ASTEntryPointBlock extends ASTBlock {
         if (this is ASTClass) {
           var clazz = this as ASTClass;
           var classContext = clazz._createContext(typeResolver, rootContext);
-          var obj =
-              (await clazz.createInstance(classContext, ASTRunStatus.dummy))!;
+          var obj = (await clazz.createInstance(
+            classContext,
+            ASTRunStatus.dummy,
+          ))!;
 
           if (classInstanceObject != null) {
             await clazz.setInstanceByVMObject(
-                classContext, ASTRunStatus.dummy, obj, classInstanceObject);
+              classContext,
+              ASTRunStatus.dummy,
+              obj,
+              classInstanceObject,
+            );
           }
 
           if (classInstanceFields != null) {
             await clazz.setInstanceByMap(
-                classContext, ASTRunStatus.dummy, obj, classInstanceFields);
+              classContext,
+              ASTRunStatus.dummy,
+              obj,
+              classInstanceFields,
+            );
           }
 
           classContext.setClassInstance(obj);
           context = classContext;
         } else {
           throw ApolloVMRuntimeError(
-              "Can't call non-static function without a class context: $this");
+            "Can't call non-static function without a class context: $this",
+          );
         }
       }
 
-      return await f.call(context,
-          positionalParameters: positionalParameters,
-          namedParameters: namedParameters);
+      return await f.call(
+        context,
+        positionalParameters: positionalParameters,
+        namedParameters: namedParameters,
+      );
     } finally {
       VMContext.setCurrent(prevContext);
       if (identical(
-          rootContext.externalFunctionMapper, externalFunctionMapper)) {
+        rootContext.externalFunctionMapper,
+        externalFunctionMapper,
+      )) {
         rootContext.externalFunctionMapper = prevExternalFunctionMapper;
       }
     }
   }
 
   FutureOr<ASTFunctionDeclaration?> getFunctionWithParameters(
-      String entryFunctionName,
-      List? positionalParameters,
-      Map? namedParameters,
-      {ApolloExternalFunctionMapper? externalFunctionMapper,
-      VMTypeResolver? typeResolver}) async {
-    var rootContext =
-        await _initializeEntryPointBlock(externalFunctionMapper, typeResolver);
+    String entryFunctionName,
+    List? positionalParameters,
+    Map? namedParameters, {
+    ApolloExternalFunctionMapper? externalFunctionMapper,
+    VMTypeResolver? typeResolver,
+  }) async {
+    var rootContext = await _initializeEntryPointBlock(
+      externalFunctionMapper,
+      typeResolver,
+    );
 
     ApolloExternalFunctionMapper? prevExternalFunctionMapper;
     if (externalFunctionMapper != null) {
@@ -104,8 +131,10 @@ class ASTEntryPointBlock extends ASTBlock {
 
     var prevContext = VMContext.setCurrent(rootContext);
     try {
-      var fSignature =
-          ASTFunctionSignature.from(positionalParameters, namedParameters);
+      var fSignature = ASTFunctionSignature.from(
+        positionalParameters,
+        namedParameters,
+      );
 
       try {
         var f = getFunction(entryFunctionName, fSignature, rootContext);
@@ -116,7 +145,9 @@ class ASTEntryPointBlock extends ASTBlock {
     } finally {
       VMContext.setCurrent(prevContext);
       if (identical(
-          rootContext.externalFunctionMapper, externalFunctionMapper)) {
+        rootContext.externalFunctionMapper,
+        externalFunctionMapper,
+      )) {
         rootContext.externalFunctionMapper = prevExternalFunctionMapper;
       }
     }
@@ -125,8 +156,9 @@ class ASTEntryPointBlock extends ASTBlock {
   VMContext? _rootContext;
 
   Future<VMContext> _initializeEntryPointBlock(
-      ApolloExternalFunctionMapper? externalFunctionMapper,
-      VMTypeResolver? typeResolver) async {
+    ApolloExternalFunctionMapper? externalFunctionMapper,
+    VMTypeResolver? typeResolver,
+  ) async {
     if (_rootContext == null) {
       var rootContext = _createContext(typeResolver);
       var rootStatus = ASTRunStatus();
@@ -145,7 +177,9 @@ class ASTEntryPointBlock extends ASTBlock {
         VMContext.setCurrent(prevContext);
 
         if (identical(
-            rootContext.externalFunctionMapper, externalFunctionMapper)) {
+          rootContext.externalFunctionMapper,
+          externalFunctionMapper,
+        )) {
           rootContext.externalFunctionMapper = prevExternalFunctionMapper;
         }
       }
@@ -170,23 +204,27 @@ abstract class ASTClass<T> extends ASTEntryPointBlock {
   }
 
   @override
-  VMClassContext _createContext(VMTypeResolver? typeResolver,
-          [VMContext? parentContext]) =>
-      VMClassContext(this, parent: parentContext, typeResolver: typeResolver);
+  VMClassContext _createContext(
+    VMTypeResolver? typeResolver, [
+    VMContext? parentContext,
+  ]) => VMClassContext(this, parent: parentContext, typeResolver: typeResolver);
 
   List<ASTClassField> get fields;
 
   List<String> get fieldsNames;
 
   /// Returns a [Map<String,Object>] with the fields names and values.
-  FutureOr<Map<String, Object>> getFieldsMap(
-      {VMContext? context, Map<String, ASTValue>? fieldOverwrite});
+  FutureOr<Map<String, Object>> getFieldsMap({
+    VMContext? context,
+    Map<String, ASTValue>? fieldOverwrite,
+  });
 
   /// Builds a [Map<String,Object>] with the fields names and values.
   static FutureOr<Map<String, Object>> buildFieldsMap(
-      Map<String, ASTClassField> fields,
-      {VMContext? context,
-      Map<String, ASTValue>? fieldOverwrite}) async {
+    Map<String, ASTClassField> fields, {
+    VMContext? context,
+    Map<String, ASTValue>? fieldOverwrite,
+  }) async {
     var astRunStatus = ASTRunStatus();
 
     var fieldsEntriesFuture = fields.values.map((f) async {
@@ -223,36 +261,62 @@ abstract class ASTClass<T> extends ASTEntryPointBlock {
   ASTClassField? getField(String name, {bool caseInsensitive = false});
 
   FutureOr<ASTValue<T>?> createInstance(
-      VMClassContext context, ASTRunStatus runStatus);
+    VMClassContext context,
+    ASTRunStatus runStatus,
+  );
 
   FutureOr<void> initializeInstance(
-      VMClassContext context, ASTRunStatus runStatus, ASTValue<T> instance);
+    VMClassContext context,
+    ASTRunStatus runStatus,
+    ASTValue<T> instance,
+  );
 
-  FutureOr<void> setInstanceByValue(VMClassContext context,
-      ASTRunStatus runStatus, ASTValue<T> instance, ASTValue<T> value);
+  FutureOr<void> setInstanceByValue(
+    VMClassContext context,
+    ASTRunStatus runStatus,
+    ASTValue<T> instance,
+    ASTValue<T> value,
+  );
 
-  FutureOr<void> setInstanceByVMObject(VMClassContext context,
-      ASTRunStatus runStatus, ASTValue<T> instance, VMObject value);
+  FutureOr<void> setInstanceByVMObject(
+    VMClassContext context,
+    ASTRunStatus runStatus,
+    ASTValue<T> instance,
+    VMObject value,
+  );
 
-  FutureOr<void> setInstanceByMap(VMClassContext context,
-      ASTRunStatus runStatus, ASTValue<T> instance, Map<String, ASTValue> value,
-      {bool caseInsensitive = false});
+  FutureOr<void> setInstanceByMap(
+    VMClassContext context,
+    ASTRunStatus runStatus,
+    ASTValue<T> instance,
+    Map<String, ASTValue> value, {
+    bool caseInsensitive = false,
+  });
 
-  FutureOr<ASTValue?> getInstanceFieldValue(VMContext context,
-      ASTRunStatus runStatus, ASTValue<T> instance, String fieldName,
-      {bool caseInsensitive = false});
+  FutureOr<ASTValue?> getInstanceFieldValue(
+    VMContext context,
+    ASTRunStatus runStatus,
+    ASTValue<T> instance,
+    String fieldName, {
+    bool caseInsensitive = false,
+  });
 
   FutureOr<ASTValue?> setInstanceFieldValue(
-      VMContext context,
-      ASTRunStatus runStatus,
-      ASTValue<T> instance,
-      String fieldName,
-      ASTValue value,
-      {bool caseInsensitive = false});
+    VMContext context,
+    ASTRunStatus runStatus,
+    ASTValue<T> instance,
+    String fieldName,
+    ASTValue value, {
+    bool caseInsensitive = false,
+  });
 
-  FutureOr<ASTValue?> removeInstanceFieldValue(VMContext context,
-      ASTRunStatus runStatus, ASTValue<T> instance, String fieldName,
-      {bool caseInsensitive = false});
+  FutureOr<ASTValue?> removeInstanceFieldValue(
+    VMContext context,
+    ASTRunStatus runStatus,
+    ASTValue<T> instance,
+    String fieldName, {
+    bool caseInsensitive = false,
+  });
 
   @override
   void resolveNode(ASTNode? parentNode) {
@@ -291,9 +355,10 @@ class ASTClassPrimitive<T> extends ASTClass<T> {
   List<String> get fieldsNames => <String>[];
 
   @override
-  FutureOr<Map<String, Object>> getFieldsMap(
-          {VMContext? context, Map<String, ASTValue>? fieldOverwrite}) =>
-      <String, Object>{};
+  FutureOr<Map<String, Object>> getFieldsMap({
+    VMContext? context,
+    Map<String, ASTValue>? fieldOverwrite,
+  }) => <String, Object>{};
 
   @override
   void addFunction(ASTFunctionDeclaration f) {}
@@ -305,48 +370,71 @@ class ASTClassPrimitive<T> extends ASTClass<T> {
 
   @override
   FutureOr<ASTValue<T>?> createInstance(
-      VMClassContext context, ASTRunStatus runStatus) {
+    VMClassContext context,
+    ASTRunStatus runStatus,
+  ) {
     return type.toDefaultValue(context);
   }
 
   @override
   FutureOr<void> initializeInstance(
-      VMClassContext context, ASTRunStatus runStatus, ASTValue<T> instance) {}
+    VMClassContext context,
+    ASTRunStatus runStatus,
+    ASTValue<T> instance,
+  ) {}
 
   @override
-  FutureOr<void> setInstanceByVMObject(VMClassContext context,
-      ASTRunStatus runStatus, ASTValue<T> instance, VMObject value) {}
+  FutureOr<void> setInstanceByVMObject(
+    VMClassContext context,
+    ASTRunStatus runStatus,
+    ASTValue<T> instance,
+    VMObject value,
+  ) {}
 
   @override
-  FutureOr<void> setInstanceByValue(VMClassContext context,
-      ASTRunStatus runStatus, ASTValue<T> instance, ASTValue<T> value) {}
+  FutureOr<void> setInstanceByValue(
+    VMClassContext context,
+    ASTRunStatus runStatus,
+    ASTValue<T> instance,
+    ASTValue<T> value,
+  ) {}
 
   @override
-  FutureOr<void> setInstanceByMap(VMClassContext context,
-      ASTRunStatus runStatus, ASTValue<T> instance, Map<String, ASTValue> value,
-      {bool caseInsensitive = false}) {}
+  FutureOr<void> setInstanceByMap(
+    VMClassContext context,
+    ASTRunStatus runStatus,
+    ASTValue<T> instance,
+    Map<String, ASTValue> value, {
+    bool caseInsensitive = false,
+  }) {}
 
   @override
-  FutureOr<ASTValue?> getInstanceFieldValue(VMContext context,
-          ASTRunStatus runStatus, ASTValue<T> instance, String fieldName,
-          {bool caseInsensitive = false}) =>
-      null;
+  FutureOr<ASTValue?> getInstanceFieldValue(
+    VMContext context,
+    ASTRunStatus runStatus,
+    ASTValue<T> instance,
+    String fieldName, {
+    bool caseInsensitive = false,
+  }) => null;
 
   @override
   FutureOr<ASTValue?> setInstanceFieldValue(
-          VMContext context,
-          ASTRunStatus runStatus,
-          ASTValue<T> instance,
-          String fieldName,
-          ASTValue value,
-          {bool caseInsensitive = false}) =>
-      null;
+    VMContext context,
+    ASTRunStatus runStatus,
+    ASTValue<T> instance,
+    String fieldName,
+    ASTValue value, {
+    bool caseInsensitive = false,
+  }) => null;
 
   @override
-  FutureOr<ASTValue?> removeInstanceFieldValue(VMContext context,
-          ASTRunStatus runStatus, ASTValue<T> instance, String fieldName,
-          {bool caseInsensitive = false}) =>
-      null;
+  FutureOr<ASTValue?> removeInstanceFieldValue(
+    VMContext context,
+    ASTRunStatus runStatus,
+    ASTValue<T> instance,
+    String fieldName, {
+    bool caseInsensitive = false,
+  }) => null;
 }
 
 /// AST of a normal VM Class.
@@ -398,10 +486,14 @@ class ASTClassNormal extends ASTClass<VMObject> {
   }
 
   @override
-  FutureOr<Map<String, Object>> getFieldsMap(
-          {VMContext? context, Map<String, ASTValue>? fieldOverwrite}) =>
-      ASTClass.buildFieldsMap(_fields,
-          context: context, fieldOverwrite: fieldOverwrite);
+  FutureOr<Map<String, Object>> getFieldsMap({
+    VMContext? context,
+    Map<String, ASTValue>? fieldOverwrite,
+  }) => ASTClass.buildFieldsMap(
+    _fields,
+    context: context,
+    fieldOverwrite: fieldOverwrite,
+  );
 
   @override
   void addFunction(ASTFunctionDeclaration f) {
@@ -431,15 +523,22 @@ class ASTClassNormal extends ASTClass<VMObject> {
 
   @override
   FutureOr<ASTClassInstance<VMObject>?> createInstance(
-      VMClassContext context, ASTRunStatus runStatus) {
+    VMClassContext context,
+    ASTRunStatus runStatus,
+  ) {
     var obj = ASTClassInstance<VMObject>(
-        this, VMObject.createInstance(context, type));
+      this,
+      VMObject.createInstance(context, type),
+    );
     return initializeInstance(context, runStatus, obj).resolveWithValue(obj);
   }
 
   @override
-  FutureOr<void> initializeInstance(VMClassContext context,
-      ASTRunStatus runStatus, ASTValue<VMObject> instance) async {
+  FutureOr<void> initializeInstance(
+    VMClassContext context,
+    ASTRunStatus runStatus,
+    ASTValue<VMObject> instance,
+  ) async {
     if (instance is! ASTClassInstance<VMObject>) {
       throw _exceptionNotClassInstance(instance);
     }
@@ -456,10 +555,11 @@ class ASTClassNormal extends ASTClass<VMObject> {
 
   @override
   FutureOr<void> setInstanceByVMObject(
-      VMClassContext context,
-      ASTRunStatus runStatus,
-      ASTValue<VMObject> instance,
-      VMObject value) async {
+    VMClassContext context,
+    ASTRunStatus runStatus,
+    ASTValue<VMObject> instance,
+    VMObject value,
+  ) async {
     if (instance is! ASTClassInstance<VMObject>) {
       throw _exceptionNotClassInstance(instance);
     }
@@ -474,10 +574,11 @@ class ASTClassNormal extends ASTClass<VMObject> {
 
   @override
   FutureOr<void> setInstanceByValue(
-      VMClassContext context,
-      ASTRunStatus runStatus,
-      ASTValue<VMObject> instance,
-      ASTValue<VMObject> value) async {
+    VMClassContext context,
+    ASTRunStatus runStatus,
+    ASTValue<VMObject> instance,
+    ASTValue<VMObject> value,
+  ) async {
     if (instance is! ASTClassInstance<VMObject>) {
       throw _exceptionNotClassInstance(instance);
     }
@@ -491,17 +592,19 @@ class ASTClassNormal extends ASTClass<VMObject> {
   }
 
   ApolloVMCastException _exceptionNotClassInstance(
-          ASTValue<VMObject> instance) =>
-      ApolloVMCastException(
-          "Can't cast $instance to ASTClassInstance<VMObject>");
+    ASTValue<VMObject> instance,
+  ) => ApolloVMCastException(
+    "Can't cast $instance to ASTClassInstance<VMObject>",
+  );
 
   @override
   FutureOr<void> setInstanceByMap(
-      VMClassContext context,
-      ASTRunStatus runStatus,
-      ASTValue<VMObject> instance,
-      Map<String, ASTValue> value,
-      {bool caseInsensitive = false}) async {
+    VMClassContext context,
+    ASTRunStatus runStatus,
+    ASTValue<VMObject> instance,
+    Map<String, ASTValue> value, {
+    bool caseInsensitive = false,
+  }) async {
     if (instance is! ASTClassInstance<VMObject>) {
       throw _exceptionNotClassInstance(instance);
     }
@@ -522,9 +625,13 @@ class ASTClassNormal extends ASTClass<VMObject> {
   }
 
   @override
-  FutureOr<ASTValue?> getInstanceFieldValue(VMContext context,
-      ASTRunStatus runStatus, ASTValue<VMObject> instance, String fieldName,
-      {bool caseInsensitive = false}) {
+  FutureOr<ASTValue?> getInstanceFieldValue(
+    VMContext context,
+    ASTRunStatus runStatus,
+    ASTValue<VMObject> instance,
+    String fieldName, {
+    bool caseInsensitive = false,
+  }) {
     if (instance is! ASTClassInstance<VMObject>) {
       throw _exceptionNotClassInstance(instance);
     }
@@ -541,12 +648,13 @@ class ASTClassNormal extends ASTClass<VMObject> {
 
   @override
   FutureOr<ASTValue?> setInstanceFieldValue(
-      VMContext context,
-      ASTRunStatus runStatus,
-      ASTValue<VMObject> instance,
-      String fieldName,
-      ASTValue value,
-      {bool caseInsensitive = false}) {
+    VMContext context,
+    ASTRunStatus runStatus,
+    ASTValue<VMObject> instance,
+    String fieldName,
+    ASTValue value, {
+    bool caseInsensitive = false,
+  }) {
     if (instance is! ASTClassInstance<VMObject>) {
       throw _exceptionNotClassInstance(instance);
     }
@@ -562,9 +670,13 @@ class ASTClassNormal extends ASTClass<VMObject> {
   }
 
   @override
-  FutureOr<ASTValue?> removeInstanceFieldValue(VMContext context,
-      ASTRunStatus runStatus, ASTValue<VMObject> instance, String fieldName,
-      {bool caseInsensitive = false}) {
+  FutureOr<ASTValue?> removeInstanceFieldValue(
+    VMContext context,
+    ASTRunStatus runStatus,
+    ASTValue<VMObject> instance,
+    String fieldName, {
+    bool caseInsensitive = false,
+  }) {
     if (instance is! ASTClassInstance<VMObject>) {
       throw _exceptionNotClassInstance(instance);
     }
@@ -713,7 +825,11 @@ class ASTFunctionParameterDeclaration<T> extends ASTParameterDeclaration<T> {
   final bool optional;
 
   ASTFunctionParameterDeclaration(
-      super.type, super.name, this.index, this.optional);
+    super.type,
+    super.name,
+    this.index,
+    this.optional,
+  );
 }
 
 /// An AST Function Signature.
@@ -725,12 +841,12 @@ class ASTFunctionSignature with ASTNode {
   ASTFunctionSignature(this.positionalTypes, this.namedTypes);
 
   @override
-  Iterable<ASTNode> get children => [
-        ...?positionalTypes?.whereNotNull(),
-      ];
+  Iterable<ASTNode> get children => [...?positionalTypes?.nonNulls];
 
   static ASTFunctionSignature from(
-      List? positionalParameters, Map? namedParameters) {
+    List? positionalParameters,
+    Map? namedParameters,
+  ) {
     if ((positionalParameters == null || positionalParameters.isEmpty) &&
         (namedParameters == null || namedParameters.isEmpty)) {
       return ASTFunctionSignature(null, null);
@@ -753,8 +869,10 @@ class ASTFunctionSignature with ASTNode {
     return params.map((e) => toASTType(e, context)).toList();
   }
 
-  static Map<String, ASTType?>? toASTTypeMap(Map? params,
-      [VMContext? context]) {
+  static Map<String, ASTType?>? toASTTypeMap(
+    Map? params, [
+    VMContext? context,
+  ]) {
     if (params == null || params.isEmpty) return null;
     return params.map((k, v) => MapEntry('$k', toASTType(v, context)));
   }
@@ -834,11 +952,13 @@ class ASTFunctionSignature with ASTNode {
     if (namedTypes != null && namedTypes!.isNotEmpty) {
       if (s.length > 1) s.write(', ');
       s.write('namedTypes: ');
-      s.write(namedTypes!.entries.map((e) {
-        var k = e.key;
-        var v = e.value;
-        return v != null ? '$k: $v' : '$k: ?';
-      }).toList());
+      s.write(
+        namedTypes!.entries.map((e) {
+          var k = e.key;
+          var v = e.value;
+          return v != null ? '$k: $v' : '$k: ?';
+        }).toList(),
+      );
     }
 
     s.write('}');
@@ -856,7 +976,9 @@ abstract class ASTFunctionSet with ASTNode {
   ASTFunctionDeclaration get firstFunction;
 
   ASTFunctionDeclaration get(
-      ASTFunctionSignature parametersSignature, bool exactTypes);
+    ASTFunctionSignature parametersSignature,
+    bool exactTypes,
+  );
 
   ASTFunctionSet add(ASTFunctionDeclaration f);
 }
@@ -878,13 +1000,16 @@ class ASTFunctionSetSingle extends ASTFunctionSet {
 
   @override
   ASTFunctionDeclaration get(
-      ASTFunctionSignature parametersSignature, bool exactTypes) {
+    ASTFunctionSignature parametersSignature,
+    bool exactTypes,
+  ) {
     if (f.matchesParametersTypes(parametersSignature, exactTypes)) {
       return f;
     }
 
     throw StateError(
-        'Function \'${f.name}\' parameters signature not compatible: sign:$parametersSignature != f:${f.parameters}');
+      'Function \'${f.name}\' parameters signature not compatible: sign:$parametersSignature != f:${f.parameters}',
+    );
   }
 
   @override
@@ -929,7 +1054,9 @@ class ASTFunctionSetMultiple extends ASTFunctionSet {
 
   @override
   ASTFunctionDeclaration get(
-      ASTFunctionSignature parametersSignature, bool exactTypes) {
+    ASTFunctionSignature parametersSignature,
+    bool exactTypes,
+  ) {
     for (var f in _functions) {
       if (f.matchesParametersTypes(parametersSignature, exactTypes)) {
         return f;
@@ -947,7 +1074,8 @@ class ASTFunctionSetMultiple extends ASTFunctionSet {
     }
 
     throw StateError(
-        "Can't find function '${first?.name}' with signature: $parametersSignature");
+      "Can't find function '${first?.name}' with signature: $parametersSignature",
+    );
   }
 
   @override
@@ -992,8 +1120,11 @@ class ASTParametersDeclaration {
 
   List<ASTFunctionParameterDeclaration>? namedParameters;
 
-  ASTParametersDeclaration(this.positionalParameters,
-      [this.optionalParameters, this.namedParameters]);
+  ASTParametersDeclaration(
+    this.positionalParameters, [
+    this.optionalParameters,
+    this.namedParameters,
+  ]);
 
   void resolveNode(ASTNode? parentNode) {
     if (positionalParameters != null) {
@@ -1017,10 +1148,10 @@ class ASTParametersDeclaration {
 
   /// Returns a list with all the [positionalParameters], [optionalParameters] and [namedParameters].
   List<ASTFunctionParameterDeclaration> get allParameters => [
-        ...?positionalParameters,
-        ...?optionalParameters,
-        ...?namedParameters,
-      ];
+    ...?positionalParameters,
+    ...?optionalParameters,
+    ...?namedParameters,
+  ];
 
   int get positionalParametersSize => positionalParameters?.length ?? 0;
 
@@ -1074,7 +1205,9 @@ class ASTParametersDeclaration {
   ///
   /// - [exactTypes] if true the types should be exact, and not only acceptable.
   bool matchesParametersTypes(
-      ASTFunctionSignature parametersSignature, bool exactTypes) {
+    ASTFunctionSignature parametersSignature,
+    bool exactTypes,
+  ) {
     var parametersSize = size;
     var paramsSignSize = parametersSignature.size;
 
@@ -1121,7 +1254,10 @@ class ASTParametersDeclaration {
   ///
   /// - [exactType]: if true the [param] should be exact to [type].
   static bool parameterAcceptsType(
-      ASTFunctionParameterDeclaration? param, ASTType? type, bool exactType) {
+    ASTFunctionParameterDeclaration? param,
+    ASTType? type,
+    bool exactType,
+  ) {
     if (param == null || type == null) {
       return false;
     }
@@ -1170,18 +1306,28 @@ class ASTClassFunctionDeclaration<T> extends ASTFunctionDeclaration<T> {
 
   ASTType? get classType => clazz?.type;
 
-  ASTClassFunctionDeclaration(this.clazz, String name,
-      ASTParametersDeclaration parameters, ASTType<T> returnType,
-      {ASTBlock? block, ASTModifiers? modifiers})
-      : super(name, parameters, returnType, block: block, modifiers: modifiers);
+  ASTClassFunctionDeclaration(
+    this.clazz,
+    String name,
+    ASTParametersDeclaration parameters,
+    ASTType<T> returnType, {
+    ASTBlock? block,
+    ASTModifiers? modifiers,
+  }) : super(name, parameters, returnType, block: block, modifiers: modifiers);
 
-  FutureOr<ASTValue<T>> objectCall(VMContext parent, ASTValue classInstance,
-      {List? positionalParameters, Map? namedParameters}) {
+  FutureOr<ASTValue<T>> objectCall(
+    VMContext parent,
+    ASTValue classInstance, {
+    List? positionalParameters,
+    Map? namedParameters,
+  }) {
     var objContext = VMClassContext(clazz!, parent: parent);
     objContext.setClassInstance(classInstance);
-    return call(objContext,
-        positionalParameters: positionalParameters,
-        namedParameters: namedParameters);
+    return call(
+      objContext,
+      positionalParameters: positionalParameters,
+      namedParameters: namedParameters,
+    );
   }
 }
 
@@ -1199,10 +1345,14 @@ class ASTFunctionDeclaration<T> extends ASTBlock {
   /// Modifiers of this function.
   final ASTModifiers modifiers;
 
-  ASTFunctionDeclaration(this.name, this._parameters, this.returnType,
-      {ASTBlock? block, ASTModifiers? modifiers})
-      : modifiers = modifiers ?? ASTModifiers.modifiersNone,
-        super(null) {
+  ASTFunctionDeclaration(
+    this.name,
+    this._parameters,
+    this.returnType, {
+    ASTBlock? block,
+    ASTModifiers? modifiers,
+  }) : modifiers = modifiers ?? ASTModifiers.modifiersNone,
+       super(null) {
     set(block);
   }
 
@@ -1271,11 +1421,15 @@ class ASTFunctionDeclaration<T> extends ASTBlock {
   }
 
   bool matchesParametersTypes(
-          ASTFunctionSignature signature, bool exactTypes) =>
-      _parameters.matchesParametersTypes(signature, exactTypes);
+    ASTFunctionSignature signature,
+    bool exactTypes,
+  ) => _parameters.matchesParametersTypes(signature, exactTypes);
 
-  FutureOr<ASTValue<T>> call(VMContext parent,
-      {List? positionalParameters, Map? namedParameters}) async {
+  FutureOr<ASTValue<T>> call(
+    VMContext parent, {
+    List? positionalParameters,
+    Map? namedParameters,
+  }) async {
     var context = VMContext(this, parent: parent);
 
     var prevContext = VMContext.setCurrent(context);
@@ -1290,7 +1444,9 @@ class ASTFunctionDeclaration<T> extends ASTBlock {
   }
 
   FutureOr<ASTValue<T>> resolveReturnValue(
-      VMContext context, Object? returnValue) {
+    VMContext context,
+    Object? returnValue,
+  ) {
     var ret = returnType.toValue(context, returnValue);
     return ret.resolveMapped((resolved) {
       resolved ??= ASTValueVoid.instance as ASTValue<T>;
@@ -1299,10 +1455,16 @@ class ASTFunctionDeclaration<T> extends ASTBlock {
   }
 
   FutureOr<void> initializeVariables(
-      VMContext context, List? positionalParameters, Map? namedParameters) {
+    VMContext context,
+    List? positionalParameters,
+    Map? namedParameters,
+  ) {
     if (positionalParameters != null) {
-      var ret =
-          _initializePositionalParameters(positionalParameters, 0, context);
+      var ret = _initializePositionalParameters(
+        positionalParameters,
+        0,
+        context,
+      );
       return ret.onResolve((i) {
         _initializeOptionalParameters(i, context);
       });
@@ -1312,7 +1474,10 @@ class ASTFunctionDeclaration<T> extends ASTBlock {
   }
 
   FutureOr<int> _initializePositionalParameters(
-      List<dynamic> positionalParameters, int i, VMContext context) {
+    List<dynamic> positionalParameters,
+    int i,
+    VMContext context,
+  ) {
     FutureOr<void> prevFuture;
 
     for (; i < positionalParameters.length; ++i) {
@@ -1344,7 +1509,10 @@ class ASTFunctionDeclaration<T> extends ASTBlock {
     for (; i < parametersSize; ++i) {
       var fParam = getParameterByIndex(i)!;
       context.declareVariableWithValue(
-          fParam.type, fParam.name, ASTValueNull.instance);
+        fParam.type,
+        fParam.name,
+        ASTValueNull.instance,
+      );
     }
   }
 
@@ -1358,7 +1526,8 @@ class ASTFunctionDeclaration<T> extends ASTBlock {
   @override
   ASTValue run(VMContext parentContext, ASTRunStatus runStatus) {
     throw UnsupportedError(
-        "Can't run this block directly! Should use call(...), since this block needs parameters initialization!");
+      "Can't run this block directly! Should use call(...), since this block needs parameters initialization!",
+    );
   }
 
   @override
@@ -1371,8 +1540,8 @@ class ASTFunctionDeclaration<T> extends ASTBlock {
   }
 }
 
-typedef ParameterValueResolver = FutureOr<dynamic> Function(
-    ASTValue? paramVal, VMContext context);
+typedef ParameterValueResolver =
+    FutureOr<dynamic> Function(ASTValue? paramVal, VMContext context);
 
 /// An AST External Function.
 class ASTExternalFunction<T> extends ASTFunctionDeclaration<T> {
@@ -1381,11 +1550,17 @@ class ASTExternalFunction<T> extends ASTFunctionDeclaration<T> {
   final ParameterValueResolver? parameterResolver;
 
   ASTExternalFunction(
-      super.name, super.parameters, super.returnType, this.externalFunction,
-      [this.parameterResolver]);
+    super.name,
+    super.parameters,
+    super.returnType,
+    this.externalFunction, [
+    this.parameterResolver,
+  ]);
 
   FutureOr<dynamic> resolveParameterValue<V>(
-      ASTValue<V>? paramVal, VMContext context) {
+    ASTValue<V>? paramVal,
+    VMContext context,
+  ) {
     var parameterResolver = this.parameterResolver;
 
     if (parameterResolver != null) {
@@ -1396,8 +1571,11 @@ class ASTExternalFunction<T> extends ASTFunctionDeclaration<T> {
   }
 
   @override
-  FutureOr<ASTValue<T>> call(VMContext parent,
-      {List? positionalParameters, Map? namedParameters}) async {
+  FutureOr<ASTValue<T>> call(
+    VMContext parent, {
+    List? positionalParameters,
+    Map? namedParameters,
+  }) async {
     var context = VMContext(this, parent: parent);
 
     var prevContext = VMContext.setCurrent(context);
@@ -1471,12 +1649,19 @@ class ASTExternalClassFunction<T> extends ASTClassFunctionDeclaration<T> {
 
   final ParameterValueResolver? parameterResolver;
 
-  ASTExternalClassFunction(ASTClass super.clazz, super.name, super.parameters,
-      super.returnType, this.externalFunction,
-      [this.parameterResolver]);
+  ASTExternalClassFunction(
+    ASTClass super.clazz,
+    super.name,
+    super.parameters,
+    super.returnType,
+    this.externalFunction, [
+    this.parameterResolver,
+  ]);
 
   FutureOr<dynamic> resolveParameterValue<V>(
-      ASTValue<V>? paramVal, VMContext context) {
+    ASTValue<V>? paramVal,
+    VMContext context,
+  ) {
     var parameterResolver = this.parameterResolver;
 
     if (parameterResolver != null) {
@@ -1487,8 +1672,11 @@ class ASTExternalClassFunction<T> extends ASTClassFunctionDeclaration<T> {
   }
 
   @override
-  FutureOr<ASTValue<T>> call(VMContext parent,
-      {List? positionalParameters, Map? namedParameters}) async {
+  FutureOr<ASTValue<T>> call(
+    VMContext parent, {
+    List? positionalParameters,
+    Map? namedParameters,
+  }) async {
     var classInstance = parent.getClassInstance();
     var obj = await classInstance!.getValue(parent);
 

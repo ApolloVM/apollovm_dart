@@ -30,15 +30,21 @@ abstract class WasmRuntime {
 
   /// Loads a Wasm module.
   Future<WasmModule> loadModule(
-      String moduleName, Uint8List wasmModuleBinary) async {
-    return _loadedModules[moduleName] ??=
-        await loadModuleImpl(moduleName, wasmModuleBinary);
+    String moduleName,
+    Uint8List wasmModuleBinary,
+  ) async {
+    return _loadedModules[moduleName] ??= await loadModuleImpl(
+      moduleName,
+      wasmModuleBinary,
+    );
   }
 
   /// Platform specific implementation.
   /// Call [loadModule].
   Future<WasmModule> loadModuleImpl(
-      String moduleName, Uint8List wasmModuleBinary);
+    String moduleName,
+    Uint8List wasmModuleBinary,
+  );
 
   /// Removes a Wasm module.
   FutureOr<WasmModule?> removeModule(String moduleName) {
@@ -101,10 +107,15 @@ class WasmModuleExecutionError extends WasmModuleError {
 
   final Object? cause;
 
-  WasmModuleExecutionError(this.functionName,
-      {this.parameters, this.function, String? message, this.cause})
-      : super(
-            "Error executing Wasm function> $functionName( $parameters )${function != null ? ' -> $function' : ''}");
+  WasmModuleExecutionError(
+    this.functionName, {
+    this.parameters,
+    this.function,
+    String? message,
+    this.cause,
+  }) : super(
+         "Error executing Wasm function> $functionName( $parameters )${function != null ? ' -> $function' : ''}",
+       );
 
   @override
   String toString() {

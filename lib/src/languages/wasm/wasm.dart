@@ -36,8 +36,10 @@ class Wasm {
 
   static List<int> loop(WasmType blockType) => <int>[0x03, blockType.value];
 
-  static List<int> ifInstruction(WasmType retType) =>
-      <int>[0x04, retType.value];
+  static List<int> ifInstruction(WasmType retType) => <int>[
+    0x04,
+    retType.value,
+  ];
 
   static const elseInstruction = 0x05;
   static const end = 0x0b;
@@ -65,8 +67,10 @@ class Wasm {
 
   static List<int> encodeString(String s) {
     var strBs = utf8.encode(s);
-    return Uint8List.fromList(
-        [...Leb128.encodeUnsigned(strBs.length), ...strBs]);
+    return Uint8List.fromList([
+      ...Leb128.encodeUnsigned(strBs.length),
+      ...strBs,
+    ]);
   }
 }
 
@@ -151,8 +155,10 @@ class Wasm32 {
   }
 
   static void writeFloat32(Uint8List buffer, int offset, double value) {
-    var byteData =
-        buffer.buffer.asByteData(buffer.offsetInBytes, buffer.lengthInBytes);
+    var byteData = buffer.buffer.asByteData(
+      buffer.offsetInBytes,
+      buffer.lengthInBytes,
+    );
     byteData.setFloat32(offset, value, Endian.little);
   }
 }
@@ -237,20 +243,22 @@ class Wasm64 {
   }
 
   static void writeFloat64(Uint8List buffer, int offset, double value) {
-    var byteData =
-        buffer.buffer.asByteData(buffer.offsetInBytes, buffer.lengthInBytes);
+    var byteData = buffer.buffer.asByteData(
+      buffer.offsetInBytes,
+      buffer.lengthInBytes,
+    );
     byteData.setFloat64(offset, value, Endian.little);
   }
 
   static List<int> f64Load(FloatAlign align, int offset) => <int>[
-        0x2b,
-        ...Leb128.encodeUnsigned(align.index),
-        ...Leb128.encodeUnsigned(offset)
-      ];
+    0x2b,
+    ...Leb128.encodeUnsigned(align.index),
+    ...Leb128.encodeUnsigned(offset),
+  ];
 
   static List<int> f64Store(FloatAlign align, int offset) => <int>[
-        0x39,
-        ...Leb128.encodeUnsigned(align.index),
-        ...Leb128.encodeUnsigned(offset)
-      ];
+    0x39,
+    ...Leb128.encodeUnsigned(align.index),
+    ...Leb128.encodeUnsigned(offset),
+  ];
 }

@@ -10,16 +10,21 @@ void _log(String ns, String message) {
 }
 
 void main(List<String> args) async {
-  var commandRunner = CommandRunner<bool>('apollovm',
-      'ApolloVM/${ApolloVM.VERSION} - A compact VM for Dart and Java.')
-    ..addCommand(CommandRun())
-    ..addCommand(CommandTranslate());
+  var commandRunner =
+      CommandRunner<bool>(
+          'apollovm',
+          'ApolloVM/${ApolloVM.VERSION} - A compact VM for Dart and Java.',
+        )
+        ..addCommand(CommandRun())
+        ..addCommand(CommandTranslate());
 
-  commandRunner.argParser.addFlag('version',
-      abbr: 'v',
-      negatable: false,
-      defaultsTo: false,
-      help: 'Show ApolloVM version.');
+  commandRunner.argParser.addFlag(
+    'version',
+    abbr: 'v',
+    negatable: false,
+    defaultsTo: false,
+    help: 'Show ApolloVM version.',
+  );
 
   {
     var argsResult = commandRunner.argParser.parse(args);
@@ -43,15 +48,20 @@ abstract class CommandSourceFileBase extends Command<bool> {
   ArgParser get argParser => _argParser;
 
   CommandSourceFileBase() {
-    argParser.addFlag('verbose',
-        abbr: 'v',
-        help: 'VM in Verbose mode',
-        defaultsTo: false,
-        negatable: false);
-    argParser.addOption('language',
-        help: 'Programming language of source file.\n'
-            '(defaults to language of the file extension)',
-        valueHelp: 'dart|java');
+    argParser.addFlag(
+      'verbose',
+      abbr: 'v',
+      help: 'VM in Verbose mode',
+      defaultsTo: false,
+      negatable: false,
+    );
+    argParser.addOption(
+      'language',
+      help:
+          'Programming language of source file.\n'
+          '(defaults to language of the file extension)',
+      valueHelp: 'dart|java',
+    );
   }
 
   bool? _verbose;
@@ -96,11 +106,13 @@ class CommandRun extends CommandSourceFileBase {
   final String name = 'run';
 
   CommandRun() {
-    argParser.addOption('function',
-        abbr: 'f',
-        help: 'Named of the main function to call',
-        defaultsTo: 'main',
-        valueHelp: 'main|start');
+    argParser.addOption(
+      'function',
+      abbr: 'f',
+      help: 'Named of the main function to call',
+      defaultsTo: 'main',
+      valueHelp: 'main|start',
+    );
   }
 
   String get mainFunction => argResults!['function'] ?? 'main';
@@ -112,8 +124,10 @@ class CommandRun extends CommandSourceFileBase {
     var parameters = this.parameters;
 
     if (verbose) {
-      _log('RUN',
-          '$sourceFile ; language: $language > $mainFunction( $parameters )');
+      _log(
+        'RUN',
+        '$sourceFile ; language: $language > $mainFunction( $parameters )',
+      );
     }
 
     var vm = ApolloVM();
@@ -124,7 +138,8 @@ class CommandRun extends CommandSourceFileBase {
 
     if (!loadOK) {
       throw StateError(
-          "Can't parse source! language: $language ; sourceFilePath: $sourceFilePath");
+        "Can't parse source! language: $language ; sourceFilePath: $sourceFilePath",
+      );
     }
 
     var runner = vm.createRunner(language)!;
@@ -135,19 +150,28 @@ class CommandRun extends CommandSourceFileBase {
     ASTValue? result;
 
     for (var namespace in namespaces) {
-      result =
-          await runner.tryExecuteFunction(namespace, mainFunction, parameters);
+      result = await runner.tryExecuteFunction(
+        namespace,
+        mainFunction,
+        parameters,
+      );
       if (result != null) break;
     }
 
     if (result == null) {
       LOOP_NS:
       for (var namespace in namespaces) {
-        var classes =
-            vm.getLanguageNamespaces(language).get(namespace).classesNames;
+        var classes = vm
+            .getLanguageNamespaces(language)
+            .get(namespace)
+            .classesNames;
         for (var clazz in classes) {
           result = await runner.tryExecuteClassFunction(
-              namespace, clazz, mainFunction, parameters);
+            namespace,
+            clazz,
+            mainFunction,
+            parameters,
+          );
           if (result != null) break LOOP_NS;
         }
       }
@@ -169,10 +193,13 @@ class CommandTranslate extends CommandSourceFileBase {
   final String name = 'translate';
 
   CommandTranslate() {
-    argParser.addOption('target',
-        help: 'Target Programming language for translation.\n'
-            '(defaults to the opposite of the source language)',
-        valueHelp: 'dart|java');
+    argParser.addOption(
+      'target',
+      help:
+          'Target Programming language for translation.\n'
+          '(defaults to the opposite of the source language)',
+      valueHelp: 'dart|java',
+    );
   }
 
   String get targetLanguage {
@@ -190,8 +217,10 @@ class CommandTranslate extends CommandSourceFileBase {
   @override
   FutureOr<bool> run() async {
     if (verbose) {
-      _log('TRANSLATE',
-          '$sourceFile ; language: $language > targetLanguage: $targetLanguage');
+      _log(
+        'TRANSLATE',
+        '$sourceFile ; language: $language > targetLanguage: $targetLanguage',
+      );
     }
 
     var vm = ApolloVM();
@@ -202,7 +231,8 @@ class CommandTranslate extends CommandSourceFileBase {
 
     if (!loadOK) {
       throw StateError(
-          "Can't parse source! language: $language ; sourceFilePath: $sourceFilePath");
+        "Can't parse source! language: $language ; sourceFilePath: $sourceFilePath",
+      );
     }
 
     var codeStorage = vm.generateAllCodeIn(targetLanguage);

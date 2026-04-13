@@ -15,8 +15,9 @@ import 'apollovm_ast_variable.dart';
 /// Base for AST expressions.
 abstract class ASTExpression with ASTNode implements ASTCodeRunner {
   static FutureOr<ASTType> typeFromExpressions(
-      Iterable<ASTExpression> expressions,
-      {VMContext? context}) {
+    Iterable<ASTExpression> expressions, {
+    VMContext? context,
+  }) {
     var types = expressions.map((e) => e.resolveType(context)).toSet();
 
     if (types.isEmpty) {
@@ -197,8 +198,10 @@ class ASTExpressionListLiteral extends ASTExpression {
   ASTExpressionListLiteral(this.type, this.valuesExpressions);
 
   @override
-  Iterable<ASTNode> get children =>
-      [if (type != null) type!, ...valuesExpressions];
+  Iterable<ASTNode> get children => [
+    if (type != null) type!,
+    ...valuesExpressions,
+  ];
 
   @override
   FutureOr<ASTType> resolveType(VMContext? context) =>
@@ -228,8 +231,8 @@ class ASTExpressionListLiteral extends ASTExpression {
             .toList()
             .resolveAll()
             .resolveMapped((values) {
-          return ASTValueArray(type, values);
-        });
+              return ASTValueArray(type, values);
+            });
       });
     });
   }
@@ -248,14 +251,17 @@ class ASTExpressionMapLiteral extends ASTExpression {
   final List<MapEntry<ASTExpression, ASTExpression>> entriesExpressions;
 
   ASTExpressionMapLiteral(
-      this.keyType, this.valueType, this.entriesExpressions);
+    this.keyType,
+    this.valueType,
+    this.entriesExpressions,
+  );
 
   @override
   Iterable<ASTNode> get children => [
-        if (keyType != null) keyType!,
-        if (valueType != null) valueType!,
-        ...entriesExpressions.expand((e) => [e.key, e.value]),
-      ];
+    if (keyType != null) keyType!,
+    if (valueType != null) valueType!,
+    ...entriesExpressions.expand((e) => [e.key, e.value]),
+  ];
 
   FutureOr<ASTType> resolveKeyType(VMContext? context) =>
       ASTExpression.typeFromExpressions(entriesExpressions.map((e) => e.key));
@@ -296,8 +302,9 @@ class ASTExpressionMapLiteral extends ASTExpression {
 
         return astKeys.resolveBoth(astValues, (astKeys, astValues) {
           var keys = astKeys.map((e) => e.getValue(parentContext)).resolveAll();
-          var values =
-              astValues.map((e) => e.getValue(parentContext)).resolveAll();
+          var values = astValues
+              .map((e) => e.getValue(parentContext))
+              .resolveAll();
 
           return keys.resolveBoth(values, (keys, values) {
             var map = Map.fromIterables(keys, values);
@@ -350,7 +357,9 @@ class ASTExpressionVariableEntryAccess extends ASTExpression {
 
   @override
   FutureOr<ASTValue> run(
-      VMContext parentContext, ASTRunStatus runStatus) async {
+    VMContext parentContext,
+    ASTRunStatus runStatus,
+  ) async {
     var context = defineRunContext(parentContext);
 
     var key = await expression.run(context, runStatus);
@@ -364,7 +373,8 @@ class ASTExpressionVariableEntryAccess extends ASTExpression {
         readValue = await value.readIndex(context, idx);
       } on ApolloVMNullPointerException {
         throw ApolloVMNullPointerException(
-            "Can't read variable index: $variable[$idx] (size: ${value.size(context)} ; value: $value)");
+          "Can't read variable index: $variable[$idx] (size: ${value.size(context)} ; value: $value)",
+        );
       }
     } else {
       var k = await key.getValue(context);
@@ -372,7 +382,8 @@ class ASTExpressionVariableEntryAccess extends ASTExpression {
         readValue = await value.readKey(context, k);
       } on ApolloVMNullPointerException {
         throw ApolloVMNullPointerException(
-            "Can't read variable key: $variable[$k]  (size: ${value.size(context)} ; value: $value)");
+          "Can't read variable key: $variable[$k]  (size: ${value.size(context)} ; value: $value)",
+        );
       }
     }
 
@@ -455,8 +466,6 @@ String getASTExpressionOperatorText(ASTExpressionOperator op) {
       return '<';
     case ASTExpressionOperator.lowerOrEq:
       return '<=';
-    default:
-      throw UnsupportedError('$op');
   }
 }
 
@@ -540,7 +549,9 @@ class ASTExpressionOperation extends ASTExpression {
           var retT2 = expression2.resolveType(context);
 
           return retT1.resolveBoth(
-              retT2, (t1, t2) => _resolveTypePair(t1, t2, context));
+            retT2,
+            (t1, t2) => _resolveTypePair(t1, t2, context),
+          );
         }
       case ASTExpressionOperator.divideAsInt:
         return ASTTypeInt.instance;
@@ -556,8 +567,12 @@ class ASTExpressionOperation extends ASTExpression {
     }
   }
 
-  FutureOr<ASTType> _resolveTypePair(ASTType t1, ASTType t2, VMContext? context,
-      {int resolveDepth = 0}) {
+  FutureOr<ASTType> _resolveTypePair(
+    ASTType t1,
+    ASTType t2,
+    VMContext? context, {
+    int resolveDepth = 0,
+  }) {
     if (resolveDepth < 3) {
       FutureOr<ASTType>? resolve1;
       FutureOr<ASTType>? resolve2;
@@ -572,18 +587,30 @@ class ASTExpressionOperation extends ASTExpression {
 
       if (resolve1 != null && resolve2 != null) {
         return resolve1.resolveOther(resolve2, (t1, t2) {
-          return _resolveTypePair(t1, t2, context,
-              resolveDepth: resolveDepth + 1);
+          return _resolveTypePair(
+            t1,
+            t2,
+            context,
+            resolveDepth: resolveDepth + 1,
+          );
         });
       } else if (resolve1 != null) {
         return resolve1.resolveMapped((t1) {
-          return _resolveTypePair(t1, t2, context,
-              resolveDepth: resolveDepth + 1);
+          return _resolveTypePair(
+            t1,
+            t2,
+            context,
+            resolveDepth: resolveDepth + 1,
+          );
         });
       } else if (resolve2 != null) {
         return resolve2.resolveMapped((t2) {
-          return _resolveTypePair(t1, t2, context,
-              resolveDepth: resolveDepth + 1);
+          return _resolveTypePair(
+            t1,
+            t2,
+            context,
+            resolveDepth: resolveDepth + 1,
+          );
         });
       }
     }
@@ -663,7 +690,10 @@ class ASTExpressionOperation extends ASTExpression {
   }
 
   FutureOr<ASTValue> operatorAdd(
-      VMContext context, ASTValue val1, ASTValue val2) {
+    VMContext context,
+    ASTValue val1,
+    ASTValue val2,
+  ) {
     var t1 = val1.type;
     var t2 = val2.type;
 
@@ -707,7 +737,10 @@ class ASTExpressionOperation extends ASTExpression {
   }
 
   FutureOr<ASTValue> operatorSubtract(
-      VMContext context, ASTValue val1, ASTValue val2) {
+    VMContext context,
+    ASTValue val1,
+    ASTValue val2,
+  ) {
     var t1 = val1.type;
     var t2 = val2.type;
 
@@ -738,7 +771,10 @@ class ASTExpressionOperation extends ASTExpression {
   }
 
   FutureOr<ASTValue> operatorMultiply(
-      VMContext context, ASTValue val1, ASTValue val2) {
+    VMContext context,
+    ASTValue val1,
+    ASTValue val2,
+  ) {
     var t1 = val1.type;
     var t2 = val2.type;
 
@@ -769,7 +805,10 @@ class ASTExpressionOperation extends ASTExpression {
   }
 
   FutureOr<ASTValue> operatorDivide(
-      VMContext context, ASTValue val1, ASTValue val2) {
+    VMContext context,
+    ASTValue val1,
+    ASTValue val2,
+  ) {
     var t1 = val1.type;
     var t2 = val2.type;
 
@@ -800,7 +839,10 @@ class ASTExpressionOperation extends ASTExpression {
   }
 
   FutureOr<ASTValue> operatorDivideAsInt(
-      VMContext context, ASTValue val1, ASTValue val2) {
+    VMContext context,
+    ASTValue val1,
+    ASTValue val2,
+  ) {
     var t1 = val1.type;
     var t2 = val2.type;
 
@@ -817,7 +859,10 @@ class ASTExpressionOperation extends ASTExpression {
   }
 
   FutureOr<ASTValue> operatorDivideAsDouble(
-      VMContext context, ASTValue val1, ASTValue val2) {
+    VMContext context,
+    ASTValue val1,
+    ASTValue val2,
+  ) {
     var t1 = val1.type;
     var t2 = val2.type;
 
@@ -834,37 +879,55 @@ class ASTExpressionOperation extends ASTExpression {
   }
 
   FutureOr<ASTValueBool> operatorEquals(
-      VMContext context, ASTValue val1, ASTValue val2) {
+    VMContext context,
+    ASTValue val1,
+    ASTValue val2,
+  ) {
     var b = val1.equals(val2);
     return b.resolveMapped((val) => ASTValueBool(val));
   }
 
   FutureOr<ASTValueBool> operatorNotEquals(
-      VMContext context, ASTValue val1, ASTValue val2) {
+    VMContext context,
+    ASTValue val1,
+    ASTValue val2,
+  ) {
     var b = val1.equals(val2);
     return b.resolveMapped((val) => ASTValueBool(!val));
   }
 
   FutureOr<ASTValueBool> operatorGreater(
-      VMContext context, ASTValue val1, ASTValue val2) {
+    VMContext context,
+    ASTValue val1,
+    ASTValue val2,
+  ) {
     var b = val1 > val2;
     return b.resolveMapped((val) => ASTValueBool(val));
   }
 
   FutureOr<ASTValueBool> operatorGreaterOrEq(
-      VMContext context, ASTValue val1, ASTValue val2) {
+    VMContext context,
+    ASTValue val1,
+    ASTValue val2,
+  ) {
     var b = val1 >= val2;
     return b.resolveMapped((val) => ASTValueBool(val));
   }
 
   FutureOr<ASTValueBool> operatorLower(
-      VMContext context, ASTValue val1, ASTValue val2) {
+    VMContext context,
+    ASTValue val1,
+    ASTValue val2,
+  ) {
     var b = val1 < val2;
     return b.resolveMapped((val) => ASTValueBool(val));
   }
 
   FutureOr<ASTValueBool> operatorLowerOrEq(
-      VMContext context, ASTValue val1, ASTValue val2) {
+    VMContext context,
+    ASTValue val1,
+    ASTValue val2,
+  ) {
     var b = val1 <= val2;
     return b.resolveMapped((val) => ASTValueBool(val));
   }
@@ -885,7 +948,10 @@ class ASTExpressionVariableAssignment extends ASTExpression {
   ASTExpression expression;
 
   ASTExpressionVariableAssignment(
-      this.variable, this.operator, this.expression);
+    this.variable,
+    this.operator,
+    this.expression,
+  );
 
   @override
   Iterable<ASTNode> get children => [variable, expression];
@@ -896,7 +962,9 @@ class ASTExpressionVariableAssignment extends ASTExpression {
 
   @override
   FutureOr<ASTValue> run(
-      VMContext parentContext, ASTRunStatus runStatus) async {
+    VMContext parentContext,
+    ASTRunStatus runStatus,
+  ) async {
     var context = defineRunContext(parentContext);
 
     var value = await expression.run(context, runStatus);
@@ -930,8 +998,6 @@ class ASTExpressionVariableAssignment extends ASTExpression {
           result = variableValue * value;
           break;
         }
-      default:
-        throw UnsupportedError('operator: $operator');
     }
 
     await variable.setValue(context, await result);
@@ -950,7 +1016,10 @@ class ASTExpressionVariableDirectOperation extends ASTExpression {
   bool preOperation;
 
   ASTExpressionVariableDirectOperation(
-      this.variable, this.operator, this.preOperation);
+    this.variable,
+    this.operator,
+    this.preOperation,
+  );
 
   @override
   Iterable<ASTNode> get children => [variable];
@@ -961,7 +1030,9 @@ class ASTExpressionVariableDirectOperation extends ASTExpression {
 
   @override
   FutureOr<ASTValue> run(
-      VMContext parentContext, ASTRunStatus runStatus) async {
+    VMContext parentContext,
+    ASTRunStatus runStatus,
+  ) async {
     var context = defineRunContext(parentContext);
 
     var variableValue = await variable.getValue(context);
@@ -1040,11 +1111,16 @@ abstract class ASTExpressionFunctionInvocation extends ASTExpression {
 
   @override
   FutureOr<ASTValue> run(
-      VMContext parentContext, ASTRunStatus runStatus) async {
+    VMContext parentContext,
+    ASTRunStatus runStatus,
+  ) async {
     var f = await _getFunction(parentContext);
 
-    var argumentsValues =
-        await _resolveArgumentsValues(parentContext, runStatus, arguments);
+    var argumentsValues = await _resolveArgumentsValues(
+      parentContext,
+      runStatus,
+      arguments,
+    );
 
     return f.call(parentContext, positionalParameters: argumentsValues);
   }
@@ -1055,8 +1131,11 @@ abstract class ASTExpressionFunctionInvocation extends ASTExpression {
   }
 }
 
-Future<List<ASTValue>> _resolveArgumentsValues(VMContext parentContext,
-    ASTRunStatus runStatus, List<ASTExpression> arguments) async {
+Future<List<ASTValue>> _resolveArgumentsValues(
+  VMContext parentContext,
+  ASTRunStatus runStatus,
+  List<ASTExpression> arguments,
+) async {
   var argumentsFuture = arguments.map((e) async {
     return await e.run(parentContext, runStatus);
   }).toList();
@@ -1077,7 +1156,8 @@ class ASTExpressionLocalFunctionInvocation
 
     if (f == null) {
       throw ApolloVMRuntimeError(
-          'Can\'t find function "$name" with parameters signature: $fSignature > $arguments');
+        'Can\'t find function "$name" with parameters signature: $fSignature > $arguments',
+      );
     }
 
     return f;
@@ -1090,8 +1170,10 @@ class ASTExpressionObjectFunctionInvocation
   ASTVariable variable;
 
   ASTExpressionObjectFunctionInvocation(
-      this.variable, String name, List<ASTExpression> arguments)
-      : super(name, arguments);
+    this.variable,
+    String name,
+    List<ASTExpression> arguments,
+  ) : super(name, arguments);
 
   @override
   Iterable<ASTNode> get children => [variable];
@@ -1140,7 +1222,8 @@ class ASTExpressionObjectFunctionInvocation
     if (f == null) {
       var obj = await _getVariableValue(parentContext);
       throw ApolloVMRuntimeError(
-          "Can't find class[${clazz.name}] function[$name( $fSignature )] for object: $obj");
+        "Can't find class[${clazz.name}] function[$name( $fSignature )] for object: $obj",
+      );
     }
 
     return f;
@@ -1148,17 +1231,25 @@ class ASTExpressionObjectFunctionInvocation
 
   @override
   FutureOr<ASTValue> run(
-      VMContext parentContext, ASTRunStatus runStatus) async {
+    VMContext parentContext,
+    ASTRunStatus runStatus,
+  ) async {
     var f = await _getFunction(parentContext);
 
-    var argumentsValues =
-        await _resolveArgumentsValues(parentContext, runStatus, arguments);
+    var argumentsValues = await _resolveArgumentsValues(
+      parentContext,
+      runStatus,
+      arguments,
+    );
 
     var obj = await _getVariableValue(parentContext);
 
     if (f is ASTClassFunctionDeclaration) {
-      return f.objectCall(parentContext, obj,
-          positionalParameters: argumentsValues);
+      return f.objectCall(
+        parentContext,
+        obj,
+        positionalParameters: argumentsValues,
+      );
     } else {
       // Static function call:
       return f.call(parentContext, positionalParameters: argumentsValues);

@@ -29,8 +29,10 @@ class WasmRuntimeIO extends WasmRuntime {
     var libPath = _wasmRunLibraryFilePath();
 
     if (libPath == null) {
-      throw StateError("Unable to locate the `wasm_run` dynamic library. "
-          "You can specify the library path using the environment variable `WASM_RUN_LIB_PATH`.");
+      throw StateError(
+        "Unable to locate the `wasm_run` dynamic library. "
+        "You can specify the library path using the environment variable `WASM_RUN_LIB_PATH`.",
+      );
     }
 
     print('** Loading `wasm_run` dynamic library: $libPath');
@@ -63,7 +65,9 @@ class WasmRuntimeIO extends WasmRuntime {
 
   @override
   Future<WasmModuleIO> loadModuleImpl(
-      String moduleName, Uint8List wasmModuleBinary) async {
+    String moduleName,
+    Uint8List wasmModuleBinary,
+  ) async {
     var module = await _compileModule(wasmModuleBinary);
     var moduleInstance = await module.builder().build();
     return WasmModuleIO(moduleName, module, moduleInstance);
@@ -74,8 +78,9 @@ class WasmRuntimeIO extends WasmRuntime {
   Future<wasm_run.WasmModule> _compileModule(Uint8List wasmModuleBinary) async {
     var binarySignature = _computeBinarySignatureHex(wasmModuleBinary);
 
-    var module = _compiledModules[binarySignature] ??=
-        await _compileModuleImpl(wasmModuleBinary);
+    var module = _compiledModules[binarySignature] ??= await _compileModuleImpl(
+      wasmModuleBinary,
+    );
 
     return module;
   }
@@ -154,7 +159,7 @@ String? _wasmRunLibraryFilePath() {
     '../../',
     'lib',
     '../lib',
-    '../../lib'
+    '../../lib',
   ];
 
   for (var dirPath in possibleDirs) {

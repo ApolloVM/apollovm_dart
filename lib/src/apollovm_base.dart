@@ -35,7 +35,7 @@ import 'languages/wasm/wasm_runner.dart';
 /// The Apollo VM.
 class ApolloVM implements VMTypeResolver {
   // ignore: non_constant_identifier_names
-  static final String VERSION = '0.0.53';
+  static final String VERSION = '0.0.54';
 
   static int _idCount = 0;
 
@@ -77,26 +77,36 @@ class ApolloVM implements VMTypeResolver {
 
   /// Returns a [List] of [CodeNamespace] with name [namespace] and with class [className].
   List<CodeNamespace> getNamespaceWithNameAndClass(
-      String namespace, String className,
-      {bool caseInsensitive = false}) {
+    String namespace,
+    String className, {
+    bool caseInsensitive = false,
+  }) {
     return getNamespaceWithName(namespace)
         .where(
-            (e) => e.containsClass(className, caseInsensitive: caseInsensitive))
+          (e) => e.containsClass(className, caseInsensitive: caseInsensitive),
+        )
         .toList();
   }
 
   /// Returns a [CodeNamespace] with class [className] for [language] (optional).
-  List<CodeNamespace> getNamespaceWithClass(String className,
-      {String? language, bool caseInsensitive = false}) {
+  List<CodeNamespace> getNamespaceWithClass(
+    String className, {
+    String? language,
+    bool caseInsensitive = false,
+  }) {
     if (language != null) {
       var ns = _languageNamespaces[language];
       if (ns == null) return [];
-      return ns.getNamespaceWithClass(className,
-          caseInsensitive: caseInsensitive);
+      return ns.getNamespaceWithClass(
+        className,
+        caseInsensitive: caseInsensitive,
+      );
     } else {
       return _languageNamespaces.values.expand((ns) {
-        var namespaces = ns.getNamespaceWithClass(className,
-            caseInsensitive: caseInsensitive);
+        var namespaces = ns.getNamespaceWithClass(
+          className,
+          caseInsensitive: caseInsensitive,
+        );
         return namespaces;
       }).toList();
     }
@@ -105,7 +115,9 @@ class ApolloVM implements VMTypeResolver {
   /// Returns a [LanguageNamespaces] for [language].
   LanguageNamespaces getLanguageNamespaces(String language) {
     return _languageNamespaces.putIfAbsent(
-        language, () => LanguageNamespaces(language));
+      language,
+      () => LanguageNamespaces(language),
+    );
   }
 
   /// Loads [codeUnit], parsing the [CodeUnit.source] to the
@@ -172,7 +184,9 @@ class ApolloVM implements VMTypeResolver {
 
   /// Creates an [ApolloCodeGenerator] for the [language] and a [codeStorage].
   ApolloCodeGenerator? createCodeGenerator(
-      String language, ApolloSourceCodeStorage codeStorage) {
+    String language,
+    ApolloSourceCodeStorage codeStorage,
+  ) {
     switch (language) {
       case 'dart':
         return ApolloCodeGeneratorDart(codeStorage);
@@ -193,7 +207,9 @@ class ApolloVM implements VMTypeResolver {
 
   /// Creates an [ApolloGenerator] for the [language] and a [codeStorage].
   ApolloGenerator? createGenerator<O extends Object>(
-      String language, ApolloCodeUnitStorage<O> codeStorage) {
+    String language,
+    ApolloCodeUnitStorage<O> codeStorage,
+  ) {
     switch (language) {
       case 'wasm':
         {
@@ -203,24 +219,30 @@ class ApolloVM implements VMTypeResolver {
         {
           if (codeStorage is ApolloSourceCodeStorage) {
             return createCodeGenerator(
-                language, codeStorage as ApolloSourceCodeStorage);
+              language,
+              codeStorage as ApolloSourceCodeStorage,
+            );
           }
         }
     }
 
     throw StateError(
-        "Can't create a generator> language: $language ; codeStorage: $codeStorage");
+      "Can't create a generator> language: $language ; codeStorage: $codeStorage",
+    );
   }
 
   /// Generates all the VM loaded code in [language],
   /// returning a [ApolloSourceCodeStorage].
-  ApolloSourceCodeStorage generateAllCodeIn(String language,
-      {ApolloSourceCodeStorage? codeStorage}) {
+  ApolloSourceCodeStorage generateAllCodeIn(
+    String language, {
+    ApolloSourceCodeStorage? codeStorage,
+  }) {
     codeStorage ??= ApolloSourceCodeStorageMemory();
     var codeGenerator = createCodeGenerator(language, codeStorage);
     if (codeGenerator == null) {
       throw StateError(
-          "Can't find an ApolloCodeGenerator for language: $language");
+        "Can't find an ApolloCodeGenerator for language: $language",
+      );
     }
     generateAllCode(codeGenerator);
     return codeStorage;
@@ -228,8 +250,10 @@ class ApolloVM implements VMTypeResolver {
 
   /// Generates all the VM loaded code in [language],
   /// returning a [ApolloSourceCodeStorage].
-  ApolloCodeUnitStorage<O> generateAllIn<O extends Object>(String language,
-      {ApolloCodeUnitStorage<O>? codeStorage}) {
+  ApolloCodeUnitStorage<O> generateAllIn<O extends Object>(
+    String language, {
+    ApolloCodeUnitStorage<O>? codeStorage,
+  }) {
     if (codeStorage == null) {
       if (O == String) {
         codeStorage =
@@ -238,8 +262,9 @@ class ApolloVM implements VMTypeResolver {
         codeStorage =
             ApolloBinaryCodeStorageMemory() as ApolloCodeUnitStorage<O>;
       } else if (O == BytesOutput) {
-        codeStorage = ApolloGenericCodeStorageMemory<BytesOutput>()
-            as ApolloCodeUnitStorage<O>;
+        codeStorage =
+            ApolloGenericCodeStorageMemory<BytesOutput>()
+                as ApolloCodeUnitStorage<O>;
       } else {
         codeStorage =
             ApolloBinaryCodeStorageMemory() as ApolloCodeUnitStorage<O>;
@@ -249,7 +274,8 @@ class ApolloVM implements VMTypeResolver {
     var generator = createGenerator(language, codeStorage);
     if (generator == null) {
       throw StateError(
-          "Can't find an ApolloCodeGenerator for language: $language");
+        "Can't find an ApolloCodeGenerator for language: $language",
+      );
     }
 
     generateAll(generator);
@@ -296,15 +322,21 @@ class ApolloVM implements VMTypeResolver {
   }
 
   @override
-  ASTType? resolveType(String typeName,
-      {String? namespace, String? language, bool caseInsensitive = false}) {
+  ASTType? resolveType(
+    String typeName, {
+    String? namespace,
+    String? language,
+    bool caseInsensitive = false,
+  }) {
     if (language != null && namespace != null) {
       var ns = getNamespace(language, namespace);
       if (ns == null) {
-        return resolveCoreType(typeName,
-            namespace: namespace,
-            language: language,
-            caseInsensitive: caseInsensitive);
+        return resolveCoreType(
+          typeName,
+          namespace: namespace,
+          language: language,
+          caseInsensitive: caseInsensitive,
+        );
       }
       var clazz = ns.getClass(typeName);
       return clazz?.type;
@@ -312,26 +344,38 @@ class ApolloVM implements VMTypeResolver {
 
     List<CodeNamespace> ns;
     if (namespace != null) {
-      ns = getNamespaceWithNameAndClass(namespace, typeName,
-          caseInsensitive: caseInsensitive);
+      ns = getNamespaceWithNameAndClass(
+        namespace,
+        typeName,
+        caseInsensitive: caseInsensitive,
+      );
     } else {
-      ns = getNamespaceWithClass(typeName,
-          language: language, caseInsensitive: caseInsensitive);
+      ns = getNamespaceWithClass(
+        typeName,
+        language: language,
+        caseInsensitive: caseInsensitive,
+      );
     }
 
     if (ns.isEmpty) {
-      return resolveCoreType(typeName,
-          namespace: namespace,
-          language: language,
-          caseInsensitive: caseInsensitive);
+      return resolveCoreType(
+        typeName,
+        namespace: namespace,
+        language: language,
+        caseInsensitive: caseInsensitive,
+      );
     }
 
     var clazz = ns.first.getClass(typeName, caseInsensitive: caseInsensitive);
     return clazz!.type;
   }
 
-  ASTType? resolveCoreType(String typeName,
-      {String? namespace, String? language, bool caseInsensitive = false}) {
+  ASTType? resolveCoreType(
+    String typeName, {
+    String? namespace,
+    String? language,
+    bool caseInsensitive = false,
+  }) {
     var clazz = ApolloVMCore.getClass(typeName);
     return clazz?.type;
   }
@@ -356,13 +400,18 @@ class LanguageNamespaces {
   List<String> get namespaces => _namespaces.keys.toList();
 
   CodeNamespace get(String namespace) => _namespaces.putIfAbsent(
-      namespace, () => CodeNamespace(language, namespace));
+    namespace,
+    () => CodeNamespace(language, namespace),
+  );
 
   CodeNamespace? getIfLoaded(String namespace) => _namespaces[namespace];
 
   /// Lookup for the first class [className] in [namespace] (optional).
-  ASTClassNormal? getClass(String className,
-      {String? namespace, bool caseInsensitive = false}) {
+  ASTClassNormal? getClass(
+    String className, {
+    String? namespace,
+    bool caseInsensitive = false,
+  }) {
     if (namespace != null) {
       var ns = _namespaces[namespace];
       return ns?.getClass(className, caseInsensitive: caseInsensitive);
@@ -378,11 +427,14 @@ class LanguageNamespaces {
   }
 
   /// Returns a [List] of [CodeNamespace] with class [className].
-  List<CodeNamespace> getNamespaceWithClass(String className,
-      {bool caseInsensitive = false}) {
+  List<CodeNamespace> getNamespaceWithClass(
+    String className, {
+    bool caseInsensitive = false,
+  }) {
     return _namespaces.values
-        .where((ns) =>
-            ns.containsClass(className, caseInsensitive: caseInsensitive))
+        .where(
+          (ns) => ns.containsClass(className, caseInsensitive: caseInsensitive),
+        )
         .toList();
   }
 
@@ -441,11 +493,15 @@ class CodeNamespace {
   }
 
   /// Returns the 1st [CodeUnit] with a class with [className].
-  CodeUnit? getCodeUnitWithClass(String className,
-      {bool caseInsensitive = false}) {
+  CodeUnit? getCodeUnitWithClass(
+    String className, {
+    bool caseInsensitive = false,
+  }) {
     for (var cu in _codeUnits) {
-      var clazz =
-          cu.root!.getClass(className, caseInsensitive: caseInsensitive);
+      var clazz = cu.root!.getClass(
+        className,
+        caseInsensitive: caseInsensitive,
+      );
       if (clazz != null) return cu;
     }
     return null;
@@ -458,8 +514,10 @@ class CodeNamespace {
   /// Returns an [ASTClassNormal] for [className].
   ASTClassNormal? getClass(String className, {bool caseInsensitive = false}) {
     for (var cu in _codeUnits) {
-      var clazz =
-          cu.root!.getClass(className, caseInsensitive: caseInsensitive);
+      var clazz = cu.root!.getClass(
+        className,
+        caseInsensitive: caseInsensitive,
+      );
       if (clazz != null) return clazz;
     }
     return null;
@@ -480,18 +538,26 @@ class CodeNamespace {
       _codeUnits.expand((e) => e.root!.functions).map((f) => f.name).toList();
 
   /// Returns the 1st [CodeUnit] with a function of name [fName].
-  CodeUnit? getCodeUnitWithFunction(String fName,
-      {bool caseInsensitive = false}) {
+  CodeUnit? getCodeUnitWithFunction(
+    String fName, {
+    bool caseInsensitive = false,
+  }) {
     for (var cu in _codeUnits) {
-      if (cu.root!.containsFunctionWithName(fName,
-          caseInsensitive: caseInsensitive)) return cu;
+      if (cu.root!.containsFunctionWithName(
+        fName,
+        caseInsensitive: caseInsensitive,
+      )) {
+        return cu;
+      }
     }
     return null;
   }
 
   /// Returns the 1st [CodeUnit] with a class method of name [fName].
-  CodeUnit? getCodeUnitWithClassMethod(String fName,
-      {bool caseInsensitive = false}) {
+  CodeUnit? getCodeUnitWithClassMethod(
+    String fName, {
+    bool caseInsensitive = false,
+  }) {
     for (var cu in _codeUnits) {
       if (cu.root!.classes.any((c) => c.containsFunctionWithName(fName))) {
         return cu;
@@ -503,11 +569,18 @@ class CodeNamespace {
   /// Returns a function with [fName] and [parametersSignature]
   /// (using [context] if needed).
   ASTFunctionDeclaration? getFunction(
-      String fName, ASTFunctionSignature parametersSignature, VMContext context,
-      {bool caseInsensitive = false}) {
+    String fName,
+    ASTFunctionSignature parametersSignature,
+    VMContext context, {
+    bool caseInsensitive = false,
+  }) {
     for (var cu in _codeUnits) {
-      var f = cu.root!.getFunction(fName, parametersSignature, context,
-          caseInsensitive: caseInsensitive);
+      var f = cu.root!.getFunction(
+        fName,
+        parametersSignature,
+        context,
+        caseInsensitive: caseInsensitive,
+      );
       if (f != null) return f;
     }
     return null;
@@ -518,8 +591,11 @@ class CodeNamespace {
       generateAll(codeGenerator);
 
   /// Generates all the code of this namespace using [codeGenerator].
-  void generateAll<O extends Object, S extends ApolloCodeUnitStorage<D>,
-      D extends Object>(ApolloGenerator<O, S, D> generator) {
+  void generateAll<
+    O extends Object,
+    S extends ApolloCodeUnitStorage<D>,
+    D extends Object
+  >(ApolloGenerator<O, S, D> generator) {
     var codeStorage = generator.codeStorage;
     for (var cu in _codeUnits) {
       var cuOutput = cu.generate(generator);
@@ -563,11 +639,15 @@ abstract class CodeUnit<T> {
       generate(codeGenerator);
 
   /// Generates the code of this [ASTRoot] ([root]), using [codeGenerator].
-  O generate<O extends Object, S extends ApolloCodeUnitStorage<D>,
-      D extends Object>(ApolloGenerator<O, S, D> codeGenerator) {
+  O generate<
+    O extends Object,
+    S extends ApolloCodeUnitStorage<D>,
+    D extends Object
+  >(ApolloGenerator<O, S, D> codeGenerator) {
     if (root == null) {
       throw StateError(
-          'No ASTRoot! Ensure that this CodeUnit is loaded by ApolloVM!');
+        'No ASTRoot! Ensure that this CodeUnit is loaded by ApolloVM!',
+      );
     }
     return codeGenerator.generateASTRoot(root!);
   }
@@ -612,8 +692,11 @@ class ApolloExternalFunctionMapper {
   final Map<String, ASTFunctionSet> _functions = {};
 
   /// Returns a mapped functions with [fName] and optional [parametersSignature].
-  ASTExternalFunction<R>? getMappedFunction<R>(VMContext context, String fName,
-      [ASTFunctionSignature? parametersSignature]) {
+  ASTExternalFunction<R>? getMappedFunction<R>(
+    VMContext context,
+    String fName, [
+    ASTFunctionSignature? parametersSignature,
+  ]) {
     var fSet = _functions[fName];
     if (fSet == null) return null;
 
@@ -638,7 +721,10 @@ class ApolloExternalFunctionMapper {
 
   /// Maps an external function with 0 parameters.
   void mapExternalFunction0<T, R>(
-      ASTType<R> fReturn, String fName, Function() f) {
+    ASTType<R> fReturn,
+    String fName,
+    Function() f,
+  ) {
     var fParameters = ASTParametersDeclaration(null, null, null);
 
     var fExternal = ASTExternalFunction(fName, fParameters, fReturn, f);
@@ -647,12 +733,18 @@ class ApolloExternalFunctionMapper {
   }
 
   /// Maps an external function with 1 parameter.
-  void mapExternalFunction1<T, R>(ASTType<R> fReturn, String fName,
-      ASTType<T> pType1, String pName1, Function(T p1) f) {
+  void mapExternalFunction1<T, R>(
+    ASTType<R> fReturn,
+    String fName,
+    ASTType<T> pType1,
+    String pName1,
+    Function(T p1) f,
+  ) {
     var fParameters = ASTParametersDeclaration(
-        [ASTFunctionParameterDeclaration(pType1, pName1, 0, false)],
-        null,
-        null);
+      [ASTFunctionParameterDeclaration(pType1, pName1, 0, false)],
+      null,
+      null,
+    );
 
     var fExternal = ASTExternalFunction(fName, fParameters, fReturn, f);
 
@@ -661,17 +753,22 @@ class ApolloExternalFunctionMapper {
 
   /// Maps an external function with 2 parameters.
   void mapExternalFunction2<A, B, R>(
-      ASTType<R> fReturn,
-      String fName,
-      ASTType<A> pType1,
-      String pName1,
-      ASTType<B> pType2,
-      String pName2,
-      Function(A p1, B p2) f) {
-    var fParameters = ASTParametersDeclaration([
-      ASTFunctionParameterDeclaration(pType1, pName1, 0, false),
-      ASTFunctionParameterDeclaration(pType2, pName2, 1, false),
-    ], null, null);
+    ASTType<R> fReturn,
+    String fName,
+    ASTType<A> pType1,
+    String pName1,
+    ASTType<B> pType2,
+    String pName2,
+    Function(A p1, B p2) f,
+  ) {
+    var fParameters = ASTParametersDeclaration(
+      [
+        ASTFunctionParameterDeclaration(pType1, pName1, 0, false),
+        ASTFunctionParameterDeclaration(pType2, pName2, 1, false),
+      ],
+      null,
+      null,
+    );
 
     var fExternal = ASTExternalFunction(fName, fParameters, fReturn, f);
 
@@ -680,20 +777,25 @@ class ApolloExternalFunctionMapper {
 
   /// Maps an external function with 3 parameters.
   void mapExternalFunction3<A, B, C, R>(
-      ASTType<R> fReturn,
-      String fName,
-      ASTType<A> pType1,
-      String pName1,
-      ASTType<B> pType2,
-      String pName2,
-      ASTType<B> pType3,
-      String pName3,
-      Function(A p1, B p2) f) {
-    var fParameters = ASTParametersDeclaration([
-      ASTFunctionParameterDeclaration(pType1, pName1, 0, false),
-      ASTFunctionParameterDeclaration(pType2, pName2, 1, false),
-      ASTFunctionParameterDeclaration(pType3, pName3, 1, false),
-    ], null, null);
+    ASTType<R> fReturn,
+    String fName,
+    ASTType<A> pType1,
+    String pName1,
+    ASTType<B> pType2,
+    String pName2,
+    ASTType<B> pType3,
+    String pName3,
+    Function(A p1, B p2) f,
+  ) {
+    var fParameters = ASTParametersDeclaration(
+      [
+        ASTFunctionParameterDeclaration(pType1, pName1, 0, false),
+        ASTFunctionParameterDeclaration(pType2, pName2, 1, false),
+        ASTFunctionParameterDeclaration(pType3, pName3, 1, false),
+      ],
+      null,
+      null,
+    );
 
     var fExternal = ASTExternalFunction(fName, fParameters, fReturn, f);
 
@@ -702,23 +804,28 @@ class ApolloExternalFunctionMapper {
 
   /// Maps an external function with 4 parameters.
   void mapExternalFunction4<A, B, C, D, R>(
-      ASTType<R> fReturn,
-      String fName,
-      ASTType<A> pType1,
-      String pName1,
-      ASTType<B> pType2,
-      String pName2,
-      ASTType<B> pType3,
-      String pName3,
-      ASTType<B> pType4,
-      String pName4,
-      Function(A p1, B p2) f) {
-    var fParameters = ASTParametersDeclaration([
-      ASTFunctionParameterDeclaration(pType1, pName1, 0, false),
-      ASTFunctionParameterDeclaration(pType2, pName2, 1, false),
-      ASTFunctionParameterDeclaration(pType3, pName3, 1, false),
-      ASTFunctionParameterDeclaration(pType4, pName4, 1, false),
-    ], null, null);
+    ASTType<R> fReturn,
+    String fName,
+    ASTType<A> pType1,
+    String pName1,
+    ASTType<B> pType2,
+    String pName2,
+    ASTType<B> pType3,
+    String pName3,
+    ASTType<B> pType4,
+    String pName4,
+    Function(A p1, B p2) f,
+  ) {
+    var fParameters = ASTParametersDeclaration(
+      [
+        ASTFunctionParameterDeclaration(pType1, pName1, 0, false),
+        ASTFunctionParameterDeclaration(pType2, pName2, 1, false),
+        ASTFunctionParameterDeclaration(pType3, pName3, 1, false),
+        ASTFunctionParameterDeclaration(pType4, pName4, 1, false),
+      ],
+      null,
+      null,
+    );
 
     var fExternal = ASTExternalFunction(fName, fParameters, fReturn, f);
 
@@ -734,7 +841,7 @@ class VMClassContext<T> extends VMContext {
   ASTClass<T> clazz;
 
   VMClassContext(this.clazz, {VMContext? parent, VMTypeResolver? typeResolver})
-      : super(clazz, parent: parent, typeResolver: typeResolver);
+    : super(clazz, parent: parent, typeResolver: typeResolver);
 
   ASTValue<T>? _classInstance;
 
@@ -753,8 +860,12 @@ class VMClassContext<T> extends VMContext {
 
 abstract class VMTypeResolver {
   /// Resolves an [ASTType] with [typeName].
-  FutureOr<ASTType?> resolveType(String typeName,
-      {String? namespace, String? language, bool caseInsensitive = false});
+  FutureOr<ASTType?> resolveType(
+    String typeName, {
+    String? namespace,
+    String? language,
+    bool caseInsensitive = false,
+  });
 }
 
 /// A runtime context of the VM.
@@ -793,7 +904,7 @@ class VMContext {
   final ASTBlock block;
 
   VMContext(this.block, {this.parent, VMTypeResolver? typeResolver})
-      : _typeResolver = typeResolver;
+    : _typeResolver = typeResolver;
 
   final Map<String, ASTTypedVariable> _variables = {};
 
@@ -815,8 +926,12 @@ class VMContext {
       var obj = getClassInstance();
       if (obj != null) {
         if (obj is ASTClassInstance) {
-          var fieldValue = obj.clazz
-              .getInstanceFieldValue(this, ASTRunStatus.dummy, obj, name);
+          var fieldValue = obj.clazz.getInstanceFieldValue(
+            this,
+            ASTRunStatus.dummy,
+            obj,
+            name,
+          );
           return fieldValue.resolveMapped((v) {
             if (v != null) {
               return ASTRuntimeVariable(v.type, name, v);
@@ -881,7 +996,9 @@ class VMContext {
   ///
   /// If [parent] is defined, will also look in the parent context.
   ASTFunctionDeclaration? getFunction(
-      String name, ASTFunctionSignature parametersSignature) {
+    String name,
+    ASTFunctionSignature parametersSignature,
+  ) {
     var f = block.getFunction(name, parametersSignature, this);
     if (f != null) return f;
     return parent?.getFunction(name, parametersSignature);
@@ -892,11 +1009,16 @@ class VMContext {
   /// Returns an [ASTExternalFunction] of [fName] and [parametersSignature].
   ///
   /// If [parent] is defined, will also look in the parent context.
-  ASTExternalFunction<R>? getMappedExternalFunction<R>(String fName,
-      [ASTFunctionSignature? parametersSignature]) {
+  ASTExternalFunction<R>? getMappedExternalFunction<R>(
+    String fName, [
+    ASTFunctionSignature? parametersSignature,
+  ]) {
     if (externalFunctionMapper != null) {
-      var f = externalFunctionMapper!
-          .getMappedFunction(this, fName, parametersSignature);
+      var f = externalFunctionMapper!.getMappedFunction(
+        this,
+        fName,
+        parametersSignature,
+      );
       if (f != null) return f as ASTExternalFunction<R>;
     }
 
@@ -967,8 +1089,11 @@ class VMObject extends ASTValue<dynamic> {
   }
 
   /// Sets a field [value].
-  ASTRuntimeVariable? setFieldValue(String fieldName, ASTValue value,
-      [VMContext? context]) {
+  ASTRuntimeVariable? setFieldValue(
+    String fieldName,
+    ASTValue value, [
+    VMContext? context,
+  ]) {
     var prev = _fieldsValues[fieldName];
     _fieldsValues[fieldName] = ASTRuntimeVariable(value.type, fieldName, value);
     return prev;
@@ -998,8 +1123,10 @@ class VMObject extends ASTValue<dynamic> {
   }
 
   /// Set fields values from a [Map] [fieldsValues].
-  void setFieldsValues(Map<String, ASTValue> fieldsValues,
-      [VMContext? context]) {
+  void setFieldsValues(
+    Map<String, ASTValue> fieldsValues, [
+    VMContext? context,
+  ]) {
     for (var entry in fieldsValues.entries) {
       setFieldValue(entry.key, entry.value, context);
     }

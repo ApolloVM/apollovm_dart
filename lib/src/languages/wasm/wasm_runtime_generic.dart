@@ -14,7 +14,9 @@ class WasmRuntimeGeneric extends WasmRuntime {
 
   @override
   Future<WasmModuleGeneric> loadModuleImpl(
-      String moduleName, Uint8List wasmModuleBinary) async {
+    String moduleName,
+    Uint8List wasmModuleBinary,
+  ) async {
     return WasmModuleGeneric(moduleName);
   }
 }

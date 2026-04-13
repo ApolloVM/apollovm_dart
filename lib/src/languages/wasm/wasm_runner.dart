@@ -30,22 +30,30 @@ class ApolloRunnerWasm extends ApolloRunner {
   }
 
   @override
-  Future<ASTValue> executeFunction(String namespace, String functionName,
-      {List? positionalParameters,
-      Map? namedParameters,
-      bool allowClassMethod = false}) async {
-    var r = await getFunctionCodeUnit(namespace, functionName,
-        allowClassMethod: allowClassMethod);
+  Future<ASTValue> executeFunction(
+    String namespace,
+    String functionName, {
+    List? positionalParameters,
+    Map? namedParameters,
+    bool allowClassMethod = false,
+  }) async {
+    var r = await getFunctionCodeUnit(
+      namespace,
+      functionName,
+      allowClassMethod: allowClassMethod,
+    );
 
     var codeUnit = r.codeUnit as CodeUnit<Uint8List>?;
     if (codeUnit == null) {
       throw StateError(
-          "Can't find function to execute> functionName: $functionName ; language: $language");
+        "Can't find function to execute> functionName: $functionName ; language: $language",
+      );
     }
 
     if (!_wasmRuntime.isSupported) {
       throw StateError(
-          "`WasmRuntime` not supported on this platform: ${_wasmRuntime.platformVersion}");
+        "`WasmRuntime` not supported on this platform: ${_wasmRuntime.platformVersion}",
+      );
     }
 
     var module = await _wasmRuntime.loadModule(codeUnit.id, codeUnit.code);
@@ -55,10 +63,7 @@ class ApolloRunnerWasm extends ApolloRunner {
       throw StateError("Can't find function: $functionName");
     }
 
-    var allParams = [
-      ...?positionalParameters,
-      ...?namedParameters?.values,
-    ];
+    var allParams = [...?positionalParameters, ...?namedParameters?.values];
 
     var astFunction = _getASTFunction(codeUnit, functionName, allParams);
     if (astFunction != null) {
@@ -69,20 +74,27 @@ class ApolloRunnerWasm extends ApolloRunner {
     try {
       res = Function.apply(f, allParams);
     } catch (e) {
-      throw WasmModuleExecutionError(functionName,
-          parameters: allParams, function: f, cause: e);
+      throw WasmModuleExecutionError(
+        functionName,
+        parameters: allParams,
+        function: f,
+        cause: e,
+      );
     }
 
     res = module.resolveReturnedValue(res, astFunction);
 
-    var astValue =
-        res == null ? ASTValueNull.instance : ASTValue.fromValue(res);
+    var astValue = res == null
+        ? ASTValueNull.instance
+        : ASTValue.fromValue(res);
 
     return astValue;
   }
 
   void _resolveWasmCallParameters(
-      ASTFunctionDeclaration astFunction, List parameters) {
+    ASTFunctionDeclaration astFunction,
+    List parameters,
+  ) {
     var astParameters = astFunction.parameters.allParameters;
     var limit = math.min(parameters.length, astParameters.length);
 
@@ -96,7 +108,9 @@ class ApolloRunnerWasm extends ApolloRunner {
   }
 
   Object? _resolveParameterValueType(
-      ASTFunctionParameterDeclaration p, Object? v) {
+    ASTFunctionParameterDeclaration p,
+    Object? v,
+  ) {
     var t = p.type;
 
     if (t is ASTTypeInt) {
@@ -116,7 +130,10 @@ class ApolloRunnerWasm extends ApolloRunner {
   }
 
   ASTFunctionDeclaration? _getASTFunction(
-      CodeUnit<Uint8List> codeUnit, String functionName, List parameters) {
+    CodeUnit<Uint8List> codeUnit,
+    String functionName,
+    List parameters,
+  ) {
     var astFunctionSet = codeUnit.root?.getFunctionWithName(functionName);
     if (astFunctionSet == null) return null;
 
@@ -124,12 +141,14 @@ class ApolloRunnerWasm extends ApolloRunner {
       return astFunctionSet.functions.firstOrNull;
     }
 
-    var list = astFunctionSet.functions
-        .where((f) => f.parameters.size == parameters.length);
+    var list = astFunctionSet.functions.where(
+      (f) => f.parameters.size == parameters.length,
+    );
 
     if (list.length <= 1) return list.firstOrNull;
 
     throw StateError(
-        "Ambiguous AST functions. Can't determine function with name `$functionName` and with ${parameters.length} parameters");
+      "Ambiguous AST functions. Can't determine function with name `$functionName` and with ${parameters.length} parameters",
+    );
   }
 }

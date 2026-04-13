@@ -9,29 +9,28 @@ void main() async {
     test(
       'empty',
       () => _testWasm(
-          language: 'dart',
-          code: r'''
+        language: 'dart',
+        code: r'''
       
           void empty() {
             
           }
           
         ''',
-          functionName: 'empty',
-          executions: {
-            []: null,
-          },
-          expecteWasm: {
-            'test':
-                '0061736D010000000104016000000302010007090105656D70747900000A040102000B',
-          }),
+        functionName: 'empty',
+        executions: {[]: null},
+        expecteWasm: {
+          'test':
+              '0061736D010000000104016000000302010007090105656D70747900000A040102000B',
+        },
+      ),
     );
 
     test(
       'add1',
       () => _testWasm(
-          language: 'dart',
-          code: r'''
+        language: 'dart',
+        code: r'''
       
           int add1(int a) {
             int x = a + 10;
@@ -39,21 +38,22 @@ void main() async {
           }
           
         ''',
-          functionName: 'add1',
-          executions: {
-            [101]: 111,
-          },
-          expecteWasm: {
-            'test':
-                '0061736D0100000001060160017E017E03020100070801046164643100000A10010E01017E2000420A7C210120010F0B',
-          }),
+        functionName: 'add1',
+        executions: {
+          [101]: 111,
+        },
+        expecteWasm: {
+          'test':
+              '0061736D0100000001060160017E017E03020100070801046164643100000A10010E01017E2000420A7C210120010F0B',
+        },
+      ),
     );
 
     test(
       'add3',
       () => _testWasm(
-          language: 'dart',
-          code: r'''
+        language: 'dart',
+        code: r'''
       
           int add3(int a, int b) {
             int x = a + b + 10;
@@ -61,21 +61,22 @@ void main() async {
           }
           
         ''',
-          functionName: 'add3',
-          executions: {
-            [101, 50]: 161,
-          },
-          expecteWasm: {
-            'test':
-                '0061736D0100000001070160027E7E017E03020100070801046164643300000A13011101017E20002001420A7C7C210220020F0B',
-          }),
+        functionName: 'add3',
+        executions: {
+          [101, 50]: 161,
+        },
+        expecteWasm: {
+          'test':
+              '0061736D0100000001070160027E7E017E03020100070801046164643300000A13011101017E20002001420A7C7C210220020F0B',
+        },
+      ),
     );
 
     test(
       'add4',
       () => _testWasm(
-          language: 'dart',
-          code: r'''
+        language: 'dart',
+        code: r'''
       
           int add4(int a, int b, int c) {
             int x = a + b + 10;
@@ -85,21 +86,22 @@ void main() async {
           }
           
         ''',
-          functionName: 'add4',
-          executions: {
-            [101, 50, 30]: 146,
-          },
-          expecteWasm: {
-            'test':
-                '0061736D0100000001080160037E7E7E017E03020100070801046164643400000A28012603017E017E017E20002001420A7C7C21032002B94202B9A3B02104200320047D210520050F0B',
-          }),
+        functionName: 'add4',
+        executions: {
+          [101, 50, 30]: 146,
+        },
+        expecteWasm: {
+          'test':
+              '0061736D0100000001080160037E7E7E017E03020100070801046164643400000A28012603017E017E017E20002001420A7C7C21032002B94202B9A3B02104200320047D210520050F0B',
+        },
+      ),
     );
 
     test(
       'add5',
       () => _testWasm(
-          language: 'dart',
-          code: r'''
+        language: 'dart',
+        code: r'''
       
           int add5(int a, int b, int c) {
             int x = a + b + 10;
@@ -109,22 +111,23 @@ void main() async {
           }
           
         ''',
-          functionName: 'add5',
-          executions: {
-            [101, 50, 30]: 21316,
-            [10, 50, 300]: 6400,
-          },
-          expecteWasm: {
-            'test':
-                '0061736D0100000001080160037E7E7E017E03020100070801046164643500000A2B012903017E017E017E20002001420A7C7C21032002B94202B9A3B02104200320047D2105200520057E0F0B',
-          }),
+        functionName: 'add5',
+        executions: {
+          [101, 50, 30]: 21316,
+          [10, 50, 300]: 6400,
+        },
+        expecteWasm: {
+          'test':
+              '0061736D0100000001080160037E7E7E017E03020100070801046164643500000A2B012903017E017E017E20002001420A7C7C21032002B94202B9A3B02104200320047D2105200520057E0F0B',
+        },
+      ),
     );
 
     test(
       'add6',
       () => _testWasm(
-          language: 'dart',
-          code: r'''
+        language: 'dart',
+        code: r'''
       
           int add6(int a) {
             if (a > 100) {
@@ -134,22 +137,23 @@ void main() async {
           }
           
         ''',
-          functionName: 'add6',
-          executions: {
-            [101]: 1,
-            [10]: 0,
-          },
-          expecteWasm: {
-            'test':
-                '0061736D0100000001060160017E017E03020100070801046164643600000A16011400200042E40055044042010F0B42000F0042000B',
-          }),
+        functionName: 'add6',
+        executions: {
+          [101]: 1,
+          [10]: 0,
+        },
+        expecteWasm: {
+          'test':
+              '0061736D0100000001060160017E017E03020100070801046164643600000A16011400200042E40055044042010F0B42000F0042000B',
+        },
+      ),
     );
 
     test(
       'add7',
       () => _testWasm(
-          language: 'dart',
-          code: r'''
+        language: 'dart',
+        code: r'''
       
           int add7(int a) {
             if (a > 100) {
@@ -163,22 +167,23 @@ void main() async {
           }
           
         ''',
-          functionName: 'add7',
-          executions: {
-            [111]: 211,
-            [11]: 21,
-          },
-          expecteWasm: {
-            'test':
-                '0061736D0100000001060160017E017E03020100070801046164643700000A20011E00200042E400550440200042E4007C2100052000420A7C21000B20000F0B',
-          }),
+        functionName: 'add7',
+        executions: {
+          [111]: 211,
+          [11]: 21,
+        },
+        expecteWasm: {
+          'test':
+              '0061736D0100000001060160017E017E03020100070801046164643700000A20011E00200042E400550440200042E4007C2100052000420A7C21000B20000F0B',
+        },
+      ),
     );
 
     test(
       'add8',
       () => _testWasm(
-          language: 'dart',
-          code: r'''
+        language: 'dart',
+        code: r'''
       
           int add8(int a) {
             if (a > 100) {
@@ -193,23 +198,24 @@ void main() async {
           }
           
         ''',
-          functionName: 'add8',
-          executions: {
-            [101]: 1,
-            [0]: 0,
-            [10]: -1,
-          },
-          expecteWasm: {
-            'test':
-                '0061736D0100000001060160017E017E03020100070801046164643800000A21011F00200042E40055044042010F05200050044042000F05427F0F0B0B0042000B',
-          }),
+        functionName: 'add8',
+        executions: {
+          [101]: 1,
+          [0]: 0,
+          [10]: -1,
+        },
+        expecteWasm: {
+          'test':
+              '0061736D0100000001060160017E017E03020100070801046164643800000A21011F00200042E40055044042010F05200050044042000F05427F0F0B0B0042000B',
+        },
+      ),
     );
 
     test(
       'add9',
       () => _testWasm(
-          language: 'dart',
-          code: r'''
+        language: 'dart',
+        code: r'''
       
           int add9(int a) {
             if (a > 100) {
@@ -227,24 +233,25 @@ void main() async {
           }
           
         ''',
-          functionName: 'add9',
-          executions: {
-            [101]: 100,
-            [0]: 0,
-            [1]: 1,
-            [10]: -1,
-          },
-          expecteWasm: {
-            'test':
-                '0061736D0100000001060160017E017E03020100070801046164643900000A2E012C00200042E40055044042E4000F05200050044042000F052000420151044042010F05427F0F0B0B0B0042000B',
-          }),
+        functionName: 'add9',
+        executions: {
+          [101]: 100,
+          [0]: 0,
+          [1]: 1,
+          [10]: -1,
+        },
+        expecteWasm: {
+          'test':
+              '0061736D0100000001060160017E017E03020100070801046164643900000A2E012C00200042E40055044042E4000F05200050044042000F052000420151044042010F05427F0F0B0B0B0042000B',
+        },
+      ),
     );
 
     test(
       'add10',
       () => _testWasm(
-          language: 'dart',
-          code: r'''
+        language: 'dart',
+        code: r'''
       
           int add10(int a) {
             if (a > 100) {
@@ -258,23 +265,24 @@ void main() async {
           }
           
         ''',
-          functionName: 'add10',
-          executions: {
-            [101]: 1,
-            [0]: 0,
-            [10]: -11,
-          },
-          expecteWasm: {
-            'test':
-                '0061736D0100000001060160017E017E0302010007090105616464313000000A20011E00200042E40055044042010F05200050044042000F0B0B42750F0042000B',
-          }),
+        functionName: 'add10',
+        executions: {
+          [101]: 1,
+          [0]: 0,
+          [10]: -11,
+        },
+        expecteWasm: {
+          'test':
+              '0061736D0100000001060160017E017E0302010007090105616464313000000A20011E00200042E40055044042010F05200050044042000F0B0B42750F0042000B',
+        },
+      ),
     );
 
     test(
       'add11',
       () => _testWasm(
-          language: 'dart',
-          code: r'''
+        language: 'dart',
+        code: r'''
       
           int add11(int a) {
             var x = a + 10;
@@ -282,21 +290,22 @@ void main() async {
           }
           
         ''',
-          functionName: 'add11',
-          executions: {
-            [101]: 111,
-          },
-          expecteWasm: {
-            'test':
-                '0061736D0100000001060160017E017E0302010007090105616464313100000A10010E01017E2000420A7C210120010F0B',
-          }),
+        functionName: 'add11',
+        executions: {
+          [101]: 111,
+        },
+        expecteWasm: {
+          'test':
+              '0061736D0100000001060160017E017E0302010007090105616464313100000A10010E01017E2000420A7C210120010F0B',
+        },
+      ),
     );
 
     test(
       'add12',
       () => _testWasm(
-          language: 'dart',
-          code: r'''
+        language: 'dart',
+        code: r'''
       
           double add12( int a, int b ) {
             double c = b / 2;
@@ -305,21 +314,22 @@ void main() async {
           }
           
         ''',
-          functionName: 'add12',
-          executions: {
-            [100, 31]: 115.5,
-          },
-          expecteWasm: {
-            'test':
-                '0061736D0100000001070160027E7E017C0302010007090105616464313200000A1C011A02017C017C2001B94202B9A321022000B92002A0210320030F0B',
-          }),
+        functionName: 'add12',
+        executions: {
+          [100, 31]: 115.5,
+        },
+        expecteWasm: {
+          'test':
+              '0061736D0100000001070160027E7E017C0302010007090105616464313200000A1C011A02017C017C2001B94202B9A321022000B92002A0210320030F0B',
+        },
+      ),
     );
 
     test(
       'add13',
       () => _testWasm(
-          language: 'dart',
-          code: r'''
+        language: 'dart',
+        code: r'''
       
           double add13(int a) {
             var x = a + 10 ;
@@ -327,21 +337,22 @@ void main() async {
           }
           
         ''',
-          functionName: 'add13',
-          executions: {
-            [100]: 110,
-          },
-          expecteWasm: {
-            'test':
-                '0061736D0100000001060160017E017C0302010007090105616464313300000A11010F01017E2000420A7C21012001B90F0B',
-          }),
+        functionName: 'add13',
+        executions: {
+          [100]: 110,
+        },
+        expecteWasm: {
+          'test':
+              '0061736D0100000001060160017E017C0302010007090105616464313300000A11010F01017E2000420A7C21012001B90F0B',
+        },
+      ),
     );
 
     test(
       'increment1',
       () => _testWasm(
-          language: 'dart',
-          code: r'''
+        language: 'dart',
+        code: r'''
       
           int increment1(int a) {
             int x = a++;
@@ -349,21 +360,22 @@ void main() async {
           }
           
         ''',
-          functionName: 'increment1',
-          executions: {
-            [100]: 100,
-          },
-          expecteWasm: {
-            'test':
-                '0061736D0100000001060160017E017E03020100070E010A696E6372656D656E743100000A14011201017E2000200042017C2100210120010F0B',
-          }),
+        functionName: 'increment1',
+        executions: {
+          [100]: 100,
+        },
+        expecteWasm: {
+          'test':
+              '0061736D0100000001060160017E017E03020100070E010A696E6372656D656E743100000A14011201017E2000200042017C2100210120010F0B',
+        },
+      ),
     );
 
     test(
       'increment2',
       () => _testWasm(
-          language: 'dart',
-          code: r'''
+        language: 'dart',
+        code: r'''
       
           int increment2(int a) {
             a++;
@@ -372,21 +384,22 @@ void main() async {
           }
           
         ''',
-          functionName: 'increment2',
-          executions: {
-            [100]: 101,
-          },
-          expecteWasm: {
-            'test':
-                '0061736D0100000001060160017E017E03020100070E010A696E6372656D656E743200000A1D011B01017E2000200042017C21002000200042017C2100210120010F0B',
-          }),
+        functionName: 'increment2',
+        executions: {
+          [100]: 101,
+        },
+        expecteWasm: {
+          'test':
+              '0061736D0100000001060160017E017E03020100070E010A696E6372656D656E743200000A1D011B01017E2000200042017C21002000200042017C2100210120010F0B',
+        },
+      ),
     );
 
     test(
       'increment3',
       () => _testWasm(
-          language: 'dart',
-          code: r'''
+        language: 'dart',
+        code: r'''
       
           int increment3(int a) {
             a++;
@@ -395,21 +408,22 @@ void main() async {
           }
           
         ''',
-          functionName: 'increment3',
-          executions: {
-            [100]: 102,
-          },
-          expecteWasm: {
-            'test':
-                '0061736D0100000001060160017E017E03020100070E010A696E6372656D656E743300000A1D011B01017E2000200042017C21002000200042017C2100210120000F0B',
-          }),
+        functionName: 'increment3',
+        executions: {
+          [100]: 102,
+        },
+        expecteWasm: {
+          'test':
+              '0061736D0100000001060160017E017E03020100070E010A696E6372656D656E743300000A1D011B01017E2000200042017C21002000200042017C2100210120000F0B',
+        },
+      ),
     );
 
     test(
       'preIncrement1',
       () => _testWasm(
-          language: 'dart',
-          code: r'''
+        language: 'dart',
+        code: r'''
       
           int preIncrement1(int a) {
             int x = ++a;
@@ -417,21 +431,22 @@ void main() async {
           }
           
         ''',
-          functionName: 'preIncrement1',
-          executions: {
-            [100]: 101,
-          },
-          expecteWasm: {
-            'test':
-                '0061736D0100000001060160017E017E030201000711010D707265496E6372656D656E743100000A14011201017E200042017C21002000210120010F0B',
-          }),
+        functionName: 'preIncrement1',
+        executions: {
+          [100]: 101,
+        },
+        expecteWasm: {
+          'test':
+              '0061736D0100000001060160017E017E030201000711010D707265496E6372656D656E743100000A14011201017E200042017C21002000210120010F0B',
+        },
+      ),
     );
 
     test(
       'preIncrement2',
       () => _testWasm(
-          language: 'dart',
-          code: r'''
+        language: 'dart',
+        code: r'''
       
           int preIncrement2(int a) {
             ++a;
@@ -440,21 +455,22 @@ void main() async {
           }
           
         ''',
-          functionName: 'preIncrement2',
-          executions: {
-            [100]: 102,
-          },
-          expecteWasm: {
-            'test':
-                '0061736D0100000001060160017E017E030201000711010D707265496E6372656D656E743200000A1D011B01017E200042017C21002000200042017C21002000210120010F0B',
-          }),
+        functionName: 'preIncrement2',
+        executions: {
+          [100]: 102,
+        },
+        expecteWasm: {
+          'test':
+              '0061736D0100000001060160017E017E030201000711010D707265496E6372656D656E743200000A1D011B01017E200042017C21002000200042017C21002000210120010F0B',
+        },
+      ),
     );
 
     test(
       'preIncrement3',
       () => _testWasm(
-          language: 'dart',
-          code: r'''
+        language: 'dart',
+        code: r'''
       
           int preIncrement3(int a) {
             ++a;
@@ -463,21 +479,22 @@ void main() async {
           }
           
         ''',
-          functionName: 'preIncrement3',
-          executions: {
-            [100]: 102,
-          },
-          expecteWasm: {
-            'test':
-                '0061736D0100000001060160017E017E030201000711010D707265496E6372656D656E743300000A1D011B01017E200042017C21002000200042017C21002000210120000F0B',
-          }),
+        functionName: 'preIncrement3',
+        executions: {
+          [100]: 102,
+        },
+        expecteWasm: {
+          'test':
+              '0061736D0100000001060160017E017E030201000711010D707265496E6372656D656E743300000A1D011B01017E200042017C21002000200042017C21002000210120000F0B',
+        },
+      ),
     );
 
     test(
       'decrement1',
       () => _testWasm(
-          language: 'dart',
-          code: r'''
+        language: 'dart',
+        code: r'''
       
           int decrement1(int a) {
             int x = a--;
@@ -485,21 +502,22 @@ void main() async {
           }
           
         ''',
-          functionName: 'decrement1',
-          executions: {
-            [100]: 100,
-          },
-          expecteWasm: {
-            'test':
-                '0061736D0100000001060160017E017E03020100070E010A64656372656D656E743100000A14011201017E2000200042017D2100210120010F0B',
-          }),
+        functionName: 'decrement1',
+        executions: {
+          [100]: 100,
+        },
+        expecteWasm: {
+          'test':
+              '0061736D0100000001060160017E017E03020100070E010A64656372656D656E743100000A14011201017E2000200042017D2100210120010F0B',
+        },
+      ),
     );
 
     test(
       'decrement2',
       () => _testWasm(
-          language: 'dart',
-          code: r'''
+        language: 'dart',
+        code: r'''
       
           int decrement2(int a) {
             a--;
@@ -508,21 +526,22 @@ void main() async {
           }
           
         ''',
-          functionName: 'decrement2',
-          executions: {
-            [100]: 99,
-          },
-          expecteWasm: {
-            'test':
-                '0061736D0100000001060160017E017E03020100070E010A64656372656D656E743200000A1D011B01017E2000200042017D21002000200042017D2100210120010F0B',
-          }),
+        functionName: 'decrement2',
+        executions: {
+          [100]: 99,
+        },
+        expecteWasm: {
+          'test':
+              '0061736D0100000001060160017E017E03020100070E010A64656372656D656E743200000A1D011B01017E2000200042017D21002000200042017D2100210120010F0B',
+        },
+      ),
     );
 
     test(
       'decrement3',
       () => _testWasm(
-          language: 'dart',
-          code: r'''
+        language: 'dart',
+        code: r'''
       
           int decrement3(int a) {
             a--;
@@ -531,21 +550,22 @@ void main() async {
           }
           
         ''',
-          functionName: 'decrement3',
-          executions: {
-            [100]: 98,
-          },
-          expecteWasm: {
-            'test':
-                '0061736D0100000001060160017E017E03020100070E010A64656372656D656E743300000A1D011B01017E2000200042017D21002000200042017D2100210120000F0B',
-          }),
+        functionName: 'decrement3',
+        executions: {
+          [100]: 98,
+        },
+        expecteWasm: {
+          'test':
+              '0061736D0100000001060160017E017E03020100070E010A64656372656D656E743300000A1D011B01017E2000200042017D21002000200042017D2100210120000F0B',
+        },
+      ),
     );
 
     test(
       'preDecrement1',
       () => _testWasm(
-          language: 'dart',
-          code: r'''
+        language: 'dart',
+        code: r'''
       
           int preDecrement1(int a) {
             int x = --a;
@@ -553,21 +573,22 @@ void main() async {
           }
           
         ''',
-          functionName: 'preDecrement1',
-          executions: {
-            [100]: 99,
-          },
-          expecteWasm: {
-            'test':
-                '0061736D0100000001060160017E017E030201000711010D70726544656372656D656E743100000A14011201017E200042017D21002000210120010F0B',
-          }),
+        functionName: 'preDecrement1',
+        executions: {
+          [100]: 99,
+        },
+        expecteWasm: {
+          'test':
+              '0061736D0100000001060160017E017E030201000711010D70726544656372656D656E743100000A14011201017E200042017D21002000210120010F0B',
+        },
+      ),
     );
 
     test(
       'preDecrement2',
       () => _testWasm(
-          language: 'dart',
-          code: r'''
+        language: 'dart',
+        code: r'''
       
           int preDecrement2(int a) {
             --a;
@@ -576,21 +597,22 @@ void main() async {
           }
           
         ''',
-          functionName: 'preDecrement2',
-          executions: {
-            [100]: 98,
-          },
-          expecteWasm: {
-            'test':
-                '0061736D0100000001060160017E017E030201000711010D70726544656372656D656E743200000A1D011B01017E200042017D21002000200042017D21002000210120010F0B',
-          }),
+        functionName: 'preDecrement2',
+        executions: {
+          [100]: 98,
+        },
+        expecteWasm: {
+          'test':
+              '0061736D0100000001060160017E017E030201000711010D70726544656372656D656E743200000A1D011B01017E200042017D21002000200042017D21002000210120010F0B',
+        },
+      ),
     );
 
     test(
       'preDecrement3',
       () => _testWasm(
-          language: 'dart',
-          code: r'''
+        language: 'dart',
+        code: r'''
       
           int preDecrement3(int a) {
             --a;
@@ -599,21 +621,22 @@ void main() async {
           }
           
         ''',
-          functionName: 'preDecrement3',
-          executions: {
-            [100]: 98,
-          },
-          expecteWasm: {
-            'test':
-                '0061736D0100000001060160017E017E030201000711010D70726544656372656D656E743300000A1D011B01017E200042017D21002000200042017D21002000210120000F0B',
-          }),
+        functionName: 'preDecrement3',
+        executions: {
+          [100]: 98,
+        },
+        expecteWasm: {
+          'test':
+              '0061736D0100000001060160017E017E030201000711010D70726544656372656D656E743300000A1D011B01017E200042017D21002000200042017D21002000210120000F0B',
+        },
+      ),
     );
 
     test(
       'operation1',
       () => _testWasm(
-          language: 'dart',
-          code: r'''
+        language: 'dart',
+        code: r'''
       
           double operation1( int v, double r, int balance ) {
             var total = v * r ;
@@ -626,24 +649,25 @@ void main() async {
           }
           
         ''',
-          functionName: 'operation1',
-          executions: {
-            [50, 0.33, 1000]: 16.5,
-            [50, 30.0, 1000]: 0.0,
-            [50, 30.0, 2000]: 1500.0,
-            [50, 30, 2000]: 1500.0,
-          },
-          expecteWasm: {
-            'test':
-                '0061736D0100000001080160037E7C7E017C03020100070E010A6F7065726174696F6E3100000A1E011C01017C2000B92001A2210320032002B96404404200B90F0B20030F0B',
-          }),
+        functionName: 'operation1',
+        executions: {
+          [50, 0.33, 1000]: 16.5,
+          [50, 30.0, 1000]: 0.0,
+          [50, 30.0, 2000]: 1500.0,
+          [50, 30, 2000]: 1500.0,
+        },
+        expecteWasm: {
+          'test':
+              '0061736D0100000001080160037E7C7E017C03020100070E010A6F7065726174696F6E3100000A1E011C01017C2000B92001A2210320032002B96404404200B90F0B20030F0B',
+        },
+      ),
     );
 
     test(
       'operation2',
       () => _testWasm(
-          language: 'dart',
-          code: r'''
+        language: 'dart',
+        code: r'''
       
           int operation2( int v, double r, int balance ) {
             var total = v * r ;
@@ -656,23 +680,24 @@ void main() async {
           }
           
         ''',
-          functionName: 'operation2',
-          executions: {
-            [50, 0.33, 1000]: 16.0,
-            [50, 30.0, 1000]: 0.0,
-            [50, 30.0, 2000]: 1500.0,
-          },
-          expecteWasm: {
-            'test':
-                '0061736D0100000001080160037E7C7E017E03020100070E010A6F7065726174696F6E3200000A1E011C01017C2000B92001A2210320032002B964044042000F0B2003B00F0B',
-          }),
+        functionName: 'operation2',
+        executions: {
+          [50, 0.33, 1000]: 16.0,
+          [50, 30.0, 1000]: 0.0,
+          [50, 30.0, 2000]: 1500.0,
+        },
+        expecteWasm: {
+          'test':
+              '0061736D0100000001080160037E7C7E017E03020100070E010A6F7065726174696F6E3200000A1E011C01017C2000B92001A2210320032002B964044042000F0B2003B00F0B',
+        },
+      ),
     );
 
     test(
       'f\$10',
       () => _testWasm(
-          language: 'dart',
-          code: r'''
+        language: 'dart',
+        code: r'''
       
           int f$10( int a, double b , double c ) {
             var x = a * b;
@@ -681,22 +706,23 @@ void main() async {
           }
           
         ''',
-          functionName: 'f\$10',
-          executions: {
-            [10, 5, 2]: 25,
-            [10, 5, 3]: 16,
-          },
-          expecteWasm: {
-            'test':
-                '0061736D0100000001080160037E7C7C017E03020100070801046624313000000A1B011902017C017C2000B92001A2210320032002A321042004B00F0B',
-          }),
+        functionName: 'f\$10',
+        executions: {
+          [10, 5, 2]: 25,
+          [10, 5, 3]: 16,
+        },
+        expecteWasm: {
+          'test':
+              '0061736D0100000001080160037E7C7C017E03020100070801046624313000000A1B011902017C017C2000B92001A2210320032002A321042004B00F0B',
+        },
+      ),
     );
 
     test(
       'f\$11',
       () => _testWasm(
-          language: 'dart',
-          code: r'''
+        language: 'dart',
+        code: r'''
       
           double f$11( int a, double b , double c ) {
             var x = a * b;
@@ -705,22 +731,23 @@ void main() async {
           }
           
         ''',
-          functionName: 'f\$11',
-          executions: {
-            [10, 5, 2]: 25,
-            [11, 3, 2]: 16.5,
-          },
-          expecteWasm: {
-            'test':
-                '0061736D0100000001080160037E7C7C017C03020100070801046624313100000A1A011802017C017C2000B92001A2210320032002A3210420040F0B',
-          }),
+        functionName: 'f\$11',
+        executions: {
+          [10, 5, 2]: 25,
+          [11, 3, 2]: 16.5,
+        },
+        expecteWasm: {
+          'test':
+              '0061736D0100000001080160037E7C7C017C03020100070801046624313100000A1A011802017C017C2000B92001A2210320032002A3210420040F0B',
+        },
+      ),
     );
 
     test(
       'f\$12',
       () => _testWasm(
-          language: 'dart',
-          code: r'''
+        language: 'dart',
+        code: r'''
       
           double f$12( int a, double b , double c ) {
             var x = a * b;
@@ -729,25 +756,27 @@ void main() async {
           }
           
         ''',
-          functionName: 'f\$12',
-          executions: {
-            [10, 5, 2]: 25,
-            [11, 3, 2]: 16
-          },
-          expecteWasm: {
-            'test':
-                '0061736D0100000001080160037E7C7C017C03020100070801046624313200000A1C011A02017C017E2000B92001A2210320032002A3B021042004B90F0B',
-          }),
+        functionName: 'f\$12',
+        executions: {
+          [10, 5, 2]: 25,
+          [11, 3, 2]: 16,
+        },
+        expecteWasm: {
+          'test':
+              '0061736D0100000001080160037E7C7C017C03020100070801046624313200000A1C011A02017C017E2000B92001A2210320032002A3B021042004B90F0B',
+        },
+      ),
     );
   });
 }
 
-Future<void> _testWasm(
-    {required String language,
-    required String code,
-    required String functionName,
-    required Map<List, Object?> executions,
-    Map<String, dynamic>? expecteWasm}) async {
+Future<void> _testWasm({
+  required String language,
+  required String code,
+  required String functionName,
+  required Map<List, Object?> executions,
+  Map<String, dynamic>? expecteWasm,
+}) async {
   print('==================================================================');
   print("$language>> $functionName");
 
@@ -837,8 +866,11 @@ Future<void> _testWasm(
       print('<<<<<<<<<<<<<<<<<<<<<<<<<<<<');
       print('EXECUTE AST> $parameters -> $expectedResult');
 
-      var astValue = await dartRunner.executeFunction('', functionName,
-          positionalParameters: parameters);
+      var astValue = await dartRunner.executeFunction(
+        '',
+        functionName,
+        positionalParameters: parameters,
+      );
 
       var result = astValue.getValueNoContext();
       print('Result: $result');
@@ -857,8 +889,12 @@ Future<void> _testWasm(
 
     var vmWasm = ApolloVM();
 
-    var wasmCodeUnit = BinaryCodeUnit('wasm', compiledWasm!.output(),
-        id: 'test.wasm', namespace: '');
+    var wasmCodeUnit = BinaryCodeUnit(
+      'wasm',
+      compiledWasm!.output(),
+      id: 'test.wasm',
+      namespace: '',
+    );
 
     var loadOK = await vmWasm.loadCodeUnit(wasmCodeUnit);
     expect(loadOK, isTrue);
@@ -878,14 +914,17 @@ Future<void> _testWasm(
       ASTValue wasmAstValue;
 
       try {
-        wasmAstValue = await wasmRunner.executeFunction('', functionName,
-            positionalParameters: parameters);
+        wasmAstValue = await wasmRunner.executeFunction(
+          '',
+          functionName,
+          positionalParameters: parameters,
+        );
       } catch (e) {
         print(e);
 
-        var matchOffset =
-            RegExp(r'Invalid input WebAssembly code at offset (\d+)')
-                .firstMatch('$e');
+        var matchOffset = RegExp(
+          r'Invalid input WebAssembly code at offset (\d+)',
+        ).firstMatch('$e');
 
         if (matchOffset != null) {
           var offset = int.tryParse(matchOffset.group(1) ?? '');
