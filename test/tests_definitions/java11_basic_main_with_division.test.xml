@@ -66,7 +66,7 @@ class Foo {
 
     var str = "function's \"variables\"> a: " + '$a ; b: $b ; c: $c';
     var sumAB = a + b;
-    var sumABC = a + b + c;
+    var sumABC = a + (b + c);
     print(str);
     print(title);
     print(sumAB);
@@ -94,7 +94,7 @@ class Foo {
 
     var str = "function's \"variables\"> a: " + a + " ; b: " + b + " ; c: " + c;
     var sumAB = a + b;
-    var sumABC = a + b + c;
+    var sumABC = a + (b + c);
     print(str);
     print(title);
     print(sumAB);

@@ -6,6 +6,53 @@ Future<void> main() async {
   print('BASIC TESTS DEFINITIONS');
 
   var definitions = <TestDefinition>[
+    TestDefinition('dart_basic_main.test.xml', '''
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="Basic sumOrDouble(int a, int b)">
+    <source language="dart">
+        <![CDATA[
+            int sumOrDouble(int a, int b) {
+  if (a > b) {
+    print('if (a > b)');
+    return a + b;
+  } else {
+    print("else");
+    return (a + b) * 2;
+  }
+}
+        ]]>
+    </source>
+    <call function="sumOrDouble" return="14">
+        [3, 4]
+    </call>
+    <output>
+        ["else"]
+    </output>
+    <call function="sumOrDouble" return="7">
+        [4, 3]
+    </call>
+    <output>
+        ["if (a > b)"]
+    </output>
+    <source-generated language="dart"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+  int sumOrDouble(int a, int b) {
+    if (a > b) {
+        print('if (a > b)');
+        return a + b;
+    } else {
+        print('else');
+        return (a + b) * 2;
+    }
+
+  }
+
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+</test>
+    '''),
     TestDefinition('dart_basic_main_1.test.xml', '''
 <?xml version="1.0" encoding="UTF-8"?>
 <test title="Basic main(List<String>) 1">
@@ -41,7 +88,7 @@ Future<void> main() async {
     var b = args[2];
     var c = args[3];
     var sumAB = a + b;
-    var sumABC = a + b + c;
+    var sumABC = a + (b + c);
     print(title);
     print(sumAB);
     print(sumABC);
@@ -93,7 +140,7 @@ class Foo {
     var b = args[2];
     var c = args[3];
     var sumAB = a + b;
-    var sumABC = a + b + c;
+    var sumABC = a + (b + c);
     print(title);
     print(sumAB);
     print(sumABC);
@@ -115,7 +162,7 @@ class Foo {
     var b = args[2];
     var c = args[3];
     var sumAB = a + b;
-    var sumABC = a + b + c;
+    var sumABC = a + (b + c);
     print(title);
     print(sumAB);
     print(sumABC);
@@ -138,7 +185,7 @@ class Foo {
               var b = args[2];
               var c = args[3];
               var sumAB = a + b ;
-              var sumABC = a + b + c;
+              var sumABC = a + (b + c);
               print(title);
               print(sumAB);
               print(sumABC);
@@ -169,7 +216,7 @@ class Foo {
     var b = args[2];
     var c = args[3];
     var sumAB = a + b;
-    var sumABC = a + b + c;
+    var sumABC = a + (b + c);
     print(title);
     print(sumAB);
     print(sumABC);
@@ -242,7 +289,7 @@ class Foo {
     var b = args[2];
     var c = args[3];
     var sumAB = a + b;
-    var sumABC = a + b + c;
+    var sumABC = a + (b + c);
     print(title);
     print(sumAB);
     print(sumABC);
@@ -270,7 +317,7 @@ class Foo {
     var b = args[2];
     var c = args[3];
     var sumAB = a + b;
-    var sumABC = a + b + c;
+    var sumABC = a + (b + c);
     print(title);
     print(sumAB);
     print(sumABC);
@@ -344,7 +391,7 @@ class Foo {
   }
 
   int calcB(int b1, int b2) {
-    return y * b1 * b2;
+    return y * (b1 * b2);
   }
 
   void test(int a) {
@@ -372,7 +419,7 @@ class Foo {
   }
 
   int calcB(int b1, int b2) {
-    return y * b1 * b2;
+    return y * (b1 * b2);
   }
 
   void test(int a) {

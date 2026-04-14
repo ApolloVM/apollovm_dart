@@ -11,7 +11,7 @@
               var s2 = r'string';
               var c = s1 + ' \t' +"\t " + s2 ;
               var sumAB = a + b ;
-              var sumABC = a + b + c;
+              var sumABC = a + (b + c);
               print(title);
               print(sumAB);
               print(sumABC);
@@ -38,7 +38,7 @@
     var s2 = 'string';
     var c = '$s1 \t\t $s2';
     var sumAB = a + b;
-    var sumABC = a + b + c;
+    var sumABC = a + (b + c);
     print(title);
     print(sumAB);
     print(sumABC);

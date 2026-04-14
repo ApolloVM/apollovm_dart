@@ -485,11 +485,22 @@ class ApolloCodeGeneratorDart extends ApolloCodeGenerator {
 
     if (headIndented) out.write(indent);
 
+    final expression1 = expression.expression1;
+    final expression2 = expression.expression2;
+    final operator = expression.operator;
+
+    var groupComplexExpressions = true;
+
     // Merge into string template:
-    if (expression.operator == ASTExpressionOperator.add) {
-      if (expression.expression1.isVariableAccess) {
-        var s1 = generateASTExpression(expression.expression1).toString();
-        var s2 = generateASTExpression(expression.expression2).toString();
+    if (operator == ASTExpressionOperator.add) {
+      if (expression1.isVariableAccess) {
+        var s1 = generateASTExpression(expression1).toString();
+        var s2 = generateASTExpression(expression2).toString();
+
+        if (expression2.isLiteralString ||
+            expression2.hasDescendantLiteralString) {
+          groupComplexExpressions = false;
+        }
 
         if (_isVariable(s1) &&
             (_isSingleQuoteString(s2) || _isDoubleQuoteString(s2))) {
@@ -497,9 +508,11 @@ class ApolloCodeGeneratorDart extends ApolloCodeGenerator {
           out.write(sMerge);
           return out;
         }
-      } else if (expression.expression1.isLiteralString) {
-        var s1 = generateASTExpression(expression.expression1).toString();
-        var s2 = generateASTExpression(expression.expression2).toString();
+      } else if (expression1.isLiteralString) {
+        groupComplexExpressions = false;
+
+        var s1 = generateASTExpression(expression1).toString();
+        var s2 = generateASTExpression(expression2).toString();
 
         if ((_isSingleQuoteString(s1) && _isSingleQuoteString(s2)) ||
             (_isDoubleQuoteString(s1) && _isDoubleQuoteString(s2))) {
@@ -513,20 +526,37 @@ class ApolloCodeGeneratorDart extends ApolloCodeGenerator {
           out.write(sMerge);
           return out;
         }
+      } else if (expression2.isLiteralString) {
+        groupComplexExpressions = false;
+      } else if (expression1.hasDescendantLiteralString ||
+          expression2.hasDescendantLiteralString) {
+        groupComplexExpressions = false;
       }
     }
 
     var op = resolveASTExpressionOperatorText(
-      expression.operator,
-      expression.expression1.literalNumType,
-      expression.expression2.literalNumType,
+      operator,
+      expression1.literalNumType,
+      expression2.literalNumType,
     );
 
-    generateASTExpression(expression.expression1, out: out);
+    var exp1 = generateASTExpression(expression1);
+    var exp2 = generateASTExpression(expression2);
+
+    var group1 = groupComplexExpressions && expression1.isComplex;
+    var group2 = groupComplexExpressions && expression2.isComplex;
+
+    if (group1) out.write('(');
+    out.write(exp1);
+    if (group1) out.write(')');
+
     out.write(' ');
     out.write(op);
     out.write(' ');
-    generateASTExpression(expression.expression2, out: out);
+
+    if (group2) out.write('(');
+    out.write(exp2);
+    if (group2) out.write(')');
 
     return out;
   }

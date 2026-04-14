@@ -1,3 +1,20 @@
+## 0.1.2
+
+- `ApolloCodeGenerator` and `ApolloCodeGeneratorDart`:
+  - `generateASTExpressionOperation`: updated to conditionally group complex expressions with parentheses based on operator and presence of literal strings to improve expression formatting and string interpolation merging.
+  - Improved string concatenation merging for `add` operator when involving variables and literal strings.
+
+- `ASTExpression` and subclasses (`ASTExpressionOperation`, `ASTExpressionVariableAssignment`, `ASTExpressionVariableDirectOperation`, `ASTExpressionNegation`, `ASTExpressionFunctionInvocation`, etc.):
+  - Added `isComplex` getter to distinguish complex expressions.
+  - Added `hasLiteralString` and `hasDescendantLiteralString` to detect literal strings in expression trees.
+  - Updated `toString` methods to support optional grouping with parentheses for clarity.
+  - Updated `ASTExpressionOperation.toString` to optionally wrap expressions in parentheses.
+  - Updated `ASTExpressionVariableAssignment` and `ASTExpressionVariableDirectOperation` to provide detailed `toString` implementations reflecting operators.
+  - Added `childrenOperations` and `descendantChildrenOperations` helpers for expression traversal.
+
+- `ASTAssignmentOperator` enum:
+  - Added `symbol` field for operator symbol representation.
+
 ## 0.1.1
 
 - `lib/apollovm.dart`:

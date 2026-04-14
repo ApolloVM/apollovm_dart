@@ -47,7 +47,7 @@
 
     var str = 'variables> a: $a ; b: $b ; c: $c';
     var sumAB = a + b;
-    var sumABC = a + b + c;
+    var sumABC = a + (b + c);
     print(str);
     print(title);
     print(sumAB);

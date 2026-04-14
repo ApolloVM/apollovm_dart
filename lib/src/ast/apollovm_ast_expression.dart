@@ -40,6 +40,8 @@ abstract class ASTExpression with ASTNode implements ASTCodeRunner {
   @override
   ASTNode? get parentNode => _parentNode;
 
+  bool get isComplex;
+
   @override
   void resolveNode(ASTNode? parentNode) {
     _parentNode = parentNode;
@@ -58,6 +60,25 @@ abstract class ASTExpression with ASTNode implements ASTCodeRunner {
 
   @override
   void associateToType(ASTTypedNode node) {}
+
+  bool get hasLiteralString =>
+      children.whereType<ASTExpressionLiteral>().any((e) => e.isLiteralString);
+
+  bool get hasDescendantLiteralString =>
+      hasLiteralString ||
+      descendantChildrenOperations.any((e) => e.hasDescendantLiteralString);
+
+  bool get isOperation {
+    return this is ASTExpressionOperation ||
+        this is ASTExpressionVariableAssignment ||
+        this is ASTExpressionVariableDirectOperation;
+  }
+
+  Iterable<ASTExpression> get childrenOperations =>
+      children.whereType<ASTExpression>().where((e) => e.isOperation);
+
+  Iterable<ASTExpression> get descendantChildrenOperations =>
+      childrenOperations.expand((e) => [e, ...e.childrenOperations]);
 
   bool get isVariableAccess {
     return this is ASTExpressionVariableAccess;
@@ -123,6 +144,9 @@ abstract class ASTExpression with ASTNode implements ASTCodeRunner {
     }
     return false;
   }
+
+  @override
+  String toString({bool asGroup = false});
 }
 
 /// [ASTExpression] to access a variable.
@@ -130,6 +154,9 @@ class ASTExpressionVariableAccess extends ASTExpression {
   ASTVariable variable;
 
   ASTExpressionVariableAccess(this.variable);
+
+  @override
+  bool get isComplex => false;
 
   @override
   Iterable<ASTNode> get children => [variable];
@@ -156,7 +183,7 @@ class ASTExpressionVariableAccess extends ASTExpression {
   }
 
   @override
-  String toString() {
+  String toString({bool asGroup = false}) {
     return '$variable';
   }
 }
@@ -166,6 +193,9 @@ class ASTExpressionLiteral extends ASTExpression {
   ASTValue value;
 
   ASTExpressionLiteral(this.value);
+
+  @override
+  bool get isComplex => false;
 
   @override
   Iterable<ASTNode> get children => [value];
@@ -184,7 +214,7 @@ class ASTExpressionLiteral extends ASTExpression {
   }
 
   @override
-  String toString() {
+  String toString({bool asGroup = false}) {
     return '$value';
   }
 }
@@ -196,6 +226,9 @@ class ASTExpressionListLiteral extends ASTExpression {
   final List<ASTExpression> valuesExpressions;
 
   ASTExpressionListLiteral(this.type, this.valuesExpressions);
+
+  @override
+  bool get isComplex => false;
 
   @override
   Iterable<ASTNode> get children => [?type, ...valuesExpressions];
@@ -235,7 +268,7 @@ class ASTExpressionListLiteral extends ASTExpression {
   }
 
   @override
-  String toString() {
+  String toString({bool asGroup = false}) {
     return '$valuesExpressions';
   }
 }
@@ -252,6 +285,9 @@ class ASTExpressionMapLiteral extends ASTExpression {
     this.valueType,
     this.entriesExpressions,
   );
+
+  @override
+  bool get isComplex => false;
 
   @override
   Iterable<ASTNode> get children => [
@@ -313,7 +349,7 @@ class ASTExpressionMapLiteral extends ASTExpression {
   }
 
   @override
-  String toString() {
+  String toString({bool asGroup = false}) {
     return '$entriesExpressions';
   }
 }
@@ -324,6 +360,9 @@ class ASTExpressionVariableEntryAccess extends ASTExpression {
   ASTExpression expression;
 
   ASTExpressionVariableEntryAccess(this.variable, this.expression);
+
+  @override
+  bool get isComplex => false;
 
   @override
   Iterable<ASTNode> get children => [variable, expression];
@@ -388,7 +427,7 @@ class ASTExpressionVariableEntryAccess extends ASTExpression {
   }
 
   @override
-  String toString() {
+  String toString({bool asGroup = false}) {
     return '$variable.$expression';
   }
 }
@@ -473,6 +512,9 @@ class ASTExpressionNegation extends ASTExpression {
   ASTExpressionNegation(this.expression);
 
   @override
+  bool get isComplex => true;
+
+  @override
   Iterable<ASTNode> get children => [expression];
 
   @override
@@ -512,7 +554,10 @@ class ASTExpressionNegation extends ASTExpression {
   }
 
   @override
-  String toString() => '!$expression';
+  String toString({bool asGroup = false}) {
+    var s = '!$expression';
+    return asGroup ? '($s)' : s;
+  }
 }
 
 /// [ASTExpression] for an operation between 2 expressions.
@@ -522,6 +567,9 @@ class ASTExpressionOperation extends ASTExpression {
   ASTExpression expression2;
 
   ASTExpressionOperation(this.expression1, this.operator, this.expression2);
+
+  @override
+  bool get isComplex => true;
 
   @override
   Iterable<ASTNode> get children => [expression1, expression2];
@@ -930,9 +978,12 @@ class ASTExpressionOperation extends ASTExpression {
   }
 
   @override
-  String toString() {
+  String toString({bool asGroup = false}) {
     var op = getASTExpressionOperatorText(operator);
-    return '$expression1 $op $expression2';
+    var a = expression1.toString(asGroup: true);
+    var b = expression2.toString(asGroup: true);
+    var s = '$a $op $b';
+    return asGroup ? '($s)' : s;
   }
 }
 
@@ -949,6 +1000,9 @@ class ASTExpressionVariableAssignment extends ASTExpression {
     this.operator,
     this.expression,
   );
+
+  @override
+  bool get isComplex => true;
 
   @override
   Iterable<ASTNode> get children => [variable, expression];
@@ -1001,6 +1055,32 @@ class ASTExpressionVariableAssignment extends ASTExpression {
 
     return result;
   }
+
+  @override
+  String toString({bool asGroup = false}) {
+    switch (operator) {
+      case ASTAssignmentOperator.set:
+        {
+          return '$variable = $expression';
+        }
+      case ASTAssignmentOperator.sum:
+        {
+          return '$variable += $expression';
+        }
+      case ASTAssignmentOperator.subtract:
+        {
+          return '$variable -= $expression';
+        }
+      case ASTAssignmentOperator.multiply:
+        {
+          return '$variable *= $expression';
+        }
+      case ASTAssignmentOperator.divide:
+        {
+          return '$variable /= $expression';
+        }
+    }
+  }
 }
 
 /// [ASTExpression] to directly apply a change to a variable.
@@ -1017,6 +1097,9 @@ class ASTExpressionVariableDirectOperation extends ASTExpression {
     this.operator,
     this.preOperation,
   );
+
+  @override
+  bool get isComplex => true;
 
   @override
   Iterable<ASTNode> get children => [variable];
@@ -1058,6 +1141,24 @@ class ASTExpressionVariableDirectOperation extends ASTExpression {
     await variable.setValue(context, await result);
 
     return preOperation ? result : variableValue;
+  }
+
+  @override
+  String toString({bool asGroup = false}) {
+    switch (operator) {
+      case ASTAssignmentOperator.sum:
+        {
+          return preOperation ? '++$variable' : '$variable++';
+        }
+      case ASTAssignmentOperator.subtract:
+        {
+          return preOperation ? '--$variable' : '$variable--';
+        }
+      default:
+        return preOperation
+            ? '${operator.symbol * 2}$variable'
+            : '$variable${operator.symbol * 2}';
+    }
   }
 }
 
@@ -1123,7 +1224,7 @@ abstract class ASTExpressionFunctionInvocation extends ASTExpression {
   }
 
   @override
-  String toString() {
+  String toString({bool asGroup = false}) {
     return '$name( $arguments )';
   }
 }
@@ -1145,6 +1246,9 @@ Future<List<ASTValue>> _resolveArgumentsValues(
 class ASTExpressionLocalFunctionInvocation
     extends ASTExpressionFunctionInvocation {
   ASTExpressionLocalFunctionInvocation(super.name, super.arguments);
+
+  @override
+  bool get isComplex => false;
 
   @override
   ASTFunctionDeclaration _getFunction(VMContext parentContext) {
@@ -1171,6 +1275,9 @@ class ASTExpressionObjectFunctionInvocation
     String name,
     List<ASTExpression> arguments,
   ) : super(name, arguments);
+
+  @override
+  bool get isComplex => false;
 
   @override
   Iterable<ASTNode> get children => [variable];
@@ -1254,7 +1361,7 @@ class ASTExpressionObjectFunctionInvocation
   }
 
   @override
-  String toString() {
+  String toString({bool asGroup = false}) {
     var f = super.toString();
     return '$variable.$f';
   }

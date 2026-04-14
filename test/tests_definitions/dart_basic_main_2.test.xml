@@ -32,7 +32,7 @@
     var b = args[2];
     var c = args[3];
     var sumAB = a + b;
-    var sumABC = a + b + c;
+    var sumABC = a + (b + c);
     print(title);
     print(sumAB);
     print(sumABC);

@@ -258,7 +258,7 @@ Future<void> _testCall(
 
   print('RETURN[$callIndex]: $executionReturn');
 
-  if (callReturnType != null) {
+  if (callReturn != null) {
     expect(
       executionReturn.getValueNoContext().toString(),
       equals(callReturn),

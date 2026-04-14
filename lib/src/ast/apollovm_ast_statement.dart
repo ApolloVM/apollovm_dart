@@ -248,11 +248,15 @@ class ASTStatementValue extends ASTStatementTyped {
 }
 
 enum ASTAssignmentOperator {
-  set,
-  multiply,
-  divide,
-  sum,
-  subtract;
+  set('='),
+  multiply('*'),
+  divide('/'),
+  sum('+'),
+  subtract('-');
+
+  final String symbol;
+
+  const ASTAssignmentOperator(this.symbol);
 
   ASTExpressionOperator? get asASTExpressionOperator {
     switch (this) {
