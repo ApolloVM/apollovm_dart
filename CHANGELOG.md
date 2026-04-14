@@ -1,3 +1,29 @@
+## 0.1.1
+
+- `lib/apollovm.dart`:
+  - Added library-level documentation describing ApolloVM as a portable VM supporting Dart, Java, and WebAssembly compilation.
+  - Changed `library apollovm;` to a library directive without a name.
+
+- AST classes (`lib/src/ast/`):
+  - Updated `children` getters to use null-aware spread operators (`...?` and `?`) for optional fields in:
+    - `ASTExpressionListLiteral`
+    - `ASTExpressionMapLiteral`
+    - `ASTStatementVariableDeclaration`
+    - `ASTBranchIfElseBlock`
+    - `ASTBranchIfElseIfsElseBlock`
+    - `ASTType`
+    - `ASTTypeGenericVariable`
+
+- `pubspec.yaml`:
+  - Updated dependencies:
+    - `petitparser` from `^6.1.0` to `^7.0.2`
+    - `lints` from `^3.0.0` to `^6.1.0`
+    - `dependency_validator` from `^3.2.3` to `^5.0.5`
+    - `xml` from `^6.5.0` to `^6.6.1`
+
+- Tests (`test/apollovm_languages_extended_test.dart`, `test/apollovm_version_test.dart`):
+  - Added `library;` directive at the top of test files for consistency.
+
 ## 0.1.0
 
 - `WasmRuntime`:

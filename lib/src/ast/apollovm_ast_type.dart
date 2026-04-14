@@ -159,11 +159,7 @@ class ASTType<V> with ASTNode implements ASTTypedNode {
   ASTType(this.name, {this.generics, this.superType, this.annotations});
 
   @override
-  Iterable<ASTNode> get children => [
-    ...?generics,
-    ...?annotations,
-    if (superType != null) superType!,
-  ];
+  Iterable<ASTNode> get children => [...?generics, ...?annotations, ?superType];
 
   ASTClass<V>? _class;
 
@@ -878,7 +874,7 @@ class ASTTypeGenericVariable extends ASTType<Object> {
   ASTTypeGenericVariable(this.variableName, [this.type]) : super(variableName);
 
   @override
-  Iterable<ASTNode> get children => [if (type != null) type!];
+  Iterable<ASTNode> get children => [?type];
 
   @override
   ASTType<Object> resolveType(VMContext? context) =>

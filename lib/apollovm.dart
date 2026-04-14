@@ -1,8 +1,12 @@
 // Copyright © 2020 Graciliano M. P. All rights reserved.
 // This code is governed by the Apache License, Version 2.0.
 // Please refer to the LICENSE and AUTHORS files for details.
-
-library apollovm;
+/// A portable virtual machine for Dart, web (JavaScript), and Flutter.
+///
+/// ApolloVM enables parsing, translation, and execution of multiple
+/// programming languages, including Dart and Java. It also
+/// supports on-the-fly compilation to WebAssembly (Wasm).
+library;
 
 export 'package:async_extension/async_extension.dart';
 

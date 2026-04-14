@@ -198,10 +198,7 @@ class ASTExpressionListLiteral extends ASTExpression {
   ASTExpressionListLiteral(this.type, this.valuesExpressions);
 
   @override
-  Iterable<ASTNode> get children => [
-    if (type != null) type!,
-    ...valuesExpressions,
-  ];
+  Iterable<ASTNode> get children => [?type, ...valuesExpressions];
 
   @override
   FutureOr<ASTType> resolveType(VMContext? context) =>
@@ -258,8 +255,8 @@ class ASTExpressionMapLiteral extends ASTExpression {
 
   @override
   Iterable<ASTNode> get children => [
-    if (keyType != null) keyType!,
-    if (valueType != null) valueType!,
+    ?keyType,
+    ?valueType,
     ...entriesExpressions.expand((e) => [e.key, e.value]),
   ];
 

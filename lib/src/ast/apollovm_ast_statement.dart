@@ -507,7 +507,7 @@ class ASTStatementVariableDeclaration<V> extends ASTStatementTyped {
   ASTStatementVariableDeclaration(this.type, this.name, this.value);
 
   @override
-  Iterable<ASTNode> get children => [type, if (value != null) value!];
+  Iterable<ASTNode> get children => [type, ?value];
 
   @override
   void resolveNode(ASTNode? parentNode) {
@@ -677,11 +677,7 @@ class ASTBranchIfElseBlock extends ASTBranch {
   ASTBranchIfElseBlock(this.condition, this.blockIf, this.blockElse);
 
   @override
-  Iterable<ASTNode> get children => [
-    condition,
-    blockIf,
-    if (blockElse != null) blockElse!,
-  ];
+  Iterable<ASTNode> get children => [condition, blockIf, ?blockElse];
 
   @override
   void resolveNode(ASTNode? parentNode) {
@@ -733,11 +729,7 @@ class ASTBranchIfElseIfsElseBlock extends ASTBranch {
   );
 
   @override
-  Iterable<ASTNode> get children => [
-    condition,
-    ...blocksElseIf,
-    if (blockElse != null) blockElse!,
-  ];
+  Iterable<ASTNode> get children => [condition, ...blocksElseIf, ?blockElse];
 
   @override
   void resolveNode(ASTNode? parentNode) {
