@@ -1,3 +1,16 @@
+## 0.1.3
+
+- `DartGrammarDefinition`:
+  - `getTypeByName`: added support for Dart types `void` and `bool`.
+
+- `DartGrammarLexer`:
+  - `stringContentQuotedLexicalTokenEscaped`: added handling of unnecessary escape sequences for characters `(`, `)`, `{`, `}`, and space in string literals.
+
+- Tests:
+  - Added `dart_basic_sumOrDouble.test.xml` with a test for a Dart function `sumOrDouble`.
+  - Added `dart_basic_main_print_multi_line.test.xml` testing multi-line string printing.
+  - Added `dart_basic_main_print_unnecessary_escape.test.xml` testing string literals with unnecessary escape sequences and ASCII art printing.
+
 ## 0.1.2
 
 - `ApolloCodeGenerator` and `ApolloCodeGeneratorDart`:

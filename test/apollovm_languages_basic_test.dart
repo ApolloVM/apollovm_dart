@@ -6,7 +6,7 @@ Future<void> main() async {
   print('BASIC TESTS DEFINITIONS');
 
   var definitions = <TestDefinition>[
-    TestDefinition('dart_basic_main.test.xml', '''
+    TestDefinition('dart_basic_sumOrDouble.test.xml', '''
 <?xml version="1.0" encoding="UTF-8"?>
 <test title="Basic sumOrDouble(int a, int b)">
     <source language="dart">
@@ -46,6 +46,85 @@ Future<void> main() async {
         return (a + b) * 2;
     }
 
+  }
+
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+</test>
+    '''),
+    TestDefinition('dart_basic_main_print_multi_line.test.xml', '''
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="Basic sumOrDouble(int a, int b)">
+    <source language="dart">
+        <![CDATA[
+void main() {
+  print("-- single line.");
+  print("-- multi lines:\\n  -- a.\\n  -- b.\\n");
+}
+        ]]>
+    </source>
+    <call function="main">
+        []
+    </call>
+    <output>
+        [
+            "-- single line.",
+            "-- multi lines:\\n  -- a.\\n  -- b.\\n"
+        ]
+    </output>
+    <source-generated language="dart"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+  void main() {
+    print('-- single line.');
+    print('-- multi lines:\\n  -- a.\\n  -- b.\\n');
+  }
+
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+</test>
+    '''),
+    TestDefinition('dart_basic_main_print_unnecessary_escape.test.xml', r'''
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="Basic sumOrDouble(int a, int b)">
+    <source language="dart">
+        <![CDATA[
+void main() {
+  // Some comment!
+  print("--- ASCII Art ---\n");
+  print(" \\ / ");
+  print(" | | ");
+  print(" --- ");
+  print(" \\ / ");
+  print("  |\  \n");
+}
+        ]]>
+    </source>
+    <call function="main">
+        []
+    </call>
+    <output>
+        [
+            "--- ASCII Art ---\n",
+            " \\ / ",
+            " | | ",
+            " --- ",
+            " \\ / ",
+            "  |  \n"
+          ]
+    </output>
+    <source-generated language="dart"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+  void main() {
+    print('--- ASCII Art ---\n');
+    print(r' \ / ');
+    print(' | | ');
+    print(' --- ');
+    print(r' \ / ');
+    print('  |  \n');
   }
 
 <<<< CODE_UNIT_END="/test" >>>>

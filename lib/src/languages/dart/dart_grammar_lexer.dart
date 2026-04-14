@@ -329,7 +329,13 @@ abstract class DartGrammarLexer extends GrammarDefinition {
                   char(r'$').map((_) => r'$') |
                   char('t').map((_) => '\t') |
                   char('b').map((_) => '\b') |
-                  char('\\').map((_) => '\\')))
+                  char('\\').map((_) => '\\') |
+                  // Unnecessary escape in string literal:
+                  char('(').map((_) => r'(') |
+                  char(')').map((_) => r')') |
+                  char('{').map((_) => r'{') |
+                  char('}').map((_) => r'}') |
+                  char(' ').map((_) => r' ')))
           .map((v) {
             return v[1] as String;
           });

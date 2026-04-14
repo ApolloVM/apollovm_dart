@@ -20,6 +20,10 @@ class DartGrammarDefinition extends DartGrammarLexer {
     switch (name) {
       case 'Object':
         return ASTTypeObject.instance;
+      case 'void':
+        return ASTTypeVoid.instance;
+      case 'bool':
+        return ASTTypeBool.instance;
       case 'int':
         return ASTTypeInt.instance;
       case 'double':
