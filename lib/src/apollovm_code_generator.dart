@@ -862,32 +862,59 @@ abstract class ApolloCodeGenerator
 
     if (headIndented) out.write(indent);
 
-    var expression1 = expression.expression1;
-    var expression2 = expression.expression2;
+    final expression1 = expression.expression1;
+    final expression2 = expression.expression2;
+    final operator = expression.operator;
+
+    var groupComplexExpressions = true;
+
+    if (operator == ASTExpressionOperator.add) {
+      if (expression1.isVariableAccess) {
+        if (expression2.hasDescendantLiteralString) {
+          groupComplexExpressions = false;
+        }
+      } else if (expression1.isLiteralString) {
+        groupComplexExpressions = false;
+      } else if (expression2.isLiteralString) {
+        groupComplexExpressions = false;
+      } else if (expression1.hasDescendantLiteralString ||
+          expression2.hasDescendantLiteralString) {
+        groupComplexExpressions = false;
+      }
+    }
 
     var op = resolveASTExpressionOperatorText(
-      expression.operator,
+      operator,
       expression1.literalNumType,
       expression2.literalNumType,
     );
 
-    generateASTExpression(
+    var exp1 = generateASTExpression(
       expression1,
-      out: out,
       indent: '$indent  ',
       headIndented: false,
     );
+
+    var exp2 = generateASTExpression(
+      expression2,
+      indent: '$indent  ',
+      headIndented: false,
+    );
+
+    var group1 = groupComplexExpressions && expression1.isComplex;
+    var group2 = groupComplexExpressions && expression2.isComplex;
+
+    if (group1) out.write('(');
+    out.write(exp1);
+    if (group1) out.write(')');
 
     out.write(' ');
     out.write(op);
     out.write(' ');
 
-    generateASTExpression(
-      expression2,
-      out: out,
-      indent: '$indent  ',
-      headIndented: false,
-    );
+    if (group2) out.write('(');
+    out.write(exp2);
+    if (group2) out.write(')');
 
     return out;
   }
