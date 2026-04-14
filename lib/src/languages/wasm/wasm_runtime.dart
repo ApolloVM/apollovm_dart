@@ -4,7 +4,8 @@ import '../../ast/apollovm_ast_toplevel.dart';
 import 'package:async_extension/async_extension.dart';
 
 import 'wasm_runtime_generic.dart'
-    if (dart.library.html) 'wasm_runtime_browser.dart'
+    if (dart.library.js_interop) 'wasm_runtime_web.dart'
+    if (dart.library.html) 'wasm_runtime_dart_html.dart'
     if (dart.library.io) 'wasm_runtime_io.dart';
 
 /// A WebAssembly (Wasm) Runtime.
@@ -55,6 +56,19 @@ abstract class WasmRuntime {
   }
 }
 
+/// Represents a WebAssembly-exported function with metadata.
+///
+/// Combines a callable Dart function [function] with information about
+/// whether it accepts a variable number of arguments ([varArgs]).
+///
+/// - [function]: The Dart function mapped from a WebAssembly export.
+/// - [varArgs]: Indicates if the function supports variadic arguments
+///   (i.e., can be called with a dynamic number of parameters).
+///
+/// This is typically used when exposing or wrapping WebAssembly functions
+/// in Dart, allowing the runtime to handle invocation semantics correctly.
+typedef WasmModuleFunction<F extends Function> = ({F function, bool varArgs});
+
 /// A WebAssembly (Wasm) Runtime module
 abstract class WasmModule {
   /// The module name.
@@ -66,7 +80,7 @@ abstract class WasmModule {
   Future<WasmModule> copy({String? name});
 
   /// Returns a module function mapped to [F].
-  F? getFunction<F extends Function>(String functionName);
+  WasmModuleFunction<F>? getFunction<F extends Function>(String functionName);
 
   /// Resolves the returned [value] from a called module function.
   Object? resolveReturnedValue(Object? value, ASTFunctionDeclaration? f);

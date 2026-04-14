@@ -694,6 +694,73 @@ void main() async {
     );
 
     test(
+      'operation3',
+      () => _testWasm(
+        language: 'dart',
+        code: r'''
+      
+          double operation3( int v, double r, int balance , double extra ) {
+            var total = v * r ;
+          
+            total = total + extra;
+          
+            if ( total > balance ) {
+              return 0;
+            }
+            
+            return total ;
+          }
+          
+        ''',
+        functionName: 'operation3',
+        executions: {
+          [50, 0.33, 1000, 0.01]: 16.51,
+          [50, 30.0, 1000, 0.02]: 0.0,
+          [50, 30.0, 2000, 0.03]: 1500.03,
+        },
+        expecteWasm: {
+          'test':
+              '0061736D0100000001090160047E7C7E7C017C03020100070E010A6F7065726174696F6E3300000A25012301017C2000B92001A2210420042003A0210420042002B96404404200B90F0B20040F0B',
+        },
+      ),
+    );
+
+    test(
+      'operation4',
+      () => _testWasm(
+        language: 'dart',
+        code: r'''
+      
+          double operation4( int v, double r, int balance , double extra , double extraRatio ) {
+            var total = v * r ;
+          
+            total = total + (extra * extraRatio);
+          
+            if ( total > balance ) {
+              return 0;
+            }
+            
+            return total ;
+          }
+          
+        ''',
+        functionName: 'operation4',
+        executions: {
+          [50, 0.33, 1000, 0.01, 1]: 16.51,
+          [50, 0.33, 1000, 0.01, 0.5]: 16.505,
+          [50, 30.0, 1000, 0.02, 1]: 0.0,
+          [50, 30.0, 1000, 0.02, 2]: 0.0,
+          [50, 30.0, 2000, 0.03, 1]: 1500.03,
+          [50, 30.0, 2000, 0.03, 2]: 1500.06,
+        },
+        expecteWasm: {
+          'test':
+              '0061736D01000000010A0160057E7C7E7C7C017C03020100070E010A6F7065726174696F6E3400000A28012601017C2000B92001A22105200520032004A2A0210520052002B96404404200B90F0B20050F0B',
+        },
+      ),
+    );
+
+    test(
       'f\$10',
       () => _testWasm(
         language: 'dart',

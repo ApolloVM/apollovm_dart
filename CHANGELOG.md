@@ -1,3 +1,39 @@
+## 0.1.0
+
+- `WasmRuntime`:
+  - Added `WasmModuleFunction` typedef to represent a WebAssembly-exported function with metadata including the Dart function and a `varArgs` flag.
+  - Updated `WasmModule.getFunction` signature to return `WasmModuleFunction<F>?` instead of just `F?`.
+
+- `WasmRunnerWasm`:
+  - Updated function invocation logic in `ApolloRunnerWasm` to handle `WasmModuleFunction` with `varArgs` flag.
+  - Added special handling for functions with no arguments and functions expecting a single `List` argument.
+
+- `wasm_runtime_generic.dart`:
+  - Updated `WasmModuleGeneric.getFunction` to return `null` as `WasmModuleFunction<F>?`.
+
+- `wasm_runtime_io.dart`:
+  - Updated `WasmModuleIO.getFunction` to return a `WasmModuleFunction` with `varArgs: true`.
+
+- `wasm_runtime_dart_html.dart`:
+  - Deprecated `WasmRuntimeDartHTML` in favor of `WasmRuntimeWeb`.
+  - Updated `WasmModuleBrowser.getFunction` to return a `WasmModuleFunction` with `varArgs: true`.
+  - Updated `createWasmRuntime` to return `WasmRuntimeDartHTML` with deprecation warning.
+
+- `wasm_runtime_web.dart`:
+  - New `WasmRuntimeWeb` implementation using `dart:js_interop` and `web` package.
+  - Added JS interop bindings for WebAssembly APIs using extension types.
+  - Implemented `WasmModuleBrowser` wrapping `_WasmInstance` with proper JS interop.
+  - `getFunction` returns a Dart function wrapping JS function calls with argument conversion and `varArgs: false`.
+  - Added utilities to convert JS BigInt to Dart `num` or `BigInt`.
+  - Updated `createWasmRuntime` to return `WasmRuntimeWeb`.
+  - Added extensions for JS function invocation and JSAny type checks and casts.
+
+- `pubspec.yaml`:
+  - Added dependency on `web: ^1.1.1`.
+
+- Tests:
+  - Added new tests `operation3` and `operation4` verifying multi-parameter Dart functions compiled to Wasm and executed correctly.
+
 ## 0.0.54
 
 - Updated minimum Dart SDK constraint to `>=3.10.0 <4.0.0`.

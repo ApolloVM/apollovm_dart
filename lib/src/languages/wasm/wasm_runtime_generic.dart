@@ -31,7 +31,8 @@ class WasmModuleGeneric extends WasmModule {
   }
 
   @override
-  F? getFunction<F extends Function>(String functionName) => null;
+  WasmModuleFunction<F>? getFunction<F extends Function>(String functionName) =>
+      null;
 
   @override
   Object? resolveReturnedValue(Object? value, ASTFunctionDeclaration? f) =>
