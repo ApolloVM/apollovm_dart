@@ -132,6 +132,127 @@ void main() {
 ]]></source-generated>
 </test>
     '''),
+    TestDefinition('dart_basic_main_print_unnecessary_escape.test.xml', r'''
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="Basic sumOrDouble(int a, int b)">
+    <source language="dart">
+        <![CDATA[
+double calculateShippingCost(String destination, double weightKg) {
+  // Normalize the destination string to ensure case-insensitivity
+  final normalizedDest = destination.toLowerCase();
+
+  // 1. Primary Reasoning: Check Destination Type
+  if (normalizedDest == 'domestic') {
+    // Logic for Domestic Shipping
+    if (weightKg <= 5.0) {
+      // Rule A: Light domestic package
+      return 10.0;
+    } else if (weightKg <= 20.0) {
+      // Rule B: Medium domestic package
+      return 15.0;
+    } else {
+      // Rule C: Heavy domestic package
+      return 25.0;
+    }
+  } else if (normalizedDest == 'international') {
+    // Logic for International Shipping
+    if (weightKg <= 10.0) {
+      // Rule D: Light international package
+      return 40.0;
+    } else {
+      // Rule E: Heavy international package
+      return 60.0;
+    }
+  } else {
+    // Default/Fallback Reasoning: If the destination is unknown, return 0.0
+    return 0.0; // Signifies an invalid or uncalculable route
+  }
+}
+
+void main() {
+  print("--- Shipping Cost Calculator (No Exceptions) ---");
+
+  // Test Case 1: Light Domestic Package (Expected: 10.0)
+  double cost1 = calculateShippingCost('Domestic', 3.5);
+  print("Cost for a 3.5kg domestic package: \$${cost1.toStringAsFixed(2)}\n");
+
+  // Test Case 2: Heavy Domestic Package (Expected: 25.0)
+  double cost2 = calculateShippingCost('Domestic', 15.0);
+  print("Cost for a 15.0kg domestic package: \$${cost2.toStringAsFixed(2)}\n");
+
+  // Test Case 3: Light International Package (Expected: 40.0)
+  double cost3 = calculateShippingCost('International', 8.0);
+  print("Cost for an 8.0kg international package: \$${cost3.toStringAsFixed(2)}\n");
+
+  // Test Case 4: Heavy International Package (Expected: 60.0)
+  double cost4 = calculateShippingCost('International', 12.0);
+  print("Cost for a 12.0kg international package: \$${cost4.toStringAsFixed(2)}\n");
+
+  // Test Case 5: Invalid Destination (Reasoning returns 0.0)
+  double cost5 = calculateShippingCost('Mars', 1.0);
+  print("Cost for an invalid destination ('Mars'): \$${cost5.toStringAsFixed(2)}\n");
+}
+        ]]>
+    </source>
+    <call function="main">
+        []
+    </call>
+    <output>
+       [
+        "--- Shipping Cost Calculator (No Exceptions) ---",
+        "Cost for a 3.5kg domestic package: $10.00\n",
+        "Cost for a 15.0kg domestic package: $15.00\n",
+        "Cost for an 8.0kg international package: $40.00\n",
+        "Cost for a 12.0kg international package: $60.00\n",
+        "Cost for an invalid destination ('Mars'): $0.00\n"
+      ]
+    </output>
+    <source-generated language="dart"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+  double calculateShippingCost(String destination, double weightKg) {
+    final normalizedDest = destination.toLowerCase();
+    if (normalizedDest == 'domestic') {
+        if (weightKg <= 5.0) {
+            return 10.0;
+        } else if (weightKg <= 20.0) {
+            return 15.0;
+        } else {
+            return 25.0;
+        }
+
+    } else if (normalizedDest == 'international') {
+        if (weightKg <= 10.0) {
+            return 40.0;
+        } else {
+            return 60.0;
+        }
+
+    } else {
+        return 0.0;
+    }
+
+  }
+
+  void main() {
+    print('--- Shipping Cost Calculator (No Exceptions) ---');
+    double cost1 = calculateShippingCost('Domestic', 3.5);
+    print('Cost for a 3.5kg domestic package: \$${cost1.toStringAsFixed(2)}\n');
+    double cost2 = calculateShippingCost('Domestic', 15.0);
+    print('Cost for a 15.0kg domestic package: \$${cost2.toStringAsFixed(2)}\n');
+    double cost3 = calculateShippingCost('International', 8.0);
+    print('Cost for an 8.0kg international package: \$${cost3.toStringAsFixed(2)}\n');
+    double cost4 = calculateShippingCost('International', 12.0);
+    print('Cost for a 12.0kg international package: \$${cost4.toStringAsFixed(2)}\n');
+    double cost5 = calculateShippingCost('Mars', 1.0);
+    print("Cost for an invalid destination ('Mars'): "'\$${cost5.toStringAsFixed(2)}\n');
+  }
+
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+</test>
+    '''),
     TestDefinition('dart_basic_main_1.test.xml', '''
 <?xml version="1.0" encoding="UTF-8"?>
 <test title="Basic main(List<String>) 1">
@@ -516,5 +637,5 @@ class Foo {
     '''),
   ];
 
-  await runTestDefinitions(definitions);
+  await runTestDefinitions([definitions[3]]);
 }

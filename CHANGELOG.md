@@ -1,3 +1,51 @@
+## 0.1.4
+
+- `ASTTypeVar`:
+  - Added `unmodifiable` field to distinguish `var` and `final` types.
+  - Added static instance `instanceUnmodifiable` for `final`.
+  - Updated constructor to accept `unmodifiable` flag and set name accordingly.
+  - Updated `toString` and equality to reflect `unmodifiable` state.
+
+- `ApolloVMCore`:
+  - Added support for `double` and `Double` core classes returning `CoreClassDouble`.
+
+- `CoreClassPrimitive`:
+  - Added helper `_externalClassFunctionArgs2` for external class functions with two parameters.
+
+- `CoreClassString`:
+  - Added many new external class functions:
+    - `length`, `isEmpty`, `isNotEmpty`
+    - `substring`, `indexOf`, `startsWith`, `endsWith`
+    - `trim`, `split`, `replaceAll`
+  - Updated `getFunction` to support these new string functions.
+
+- `CoreClassInt`:
+  - Added external static function `tryParse`.
+  - Added external class functions:
+    - `compareTo`, `abs`, `sign`, `clamp`, `remainder`, `toRadixString`, `toDouble`
+  - Updated `getFunction` to support new int functions.
+
+- Added new class `CoreClassDouble`:
+  - External static functions: `parseDouble` (alias `parse`), `tryParse`, `valueOf`.
+  - External class functions: `compareTo`, `abs`, `sign`, `clamp`, `remainder`,
+    `toStringAsFixed`, `toStringAsExponential`, `toStringAsPrecision`,
+    `toInt`, `round`, `floor`, `ceil`, `truncate`.
+  - Implements `getFunction` to provide these functions.
+
+- `ApolloCodeGeneratorDart`:
+  - Improved string literal concatenation handling:
+    - Added support for concatenating multiple string literals including raw and multiline strings.
+    - Added helper `writeAllStrings` to write concatenated string parts correctly.
+    - Improved splitting and merging of string literal blocks to avoid unnecessary concatenations.
+    - Preserves multiline string formatting and raw string prefixes.
+
+- `DartGrammarDefinition`:
+  - Added support for `final` keyword returning `ASTTypeVar(unmodifiable: true)`.
+  - Updated `literalString` parser to support concatenation of multiple string literals into `ASTValueStringConcatenation`.
+
+- `Java11GrammarDefinition`:
+  - Added support for `final` keyword returning `ASTTypeVar(unmodifiable: true)`.
+
 ## 0.1.3
 
 - `DartGrammarDefinition`:

@@ -33,6 +33,8 @@ class Java11GrammarDefinition extends Java11GrammarLexer {
         return ASTTypeArray(ASTTypeDynamic.instance);
       case 'var':
         return ASTTypeVar();
+      case 'final':
+        return ASTTypeVar(unmodifiable: true);
       default:
         return ASTType(name);
     }

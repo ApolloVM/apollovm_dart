@@ -694,7 +694,12 @@ class ASTTypeObject extends ASTType<Object> {
 class ASTTypeVar extends ASTType<dynamic> {
   static final ASTTypeVar instance = ASTTypeVar();
 
-  ASTTypeVar() : super('var');
+  static final ASTTypeVar instanceUnmodifiable = ASTTypeVar(unmodifiable: true);
+
+  final bool unmodifiable;
+
+  ASTTypeVar({this.unmodifiable = false})
+    : super(unmodifiable ? 'final' : 'var');
 
   @override
   Iterable<ASTNode> get children => [];
@@ -750,7 +755,7 @@ class ASTTypeVar extends ASTType<dynamic> {
 
   @override
   String toString() {
-    return 'var';
+    return unmodifiable ? 'final' : 'var';
   }
 }
 

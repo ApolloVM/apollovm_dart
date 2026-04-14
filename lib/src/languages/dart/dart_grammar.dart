@@ -40,6 +40,8 @@ class DartGrammarDefinition extends DartGrammarLexer {
         return ASTTypeMap.instanceOfDynamicOfDynamic;
       case 'var':
         return ASTTypeVar();
+      case 'final':
+        return ASTTypeVar(unmodifiable: true);
       default:
         return ASTType(name);
     }
@@ -700,7 +702,15 @@ class DartGrammarDefinition extends DartGrammarLexer {
       });
 
   Parser<ASTValue<String>> literalString() =>
-      (stringLexicalToken()).map((v) => v.asValue());
+      (stringLexicalToken()).plus().map((l) {
+        if (l.length == 1) {
+          var v = l[0];
+          return v.asValue();
+        } else {
+          var values = l.map((e) => e.asValue()).toList();
+          return ASTValueStringConcatenation(values);
+        }
+      });
 
   static List _expandListDeeply(List l) {
     if (l.isEmpty) return l;

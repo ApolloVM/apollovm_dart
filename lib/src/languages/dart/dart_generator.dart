@@ -2,6 +2,8 @@
 // This code is governed by the Apache License, Version 2.0.
 // Please refer to the LICENSE and AUTHORS files for details.
 
+import 'package:collection/collection.dart';
+
 import '../../apollovm_code_generator.dart';
 import '../../apollovm_code_storage.dart';
 import '../../ast/apollovm_ast_expression.dart';
@@ -330,58 +332,108 @@ class ApolloCodeGeneratorDart extends ApolloCodeGenerator {
 
     out ??= newOutput();
 
+    void writeAllStrings(List list, {bool raw = false}) {
+      var skip = raw ? 2 : 1;
+      for (var e in list) {
+        if (e is String) {
+          out!.write(e.substring(skip, e.length - 1));
+        } else {
+          var s2 = e.toString();
+          out!.write(s2.substring(skip, s2.length - 1));
+        }
+      }
+    }
+
     if (generatedStrings.every((s) => s.startsWith("'''")) ||
         generatedStrings.every((s) => s.startsWith('"""'))) {
       // will generate concatenation at end...
     } else if (generatedStrings.every((s) => s.startsWith("'"))) {
       out.write("'");
-
-      for (var e in list) {
-        if (e is String) {
-          out.write(e.substring(1, e.length - 1));
-        } else {
-          var s2 = e.toString();
-          out.write(s2.substring(1, s2.length - 1));
-        }
-      }
-
+      writeAllStrings(list);
       out.write("'");
-
+      return out;
+    } else if (generatedStrings.every((s) => s.startsWith("r'"))) {
+      out.write("r'");
+      writeAllStrings(list, raw: true);
+      out.write("'");
       return out;
     } else if (generatedStrings.every((s) => s.startsWith('"'))) {
       out.write('"');
-
-      for (var e in list) {
-        if (e is String) {
-          out.write(e.substring(1, out.length - 1));
-        } else {
-          var s2 = e.toString();
-          out.write(s2.substring(1, s2.length - 1));
-        }
-      }
-
+      writeAllStrings(list);
       out.write('"');
-
+      return out;
+    } else if (generatedStrings.every((s) => s.startsWith('r"'))) {
+      out.write('r"');
+      writeAllStrings(list, raw: true);
+      out.write('"');
       return out;
     }
 
-    for (var i = 0; i < list.length; ++i) {
-      var e = list[i];
+    var strings = list.map((e) => e is String ? e : e.toString()).toList();
 
-      if (e is String) {
-        var multiline =
-            e.startsWith("'''") ||
-            e.startsWith('"""') ||
-            e.startsWith("r'''") ||
-            e.startsWith('r"""');
-        if (multiline && i > 0) {
-          out.write('\n');
+    const stringOpenersMultiline = ["'''", '"""', "r'''", 'r"""'];
+    const stringOpeners = ["'", '"', "r'", 'r"'];
+
+    var stringsBlocks = strings.splitBetween((a, b) {
+      for (var o in stringOpenersMultiline) {
+        // a is multiline `o`:
+        if (a.startsWith(o)) {
+          // split if b is NOT multiline `o`:
+          return !b.startsWith(o);
         }
-        out.write(e);
-      } else {
-        var s2 = e.toString();
-        out.write(s2);
+        // a is NOT multiline `o` AND b IS multiline `o`, split:
+        else if (b.startsWith(o)) {
+          return true;
+        }
       }
+
+      for (var o in stringOpeners) {
+        // a is string `o`:
+        if (a.startsWith(o)) {
+          // split if b is NOT string `o`:
+          return !b.startsWith(o);
+        }
+        // a is NOT string `o` AND b IS string `o`, split:
+        else if (b.startsWith(o)) {
+          return true;
+        }
+      }
+
+      return false;
+    }).toList();
+
+    var stringsMerged = stringsBlocks
+        .map(
+          (l) => l.reduce((a, b) {
+            if (a.startsWith('"""') || a.startsWith("'''")) {
+              return a.substring(0, a.length - 3) + b.substring(3);
+            } else if (a.startsWith('r"""') || a.startsWith("r'''")) {
+              return a.substring(0, a.length - 3) + b.substring(4);
+            } else if (a.startsWith('"') || a.startsWith("'")) {
+              return a.substring(0, a.length - 1) + b.substring(1);
+            } else if (a.startsWith('r"') || a.startsWith("r'")) {
+              return a.substring(0, a.length - 1) + b.substring(2);
+            } else {
+              return a + b;
+            }
+          }),
+        )
+        .toList();
+
+    for (var i = 0; i < stringsMerged.length; ++i) {
+      var e = stringsMerged[i];
+
+      var multiline =
+          e.startsWith("'''") ||
+          e.startsWith('"""') ||
+          e.startsWith("r'''") ||
+          e.startsWith('r"""');
+
+      if (multiline && i > 0) {
+        out.write('\n');
+      }
+
+      out.write(e);
     }
 
     return out;
