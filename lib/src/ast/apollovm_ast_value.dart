@@ -107,16 +107,19 @@ abstract class ASTValue<T> with ASTNode implements ASTTypedNode {
       throw UnsupportedValueOperationError('+');
 
   FutureOr<ASTValue> operator -(ASTValue other) =>
-      throw UnsupportedValueOperationError('+');
+      throw UnsupportedValueOperationError('-');
 
   FutureOr<ASTValue> operator /(ASTValue other) =>
-      throw UnsupportedValueOperationError('+');
+      throw UnsupportedValueOperationError('/');
 
   FutureOr<ASTValue> operator *(ASTValue other) =>
-      throw UnsupportedValueOperationError('+');
+      throw UnsupportedValueOperationError('*');
 
   FutureOr<ASTValue> operator ~/(ASTValue other) =>
-      throw UnsupportedValueOperationError('+');
+      throw UnsupportedValueOperationError('~/');
+
+  FutureOr<ASTValue> operator %(ASTValue other) =>
+      throw UnsupportedValueOperationError('%');
 
   FutureOr<T> _getValue(VMContext? context, ASTValue v) => context != null
       ? v.getValue(context) as FutureOr<T>
@@ -448,13 +451,13 @@ abstract class ASTValueNum<T extends num> extends ASTValuePrimitive<T> {
   FutureOr<ASTValue> operator +(ASTValue other);
 
   @override
-  FutureOr<ASTValue> operator -(ASTValue other);
+  FutureOr<ASTValueNum> operator -(ASTValue other);
 
   @override
-  FutureOr<ASTValue> operator /(ASTValue other);
+  FutureOr<ASTValueNum> operator /(ASTValue other);
 
   @override
-  FutureOr<ASTValue> operator *(ASTValue other);
+  FutureOr<ASTValueNum> operator *(ASTValue other);
 
   @override
   bool operator ==(Object other) {
@@ -572,7 +575,7 @@ class ASTValueInt extends ASTValueNum<int> {
   }
 
   @override
-  ASTValue operator -(ASTValue other) {
+  ASTValueNum operator -(ASTValue other) {
     if (other is ASTValueInt) {
       return ASTValueInt(value - other.value);
     } else if (other is ASTValueDouble) {
@@ -585,7 +588,7 @@ class ASTValueInt extends ASTValueNum<int> {
   }
 
   @override
-  ASTValue operator /(ASTValue other) {
+  ASTValueDouble operator /(ASTValue other) {
     if (other is ASTValueInt) {
       return ASTValueDouble(value / other.value);
     } else if (other is ASTValueDouble) {
@@ -598,7 +601,20 @@ class ASTValueInt extends ASTValueNum<int> {
   }
 
   @override
-  ASTValue operator *(ASTValue other) {
+  ASTValueInt operator ~/(ASTValue other) {
+    if (other is ASTValueInt) {
+      return ASTValueInt(value ~/ other.value);
+    } else if (other is ASTValueDouble) {
+      return ASTValueInt(value ~/ other.value);
+    } else {
+      throw UnsupportedValueOperationError(
+        "Can't do '~/' operation with: $other",
+      );
+    }
+  }
+
+  @override
+  ASTValueNum operator *(ASTValue other) {
     if (other is ASTValueInt) {
       return ASTValueInt(value * other.value);
     } else if (other is ASTValueDouble) {
@@ -606,6 +622,19 @@ class ASTValueInt extends ASTValueNum<int> {
     } else {
       throw UnsupportedValueOperationError(
         "Can't do '*' operation with: $other",
+      );
+    }
+  }
+
+  @override
+  ASTValueNum operator %(ASTValue other) {
+    if (other is ASTValueInt) {
+      return ASTValueInt(value % other.value);
+    } else if (other is ASTValueDouble) {
+      return ASTValueDouble(value % other.value);
+    } else {
+      throw UnsupportedValueOperationError(
+        "Can't do '%' operation with: $other",
       );
     }
   }
@@ -636,7 +665,7 @@ class ASTValueDouble extends ASTValueNum<double> {
   }
 
   @override
-  ASTValueDouble operator -(ASTValue other) {
+  ASTValueNum operator -(ASTValue other) {
     if (other is ASTValueInt) {
       return ASTValueDouble(value - other.value);
     } else if (other is ASTValueDouble) {
@@ -662,6 +691,19 @@ class ASTValueDouble extends ASTValueNum<double> {
   }
 
   @override
+  ASTValueInt operator ~/(ASTValue other) {
+    if (other is ASTValueInt) {
+      return ASTValueInt(value ~/ other.value);
+    } else if (other is ASTValueDouble) {
+      return ASTValueInt(value ~/ other.value);
+    } else {
+      throw UnsupportedValueOperationError(
+        "Can't do '~/' operation with: $other",
+      );
+    }
+  }
+
+  @override
   ASTValueDouble operator *(ASTValue other) {
     if (other is ASTValueInt) {
       return ASTValueDouble(value * other.value);
@@ -670,6 +712,19 @@ class ASTValueDouble extends ASTValueNum<double> {
     } else {
       throw UnsupportedValueOperationError(
         "Can't do '*' operation with: $other",
+      );
+    }
+  }
+
+  @override
+  ASTValueDouble operator %(ASTValue other) {
+    if (other is ASTValueInt) {
+      return ASTValueDouble(value % other.value);
+    } else if (other is ASTValueDouble) {
+      return ASTValueDouble(value % other.value);
+    } else {
+      throw UnsupportedValueOperationError(
+        "Can't do '%' operation with: $other",
       );
     }
   }

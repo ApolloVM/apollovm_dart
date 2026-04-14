@@ -1,3 +1,33 @@
+## 0.1.5
+
+- `ASTExpressionOperator`:
+  - Added new operators: `remainder`, `and`, `or`.
+  - Updated `getASTExpressionOperator` and `getASTExpressionOperatorText` to support `%`, `&&`, and `||`.
+
+- `ASTExpressionOperation`:
+  - Updated `resolveType` to handle `remainder`, `and`, and `or` operators.
+  - Added evaluation methods:
+    - `operatorRemainder` for `%` operator supporting int and double operands.
+    - `operatorAnd` and `operatorOr` for logical `&&` and `||` with boolean coercion.
+  - Added private helper `_toBoolean` to convert various `ASTValue` types to boolean.
+  - Updated `throwOperationError` to handle new operators.
+
+- `ASTValue` and subclasses:
+  - Added `%` operator support in `ASTValueNum`, `ASTValueInt`, and `ASTValueDouble`.
+  - Fixed incorrect error messages in base `ASTValue` operator overrides.
+  - Added `operator ~/(ASTValue other)` implementations in `ASTValueInt` and `ASTValueDouble`.
+  - Updated operator return types for numeric operations to be more specific (`ASTValueNum`).
+
+- `DartGrammarDefinition`:
+  - Extended `expressionOperator` parser to recognize `%`, `&&`, and `||`.
+  - Updated expression parsing logic to:
+    - Split expressions into blocks separated by logical operators `&&` and `||`.
+    - Resolve `%` operator with higher precedence within blocks.
+    - Correctly build AST for logical expressions combining blocks with `&&` and `||`.
+
+- `WasmGenerator`:
+  - Added default case throwing `UnsupportedError` for unsupported operators in WASM code generation.
+
 ## 0.1.4
 
 - `ASTTypeVar`:

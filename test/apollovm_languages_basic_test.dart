@@ -6,12 +6,77 @@ Future<void> main() async {
   print('BASIC TESTS DEFINITIONS');
 
   var definitions = <TestDefinition>[
+    TestDefinition('dart_basic_fizzBuzz.test.xml', r'''
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="Basic sumOrDouble(int a, int b)">
+    <source language="dart">
+        <![CDATA[
+void fizzBuzz(int n) {
+  for (var i = 1; i <= n; i++) {
+    if (i % 3 == 0 && i % 5 == 0) {
+      print('$i is a multiple of both 3 and 5');
+    } else if (i % 3 == 0) {
+      print('$i is a multiple of 3');
+    } else if (i % 5 == 0) {
+      print('$i is a multiple of 5');
+    } else {
+      print('$i');
+    }
+  }
+}
+        ]]>
+    </source>
+    <call function="fizzBuzz" return="null">
+        [15]
+    </call>
+    <output>
+        [
+          "1",
+          "2",
+          "3 is a multiple of 3",
+          "4",
+          "5 is a multiple of 5",
+          "6 is a multiple of 3",
+          "7",
+          "8",
+          "9 is a multiple of 3",
+          "10 is a multiple of 5",
+          "11",
+          "12 is a multiple of 3",
+          "13",
+          "14",
+          "15 is a multiple of both 3 and 5"
+        ]
+    </output>
+    <source-generated language="dart"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+  void fizzBuzz(int n) {
+    for (var i = 1; i <= n ; i++) {
+      if (((i % 3) == 0) && ((i % 5) == 0)) {
+          print('$i is a multiple of both 3 and 5');
+      } else if ((i % 3) == 0) {
+          print('$i is a multiple of 3');
+      } else if ((i % 5) == 0) {
+          print('$i is a multiple of 5');
+      } else {
+          print('$i');
+      }
+
+    }
+  }
+
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+</test>
+    '''),
     TestDefinition('dart_basic_sumOrDouble.test.xml', '''
 <?xml version="1.0" encoding="UTF-8"?>
 <test title="Basic sumOrDouble(int a, int b)">
     <source language="dart">
         <![CDATA[
-            int sumOrDouble(int a, int b) {
+int sumOrDouble(int a, int b) {
   if (a > b) {
     print('if (a > b)');
     return a + b;

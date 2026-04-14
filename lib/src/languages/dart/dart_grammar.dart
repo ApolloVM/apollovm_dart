@@ -2,6 +2,7 @@
 // This code is governed by the Apache License, Version 2.0.
 // Please refer to the LICENSE and AUTHORS files for details.
 
+import 'package:collection/collection.dart';
 import 'package:petitparser/petitparser.dart';
 
 import '../../apollovm_base.dart';
@@ -338,16 +339,87 @@ class DartGrammarDefinition extends DartGrammarLexer {
 
             var all = <dynamic>[exp1, ...extra];
 
-            while (all.length >= 3) {
-              var e2 = all.removeLast();
-              var op = all.removeLast();
-              var e1 = all.removeLast();
-              var exp = ASTExpressionOperation(e1, op, e2);
-              all.add(exp);
-            }
-            assert(all.length == 1);
+            // Split expression into logical blocks
+            // separated by `&&` and `||` operators:
+            var blocks = all
+                .splitBefore(
+                  (e) =>
+                      e == ASTExpressionOperator.and ||
+                      e == ASTExpressionOperator.or,
+                )
+                .toList();
 
-            return all[0] as ASTExpressionOperation;
+            // Resolve the final expression:
+            ASTExpressionOperation? finalExpressionOp;
+
+            for (var i = 0; i < blocks.length; ++i) {
+              final block = blocks[i];
+
+              // Detect leading logical operator (&& / ||)
+              ASTExpressionOperator? blockOp;
+              final first = block.first;
+
+              if (first == ASTExpressionOperator.and ||
+                  first == ASTExpressionOperator.or) {
+                block.removeAt(0);
+                blockOp = first;
+                // Must already have a left-hand expression:
+                assert(finalExpressionOp != null);
+              }
+
+              // Resolve higher-precedence remainder (%) first
+              while (block.length >= 5) {
+                var e2 = block.removeLast();
+                var op = block.removeLast();
+                var e1 = block.removeLast();
+
+                var maybeOpRemainder = block.last;
+                if (maybeOpRemainder == ASTExpressionOperator.remainder &&
+                    block.length >= 2) {
+                  var maybeLeft = block[block.length - 2];
+                  if (maybeLeft is ASTExpression) {
+                    block.removeLast();
+                    block.removeLast();
+                    e1 = ASTExpressionOperation(
+                      maybeLeft,
+                      maybeOpRemainder,
+                      e1,
+                    );
+                  }
+                }
+
+                var exp = ASTExpressionOperation(e1, op, e2);
+                block.add(exp);
+              }
+
+              // Resolve remaining binary expressions (left-to-right)
+              while (block.length >= 3) {
+                var e2 = block.removeLast();
+                var op = block.removeLast();
+                var e1 = block.removeLast();
+                var exp = ASTExpressionOperation(e1, op, e2);
+                block.add(exp);
+              }
+              assert(block.length == 1);
+
+              var expressionOp = block.single as ASTExpressionOperation;
+
+              if (finalExpressionOp == null) {
+                finalExpressionOp = expressionOp;
+              } else {
+                if (blockOp == null) {
+                  throw StateError('Missing logical operator between blocks');
+                }
+
+                finalExpressionOp = ASTExpressionOperation(
+                  finalExpressionOp,
+                  blockOp,
+                  expressionOp,
+                );
+              }
+            }
+
+            return finalExpressionOp!;
           });
 
   Parser<ASTExpressionOperator> expressionOperator() =>
@@ -361,7 +433,10 @@ class DartGrammarDefinition extends DartGrammarLexer {
               string('>=') |
               string('<=') |
               char('>') |
-              char('<'))
+              char('<') |
+              char('%') |
+              string('&&') |
+              string('||'))
           .trimHidden()
           .map((v) {
             var op = getASTExpressionOperator(v);

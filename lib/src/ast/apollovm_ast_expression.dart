@@ -3,6 +3,7 @@
 // Please refer to the LICENSE and AUTHORS files for details.
 
 import 'package:async_extension/async_extension.dart';
+import 'package:swiss_knife/swiss_knife.dart';
 
 import '../apollovm_base.dart';
 import 'apollovm_ast_base.dart';
@@ -445,6 +446,9 @@ enum ASTExpressionOperator {
   lower,
   greaterOrEq,
   lowerOrEq,
+  remainder,
+  and,
+  or,
 }
 
 ASTExpressionOperator getASTExpressionOperator(String op) {
@@ -472,6 +476,12 @@ ASTExpressionOperator getASTExpressionOperator(String op) {
       return ASTExpressionOperator.lower;
     case '<=':
       return ASTExpressionOperator.lowerOrEq;
+    case '%':
+      return ASTExpressionOperator.remainder;
+    case '&&':
+      return ASTExpressionOperator.and;
+    case '||':
+      return ASTExpressionOperator.or;
     default:
       throw UnsupportedError(op);
   }
@@ -502,6 +512,12 @@ String getASTExpressionOperatorText(ASTExpressionOperator op) {
       return '<';
     case ASTExpressionOperator.lowerOrEq:
       return '<=';
+    case ASTExpressionOperator.remainder:
+      return '%';
+    case ASTExpressionOperator.and:
+      return '&&';
+    case ASTExpressionOperator.or:
+      return '||';
   }
 }
 
@@ -589,6 +605,7 @@ class ASTExpressionOperation extends ASTExpression {
       case ASTExpressionOperator.subtract:
       case ASTExpressionOperator.multiply:
       case ASTExpressionOperator.divide:
+      case ASTExpressionOperator.remainder:
         {
           var retT1 = expression1.resolveType(context);
           var retT2 = expression2.resolveType(context);
@@ -608,6 +625,8 @@ class ASTExpressionOperation extends ASTExpression {
       case ASTExpressionOperator.greaterOrEq:
       case ASTExpressionOperator.lower:
       case ASTExpressionOperator.lowerOrEq:
+      case ASTExpressionOperator.and:
+      case ASTExpressionOperator.or:
         return ASTTypeBool.instance;
     }
   }
@@ -720,6 +739,12 @@ class ASTExpressionOperation extends ASTExpression {
           return operatorLower(parentContext, val1, val2);
         case ASTExpressionOperator.lowerOrEq:
           return operatorLowerOrEq(parentContext, val1, val2);
+        case ASTExpressionOperator.remainder:
+          return operatorRemainder(parentContext, val1, val2);
+        case ASTExpressionOperator.and:
+          return operatorAnd(parentContext, val1, val2);
+        case ASTExpressionOperator.or:
+          return operatorOr(parentContext, val1, val2);
       }
     });
   }
@@ -975,6 +1000,92 @@ class ASTExpressionOperation extends ASTExpression {
   ) {
     var b = val1 <= val2;
     return b.resolveMapped((val) => ASTValueBool(val));
+  }
+
+  FutureOr<ASTValue> operatorRemainder(
+    VMContext context,
+    ASTValue val1,
+    ASTValue val2,
+  ) {
+    var t1 = val1.type;
+    var t2 = val2.type;
+
+    if (t1 is ASTTypeInt) {
+      if (t2 is ASTTypeInt) {
+        var v1 = val1.getValue(context) as int;
+        var v2 = val2.getValue(context) as int;
+        var r = v1 % v2;
+        return ASTValueInt(r);
+      } else if (t2 is ASTTypeDouble) {
+        var v1 = val1.getValue(context) as int;
+        var v2 = val2.getValue(context) as double;
+        var r = v1 % v2;
+        return ASTValueDouble(r);
+      }
+    }
+
+    if (t1 is ASTTypeDouble) {
+      if (t2 is ASTTypeNum) {
+        var v1 = val1.getValue(context) as double;
+        var v2 = val2.getValue(context) as num;
+        var r = v1 % v2;
+        return ASTValueDouble(r);
+      }
+    }
+
+    throwOperationError('%', t1, t2);
+  }
+
+  FutureOr<ASTValueBool> operatorAnd(
+    VMContext context,
+    ASTValue val1,
+    ASTValue val2,
+  ) {
+    var b1 = _toBoolean(val1, context);
+    var b2 = _toBoolean(val2, context);
+
+    return b1.resolveBoth(b2, (a, b) {
+      var val = a && b;
+      return ASTValueBool(val);
+    });
+  }
+
+  FutureOr<ASTValueBool> operatorOr(
+    VMContext context,
+    ASTValue val1,
+    ASTValue val2,
+  ) {
+    var b1 = _toBoolean(val1, context);
+    var b2 = _toBoolean(val2, context);
+
+    return b1.resolveBoth(b2, (a, b) {
+      var val = a || b;
+      return ASTValueBool(val);
+    });
+  }
+
+  FutureOr<bool> _toBoolean(ASTValue val, VMContext context) {
+    if (val is ASTValueBool) {
+      return val.value;
+    }
+
+    return val.resolve(context).resolveMapped((val) {
+      if (val is ASTValueBool) {
+        return val.value;
+      } else if (val is ASTValueNum) {
+        return val.value > 0;
+      } else if (val is ASTValueString) {
+        return parseBool(val.value) ?? false;
+      } else if (val is ASTValueArray) {
+        return val.value.isNotEmpty;
+      } else if (val is ASTValueMap) {
+        return val.value.isNotEmpty;
+      } else if (val is ASTValueNull) {
+        return false;
+      } else {
+        return false;
+      }
+    });
   }
 
   @override

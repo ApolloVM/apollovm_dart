@@ -890,6 +890,10 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
             "i64.lowerOrEqualsSigned",
           );
         }
+      default:
+        throw UnsupportedError(
+          "Wasm Operator not supported: ${expression.operator.name}",
+        );
     }
 
     context.assertStackLength(stackLng2 - 1, "After operation result");
