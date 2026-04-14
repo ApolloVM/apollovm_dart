@@ -1,3 +1,19 @@
+## 0.1.6
+
+- Added support for external getters in `ApolloVM`:
+  - New class `ApolloExternalGetterMapper` to map Dart getters to ApolloVM.
+  - Added `getGetter` and `getMappedExternalGetter` methods in `VMContext` for getter resolution.
+  - Extended `ASTBlock` with getter management (`addGetter`, `getGetter`, etc.).
+  - Added `ASTGetterDeclaration` and related classes (`ASTClassGetterDeclaration`, `ASTExternalGetter`, `ASTExternalClassGetter`) to represent getters in the AST.
+  - Added `ASTExpressionGetterAccess` base class and subclasses `ASTExpressionLocalGetterAccess` and `ASTExpressionObjectGetterAccess` for getter expressions.
+  - Updated `DartGrammarDefinition` to parse getter access expressions.
+  - Updated `ApolloCodeGenerator` and `ApolloGenerator` interfaces and implementations to generate code for getter access expressions.
+  - Added `externalGetterMapper` field to `VMContext` to support external getter mapping.
+
+- Core library updates:
+  - Added `CoreClassList` class implementing core `List` type support with external class functions and getters for common list operations (`add`, `remove`, `length`, `isEmpty`, `sublist`, etc.).
+  - Refactored core class base and primitive classes to use `CoreClassMixin` for external function and getter creation.
+
 ## 0.1.5
 
 - `ASTExpressionOperator`:

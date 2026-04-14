@@ -6,6 +6,56 @@ Future<void> main() async {
   print('BASIC TESTS DEFINITIONS');
 
   var definitions = <TestDefinition>[
+    TestDefinition('dart_basic_sumOfEvens.test.xml', r'''
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="Basic sumOfEvens(List<int> numbers)">
+    <source language="dart">
+        <![CDATA[
+int sumOfEvens(List<int> numbers) {
+  int sum = 0;
+  for (var i = 0 ; i < numbers.length ; ++i) {
+    var number = numbers[i] ;
+    if (number % 2 == 0) {
+      sum += number;
+      print('[$i] $number -> $sum');
+    }
+  }
+  return sum;
+}
+
+        ]]>
+    </source>
+    <call function="sumOfEvens" return="12">
+        [[1, 2, 3, 4, 5, 6]]
+    </call>
+    <output>
+        [
+          "[1] 2 -> 2",
+          "[3] 4 -> 6",
+          "[5] 6 -> 12"
+        ]
+    </output>
+    <source-generated language="dart"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+  int sumOfEvens(List<int> numbers) {
+    int sum = 0;
+    for (var i = 0; i < numbers.length ; ++i) {
+      var number = numbers[i];
+      if ((number % 2) == 0) {
+          sum += number;
+          print('[$i] $number -> $sum');
+      }
+
+    }
+    return sum;
+  }
+
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+</test>
+    '''),
     TestDefinition('dart_basic_fizzBuzz.test.xml', r'''
 <?xml version="1.0" encoding="UTF-8"?>
 <test title="Basic sumOrDouble(int a, int b)">

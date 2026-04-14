@@ -1540,8 +1540,195 @@ class ASTFunctionDeclaration<T> extends ASTBlock {
   }
 }
 
+/// An AST Class Getter Declaration.
+class ASTClassGetterDeclaration<T> extends ASTGetterDeclaration<T> {
+  /// The class type of this getter.
+  ASTClass? clazz;
+
+  ASTType? get classType => clazz?.type;
+
+  ASTClassGetterDeclaration(
+    this.clazz,
+    String name,
+
+    ASTType<T> returnType, {
+    ASTBlock? block,
+    ASTModifiers? modifiers,
+  }) : super(name, returnType, block: block, modifiers: modifiers);
+
+  FutureOr<ASTValue<T>> objectCall(
+    VMContext parent,
+    ASTValue classInstance, {
+    List? positionalParameters,
+    Map? namedParameters,
+  }) {
+    var objContext = VMClassContext(clazz!, parent: parent);
+    objContext.setClassInstance(classInstance);
+    return call(objContext);
+  }
+}
+
+/// An AST getter Declaration.
+class ASTGetterDeclaration<T> extends ASTBlock {
+  /// Name of this function.
+  final String name;
+
+  /// The return type of this function.
+  final ASTType<T> returnType;
+
+  /// Modifiers of this function.
+  final ASTModifiers modifiers;
+
+  ASTGetterDeclaration(
+    this.name,
+    this.returnType, {
+    ASTBlock? block,
+    ASTModifiers? modifiers,
+  }) : modifiers = modifiers ?? ASTModifiers.modifiersNone,
+       super(null) {
+    set(block);
+  }
+
+  @override
+  ASTNode? getNodeIdentifier(String name, {ASTNode? requester}) {
+    var allChildren = descendantChildren;
+
+    var limit = allChildren.length;
+
+    if (requester != null) {
+      var idx = allChildren.indexWhere((e) => identical(e, requester));
+
+      if (idx >= 0) {
+        limit = idx + 1;
+      }
+    }
+
+    for (var i = limit - 1; i >= 0; --i) {
+      var child = allChildren[i];
+
+      if (child is ASTStatementVariableDeclaration && child.name == name) {
+        return child;
+      } else if (child is ASTFunctionDeclaration && child.name == name) {
+        return child;
+      }
+    }
+
+    return super.getNodeIdentifier(name, requester: requester);
+  }
+
+  FutureOr<ASTValue<T>> call(VMContext parent) async {
+    var context = VMContext(this, parent: parent);
+
+    var prevContext = VMContext.setCurrent(context);
+    try {
+      var result = await super.run(context, ASTRunStatus());
+      return await resolveReturnValue(context, result);
+    } finally {
+      VMContext.setCurrent(prevContext);
+    }
+  }
+
+  FutureOr<ASTValue<T>> resolveReturnValue(
+    VMContext context,
+    Object? returnValue,
+  ) {
+    var ret = returnType.toValue(context, returnValue);
+    return ret.resolveMapped((resolved) {
+      resolved ??= ASTValueVoid.instance as ASTValue<T>;
+      return resolved;
+    });
+  }
+
+  @override
+  VMContext defineRunContext(VMContext parentContext) {
+    // Ensure the the passed parentContext will be used by the block,
+    // since is already instantiated by call(...).
+    return parentContext;
+  }
+
+  @override
+  ASTValue run(VMContext parentContext, ASTRunStatus runStatus) {
+    throw UnsupportedError(
+      "Can't run this block directly! Should use call(...), since this block needs parameters initialization!",
+    );
+  }
+
+  @override
+  ASTType resolveType(VMContext? context) => returnType;
+
+  @override
+  String toString() {
+    var block = super.toString();
+    return '$modifiers $returnType get $name $block';
+  }
+}
+
 typedef ParameterValueResolver =
     FutureOr<dynamic> Function(ASTValue? paramVal, VMContext context);
+
+/// An AST External Getter.
+class ASTExternalGetter<T> extends ASTGetterDeclaration<T> {
+  final Function() externalFunction;
+
+  ASTExternalGetter(super.name, super.returnType, this.externalFunction);
+
+  @override
+  FutureOr<ASTValue<T>> call(VMContext parent) async {
+    var context = VMContext(this, parent: parent);
+
+    var prevContext = VMContext.setCurrent(context);
+    try {
+      dynamic result = externalFunction();
+
+      if (result is Future) {
+        var r = await result;
+        return await resolveReturnValue(context, r);
+      } else {
+        return await resolveReturnValue(context, result);
+      }
+    } finally {
+      VMContext.setCurrent(prevContext);
+    }
+  }
+}
+
+/// An AST External Class Getter.
+class ASTExternalClassGetter<T> extends ASTClassGetterDeclaration<T> {
+  final Function(Object? o) externalFunction;
+
+  ASTExternalClassGetter(
+    ASTClass super.clazz,
+    super.name,
+    super.returnType,
+    this.externalFunction,
+  );
+
+  @override
+  FutureOr<ASTValue<T>> call(
+    VMContext parent, {
+    List? positionalParameters,
+    Map? namedParameters,
+  }) async {
+    var classInstance = parent.getClassInstance();
+    var obj = await classInstance!.getValue(parent);
+
+    var context = VMContext(this, parent: parent);
+
+    var prevContext = VMContext.setCurrent(context);
+    try {
+      dynamic result = externalFunction(obj);
+
+      if (result is Future) {
+        var r = await result;
+        return await resolveReturnValue(context, r);
+      } else {
+        return await resolveReturnValue(context, result);
+      }
+    } finally {
+      VMContext.setCurrent(prevContext);
+    }
+  }
+}
 
 /// An AST External Function.
 class ASTExternalFunction<T> extends ASTFunctionDeclaration<T> {
@@ -1643,7 +1830,7 @@ class ASTExternalFunction<T> extends ASTFunctionDeclaration<T> {
   }
 }
 
-/// An AST External Function.
+/// An AST External Class Function.
 class ASTExternalClassFunction<T> extends ASTClassFunctionDeclaration<T> {
   final Function externalFunction;
 

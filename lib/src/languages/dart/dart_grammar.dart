@@ -458,6 +458,7 @@ class DartGrammarDefinition extends DartGrammarLexer {
               expressionVariableAssigment() |
               expressionFunctionInvocation() |
               expressionVariableEntryAccess() |
+              expressionGetterAccess() |
               expressionVariableAccess())
           .cast<ASTExpression>();
 
@@ -498,6 +499,19 @@ class DartGrammarDefinition extends DartGrammarLexer {
               return ASTExpressionLocalFunctionInvocation(name, args);
             }
           });
+
+  Parser<ASTExpressionGetterAccess> expressionGetterAccess() =>
+      ((identifier() & char('.')) & identifier().trimHidden()).map((v) {
+        var obj = v[0] as String?;
+        var name = v[2] as String;
+
+        if (obj != null && obj != 'this') {
+          var variable = ASTScopeVariable(obj);
+          return ASTExpressionObjectGetterAccess(variable, name);
+        } else {
+          return ASTExpressionLocalGetterAccess(name);
+        }
+      });
 
   Parser<List<ASTExpression>> expressionSequence() =>
       (ref0(expression) & (char(',').trimHidden() & ref0(expression)).star())

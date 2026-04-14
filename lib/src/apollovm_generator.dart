@@ -261,6 +261,20 @@ abstract class ApolloGenerator<
     O? out,
   });
 
+  StringBuffer generateASTExpressionObjectGetterAccess(
+    ASTExpressionObjectGetterAccess expression, {
+    StringBuffer? out,
+    String indent = '',
+    bool headIndented = true,
+  });
+
+  StringBuffer generateASTExpressionLocalGetterAccess(
+    ASTExpressionLocalGetterAccess expression, {
+    StringBuffer? out,
+    String indent = '',
+    bool headIndented = true,
+  });
+
   O generateASTExpressionVariableAccess(
     ASTExpressionVariableAccess expression, {
     O? out,

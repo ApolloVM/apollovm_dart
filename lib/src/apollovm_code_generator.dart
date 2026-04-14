@@ -839,6 +839,20 @@ abstract class ApolloCodeGenerator
         indent: indent,
         headIndented: headIndented,
       );
+    } else if (expression is ASTExpressionLocalGetterAccess) {
+      return generateASTExpressionLocalGetterAccess(
+        expression,
+        out: out,
+        indent: indent,
+        headIndented: headIndented,
+      );
+    } else if (expression is ASTExpressionObjectGetterAccess) {
+      return generateASTExpressionObjectGetterAccess(
+        expression,
+        out: out,
+        indent: indent,
+        headIndented: headIndented,
+      );
     } else if (expression is ASTExpressionOperation) {
       return generateASTExpressionOperation(
         expression,
@@ -1117,6 +1131,54 @@ abstract class ApolloCodeGenerator
       );
     }
     out.write(')');
+
+    return out;
+  }
+
+  @override
+  StringBuffer generateASTExpressionObjectGetterAccess(
+    ASTExpressionObjectGetterAccess expression, {
+    StringBuffer? out,
+    String indent = '',
+    bool headIndented = true,
+  }) {
+    out ??= newOutput();
+
+    if (headIndented) out.write(indent);
+
+    var getterName = expression.name;
+
+    if (expression.variable.isTypeIdentifier) {
+      var typeIdentifier = expression.variable.typeIdentifier;
+      getterName = normalizeTypeFunction(typeIdentifier!.name, getterName);
+    }
+
+    generateASTVariable(
+      expression.variable,
+      callingFunction: getterName,
+      out: out,
+      indent: indent,
+      headIndented: false,
+    );
+    out.write('.');
+
+    out.write(getterName);
+
+    return out;
+  }
+
+  @override
+  StringBuffer generateASTExpressionLocalGetterAccess(
+    ASTExpressionLocalGetterAccess expression, {
+    String indent = '',
+    StringBuffer? out,
+    bool headIndented = true,
+  }) {
+    out ??= newOutput();
+
+    if (headIndented) out.write(indent);
+
+    out.write(expression.name);
 
     return out;
   }

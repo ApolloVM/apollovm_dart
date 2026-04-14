@@ -1477,3 +1477,151 @@ class ASTExpressionObjectFunctionInvocation
     return '$variable.$f';
   }
 }
+
+/// [ASTExpression] base class to call a function.
+abstract class ASTExpressionGetterAccess extends ASTExpression {
+  String name;
+
+  ASTExpressionGetterAccess(this.name);
+
+  @override
+  FutureOr<ASTType> resolveType(VMContext? context) {
+    if (context != null) {
+      return _getGetter(context).resolveMapped((f) => f.resolveType(context));
+    }
+
+    final associatedNode = _associatedNode;
+    return associatedNode == null
+        ? ASTTypeDynamic.instance
+        : associatedNode.resolveType(context);
+  }
+
+  ASTTypedNode? _associatedNode;
+
+  @override
+  void associateToType(ASTTypedNode node) => _associatedNode = node;
+
+  FutureOr<ASTGetterDeclaration> _getGetter(VMContext parentContext);
+
+  @override
+  FutureOr<ASTValue> run(
+    VMContext parentContext,
+    ASTRunStatus runStatus,
+  ) async {
+    var g = await _getGetter(parentContext);
+    return g.call(parentContext);
+  }
+
+  @override
+  String toString({bool asGroup = false}) {
+    return 'get:$name';
+  }
+}
+
+/// [ASTExpression] to call a local context function.
+class ASTExpressionLocalGetterAccess extends ASTExpressionGetterAccess {
+  ASTExpressionLocalGetterAccess(super.name);
+
+  @override
+  bool get isComplex => false;
+
+  @override
+  Iterable<ASTNode> get children => [];
+
+  @override
+  ASTGetterDeclaration _getGetter(VMContext parentContext) {
+    var g = parentContext.getGetter(name);
+
+    if (g == null) {
+      throw ApolloVMRuntimeError('Can\'t find getter "$name"');
+    }
+
+    return g;
+  }
+}
+
+/// [ASTExpression] to call a class object function.
+class ASTExpressionObjectGetterAccess extends ASTExpressionGetterAccess {
+  ASTVariable variable;
+
+  ASTExpressionObjectGetterAccess(this.variable, String name) : super(name);
+
+  @override
+  bool get isComplex => false;
+
+  @override
+  Iterable<ASTNode> get children => [variable];
+
+  @override
+  void resolveNode(ASTNode? parentNode) {
+    super.resolveNode(parentNode);
+
+    variable.resolveNode(this);
+  }
+
+  FutureOr<ASTValue> _getVariableValue(VMContext parentContext) {
+    return variable.getValue(parentContext);
+  }
+
+  FutureOr<ASTClass> _getObjectClass(VMContext parentContext) {
+    var retObj = _getVariableValue(parentContext);
+
+    return retObj.resolveMapped((obj) {
+      if (obj is ASTClassInstance) {
+        return obj.clazz;
+      }
+
+      var clazz = obj.type.getClass();
+      return clazz;
+    });
+  }
+
+  ASTClass? _getterClass;
+
+  FutureOr<ASTClass> _getGetterClass(VMContext parentContext) async {
+    if (_getterClass == null) {
+      var clazz = await _getObjectClass(parentContext);
+      _getterClass = clazz;
+    }
+    return _getterClass!;
+  }
+
+  @override
+  FutureOr<ASTGetterDeclaration> _getGetter(VMContext parentContext) async {
+    var clazz = await _getGetterClass(parentContext);
+
+    var g = clazz.getGetter(name, parentContext);
+
+    if (g == null) {
+      var obj = await _getVariableValue(parentContext);
+      throw ApolloVMRuntimeError(
+        "Can't find class[${clazz.name}] getter[$name] for object: $obj",
+      );
+    }
+
+    return g;
+  }
+
+  @override
+  FutureOr<ASTValue> run(
+    VMContext parentContext,
+    ASTRunStatus runStatus,
+  ) async {
+    var f = await _getGetter(parentContext);
+
+    var obj = await _getVariableValue(parentContext);
+
+    if (f is ASTClassGetterDeclaration) {
+      return f.objectCall(parentContext, obj);
+    } else {
+      // Static getter call:
+      return f.call(parentContext);
+    }
+  }
+
+  @override
+  String toString({bool asGroup = false}) {
+    var f = super.toString();
+    return '$variable.$f';
+  }
+}

@@ -2,10 +2,14 @@
 // This code is governed by the Apache License, Version 2.0.
 // Please refer to the LICENSE and AUTHORS files for details.
 
+import 'dart:async';
+
 import '../apollovm_base.dart';
+import '../ast/apollovm_ast_base.dart';
 import '../ast/apollovm_ast_toplevel.dart';
 import '../ast/apollovm_ast_type.dart';
 import '../ast/apollovm_ast_value.dart';
+import '../ast/apollovm_ast_variable.dart';
 
 class ApolloVMCore {
   static ASTClass<V>? getClass<V>(String className) {
@@ -18,17 +22,28 @@ class ApolloVMCore {
       case 'double':
       case 'Double':
         return CoreClassDouble.instance as ASTClass<V>;
+      case 'List':
+        return CoreClassList.instance as ASTClass<V>;
       default:
         return null;
     }
   }
 }
 
-abstract class CoreClassPrimitive<T> extends ASTClassPrimitive<T> {
-  final String coreName;
+abstract mixin class CoreClassMixin<T> {
+  ASTClass<T> get astClass;
 
-  CoreClassPrimitive(ASTTypePrimitive<T> type, this.coreName) : super(type) {
-    type.setClass(this);
+  ASTExternalClassGetter<R> _externalClassGetter<R>(
+    String name,
+    ASTType<R> returnType,
+    Function(Object? o) externalFunction,
+  ) {
+    return ASTExternalClassGetter<R>(
+      astClass,
+      name,
+      returnType,
+      externalFunction,
+    );
   }
 
   ASTExternalClassFunction<R> _externalClassFunctionArgs0<R>(
@@ -38,7 +53,7 @@ abstract class CoreClassPrimitive<T> extends ASTClassPrimitive<T> {
     ParameterValueResolver? parameterValueResolver,
   ]) {
     return ASTExternalClassFunction<R>(
-      this,
+      astClass,
       name,
       ASTParametersDeclaration(null, null, null),
       returnType,
@@ -55,7 +70,7 @@ abstract class CoreClassPrimitive<T> extends ASTClassPrimitive<T> {
     ParameterValueResolver? parameterValueResolver,
   ]) {
     return ASTExternalClassFunction<R>(
-      this,
+      astClass,
       name,
       ASTParametersDeclaration([param1], null, null),
       returnType,
@@ -73,7 +88,7 @@ abstract class CoreClassPrimitive<T> extends ASTClassPrimitive<T> {
     ParameterValueResolver? parameterValueResolver,
   ]) {
     return ASTExternalClassFunction<R>(
-      this,
+      astClass,
       name,
       ASTParametersDeclaration([param1, param2], null, null),
       returnType,
@@ -112,6 +127,29 @@ abstract class CoreClassPrimitive<T> extends ASTClassPrimitive<T> {
       externalFunction,
       parameterValueResolver,
     );
+  }
+}
+
+abstract class CoreClassBase<T> extends ASTClass<T> with CoreClassMixin {
+  final String coreName;
+
+  @override
+  ASTClass<T> get astClass => this;
+
+  CoreClassBase(ASTType<T> type, this.coreName) : super(coreName, type, null) {
+    type.setClass(this);
+  }
+}
+
+abstract class CoreClassPrimitive<T> extends ASTClassPrimitive<T>
+    with CoreClassMixin {
+  final String coreName;
+
+  @override
+  ASTClass<T> get astClass => this;
+
+  CoreClassPrimitive(super.type, this.coreName) {
+    type.setClass(this);
   }
 }
 
@@ -660,5 +698,388 @@ class CoreClassDouble extends CoreClassPrimitive<double> {
     throw StateError(
       "Can't find core function: $coreName.$fName( $parametersSignature )",
     );
+  }
+}
+
+class CoreClassList extends CoreClassBase<List<Object>> {
+  static final CoreClassList instance = CoreClassList._();
+
+  late final ASTExternalClassGetter _getterLength;
+  late final ASTExternalClassGetter _getterIsEmpty;
+  late final ASTExternalClassGetter _getterIsNotEmpty;
+
+  late final ASTExternalClassFunction _functionAdd;
+  late final ASTExternalClassFunction _functionAddAll;
+  late final ASTExternalClassFunction _functionRemove;
+  late final ASTExternalClassFunction _functionRemoveAt;
+
+  late final ASTExternalClassFunction _functionContains;
+
+  late final ASTExternalClassFunction _functionLength;
+  late final ASTExternalClassFunction _functionIsEmpty;
+  late final ASTExternalClassFunction _functionIsNotEmpty;
+
+  late final ASTExternalClassFunction _functionClear;
+  late final ASTExternalClassFunction _functionIndexOf;
+  late final ASTExternalClassFunction _functionInsert;
+
+  late final ASTExternalClassFunction _functionFirst;
+  late final ASTExternalClassFunction _functionLast;
+
+  late final ASTExternalClassFunction _functionSublist;
+
+  late final ASTExternalFunction _functionValueOf;
+
+  CoreClassList._() : super(ASTTypeArray.instanceOfObject, 'List') {
+    _getterLength = _externalClassGetter(
+      'length',
+      ASTTypeInt.instance,
+      (Object? o) => o is List ? o.length : null,
+    );
+
+    _getterIsEmpty = _externalClassGetter(
+      'isEmpty',
+      ASTTypeBool.instance,
+      (Object? o) => o is List ? o.isEmpty : null,
+    );
+
+    _getterIsNotEmpty = _externalClassGetter(
+      'isNotEmpty',
+      ASTTypeBool.instance,
+      (Object? o) => o is List ? o.isNotEmpty : null,
+    );
+
+    _functionAdd = _externalClassFunctionArgs1(
+      'add',
+      ASTTypeBool.instance,
+      ASTFunctionParameterDeclaration(
+        ASTTypeDynamic.instance,
+        'value',
+        0,
+        false,
+      ),
+      (List o, dynamic v) {
+        o.add(v);
+        return true;
+      },
+    );
+
+    _functionAddAll = _externalClassFunctionArgs1(
+      'addAll',
+      ASTTypeBool.instance,
+      ASTFunctionParameterDeclaration(
+        ASTTypeArray.instanceOfObject,
+        'values',
+        0,
+        false,
+      ),
+      (List o, List v) {
+        o.addAll(v);
+        return true;
+      },
+    );
+
+    _functionRemove = _externalClassFunctionArgs1(
+      'remove',
+      ASTTypeBool.instance,
+      ASTFunctionParameterDeclaration(
+        ASTTypeDynamic.instance,
+        'value',
+        0,
+        false,
+      ),
+      (List o, dynamic v) => o.remove(v),
+    );
+
+    _functionRemoveAt = _externalClassFunctionArgs1(
+      'removeAt',
+      ASTTypeDynamic.instance,
+      ASTFunctionParameterDeclaration(ASTTypeInt.instance, 'index', 0, false),
+      (List o, int i) => o.removeAt(i),
+    );
+
+    _functionContains = _externalClassFunctionArgs1(
+      'contains',
+      ASTTypeBool.instance,
+      ASTFunctionParameterDeclaration(
+        ASTTypeDynamic.instance,
+        'value',
+        0,
+        false,
+      ),
+      (List o, dynamic v) => o.contains(v),
+    );
+
+    _functionLength = _externalClassFunctionArgs0(
+      'length',
+      ASTTypeInt.instance,
+      (List o) => o.length,
+    );
+
+    _functionIsEmpty = _externalClassFunctionArgs0(
+      'isEmpty',
+      ASTTypeBool.instance,
+      (List o) => o.isEmpty,
+    );
+
+    _functionIsNotEmpty = _externalClassFunctionArgs0(
+      'isNotEmpty',
+      ASTTypeBool.instance,
+      (List o) => o.isNotEmpty,
+    );
+
+    _functionClear = _externalClassFunctionArgs0(
+      'clear',
+      ASTTypeVoid.instance,
+      (List o) {
+        o.clear();
+        return null;
+      },
+    );
+
+    _functionIndexOf = _externalClassFunctionArgs1(
+      'indexOf',
+      ASTTypeInt.instance,
+      ASTFunctionParameterDeclaration(
+        ASTTypeDynamic.instance,
+        'value',
+        0,
+        false,
+      ),
+      (List o, dynamic v) => o.indexOf(v),
+    );
+
+    _functionInsert = _externalClassFunctionArgs2(
+      'insert',
+      ASTTypeVoid.instance,
+      ASTFunctionParameterDeclaration(ASTTypeInt.instance, 'index', 0, false),
+      ASTFunctionParameterDeclaration(
+        ASTTypeDynamic.instance,
+        'value',
+        1,
+        false,
+      ),
+      (List o, int i, dynamic v) {
+        o.insert(i, v);
+        return null;
+      },
+    );
+
+    _functionFirst = _externalClassFunctionArgs0(
+      'first',
+      ASTTypeDynamic.instance,
+      (List o) => o.first,
+    );
+
+    _functionLast = _externalClassFunctionArgs0(
+      'last',
+      ASTTypeDynamic.instance,
+      (List o) => o.last,
+    );
+
+    _functionSublist = _externalClassFunctionArgs2(
+      'sublist',
+      ASTTypeArray.instanceOfObject,
+      ASTFunctionParameterDeclaration(ASTTypeInt.instance, 'start', 0, false),
+      ASTFunctionParameterDeclaration(ASTTypeInt.instance, 'end', 1, true),
+      (List o, dynamic start, dynamic end) {
+        if (end == null) return o.sublist(start);
+        return o.sublist(start, end);
+      },
+    );
+
+    _functionValueOf = _externalStaticFunctionArgs1(
+      'valueOf',
+      ASTTypeArray.instanceOfObject,
+      ASTFunctionParameterDeclaration(ASTTypeDynamic.instance, 'obj', 0, false),
+      (dynamic o) {
+        if (o == null) return [];
+        if (o is List) return o;
+        return [o];
+      },
+      resolveValueToList,
+    );
+  }
+
+  List resolveValueToList(ASTValue? paramVal, VMContext context) {
+    if (paramVal == null) return [];
+
+    if (paramVal is VMObject) {
+      final v = paramVal.getValue(context);
+      if (v is List) return v;
+      return [v];
+    }
+
+    final val = paramVal.getValue(context);
+    if (val is List) return val;
+    return [val];
+  }
+
+  @override
+  ASTGetterDeclaration? getGetter(
+    String fName,
+    VMContext context, {
+    bool caseInsensitive = false,
+  }) {
+    switch (fName) {
+      case 'length':
+        return _getterLength;
+      case 'isEmpty':
+        return _getterIsEmpty;
+      case 'isNotEmpty':
+        return _getterIsNotEmpty;
+    }
+
+    throw StateError("Can't find core getter: $coreName.$fName");
+  }
+
+  @override
+  ASTFunctionDeclaration? getFunction(
+    String fName,
+    ASTFunctionSignature parametersSignature,
+    VMContext context, {
+    bool caseInsensitive = false,
+  }) {
+    switch (fName) {
+      case 'add':
+        return _functionAdd;
+      case 'addAll':
+        return _functionAddAll;
+      case 'remove':
+        return _functionRemove;
+      case 'removeAt':
+        return _functionRemoveAt;
+
+      case 'contains':
+        return _functionContains;
+
+      case 'length':
+        return _functionLength;
+      case 'isEmpty':
+        return _functionIsEmpty;
+      case 'isNotEmpty':
+        return _functionIsNotEmpty;
+
+      case 'clear':
+        return _functionClear;
+      case 'indexOf':
+        return _functionIndexOf;
+      case 'insert':
+        return _functionInsert;
+
+      case 'first':
+        return _functionFirst;
+      case 'last':
+        return _functionLast;
+
+      case 'sublist':
+        return _functionSublist;
+
+      case 'valueOf':
+        return _functionValueOf;
+    }
+
+    throw StateError(
+      "Can't find core function: $coreName.$fName( $parametersSignature )",
+    );
+  }
+
+  @override
+  FutureOr<ASTValue<List<Object>>?> createInstance(
+    VMClassContext<dynamic> context,
+    ASTRunStatus runStatus,
+  ) {
+    throw UnimplementedError();
+  }
+
+  @override
+  List<ASTClassField<dynamic>> get fields => throw UnimplementedError();
+
+  @override
+  List<String> get fieldsNames => throw UnimplementedError();
+
+  @override
+  FutureOr<Map<String, Object>> getFieldsMap({
+    VMContext? context,
+    Map<String, ASTValue<dynamic>>? fieldOverwrite,
+  }) {
+    throw UnimplementedError();
+  }
+
+  @override
+  FutureOr<ASTValue<dynamic>?> getInstanceFieldValue(
+    VMContext context,
+    ASTRunStatus runStatus,
+    ASTValue<List<dynamic>> instance,
+    String fieldName, {
+    bool caseInsensitive = false,
+  }) {
+    throw UnimplementedError();
+  }
+
+  @override
+  FutureOr<void> initializeInstance(
+    VMClassContext<dynamic> context,
+    ASTRunStatus runStatus,
+    ASTValue<List<dynamic>> instance,
+  ) {
+    throw UnimplementedError();
+  }
+
+  @override
+  FutureOr<ASTValue<dynamic>?> removeInstanceFieldValue(
+    VMContext context,
+    ASTRunStatus runStatus,
+    ASTValue<List<dynamic>> instance,
+    String fieldName, {
+    bool caseInsensitive = false,
+  }) {
+    throw UnimplementedError();
+  }
+
+  @override
+  void resolveNodeFields(ASTNode? parentNode) {}
+
+  @override
+  FutureOr<void> setInstanceByMap(
+    VMClassContext<dynamic> context,
+    ASTRunStatus runStatus,
+    ASTValue<List<dynamic>> instance,
+    Map<String, ASTValue<dynamic>> value, {
+    bool caseInsensitive = false,
+  }) {
+    throw UnimplementedError();
+  }
+
+  @override
+  FutureOr<void> setInstanceByVMObject(
+    VMClassContext<dynamic> context,
+    ASTRunStatus runStatus,
+    ASTValue<List<dynamic>> instance,
+    VMObject value,
+  ) {
+    throw UnimplementedError();
+  }
+
+  @override
+  FutureOr<void> setInstanceByValue(
+    VMClassContext<dynamic> context,
+    ASTRunStatus runStatus,
+    ASTValue<List<dynamic>> instance,
+    ASTValue<List<dynamic>> value,
+  ) {
+    throw UnimplementedError();
+  }
+
+  @override
+  FutureOr<ASTValue<dynamic>?> setInstanceFieldValue(
+    VMContext context,
+    ASTRunStatus runStatus,
+    ASTValue<List<dynamic>> instance,
+    String fieldName,
+    ASTValue<dynamic> value, {
+    bool caseInsensitive = false,
+  }) {
+    throw UnimplementedError();
   }
 }

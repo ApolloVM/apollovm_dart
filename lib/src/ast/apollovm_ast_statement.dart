@@ -70,6 +70,59 @@ class ASTBlock extends ASTStatement {
     return parentNode?.getNodeIdentifier(name, requester: requester);
   }
 
+  //// Getters:
+
+  final Map<String, ASTGetterDeclaration> _getters = {};
+
+  List<ASTGetterDeclaration> get getter => _getters.values.toList();
+
+  List<String> get getterNames => _getters.keys.toList();
+
+  void addGetter(ASTGetterDeclaration g) {
+    var name = g.name;
+    g.parentBlock = this;
+    _getters[name] = g;
+  }
+
+  void addAllGetters(Iterable<ASTGetterDeclaration> gs) {
+    for (var g in gs) {
+      addGetter(g);
+    }
+  }
+
+  ASTGetterDeclaration? getGetterWithName(
+    String name, {
+    bool caseInsensitive = false,
+  }) {
+    var g = _getters[name];
+
+    if (g == null && caseInsensitive) {
+      for (var entry in _getters.entries) {
+        if (equalsIgnoreAsciiCase(entry.key, name)) {
+          g = entry.value;
+          break;
+        }
+      }
+    }
+
+    return g;
+  }
+
+  ASTGetterDeclaration? getGetter(
+    String fName,
+    VMContext context, {
+    bool caseInsensitive = false,
+  }) {
+    var g = getGetterWithName(fName, caseInsensitive: caseInsensitive);
+    if (g != null) return g;
+
+    var gExternal = context.getMappedExternalGetter(fName);
+
+    return gExternal;
+  }
+
+  //// Functions
+
   final Map<String, ASTFunctionSet> _functions = {};
 
   List<ASTFunctionSet> get functions => _functions.values.toList();
@@ -142,6 +195,8 @@ class ASTBlock extends ASTStatement {
     ASTFunctionSignature parametersTypes,
     VMContext context,
   ) => getFunction(name, parametersTypes, context)?.returnType as ASTType<T>?;
+
+  //// Statements
 
   final List<ASTStatement> _statements = [];
 

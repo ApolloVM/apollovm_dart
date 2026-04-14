@@ -35,7 +35,7 @@ import 'languages/wasm/wasm_runner.dart';
 /// The Apollo VM.
 class ApolloVM implements VMTypeResolver {
   // ignore: non_constant_identifier_names
-  static final String VERSION = '0.1.5';
+  static final String VERSION = '0.1.6';
 
   static int _idCount = 0;
 
@@ -833,6 +833,33 @@ class ApolloExternalFunctionMapper {
   }
 }
 
+/// A mapper for a getter that is external to the [ApolloVM].
+///
+/// Used to map normal Dart getters to the [ApolloVM] instance.
+/// This allows calls to Dart getters, from a source code
+/// parsed and loaded by [ApolloVM].
+class ApolloExternalGetterMapper {
+  final Map<String, ASTGetterDeclaration> _getters = {};
+
+  /// Returns a mapped getter with [gName].
+  ASTExternalGetter<R>? getMappedGetter<R>(VMContext context, String gName) {
+    return _getters[gName] as ASTExternalGetter<R>?;
+  }
+
+  /// Adds an external getter ([gExternal]) to this mapping table.
+  void addExternalGetter(ASTExternalGetter gExternal) {
+    var fName = gExternal.name;
+    _getters[fName] = gExternal;
+  }
+
+  /// Maps an external function with 0 parameters.
+  void mapExternalGetter<T, R>(ASTType<R> fReturn, String fName, Function() f) {
+    var fExternal = ASTExternalGetter(fName, fReturn, f);
+
+    addExternalGetter(fExternal);
+  }
+}
+
 /// A runtime context, for classes, of the VM.
 ///
 /// Implements the object instance reference of a running class.
@@ -992,6 +1019,15 @@ class VMContext {
   /// If [parent] is defined, will also look in the parent context.
   ASTValue? getClassInstance() => parent?.getClassInstance();
 
+  /// Returns a getter of [name].
+  ///
+  /// If [parent] is defined, will also look in the parent context.
+  ASTGetterDeclaration? getGetter(String name) {
+    var g = block.getGetter(name, this);
+    if (g != null) return g;
+    return parent?.getGetter(name);
+  }
+
   /// Returns a function of [name] and [parametersSignature]
   ///
   /// If [parent] is defined, will also look in the parent context.
@@ -1024,6 +1060,24 @@ class VMContext {
 
     if (parent != null) {
       return parent!.getMappedExternalFunction(fName, parametersSignature);
+    }
+
+    return null;
+  }
+
+  ApolloExternalGetterMapper? externalGetterMapper;
+
+  /// Returns an [ASTExternalFunction] of [fName] and [parametersSignature].
+  ///
+  /// If [parent] is defined, will also look in the parent context.
+  ASTExternalGetter<R>? getMappedExternalGetter<R>(String fName) {
+    if (externalGetterMapper != null) {
+      var g = externalGetterMapper!.getMappedGetter(this, fName);
+      if (g != null) return g as ASTExternalGetter<R>;
+    }
+
+    if (parent != null) {
+      return parent!.getMappedExternalGetter(fName);
     }
 
     return null;

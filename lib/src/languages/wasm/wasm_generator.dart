@@ -1825,6 +1825,28 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     // TODO: implement resolveASTExpressionOperatorText
     throw UnimplementedError('resolveASTExpressionOperatorText');
   }
+
+  @override
+  StringBuffer generateASTExpressionLocalGetterAccess(
+    ASTExpressionLocalGetterAccess expression, {
+    StringBuffer? out,
+    String indent = '',
+    bool headIndented = true,
+  }) {
+    // TODO: implement generateASTExpressionLocalGetterAccess
+    throw UnimplementedError();
+  }
+
+  @override
+  StringBuffer generateASTExpressionObjectGetterAccess(
+    ASTExpressionObjectGetterAccess expression, {
+    StringBuffer? out,
+    String indent = '',
+    bool headIndented = true,
+  }) {
+    // TODO: implement generateASTExpressionObjectGetterAccess
+    throw UnimplementedError();
+  }
 }
 
 /// The Wasm code context.
