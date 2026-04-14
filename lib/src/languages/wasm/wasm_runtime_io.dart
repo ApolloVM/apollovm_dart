@@ -110,11 +110,14 @@ class WasmModuleIO extends WasmModule {
   }
 
   @override
-  F? getFunction<F extends Function>(String functionName) {
+  WasmModuleFunction<F>? getFunction<F extends Function>(String functionName) {
     var f = instance.getFunction(functionName);
     if (f == null) return null;
 
-    return f.inner as F?;
+    var function = f.inner as F?;
+    if (function == null) return null;
+
+    return (function: function, varArgs: true);
   }
 
   @override

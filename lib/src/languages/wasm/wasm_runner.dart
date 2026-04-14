@@ -70,14 +70,35 @@ class ApolloRunnerWasm extends ApolloRunner {
       _resolveWasmCallParameters(astFunction, allParams);
     }
 
+    final (function: function, varArgs: varArgs) = f;
+
     dynamic res;
     try {
-      res = Function.apply(f, allParams);
+      if (!varArgs) {
+        if (function is Function(List)) {
+          res = Function.apply(function, [allParams]);
+        } else if (function is Function()) {
+          if (allParams.isNotEmpty) {
+            throw WasmModuleExecutionError(
+              functionName,
+              parameters: allParams,
+              function: function,
+              cause:
+                  "Function expects no arguments, but ${allParams.length} were provided: $allParams",
+            );
+          }
+          res = Function.apply(function, []);
+        } else {
+          res = Function.apply(function, allParams);
+        }
+      } else {
+        res = Function.apply(function, allParams);
+      }
     } catch (e) {
       throw WasmModuleExecutionError(
         functionName,
         parameters: allParams,
-        function: f,
+        function: function,
         cause: e,
       );
     }

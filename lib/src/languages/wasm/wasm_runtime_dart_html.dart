@@ -7,12 +7,15 @@ import 'package:wasm_interop/wasm_interop.dart' as browser_wasm;
 import '../../ast/apollovm_ast_toplevel.dart';
 import 'wasm_runtime.dart';
 
-/// [WasmRuntime] implementation for the Browser.
-class WasmRuntimeBrowser extends WasmRuntime {
-  WasmRuntimeBrowser() : super.base();
+/// [WasmRuntime] implementation for the Browser using `dart:html`.
+/// Use `WasmRuntimeWeb` instead.
+@Deprecated("Use `WasmRuntimeWeb` instead.")
+class WasmRuntimeDartHTML extends WasmRuntime {
+  WasmRuntimeDartHTML() : super.base();
 
   @override
-  String get platformVersion => 'Browser: ${window.navigator.userAgent}';
+  String get platformVersion =>
+      'Browser(dart:html): ${window.navigator.userAgent}';
 
   @override
   bool get isSupported => true;
@@ -52,8 +55,10 @@ class WasmModuleBrowser extends WasmModule {
   }
 
   @override
-  F? getFunction<F extends Function>(String functionName) {
-    return instance.functions[functionName]! as F?;
+  WasmModuleFunction<F>? getFunction<F extends Function>(String functionName) {
+    var function = instance.functions[functionName]! as F?;
+    if (function == null) return null;
+    return (function: function, varArgs: true);
   }
 
   @override
@@ -80,5 +85,6 @@ class WasmModuleBrowser extends WasmModule {
 }
 
 WasmRuntime createWasmRuntime() {
-  return WasmRuntimeBrowser();
+  // ignore: deprecated_member_use_from_same_package
+  return WasmRuntimeDartHTML();
 }
