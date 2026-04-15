@@ -1213,6 +1213,8 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       return generateASTBranch(statement, out: out, context: context);
     } else if (statement is ASTStatementForLoop) {
       return generateASTStatementForLoop(statement, out: out);
+    } else if (statement is ASTStatementForEach) {
+      return generateASTStatementForEach(statement, out: out);
     } else if (statement is ASTStatementReturnNull) {
       return generateASTStatementReturnNull(statement, out: out);
     } else if (statement is ASTStatementReturnValue) {
@@ -1298,6 +1300,15 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
   }) {
     // TODO: implement generateASTStatementForLoop
     throw UnimplementedError('generateASTStatementForLoop');
+  }
+
+  @override
+  BytesOutput generateASTStatementForEach(
+    ASTStatementForEach forEach, {
+    BytesOutput? out,
+  }) {
+    // TODO: implement generateASTStatementForEach
+    throw UnimplementedError('generateASTStatementForEach');
   }
 
   @override

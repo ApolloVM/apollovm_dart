@@ -941,3 +941,80 @@ class ASTStatementForLoop extends ASTStatement {
   @override
   ASTType resolveType(VMContext? context) => ASTTypeVoid.instance;
 }
+
+class ASTStatementForEach extends ASTStatement {
+  final String variableName;
+  final ASTExpression iterableExpression;
+  final ASTBlock loopBlock;
+
+  ASTStatementForEach(
+    this.variableName,
+    this.iterableExpression,
+    this.loopBlock,
+  );
+
+  @override
+  Iterable<ASTNode> get children => [iterableExpression, loopBlock];
+
+  @override
+  void resolveNode(ASTNode? parentNode) {
+    super.resolveNode(parentNode);
+
+    iterableExpression.resolveNode(parentNode);
+    loopBlock.resolveNode(parentNode);
+  }
+
+  @override
+  VMContext defineRunContext(VMContext parentContext) {
+    return parentContext;
+  }
+
+  @override
+  FutureOr<ASTValue> run(
+    VMContext parentContext,
+    ASTRunStatus runStatus,
+  ) async {
+    var context = VMContext(parentContext.block, parent: parentContext);
+    var prevContext = VMContext.setCurrent(context);
+
+    try {
+      var iterableValue = await iterableExpression.run(context, runStatus);
+
+      if (iterableValue is! ASTValueArray) {
+        throw ApolloVMRuntimeError(
+          '`iterableValue` is a `ASTValueArray`: ${iterableValue.runtimeType}',
+        );
+      }
+
+      var elementType =
+          iterableValue.type.generics?.first ?? ASTTypeObject.instance;
+
+      var iterable = iterableValue.getValue(context);
+
+      for (var element in iterable) {
+        var astElement = await elementType.toValue(parentContext, element);
+
+        var loopContext = VMContext(parentContext.block, parent: context);
+
+        loopContext.declareVariableWithValue(
+          elementType,
+          variableName,
+          astElement,
+        );
+
+        VMContext.setCurrent(loopContext);
+
+        await loopBlock.run(loopContext, runStatus);
+
+        VMContext.setCurrent(context);
+      }
+    } finally {
+      VMContext.setCurrent(prevContext);
+    }
+
+    return ASTValueVoid.instance;
+  }
+
+  @override
+  ASTType resolveType(VMContext? context) => ASTTypeVoid.instance;
+}

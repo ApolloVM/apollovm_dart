@@ -302,6 +302,13 @@ abstract class ApolloCodeGenerator
         indent: indent,
         headIndented: headIndented,
       );
+    } else if (statement is ASTStatementForEach) {
+      return generateASTStatementForEach(
+        statement,
+        out: out,
+        indent: indent,
+        headIndented: headIndented,
+      );
     } else if (statement is ASTStatementReturnNull) {
       return generateASTStatementReturnNull(
         statement,
@@ -412,6 +419,47 @@ abstract class ApolloCodeGenerator
 
     var blockCode = generateASTBlock(
       forLoop.loopBlock,
+      indent: indent,
+      withBrackets: false,
+    );
+
+    out.write(blockCode);
+    out.write(indent);
+    out.write('}');
+
+    return out;
+  }
+
+  @override
+  StringBuffer generateASTStatementForEach(
+    ASTStatementForEach forEach, {
+    StringBuffer? out,
+    String indent = '',
+    bool headIndented = true,
+  }) {
+    out ??= newOutput();
+
+    if (headIndented) out.write(indent);
+
+    out.write('for (');
+
+    // assuming you used `var` (you can adjust if you support final/type)
+    out.write('var ');
+    out.write(forEach.variableName);
+
+    out.write(' in ');
+
+    generateASTExpression(
+      forEach.iterableExpression,
+      out: out,
+      indent: indent,
+      headIndented: false,
+    );
+
+    out.write(') {\n');
+
+    var blockCode = generateASTBlock(
+      forEach.loopBlock,
       indent: indent,
       withBrackets: false,
     );

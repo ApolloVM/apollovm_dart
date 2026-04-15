@@ -180,7 +180,8 @@ class DartGrammarDefinition extends DartGrammarLexer {
 
   Parser<ASTStatement> statement() =>
       (branch() |
-              statementLoop() |
+              statementForLoop() |
+              statementForEach() |
               statementReturn() |
               statementVariableDeclaration() |
               statementExpression())
@@ -190,7 +191,7 @@ class DartGrammarDefinition extends DartGrammarLexer {
       (statementVariableDeclaration() | statementExpression())
           .cast<ASTStatement>();
 
-  Parser<ASTStatementForLoop> statementLoop() =>
+  Parser<ASTStatementForLoop> statementForLoop() =>
       (string('for').trimHidden() &
               char('(').trimHidden() &
               ref0(statementSimple) &
@@ -206,6 +207,27 @@ class DartGrammarDefinition extends DartGrammarLexer {
             var block = v[7];
             return ASTStatementForLoop(initExp, condExp, contExp, block);
           });
+
+  Parser<ASTStatementForEach> statementForEach() =>
+      (string('for').trimHidden() &
+              char('(').trimHidden() &
+              ref0(_forEachVariableDecl) &
+              string('in').trimHidden() &
+              ref0(expression) &
+              char(')').trimHidden() &
+              codeBlock())
+          .map((v) {
+            var variableName = v[2]; // from _forEachVariableDecl
+            var iterableExp = v[4];
+            var block = v[6];
+
+            return ASTStatementForEach(variableName, iterableExp, block);
+          });
+
+  Parser<String> _forEachVariableDecl() =>
+      ((string('var') | string('final')).trimHidden().optional() &
+              ref0(identifier))
+          .map((v) => v[1]);
 
   Parser<ASTStatementReturn> statementReturn() =>
       (string('return').trimHidden() &

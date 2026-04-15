@@ -1,3 +1,33 @@
+## 0.1.8
+
+- `ASTStatementForEach`:
+  - Added new AST statement class representing a for-each loop with a variable name, iterable expression, and loop block.
+  - Implements `run` method to iterate over an iterable AST value, declaring the loop variable in a nested context and running the loop block.
+  - Resolves type as `void`.
+
+- `ApolloCodeGenerator`:
+  - Added support for generating code for `ASTStatementForEach` in `generateASTStatement`.
+  - Implemented `generateASTStatementForEach` method to output a for-in loop syntax with variable declaration and loop block.
+
+- `ApolloGenerator`:
+  - Added abstract method `generateASTStatementForEach`.
+  - Updated `generateASTStatement` to dispatch to `generateASTStatementForEach` for `ASTStatementForEach`.
+
+- Dart language grammar (`dart_grammar.dart`):
+  - Added parser `statementForEach` to parse Dart-style for-each loops (`for (var x in iterable) { ... }`).
+  - Added helper parser `_forEachVariableDecl` to parse optional `var` or `final` before variable name.
+
+- Java language grammar (`java11_grammar.dart`):
+  - Added parser `statementForEach` to parse Java-style for-each loops (`for (Type var : iterable) { ... }`).
+
+- WebAssembly generator (`wasm_generator.dart`):
+  - Added stub `generateASTStatementForEach` method throwing `UnimplementedError`.
+  - Updated `generateASTStatement` to dispatch to `generateASTStatementForEach`.
+
+- Tests (`apollovm_languages_basic_test.dart`):
+  - Added new Dart test `dart_basic_findMax.test.xml` demonstrating usage of for-each loop to find max in a list.
+  - Test includes source, call, expected output, and generated source code verification.
+
 ## 0.1.7
 
 - CI:

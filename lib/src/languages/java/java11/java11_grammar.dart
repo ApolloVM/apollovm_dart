@@ -182,7 +182,7 @@ class Java11GrammarDefinition extends Java11GrammarLexer {
   Parser<ASTStatement> statement() =>
       (branch() |
               statementReturn() |
-              statementLoop() |
+              statementForLoop() |
               statementVariableDeclaration() |
               statementExpression())
           .cast<ASTStatement>();
@@ -191,7 +191,7 @@ class Java11GrammarDefinition extends Java11GrammarLexer {
       (statementVariableDeclaration() | statementExpression())
           .cast<ASTStatement>();
 
-  Parser<ASTStatementForLoop> statementLoop() =>
+  Parser<ASTStatementForLoop> statementForLoop() =>
       (string('for').trimHidden() &
               char('(').trimHidden() &
               ref0(statementSimple) &
@@ -206,6 +206,22 @@ class Java11GrammarDefinition extends Java11GrammarLexer {
             var contExp = v[5];
             var block = v[7];
             return ASTStatementForLoop(initExp, condExp, contExp, block);
+          });
+
+  Parser<ASTStatementForEach> statementForEach() =>
+      (string('for').trimHidden() &
+              char('(').trimHidden() &
+              ref0(identifier) &
+              char(':').trimHidden() &
+              ref0(expression) &
+              char(')').trimHidden() &
+              codeBlock())
+          .map((v) {
+            var variableName = v[3];
+            var iterableExp = v[5];
+            var block = v[7];
+
+            return ASTStatementForEach(variableName, iterableExp, block);
           });
 
   Parser<ASTStatementReturn> statementReturn() =>

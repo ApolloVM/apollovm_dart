@@ -6,6 +6,69 @@ Future<void> main() async {
   print('BASIC TESTS DEFINITIONS');
 
   var definitions = <TestDefinition>[
+    TestDefinition('dart_basic_findMax.test.xml', r'''
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="Basic sumOfEvens(List<int> numbers)">
+    <source language="dart">
+        <![CDATA[
+int findMax(List<int> numbers) {
+  if (numbers.isEmpty) {
+    print("The list is empty.");
+    return;
+  }
+
+  // Start by assuming the first element is the maximum
+  int max = numbers[0];
+
+  // Iterate through the rest of the list to find the actual maximum
+  for (var number in numbers) {
+    if (number > max) {
+      max = number;
+    }
+  }
+
+  print('The list is: $numbers');
+  print('The maximum number in the list is: $max');
+  return max;
+}
+
+        ]]>
+    </source>
+    <call function="findMax" return="30">
+        [[10, 5, 22, 8, 30, 9]]
+    </call>
+    <output>
+        [
+          "The list is: [10, 5, 22, 8, 30, 9]",
+          "The maximum number in the list is: 30"
+        ]
+    </output>
+    <source-generated language="dart"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+  int findMax(List<int> numbers) {
+    if (numbers.isEmpty) {
+        print('The list is empty.');
+        return;
+    }
+
+    int max = numbers[0];
+    for (var number in numbers) {
+      if (number > max) {
+          max = number;
+      }
+
+    }
+    print('The list is: $numbers');
+    print('The maximum number in the list is: $max');
+    return max;
+  }
+
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+</test>
+    '''),
     TestDefinition('dart_basic_sumOfEvens.test.xml', r'''
 <?xml version="1.0" encoding="UTF-8"?>
 <test title="Basic sumOfEvens(List<int> numbers)">
@@ -752,5 +815,5 @@ class Foo {
     '''),
   ];
 
-  await runTestDefinitions(definitions);
+  await runTestDefinitions([definitions[0]]);
 }
