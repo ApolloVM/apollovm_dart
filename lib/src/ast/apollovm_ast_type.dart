@@ -18,19 +18,43 @@ import 'apollovm_ast_variable.dart';
 
 /// An AST Type.
 class ASTType<V> with ASTNode implements ASTTypedNode {
-  static ASTType from(dynamic o, [VMContext? context]) {
-    if (o == null) return ASTTypeNull.instance;
+  static ASTType? fromType(Type type) {
+    if (type == String) {
+      return ASTTypeString.instance;
+    } else if (type == int) {
+      return ASTTypeInt.instance;
+    } else if (type == double) {
+      return ASTTypeDouble.instance;
+    } else if (type == bool) {
+      return ASTTypeBool.instance;
+    } else if (type == Object) {
+      return ASTTypeObject.instance;
+    } else if (type == dynamic) {
+      return ASTTypeDynamic.instance;
+    }
+
+    var arrayType = ASTTypeArray.fromType(type);
+    if (arrayType != null) return arrayType;
+
+    var mapType = ASTTypeMap.fromType(type);
+    if (mapType != null) return mapType;
+
+    return null;
+  }
+
+  static ASTType<T> from<T>(dynamic o, [VMContext? context]) {
+    if (o == null) return ASTTypeNull.instance as ASTType<T>;
 
     if (o is ASTType) {
-      return o;
+      return o as ASTType<T>;
     }
 
     if (o is ASTValue) {
-      return o.type;
+      return o.type as ASTType<T>;
     }
 
     if (o is ASTTypedVariable) {
-      return o.type;
+      return o.type as ASTType<T>;
     }
 
     if (o is ASTExpressionLiteral) {
@@ -40,13 +64,13 @@ class ASTType<V> with ASTNode implements ASTTypedNode {
     if (o is ASTTypedNode) {
       var resolved = o.resolveType(context ?? VMContext.getCurrent());
       if (resolved is ASTType) {
-        return resolved;
+        return resolved as ASTType<T>;
       } else {
-        return ASTTypeDynamic.instance;
+        return ASTTypeDynamic.instance as ASTType<T>;
       }
     }
 
-    return fromNativeValue(o);
+    return fromNativeValue(o) as ASTType<T>;
   }
 
   static FutureOr<ASTType> fromAsync(dynamic o) {
@@ -172,7 +196,7 @@ class ASTType<V> with ASTNode implements ASTTypedNode {
 
   ASTClass<V> getClass() {
     if (_class == null) {
-      var coreClass = ApolloVMCore.getClass<V>(name);
+      var coreClass = ApolloVMCore.getClass<V>(name, generics: generics);
       if (coreClass == null) {
         throw StateError('Class not set for type: $this');
       }
@@ -255,6 +279,10 @@ class ASTType<V> with ASTNode implements ASTTypedNode {
 
   FutureOr<ASTValue<V>?> toDefaultValue(VMContext context) => null;
 
+  ASTValue<V>? toASTValue(Object? value) {
+    return value == null ? null : ASTValue.from(this, value as V);
+  }
+
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -335,6 +363,9 @@ abstract class ASTTypePrimitive<T> extends ASTType<T> {
 
   @override
   bool acceptsType(ASTType type);
+
+  @override
+  ASTValue<T>? toASTValue(Object? value);
 }
 
 /// [ASTType] for booleans ([bool]).
@@ -374,6 +405,11 @@ class ASTTypeBool extends ASTTypePrimitive<bool> {
   }
 
   @override
+  ASTValueBool? toASTValue(Object? value) {
+    return value == null ? null : ASTValueBool(parseBool(value) ?? false);
+  }
+
+  @override
   bool operator ==(Object other) =>
       identical(this, other) ||
       super == other && other is ASTTypeInt && runtimeType == other.runtimeType;
@@ -390,11 +426,14 @@ class ASTTypeBool extends ASTTypePrimitive<bool> {
 enum ASTNumType { nan, num, int, double }
 
 /// Base [ASTType] for primitive numbers.
-abstract class ASTTypeNumber<T> extends ASTTypePrimitive<T> {
+abstract class ASTTypeNumber<T extends num> extends ASTTypePrimitive<T> {
   ASTTypeNumber(super.name);
 
   @override
   bool acceptsType(ASTType type);
+
+  @override
+  ASTValueNum<T>? toASTValue(Object? value);
 }
 
 /// [ASTType] for numbers ([num]).
@@ -437,6 +476,19 @@ class ASTTypeNum<T extends num> extends ASTTypeNumber<T> {
   ASTValueNum<T>? _toASTValueNum(dynamic v) {
     var n = parseNum(v);
     if (n == null) return null;
+
+    if (n is int) {
+      return ASTValueInt(n) as ASTValueNum<T>;
+    } else {
+      return ASTValueDouble(n.toDouble()) as ASTValueNum<T>;
+    }
+  }
+
+  @override
+  ASTValueNum<T>? toASTValue(Object? value) {
+    if (value == null) return null;
+
+    var n = parseNum(value) ?? 0;
 
     if (n is int) {
       return ASTValueInt(n) as ASTValueNum<T>;
@@ -511,6 +563,13 @@ class ASTTypeInt extends ASTTypeNum<int> with StrictType {
   }
 
   @override
+  ASTValueInt? toASTValue(Object? value) {
+    if (value == null) return null;
+    var n = parseInt(value) ?? 0;
+    return ASTValueInt(n);
+  }
+
+  @override
   bool operator ==(Object other) => equals(other);
 
   @override
@@ -577,6 +636,13 @@ class ASTTypeDouble extends ASTTypeNum<double> with StrictType {
   }
 
   @override
+  ASTValueDouble? toASTValue(Object? value) {
+    if (value == null) return null;
+    var n = parseDouble(value) ?? 0.0;
+    return ASTValueDouble(n);
+  }
+
+  @override
   bool operator ==(Object other) => equals(other);
 
   @override
@@ -622,6 +688,13 @@ class ASTTypeString extends ASTTypePrimitive<String> {
   @override
   FutureOr<ASTValueString?> toDefaultValue(VMContext context) {
     return null;
+  }
+
+  @override
+  ASTValueString? toASTValue(Object? value) {
+    if (value == null) return null;
+    var s = parseString(value) ?? '';
+    return ASTValueString(s);
   }
 
   @override
@@ -823,6 +896,11 @@ class ASTTypeNull extends ASTType<Null> {
   }
 
   @override
+  ASTValueNull? toASTValue(Object? value) {
+    return ASTValueNull.instance;
+  }
+
+  @override
   bool operator ==(Object other) =>
       identical(this, other) ||
       super == other && other is ASTTypeInt && runtimeType == other.runtimeType;
@@ -853,6 +931,11 @@ class ASTTypeVoid extends ASTType<void> {
 
   @override
   ASTValueVoid toValue(VMContext context, Object? v) {
+    return ASTValueVoid.instance;
+  }
+
+  @override
+  ASTValueVoid? toASTValue(Object? value) {
     return ASTValueVoid.instance;
   }
 
@@ -904,28 +987,83 @@ class ASTTypeGenericWildcard extends ASTTypeGenericVariable {
 /// [ASTType] for an array/List.
 class ASTTypeArray<T extends ASTType<V>, V> extends ASTType<List<V>> {
   static final ASTTypeArray<ASTTypeString, String> instanceOfString =
-      ASTTypeArray<ASTTypeString, String>(ASTTypeString.instance);
+      ASTTypeArray<ASTTypeString, String>._(ASTTypeString.instance);
 
   static final ASTTypeArray<ASTTypeInt, int> instanceOfInt =
-      ASTTypeArray<ASTTypeInt, int>(ASTTypeInt.instance);
+      ASTTypeArray<ASTTypeInt, int>._(ASTTypeInt.instance);
 
   static final ASTTypeArray<ASTTypeDouble, double> instanceOfDouble =
-      ASTTypeArray<ASTTypeDouble, double>(ASTTypeDouble.instance);
+      ASTTypeArray<ASTTypeDouble, double>._(ASTTypeDouble.instance);
 
   static final ASTTypeArray<ASTTypeBool, bool> instanceOfBool =
-      ASTTypeArray<ASTTypeBool, bool>(ASTTypeBool.instance);
+      ASTTypeArray<ASTTypeBool, bool>._(ASTTypeBool.instance);
 
   static final ASTTypeArray<ASTTypeObject, Object> instanceOfObject =
-      ASTTypeArray<ASTTypeObject, Object>(ASTTypeObject.instance);
+      ASTTypeArray<ASTTypeObject, Object>._(ASTTypeObject.instance);
 
   static final ASTTypeArray<ASTTypeDynamic, dynamic> instanceOfDynamic =
-      ASTTypeArray<ASTTypeDynamic, dynamic>(ASTTypeDynamic.instance);
+      ASTTypeArray<ASTTypeDynamic, dynamic>._(ASTTypeDynamic.instance);
+
+  static ASTTypeArray? fromType(Type type) {
+    if (type == List<String>) {
+      return ASTTypeArray.instanceOfString;
+    } else if (type == List<int>) {
+      return ASTTypeArray.instanceOfInt;
+    } else if (type == List<double>) {
+      return ASTTypeArray.instanceOfDouble;
+    } else if (type == List<bool>) {
+      return ASTTypeArray.instanceOfBool;
+    } else if (type == List<Object>) {
+      return ASTTypeArray.instanceOfObject;
+    } else if (type == List<dynamic>) {
+      return ASTTypeArray.instanceOfDynamic;
+    }
+
+    return null;
+  }
 
   final T componentType;
 
   ASTType get elementType => componentType;
 
-  ASTTypeArray(this.componentType) : super('List', generics: [componentType]);
+  ASTTypeArray._(this.componentType) : super('List', generics: [componentType]);
+
+  factory ASTTypeArray(T type) {
+    if (type is ASTTypeString) {
+      return ASTTypeArray.instanceOfString as ASTTypeArray<T, V>;
+    } else if (type is ASTTypeInt) {
+      return ASTTypeArray.instanceOfInt as ASTTypeArray<T, V>;
+    } else if (type is ASTTypeDouble) {
+      return ASTTypeArray.instanceOfDouble as ASTTypeArray<T, V>;
+    } else if (type is ASTTypeBool) {
+      return ASTTypeArray.instanceOfBool as ASTTypeArray<T, V>;
+    } else if (type is ASTTypeObject) {
+      return ASTTypeArray.instanceOfObject as ASTTypeArray<T, V>;
+    } else if (type is ASTTypeDynamic) {
+      return ASTTypeArray.instanceOfDynamic as ASTTypeArray<T, V>;
+    }
+
+    return ASTTypeArray<T, V>._(type);
+  }
+
+  factory ASTTypeArray.withType(Type type) {
+    if (type == String) {
+      return ASTTypeArray.instanceOfString as ASTTypeArray<T, V>;
+    } else if (type == int) {
+      return ASTTypeArray.instanceOfInt as ASTTypeArray<T, V>;
+    } else if (type == double) {
+      return ASTTypeArray.instanceOfDouble as ASTTypeArray<T, V>;
+    } else if (type == bool) {
+      return ASTTypeArray.instanceOfBool as ASTTypeArray<T, V>;
+    } else if (type == Object) {
+      return ASTTypeArray.instanceOfObject as ASTTypeArray<T, V>;
+    } else if (type == dynamic) {
+      return ASTTypeArray.instanceOfDynamic as ASTTypeArray<T, V>;
+    }
+
+    var astType = ASTType.from<V>(type);
+    return ASTTypeArray<T, V>._(astType as T);
+  }
 
   @override
   Iterable<ASTNode> get children => [componentType];
@@ -955,15 +1093,21 @@ class ASTTypeArray<T extends ASTType<V>, V> extends ASTType<List<V>> {
     var value = ASTValueArray<T, V>(componentType, list2);
     return value;
   }
+
+  @override
+  ASTValueArray<T, V>? toASTValue(Object? value) {
+    if (value == null) return null;
+    return _toASTValueArray(value);
+  }
 }
 
 /// [ASTType] a for a 2D array/List.
 class ASTTypeArray2D<T extends ASTType<V>, V>
     extends ASTTypeArray<ASTTypeArray<T, V>, List<V>> {
-  ASTTypeArray2D(super.type);
+  ASTTypeArray2D(super.type) : super._();
 
   factory ASTTypeArray2D.fromElementType(ASTType<V> elementType) {
-    var a1 = ASTTypeArray<T, V>(elementType as T);
+    var a1 = ASTTypeArray<T, V>._(elementType as T);
     return ASTTypeArray2D<T, V>(a1);
   }
 
@@ -979,6 +1123,10 @@ class ASTTypeArray2D<T extends ASTType<V>, V>
       v = (v).getValue(context);
     }
 
+    return _toASTValueArray2D(v);
+  }
+
+  ASTValueArray2D<T, V>? _toASTValueArray2D(Object? v) {
     List list;
     if (v is List) {
       list = v;
@@ -990,6 +1138,12 @@ class ASTTypeArray2D<T extends ASTType<V>, V>
 
     var value = ASTValueArray2D<T, V>(elementType as T, list2);
     return value;
+  }
+
+  @override
+  ASTValueArray2D<T, V>? toASTValue(Object? value) {
+    if (value == null) return null;
+    return _toASTValueArray2D(value);
   }
 }
 
@@ -1054,6 +1208,18 @@ class ASTTypeMap<TK extends ASTType<K>, TV extends ASTType<V>, K, V>
         ASTTypeDynamic.instance,
       );
 
+  static ASTTypeMap? fromType(Type type) {
+    if (type == Map<String, dynamic>) {
+      return ASTTypeMap.instanceOfStringOfDynamic;
+    } else if (type == Map<String, String>) {
+      return ASTTypeMap.instanceOfStringOfString;
+    } else if (type == Map<dynamic, dynamic>) {
+      return ASTTypeMap.instanceOfDynamicOfDynamic;
+    }
+
+    return null;
+  }
+
   final TK keyType;
   final TV valueType;
 
@@ -1111,6 +1277,12 @@ class ASTTypeMap<TK extends ASTType<K>, TV extends ASTType<V>, K, V>
     var value = ASTValueMap<TK, TV, K, V>(keyType, valueType, map2);
     return value;
   }
+
+  @override
+  ASTValueMap<TK, TV, K, V>? toASTValue(Object? value) {
+    if (value == null) return null;
+    return _toASTValueMap(value);
+  }
 }
 
 /// [ASTType] a for a [Future].
@@ -1123,5 +1295,18 @@ class ASTTypeFuture<T extends ASTType<V>, V> extends ASTType<Future<V>> {
   @override
   ASTValueFuture<T, V>? toValue(VMContext context, Object? v) {
     return ASTValueFuture(this, v as Future<V>);
+  }
+
+  @override
+  ASTValueFuture<T, V>? toASTValue(Object? value) {
+    if (value == null) return null;
+    return ASTValueFuture(
+      this,
+      value is Future<V>
+          ? value
+          : (value is Future
+                ? value.then((v) => v as V)
+                : Future.value(value as V)),
+    );
   }
 }

@@ -81,6 +81,12 @@ class WasmRuntimeWeb extends WasmRuntime {
       'Browser(web): ${web.window.navigator.userAgent}';
 
   @override
+  void ensureBooted() {}
+
+  @override
+  Object? get lastBootError => null;
+
+  @override
   bool get isSupported => true;
 
   @override

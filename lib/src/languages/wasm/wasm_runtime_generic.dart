@@ -10,6 +10,12 @@ class WasmRuntimeGeneric extends WasmRuntime {
   String get platformVersion => '?';
 
   @override
+  void ensureBooted() {}
+
+  @override
+  Object? get lastBootError => null;
+
+  @override
   bool get isSupported => false;
 
   @override

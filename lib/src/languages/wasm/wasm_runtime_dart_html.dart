@@ -18,6 +18,12 @@ class WasmRuntimeDartHTML extends WasmRuntime {
       'Browser(dart:html): ${window.navigator.userAgent}';
 
   @override
+  void ensureBooted() {}
+
+  @override
+  Object? get lastBootError => null;
+
+  @override
   bool get isSupported => true;
 
   @override

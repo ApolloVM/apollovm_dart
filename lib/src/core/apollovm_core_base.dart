@@ -12,7 +12,7 @@ import '../ast/apollovm_ast_value.dart';
 import '../ast/apollovm_ast_variable.dart';
 
 class ApolloVMCore {
-  static ASTClass<V>? getClass<V>(String className) {
+  static ASTClass<V>? getClass<V>(String className, {List<ASTType>? generics}) {
     switch (className) {
       case 'String':
         return CoreClassString.instance as ASTClass<V>;
@@ -23,7 +23,7 @@ class ApolloVMCore {
       case 'Double':
         return CoreClassDouble.instance as ASTClass<V>;
       case 'List':
-        return CoreClassList.instance as ASTClass<V>;
+        return CoreClassList.fromType(V) as ASTClass<V>;
       default:
         return null;
     }
@@ -601,9 +601,7 @@ class CoreClassDouble extends CoreClassPrimitive<double> {
         0,
         true,
       ),
-      (double self, dynamic digits) => digits == null
-          ? self.toStringAsExponential()
-          : self.toStringAsExponential(digits),
+      (double self, dynamic digits) => self.toStringAsExponential(digits),
     );
 
     _functionToStringAsPrecision = _externalClassFunctionArgs1(
@@ -701,8 +699,34 @@ class CoreClassDouble extends CoreClassPrimitive<double> {
   }
 }
 
-class CoreClassList extends CoreClassBase<List<Object>> {
-  static final CoreClassList instance = CoreClassList._();
+class CoreClassList<T> extends CoreClassBase<List<T>> {
+  static final CoreClassList instanceOfObject = CoreClassList<Object>._();
+  static final CoreClassList<String> instanceOfString =
+      CoreClassList<String>._();
+  static final CoreClassList<int> instanceOfInt = CoreClassList<int>._();
+  static final CoreClassList<double> instanceOfDouble =
+      CoreClassList<double>._();
+  static final CoreClassList<bool> instanceOfBool = CoreClassList<bool>._();
+  static final CoreClassList<dynamic> instanceOfDynamic =
+      CoreClassList<dynamic>._();
+
+  static CoreClassList<T>? fromType<T>(Type type) {
+    if (type == List<String>) {
+      return instanceOfString as CoreClassList<T>;
+    } else if (type == List<int>) {
+      return instanceOfInt as CoreClassList<T>;
+    } else if (type == List<double>) {
+      return instanceOfDouble as CoreClassList<T>;
+    } else if (type == List<bool>) {
+      return instanceOfBool as CoreClassList<T>;
+    } else if (type == List<Object>) {
+      return instanceOfObject as CoreClassList<T>;
+    } else if (type == List<dynamic>) {
+      return instanceOfDynamic as CoreClassList<T>;
+    }
+
+    return null;
+  }
 
   late final ASTExternalClassGetter _getterLength;
   late final ASTExternalClassGetter _getterIsEmpty;
@@ -730,7 +754,14 @@ class CoreClassList extends CoreClassBase<List<Object>> {
 
   late final ASTExternalFunction _functionValueOf;
 
-  CoreClassList._() : super(ASTTypeArray.instanceOfObject, 'List') {
+  CoreClassList._()
+    : super(
+        ASTTypeArray.fromType(List<T>) as ASTTypeArray<ASTType<T>, T>? ??
+            (throw ArgumentError(
+              "Can't resolve `ASTTypeArray` for type `$T` (`ASTTypeArray<$T>`)",
+            )),
+        'List',
+      ) {
     _getterLength = _externalClassGetter(
       'length',
       ASTTypeInt.instance,
@@ -881,7 +912,7 @@ class CoreClassList extends CoreClassBase<List<Object>> {
       'sublist',
       ASTTypeArray.instanceOfObject,
       ASTFunctionParameterDeclaration(ASTTypeInt.instance, 'start', 0, false),
-      ASTFunctionParameterDeclaration(ASTTypeInt.instance, 'end', 1, true),
+      ASTFunctionParameterDeclaration(ASTTypeInt.instance, 'end', 1, false),
       (List o, dynamic start, dynamic end) {
         if (end == null) return o.sublist(start);
         return o.sublist(start, end);
@@ -985,7 +1016,7 @@ class CoreClassList extends CoreClassBase<List<Object>> {
   }
 
   @override
-  FutureOr<ASTValue<List<Object>>?> createInstance(
+  FutureOr<ASTValue<List<T>>?> createInstance(
     VMClassContext<dynamic> context,
     ASTRunStatus runStatus,
   ) {

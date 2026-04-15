@@ -2,9 +2,12 @@
 // This code is governed by the Apache License, Version 2.0.
 // Please refer to the LICENSE and AUTHORS files for details.
 
+import 'dart:math' as math;
+
+import '../apollovm_utils.dart';
 import 'package:async_extension/async_extension.dart';
 import 'package:collection/collection.dart'
-    show IterableExtension, equalsIgnoreAsciiCase;
+    show IterableExtension, equalsIgnoreAsciiCase, CombinedListView;
 
 import '../apollovm_base.dart';
 import '../core/apollovm_core_base.dart';
@@ -1503,6 +1506,97 @@ class ASTFunctionDeclaration<T> extends ASTBlock {
     return prevFuture.resolveWith(() => i);
   }
 
+  (List?, Map?) normalizeParameters({
+    List? positionalParameters,
+    Map? namedParameters,
+  }) {
+    positionalParameters = normalizePositionalParameters(positionalParameters);
+    namedParameters = normalizeNamedParameters(namedParameters);
+
+    return (positionalParameters, namedParameters);
+  }
+
+  List? normalizePositionalParameters(List? positionalParameters) {
+    if (positionalParameters == null) return null;
+
+    final positionalParametersDeclaration = parameters.positionalParameters;
+
+    final optionalParametersDeclaration = parameters.optionalParameters;
+
+    final positionalParametersLength =
+        positionalParametersDeclaration?.length ?? 0;
+    final optionalParametersLength = optionalParametersDeclaration?.length ?? 0;
+
+    if (positionalParametersLength == 0 && optionalParametersLength == 0) {
+      return null;
+    }
+
+    var lng = math.min(
+      positionalParametersLength + optionalParametersLength,
+      positionalParameters.length,
+    );
+
+    if (lng == 0) return null;
+
+    final allParametersDeclaration = positionalParametersDeclaration == null
+        // Only optional parameters exist (guaranteed non-null here)
+        ? optionalParametersDeclaration!
+        : optionalParametersDeclaration == null
+        // Only positional parameters exist
+        ? positionalParametersDeclaration
+        // Both exist: combine lazily without allocating a merged list
+        : CombinedListView([
+            positionalParametersDeclaration,
+            optionalParametersDeclaration,
+          ]);
+
+    var positionalParameters2 = List.generate(lng, (i) {
+      var p = allParametersDeclaration[i];
+      var v = positionalParameters[i];
+      var astType = p.type;
+
+      var astValue = astType.toASTValue(v);
+      var v2 = astValue?.getValueNoContext();
+      return v2;
+    });
+
+    return positionalParameters2;
+  }
+
+  Map? normalizeNamedParameters(
+    Map? namedParameters, {
+    bool ignoreCase = true,
+  }) {
+    if (namedParameters == null) return null;
+
+    final namedParametersDeclaration = parameters.namedParameters;
+    if (namedParametersDeclaration == null ||
+        namedParametersDeclaration.isEmpty) {
+      return null;
+    }
+
+    var lng = math.min(
+      namedParametersDeclaration.length,
+      namedParameters.length,
+    );
+
+    if (lng == 0) return null;
+
+    var namedParameters2 = Map.fromEntries(
+      List.generate(lng, (i) {
+        var p = namedParametersDeclaration[i];
+        var pName = p.name;
+        var v = namedParameters.lookupValue(pName, ignoreCase: true);
+        var astType = p.type;
+        var astValue = astType.toASTValue(v);
+        var v2 = astValue?.getValueNoContext();
+        return MapEntry(pName, v2);
+      }),
+    );
+
+    return namedParameters2;
+  }
+
   void _initializeOptionalParameters(int i, VMContext context) {
     var parametersSize = this.parametersSize;
 
@@ -1537,6 +1631,33 @@ class ASTFunctionDeclaration<T> extends ASTBlock {
   String toString() {
     var block = super.toString();
     return '$modifiers $returnType $name($_parameters) $block';
+  }
+}
+
+extension IterableASTFunctionDeclarationExtension
+    on Iterable<ASTFunctionDeclaration> {
+  ASTFunctionDeclaration? resolveBestMatchBySignature({
+    List? positionalParameters,
+    Map? namedParameters,
+  }) {
+    final length = this.length;
+
+    if (length == 0) return null;
+
+    if (length == 1) {
+      return first;
+    } else {
+      var fSignature = ASTFunctionSignature.from(
+        positionalParameters,
+        namedParameters,
+      );
+
+      return
+      // Try strict match first (exact parameter type compatibility)
+      firstWhereOrNull((f) => f.matchesParametersTypes(fSignature, true)) ??
+          // Fallback to relaxed match (allowing looser type compatibility)
+          firstWhereOrNull((f) => f.matchesParametersTypes(fSignature, false));
+    }
   }
 }
 
