@@ -15,6 +15,7 @@ export 'src/apollovm_generated_output.dart';
 export 'src/apollovm_generator.dart';
 export 'src/apollovm_parser.dart';
 export 'src/apollovm_runner.dart';
+export 'src/apollovm_utils.dart';
 export 'src/ast/apollovm_ast_annotation.dart';
 export 'src/ast/apollovm_ast_base.dart';
 export 'src/ast/apollovm_ast_expression.dart';

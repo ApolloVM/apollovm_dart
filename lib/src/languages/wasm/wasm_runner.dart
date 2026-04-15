@@ -65,6 +65,17 @@ class ApolloRunnerWasm extends ApolloRunner {
 
     var allParams = [...?positionalParameters, ...?namedParameters?.values];
 
+    {
+      var astFunction = _getASTFunction(codeUnit, functionName, allParams);
+      if (astFunction != null) {
+        var (allParamsNormalized, _) = normalizeParameters(
+          positionalParameters: allParams,
+          astFunctions: [astFunction],
+        );
+        allParams = allParamsNormalized ?? [];
+      }
+    }
+
     var astFunction = _getASTFunction(codeUnit, functionName, allParams);
     if (astFunction != null) {
       _resolveWasmCallParameters(astFunction, allParams);

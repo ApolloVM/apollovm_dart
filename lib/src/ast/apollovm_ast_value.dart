@@ -20,6 +20,8 @@ abstract class ASTValue<T> with ASTNode implements ASTTypedNode {
   factory ASTValue.from(ASTType<T> type, T value) {
     if (value is ASTValue) {
       return value as ASTValue<T>;
+    } else if (type is ASTTypeBool) {
+      return ASTValueBool(value as bool) as ASTValue<T>;
     } else if (type is ASTTypeString) {
       return ASTValueString(value as String) as ASTValue<T>;
     } else if (type is ASTTypeInt) {

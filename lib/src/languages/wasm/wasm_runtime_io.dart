@@ -16,14 +16,26 @@ class WasmRuntimeIO extends WasmRuntime {
 
   static bool _wasmRunDynLibLoaded = false;
 
+  static Object? _lastBootError;
+
   static void boot() {
     if (_boot) return;
     _boot = true;
 
+    try {
+      var ok = _bootImpl();
+      if (ok) {
+        _wasmRunDynLibLoaded = true;
+      }
+    } catch (e) {
+      _lastBootError = e;
+    }
+  }
+
+  static bool _bootImpl() {
     if (wasm_run.WasmRunLibrary.isReachable()) {
       print('** Loading `wasm_run` dynamic library with default resolver.');
-      _wasmRunDynLibLoaded = true;
-      return;
+      return true;
     }
 
     var libPath = _wasmRunLibraryFilePath();
@@ -31,7 +43,8 @@ class WasmRuntimeIO extends WasmRuntime {
     if (libPath == null) {
       throw StateError(
         "Unable to locate the `wasm_run` dynamic library. "
-        "You can specify the library path using the environment variable `WASM_RUN_LIB_PATH`.",
+        "You can specify the library path using the environment variable `WASM_RUN_LIB_PATH`. "
+        "Run `dart run wasm_run:setup` to install `wasm_run` dynamic library.",
       );
     }
 
@@ -44,13 +57,21 @@ class WasmRuntimeIO extends WasmRuntime {
       throw StateError("Invalid `wasm_run` dynamic library: $libPath");
     }
 
-    _wasmRunDynLibLoaded = true;
+    return true;
   }
 
   WasmRuntimeIO() : super.base();
 
   @override
   String get platformVersion => 'Dart: ${Platform.version}';
+
+  @override
+  void ensureBooted() {
+    boot();
+  }
+
+  @override
+  Object? get lastBootError => _lastBootError;
 
   @override
   bool get isSupported {

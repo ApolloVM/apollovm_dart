@@ -21,6 +21,13 @@ abstract class WasmRuntime {
   /// Returns the platform version of the Wasm runtime.
   String get platformVersion;
 
+  /// Ensures that the implementation is booted.
+  void ensureBooted();
+
+  /// Last error while booting the implementation.
+  /// See [ensureBooted].
+  Object? get lastBootError;
+
   /// Returns true if the WebAssembly (Wasm) Runtime is supported in the platform.
   bool get isSupported;
 

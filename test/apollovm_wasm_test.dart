@@ -951,6 +951,8 @@ Future<void> _testWasm({
 
   final wasmRuntime = WasmRuntime();
 
+  wasmRuntime.ensureBooted();
+
   if (wasmRuntime.isSupported) {
     print(">> Running compiled Wasm...");
 
@@ -1017,7 +1019,9 @@ Future<void> _testWasm({
       print('>>>>>>>>>>>>>>>>>>>>>>>>>>>>');
     }
   } else {
-    print('** `WasmRuntime` not supported: ${wasmRuntime.platformVersion}');
+    print(
+      '** `WasmRuntime` not supported: ${wasmRuntime.platformVersion}\n** [LAST BOOT ERROR]: ${wasmRuntime.lastBootError}',
+    );
   }
 
   expect(expectedWasmBytes, isNotNull, reason: "Null `expectedWasmBytes`");

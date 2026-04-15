@@ -5,6 +5,7 @@
 import 'package:async_extension/async_extension.dart';
 
 import 'apollovm_base.dart';
+import 'apollovm_utils.dart';
 import 'ast/apollovm_ast_toplevel.dart';
 import 'ast/apollovm_ast_type.dart';
 import 'ast/apollovm_ast_value.dart';
@@ -64,7 +65,7 @@ abstract class ApolloRunner implements VMTypeResolver {
   /// - [methodName] Name of the target method.
   /// - [positionalParameters] Positional parameters to pass to the method.
   /// - [namedParameters] Named parameters to pass to the method.
-  FutureOr<ASTValue> executeClassMethod(
+  Future<ASTValue> executeClassMethod(
     String namespace,
     String className,
     String methodName, {
@@ -87,6 +88,15 @@ abstract class ApolloRunner implements VMTypeResolver {
       );
     }
 
+    var astFunctionSet = clazz.getFunctionWithName(methodName);
+    if (astFunctionSet != null) {
+      (positionalParameters, namedParameters) = normalizeParameters(
+        positionalParameters: positionalParameters,
+        namedParameters: namedParameters,
+        astFunctions: astFunctionSet.functions,
+      );
+    }
+
     var result = await clazz.execute(
       methodName,
       positionalParameters,
@@ -97,6 +107,33 @@ abstract class ApolloRunner implements VMTypeResolver {
       typeResolver: this,
     );
     return result;
+  }
+
+  (List?, Map?) normalizeParameters({
+    List? positionalParameters,
+    Map? namedParameters,
+    List<ASTFunctionDeclaration>? astFunctions,
+  }) {
+    if (astFunctions != null && astFunctions.isNotEmpty) {
+      final astFunction = astFunctions.resolveBestMatchBySignature(
+        positionalParameters: positionalParameters,
+        namedParameters: namedParameters,
+      );
+
+      if (astFunction != null) {
+        (positionalParameters, namedParameters) = astFunction
+            .normalizeParameters(
+              positionalParameters: positionalParameters,
+              namedParameters: namedParameters,
+            );
+
+        return (positionalParameters, namedParameters);
+      }
+    }
+
+    positionalParameters = positionalParameters?.toListOfType();
+
+    return (positionalParameters, namedParameters);
   }
 
   /// Returns an [ASTClassNormal] for [className] in [namespace] (optional).
@@ -199,17 +236,28 @@ abstract class ApolloRunner implements VMTypeResolver {
         positionalParameters: positionalParameters,
         namedParameters: namedParameters,
       );
+    } else {
+      final astRoot = codeUnit.root!;
+
+      var astFunctionSet = astRoot.getFunctionWithName(functionName);
+      if (astFunctionSet != null) {
+        (positionalParameters, namedParameters) = normalizeParameters(
+          positionalParameters: positionalParameters,
+          namedParameters: namedParameters,
+          astFunctions: astFunctionSet.functions,
+        );
+      }
+
+      var result = await astRoot.execute(
+        functionName,
+        positionalParameters,
+        namedParameters,
+        externalFunctionMapper: externalFunctionMapper,
+        typeResolver: this,
+      );
+
+      return result;
     }
-
-    var result = await codeUnit.root!.execute(
-      functionName,
-      positionalParameters,
-      namedParameters,
-      externalFunctionMapper: externalFunctionMapper,
-      typeResolver: this,
-    );
-
-    return result;
   }
 
   /// Returns a function in [namespace] and with name [functionName].

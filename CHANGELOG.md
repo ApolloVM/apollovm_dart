@@ -1,3 +1,79 @@
+## 0.1.7
+
+- CI:
+  - `.github/workflows/dart.yml`: updated `actions/checkout` from v3 to v6 and `codecov/codecov-action` from v3 to v5.
+
+- `apollovm.dart`:
+  - Exported new utility file `src/apollovm_utils.dart`.
+
+- `apollovm_runner.dart`:
+  - `ApolloRunner`:
+    - `executeClassMethod`: changed to async, added parameter normalization before execution.
+    - Added `normalizeParameters` method to normalize positional and named parameters against AST function declarations.
+    - `executeFunction`: added parameter normalization for top-level functions.
+    - Improved parameter handling for function execution.
+
+- `apollovm_utils.dart` (new):
+  - Added utilities for generic typed list conversion and case-insensitive map key lookup.
+  - Extensions on `List` for typed list creation and on `Map` for case-insensitive key lookup.
+
+- `apollovm_ast_toplevel.dart`:
+  - `ASTFunctionDeclaration`:
+    - Added `normalizeParameters`, `normalizePositionalParameters`, and `normalizeNamedParameters` methods to convert and normalize parameters according to function declarations.
+  - Added extension `IterableASTFunctionDeclarationExtension` with `resolveBestMatchBySignature` to select best matching function overload by parameter signature.
+
+- `apollovm_ast_type.dart`:
+  - `ASTType`:
+    - Added `fromType` factory to create ASTType from Dart `Type`.
+    - Added `toASTValue` method to convert native values to ASTValue according to type.
+  - Added `toASTValue` overrides in primitive and collection types (`ASTTypeBool`, `ASTTypeNum`, `ASTTypeInt`, `ASTTypeDouble`, `ASTTypeString`, `ASTTypeNull`, `ASTTypeVoid`, `ASTTypeArray`, `ASTTypeArray2D`, `ASTTypeMap`, `ASTTypeFuture`).
+  - Added static `fromType` methods for `ASTTypeArray` and `ASTTypeMap` to create instances from Dart generic types.
+  - `ASTTypeArray` and `CoreClassList`:
+    - Added typed singleton instances for common generic types (e.g., `List<String>`, `List<int>`, etc.).
+    - Added factory constructors and `fromType` methods to resolve types generically.
+  - `ASTTypeMap`:
+    - Added `fromType` method for common map generic types.
+  - `ASTTypeFuture`:
+    - Added `toASTValue` override to handle conversion from native or future values.
+
+- `apollovm_ast_value.dart`:
+  - `ASTValue.from` factory:
+    - Added support for `ASTTypeBool` to create `ASTValueBool`.
+
+- `apollovm_core_base.dart`:
+  - `ApolloVMCore.getClass`:
+    - Added optional `generics` parameter.
+    - `List` class resolution now uses `CoreClassList.fromType` with generic type.
+  - `CoreClassList`:
+    - Converted to generic class `CoreClassList<T>`.
+    - Added typed singleton instances for common generic types.
+    - Added `fromType` static method to resolve generic list classes.
+    - Constructor updated to accept generic type and resolve `ASTTypeArray` accordingly.
+
+- `wasm_runner.dart`:
+  - `ApolloRunnerWasm`:
+    - Added parameter normalization before calling Wasm functions.
+
+- `wasm_runtime.dart`:
+  - Added `ensureBooted()` method and `lastBootError` getter to `WasmRuntime` interface.
+
+- `wasm_runtime_dart_html.dart`, `wasm_runtime_generic.dart`, `wasm_runtime_web.dart`:
+  - Implemented `ensureBooted()` as no-op and `lastBootError` as null.
+
+- `wasm_runtime_io.dart`:
+  - Added boot logic with error capture.
+  - Implemented `ensureBooted()` to call boot.
+  - Added `lastBootError` getter.
+
+- Tests (`apollovm_languages_test_definition.dart`):
+  - Updated `_parseJsonList` to return untyped `List` without generic type conversion.
+  - Removed redundant generic list conversion helpers from test file.
+  - Updated tests to call `.toListOfType()` extension for typed list checks.
+
+- Tests (`apollovm_wasm_test.dart`):
+  - Added call to `wasmRuntime.ensureBooted()` before checking support.
+  - On unsupported runtime, print last boot error for diagnostics.
+
 ## 0.1.6
 
 - Added support for external getters in `ApolloVM`:
