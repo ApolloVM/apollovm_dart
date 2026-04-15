@@ -1,3 +1,35 @@
+## 0.1.9
+
+- `ASTExpressionListLiteral`:
+  - `resolveType`: updated to return `ASTTypeArray` of the specified type or deduced common element type.
+  - `children`: fixed to include `type` correctly.
+
+- `ASTStatementVariableDeclaration`:
+  - Constructor enhanced to handle `ASTExpressionListLiteral` values with type adjustments or cast exceptions.
+
+- `ASTStatementForEach`:
+  - Added `variableType` field.
+  - Constructor updated to accept `variableType`.
+
+- `ASTType`:
+  - Added `commonType` method to find common compatible type between two types.
+
+- `ASTTypeArray`:
+  - `toValue`: improved to cast `ASTValueArray` to correct generic type if needed.
+
+- `ASTValueArray`:
+  - Added `cast` method to convert to another generic type with optional component type.
+
+- Dart grammar (`dart_grammar.dart`):
+  - `statementForEach` parser updated to parse explicit variable type before variable name.
+  - `expressionListLiteral` parser updated to infer common element type if not specified.
+
+- Java11 grammar (`java11_grammar.dart`):
+  - `statementForEach` parser updated to parse explicit variable type before variable name.
+
+- Tests:
+  - Added Dart test for `findMax(List<int> numbers)` function with multiple test cases including empty list handling.
+
 ## 0.1.8
 
 - `ASTStatementForEach`:
@@ -19,14 +51,6 @@
 
 - Java language grammar (`java11_grammar.dart`):
   - Added parser `statementForEach` to parse Java-style for-each loops (`for (Type var : iterable) { ... }`).
-
-- WebAssembly generator (`wasm_generator.dart`):
-  - Added stub `generateASTStatementForEach` method throwing `UnimplementedError`.
-  - Updated `generateASTStatement` to dispatch to `generateASTStatementForEach`.
-
-- Tests (`apollovm_languages_basic_test.dart`):
-  - Added new Dart test `dart_basic_findMax.test.xml` demonstrating usage of for-each loop to find max in a list.
-  - Test includes source, call, expected output, and generated source code verification.
 
 ## 0.1.7
 

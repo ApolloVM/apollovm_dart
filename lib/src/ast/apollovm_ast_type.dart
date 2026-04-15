@@ -261,6 +261,18 @@ class ASTType<V> with ASTNode implements ASTTypedNode {
     return true;
   }
 
+  ASTType? commonType(ASTType? other) {
+    if (other == null || identical(this, other)) return this;
+
+    if (acceptsType(other)) {
+      return this;
+    } else if (other.acceptsType(this)) {
+      return other;
+    }
+
+    return null;
+  }
+
   FutureOr<ASTValue<V>?> toValue(VMContext context, Object? v) {
     if (v == null) return null;
 
@@ -1071,7 +1083,13 @@ class ASTTypeArray<T extends ASTType<V>, V> extends ASTType<List<V>> {
   @override
   FutureOr<ASTValueArray<T, V>?> toValue(VMContext context, Object? v) {
     if (v == null) return null;
-    if (v is ASTValueArray) return v as ASTValueArray<T, V>;
+
+    if (v is ASTValueArray) {
+      if (v is ASTValueArray<T, V>) {
+        return v;
+      }
+      return v.cast<T, V>(componentType: componentType);
+    }
 
     if (v is ASTValue) {
       return v.getValue(context).resolveMapped(_toASTValueArray);

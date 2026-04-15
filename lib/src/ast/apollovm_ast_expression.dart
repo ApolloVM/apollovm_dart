@@ -235,8 +235,16 @@ class ASTExpressionListLiteral extends ASTExpression {
   Iterable<ASTNode> get children => [?type, ...valuesExpressions];
 
   @override
-  FutureOr<ASTType> resolveType(VMContext? context) =>
-      ASTExpression.typeFromExpressions(valuesExpressions);
+  FutureOr<ASTType> resolveType(VMContext? context) {
+    final type = this.type;
+    if (type != null) {
+      return ASTTypeArray(type);
+    }
+
+    return ASTExpression.typeFromExpressions(
+      valuesExpressions,
+    ).resolveMapped((elementsType) => ASTTypeArray(elementsType));
+  }
 
   @override
   ASTNode? getNodeIdentifier(String name, {ASTNode? requester}) =>

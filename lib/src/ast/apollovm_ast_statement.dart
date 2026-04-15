@@ -563,7 +563,36 @@ class ASTStatementVariableDeclaration<V> extends ASTStatementTyped {
 
   ASTExpression? value;
 
-  ASTStatementVariableDeclaration(this.type, this.name, this.value);
+  ASTStatementVariableDeclaration(this.type, this.name, this.value) {
+    final value = this.value;
+
+    if (value is ASTExpressionListLiteral) {
+      var valueComponentType = value.type;
+      if (valueComponentType != null) {
+        // Resolve the type of the list literal:
+        var valueType = value.resolveType(null);
+
+        // If the resolved type is valid but NOT directly assignable
+        // to the declared variable type, attempt to fix or reject it
+        if (valueType is ASTType && !type.acceptsType(valueType)) {
+          var typeGenerics = type.generics?.firstOrNull;
+          if (typeGenerics != null && valueType.acceptsType(type)) {
+            var value2 = ASTExpressionListLiteral(
+              typeGenerics,
+              value.valuesExpressions,
+            );
+            // Replace the original value with the adjusted one
+            this.value = value2;
+          } else {
+            // Types are incompatible → fail fast
+            throw ApolloVMCastException(
+              "Can't cast value type ($valueType) to variable type ($type)",
+            );
+          }
+        }
+      }
+    }
+  }
 
   @override
   Iterable<ASTNode> get children => [type, ?value];
@@ -943,11 +972,13 @@ class ASTStatementForLoop extends ASTStatement {
 }
 
 class ASTStatementForEach extends ASTStatement {
+  final ASTType variableType;
   final String variableName;
   final ASTExpression iterableExpression;
   final ASTBlock loopBlock;
 
   ASTStatementForEach(
+    this.variableType,
     this.variableName,
     this.iterableExpression,
     this.loopBlock,
