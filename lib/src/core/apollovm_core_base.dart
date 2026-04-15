@@ -601,9 +601,7 @@ class CoreClassDouble extends CoreClassPrimitive<double> {
         0,
         true,
       ),
-      (double self, dynamic digits) => digits == null
-          ? self.toStringAsExponential()
-          : self.toStringAsExponential(digits),
+      (double self, dynamic digits) => self.toStringAsExponential(digits),
     );
 
     _functionToStringAsPrecision = _externalClassFunctionArgs1(
@@ -914,7 +912,7 @@ class CoreClassList<T> extends CoreClassBase<List<T>> {
       'sublist',
       ASTTypeArray.instanceOfObject,
       ASTFunctionParameterDeclaration(ASTTypeInt.instance, 'start', 0, false),
-      ASTFunctionParameterDeclaration(ASTTypeInt.instance, 'end', 1, true),
+      ASTFunctionParameterDeclaration(ASTTypeInt.instance, 'end', 1, false),
       (List o, dynamic start, dynamic end) {
         if (end == null) return o.sublist(start);
         return o.sublist(start, end);
