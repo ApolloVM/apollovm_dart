@@ -8,7 +8,107 @@ Future<void> main() async {
   var definitions = <TestDefinition>[
     TestDefinition('dart_basic_findMax.test.xml', r'''
 <?xml version="1.0" encoding="UTF-8"?>
-<test title="Basic sumOfEvens(List<int> numbers)">
+<test title="Basic findMax(List<int> numbers)">
+    <source language="dart">
+        <![CDATA[
+ void findMax(List<int> numbers) {
+  if (numbers.isEmpty) {
+    print("The list is empty.");
+    return;
+  }
+
+  // Start by assuming the first element is the maximum
+  var max = numbers[0];
+
+  // Iterate through the rest of the list to find the actual maximum
+  for (var number in numbers) {
+    if (number > max) {
+      max = number;
+    }
+  }
+
+  print('The list is: $numbers');
+  print('The maximum number in the list is: $max');
+}
+
+void main() {
+  // Test Case 1: Positive and negative numbers
+  List<int> data1 = [10, 5, 22, 8, 30, 9];
+  findMax(data1);
+  print('---');
+   
+  // Test Case 2: List with only one element
+  List<int> data2 = [42];
+  findMax(data2);
+  print('---');
+  
+  // Test Case 3: Empty list (edge case handling)
+  List<int> data3 = <int>[];
+  findMax(data3);
+  
+  // Test Case 4: Empty list (not typed)
+  List<int> data4 = [];
+  findMax(data4);  
+}
+
+        ]]>
+    </source>
+    <call function="main">
+        []
+    </call>
+    <output>
+        [
+          "The list is: [10, 5, 22, 8, 30, 9]",
+          "The maximum number in the list is: 30",
+          "---",
+          "The list is: [42]",
+          "The maximum number in the list is: 42",
+          "---",
+          "The list is empty.",
+          "The list is empty."
+        ]
+    </output>
+    <source-generated language="dart"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+  void findMax(List<int> numbers) {
+    if (numbers.isEmpty) {
+        print('The list is empty.');
+        return;
+    }
+
+    var max = numbers[0];
+    for (var number in numbers) {
+      if (number > max) {
+          max = number;
+      }
+
+    }
+    print('The list is: $numbers');
+    print('The maximum number in the list is: $max');
+  }
+
+  void main() {
+    List<int> data1 = <int>[10, 5, 22, 8, 30, 9];
+    findMax(data1);
+    print('---');
+    List<int> data2 = <int>[42];
+    findMax(data2);
+    print('---');
+    List<int> data3 = <int>[];
+    findMax(data3);
+    List<int> data4 = <int>[];
+    findMax(data4);
+  }
+
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+</test>
+    '''),
+    TestDefinition('dart_basic_findMax.test.xml', r'''
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="Basic findMax(List<int> numbers)">
     <source language="dart">
         <![CDATA[
 int findMax(List<int> numbers) {
@@ -121,7 +221,7 @@ int sumOfEvens(List<int> numbers) {
     '''),
     TestDefinition('dart_basic_fizzBuzz.test.xml', r'''
 <?xml version="1.0" encoding="UTF-8"?>
-<test title="Basic sumOrDouble(int a, int b)">
+<test title="Basic fizzBuzz(int n)">
     <source language="dart">
         <![CDATA[
 void fizzBuzz(int n) {
@@ -815,5 +915,9 @@ class Foo {
     '''),
   ];
 
-  await runTestDefinitions([definitions[0]]);
+  await runTestDefinitions(
+    // [definitions[0]],
+    //definitions.sublist(1)
+    definitions,
+  );
 }

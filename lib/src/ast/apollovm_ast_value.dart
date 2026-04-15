@@ -839,6 +839,15 @@ class ASTValueVoid extends ASTValueStatic<void> {
 class ASTValueArray<T extends ASTType<V>, V> extends ASTValueStatic<List<V>> {
   ASTValueArray(T type, List<V> value) : super(ASTTypeArray<T, V>(type), value);
 
+  ASTValueArray<T2, V2> cast<T2 extends ASTType<V2>, V2>({T2? componentType}) {
+    final value = this.value;
+
+    var t = componentType ?? (type as ASTTypeArray).componentType;
+    var v = value is List<V2> ? (value as List<V2>) : value.cast<V2>();
+
+    return ASTValueArray<T2, V2>(t as T2, v);
+  }
+
   static final ListEquality _listEquality = const ListEquality();
 
   @override

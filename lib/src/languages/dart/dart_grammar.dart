@@ -211,23 +211,25 @@ class DartGrammarDefinition extends DartGrammarLexer {
   Parser<ASTStatementForEach> statementForEach() =>
       (string('for').trimHidden() &
               char('(').trimHidden() &
-              ref0(_forEachVariableDecl) &
+              type().trimHidden() &
+              ref0(identifier).trimHidden() &
               string('in').trimHidden() &
               ref0(expression) &
               char(')').trimHidden() &
               codeBlock())
           .map((v) {
-            var variableName = v[2]; // from _forEachVariableDecl
-            var iterableExp = v[4];
-            var block = v[6];
+            var variableType = v[2];
+            var variableName = v[3];
+            var iterableExp = v[5];
+            var block = v[7];
 
-            return ASTStatementForEach(variableName, iterableExp, block);
+            return ASTStatementForEach(
+              variableType,
+              variableName,
+              iterableExp,
+              block,
+            );
           });
-
-  Parser<String> _forEachVariableDecl() =>
-      ((string('var') | string('final')).trimHidden().optional() &
-              ref0(identifier))
-          .map((v) => v[1]);
 
   Parser<ASTStatementReturn> statementReturn() =>
       (string('return').trimHidden() &
@@ -578,13 +580,29 @@ class DartGrammarDefinition extends DartGrammarLexer {
               char(',').trimHidden().optional() &
               char(']').trimHidden())
           .map((v) {
-            var type = (v[0]?[1] as ASTType?) ?? ASTTypeDynamic.instance;
+            var type = v[0]?[1] as ASTType?;
             var v0 = v[2];
             var tail = (v[3] as List?) ?? [];
 
-            var vs = tail.expand((e) => e).whereType<ASTExpression>().toList();
+            var vs = <ASTExpression>[
+              v0,
+              ...tail.expand((e) => e).whereType<ASTExpression>(),
+            ];
 
-            return ASTExpressionListLiteral(type, [v0, ...vs]);
+            if (type == null) {
+              var vsTypeResolving = vs.map((e) => e.resolveType(null)).toList();
+              var vsTypes = vsTypeResolving.whereType<ASTType>().toList();
+              if (vsTypes.length == vsTypeResolving.length) {
+                var commonType = vsTypes.isEmpty
+                    ? ASTTypeDynamic.instance
+                    : vsTypes.reduce(
+                        (a, b) => a.commonType(b) ?? ASTTypeDynamic.instance,
+                      );
+                type = commonType;
+              }
+            }
+
+            return ASTExpressionListLiteral(type, vs);
           });
 
   Parser<ASTExpressionMapLiteral> expressionMapEmptyLiteral() =>

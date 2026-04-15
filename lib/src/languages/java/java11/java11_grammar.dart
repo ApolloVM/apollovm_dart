@@ -211,17 +211,24 @@ class Java11GrammarDefinition extends Java11GrammarLexer {
   Parser<ASTStatementForEach> statementForEach() =>
       (string('for').trimHidden() &
               char('(').trimHidden() &
+              type().trimHidden() &
               ref0(identifier) &
               char(':').trimHidden() &
               ref0(expression) &
               char(')').trimHidden() &
               codeBlock())
           .map((v) {
+            var variableType = v[2];
             var variableName = v[3];
             var iterableExp = v[5];
             var block = v[7];
 
-            return ASTStatementForEach(variableName, iterableExp, block);
+            return ASTStatementForEach(
+              variableType,
+              variableName,
+              iterableExp,
+              block,
+            );
           });
 
   Parser<ASTStatementReturn> statementReturn() =>
