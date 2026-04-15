@@ -306,6 +306,7 @@ enum ASTAssignmentOperator {
   set('='),
   multiply('*'),
   divide('/'),
+  divideAsInt('~/'),
   sum('+'),
   subtract('-');
 
@@ -323,6 +324,8 @@ enum ASTAssignmentOperator {
         return ASTExpressionOperator.multiply;
       case divide:
         return ASTExpressionOperator.divide;
+      case divideAsInt:
+        return ASTExpressionOperator.divideAsInt;
       default:
         return null;
     }
@@ -356,6 +359,8 @@ String getASTAssignmentOperatorText(ASTAssignmentOperator op) {
       return '*=';
     case ASTAssignmentOperator.divide:
       return '/=';
+    case ASTAssignmentOperator.divideAsInt:
+      return '~/=';
     case ASTAssignmentOperator.sum:
       return '+=';
     case ASTAssignmentOperator.subtract:

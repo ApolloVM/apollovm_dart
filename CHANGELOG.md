@@ -1,3 +1,16 @@
+## 0.1.10
+
+- `ASTAssignmentOperator`:
+  - Added new operator `divideAsInt` with symbol `'~/'`.
+  - Updated `asASTExpressionOperator` getter to support `divideAsInt`.
+  - Updated `getASTAssignmentOperator` and `getASTAssignmentOperatorText` to handle `divideAsInt` and its assignment form `'~/='`.
+- `ASTExpressionVariableAssignment`:
+  - Added support for `divideAsInt` operator in evaluation and string representation.
+- Dart grammar (`dart_grammar.dart`):
+  - Extended `assigmentOperator` parser to recognize `'~/='` operator.
+- Java11 grammar (`java11_grammar.dart`):
+  - No changes for `divideAsInt` operator (remains unsupported).
+
 ## 0.1.9
 
 - `ASTExpressionListLiteral`:

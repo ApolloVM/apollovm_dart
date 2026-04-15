@@ -597,9 +597,11 @@ class Java11GrammarDefinition extends Java11GrammarLexer {
       });
 
   Parser<ASTAssignmentOperator> assigmentOperator() =>
-      (char('=') | string('+=')).trimHidden().map((v) {
-        return getASTAssignmentOperator(v);
-      });
+      (char('=') | string('+=') | string('-=') | string('*=') | string('/='))
+          .trimHidden()
+          .map((v) {
+            return getASTAssignmentOperator(v);
+          });
 
   Parser<ASTVariable> variable() =>
       (thisVariable() | scopeVariable()).cast<ASTVariable>();

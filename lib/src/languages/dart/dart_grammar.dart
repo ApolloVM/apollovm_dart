@@ -681,9 +681,16 @@ class DartGrammarDefinition extends DartGrammarLexer {
       });
 
   Parser<ASTAssignmentOperator> assigmentOperator() =>
-      (char('=') | string('+=')).trimHidden().map((v) {
-        return getASTAssignmentOperator(v);
-      });
+      (char('=') |
+              string('+=') |
+              string('-=') |
+              string('*=') |
+              string('/=') |
+              string('~/='))
+          .trimHidden()
+          .map((v) {
+            return getASTAssignmentOperator(v);
+          });
 
   Parser<ASTVariable> variable() =>
       (thisVariable() | scopeVariable()).cast<ASTVariable>();

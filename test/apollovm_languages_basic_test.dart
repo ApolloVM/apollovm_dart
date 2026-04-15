@@ -6,6 +6,75 @@ Future<void> main() async {
   print('BASIC TESTS DEFINITIONS');
 
   var definitions = <TestDefinition>[
+    TestDefinition('dart_basic_factorial.test.xml', r'''
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="Basic factorial(int n)">
+    <source language="dart">
+        <![CDATA[
+int factorial(int n) {
+  if (n < 0) {
+    return 0; // Simplified handling for negative numbers instead of throwing an error
+  }
+  if (n == 0 || n == 1) {
+    return 1;
+  }
+  int result = 1;
+  for (int i = 2; i <= n; i++) {
+    result *= i;
+  }
+  return result;
+}
+
+void main() {
+  int number = 6;
+  int fact = factorial(number);
+  print('The factorial of $number is: $fact');
+}
+
+        ]]>
+    </source>
+    <call function="main">
+        []
+    </call>
+    <output>
+         ["The factorial of 6 is: 720"]
+    </output>
+    <call function="factorial" return="40320">
+        [8]
+    </call>
+    <output>
+         []
+    </output>
+    <source-generated language="dart"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+  int factorial(int n) {
+    if (n < 0) {
+        return 0;
+    }
+
+    if ((n == 0) || (n == 1)) {
+        return 1;
+    }
+
+    int result = 1;
+    for (int i = 2; i <= n ; i++) {
+      result *= i;
+    }
+    return result;
+  }
+
+  void main() {
+    int number = 6;
+    int fact = factorial(number);
+    print('The factorial of $number is: $fact');
+  }
+
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+</test>
+    '''),
     TestDefinition('dart_basic_findMax.test.xml', r'''
 <?xml version="1.0" encoding="UTF-8"?>
 <test title="Basic findMax(List<int> numbers)">

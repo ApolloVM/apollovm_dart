@@ -1163,6 +1163,11 @@ class ASTExpressionVariableAssignment extends ASTExpression {
           result = variableValue / value;
           break;
         }
+      case ASTAssignmentOperator.divideAsInt:
+        {
+          result = variableValue ~/ value;
+          break;
+        }
       case ASTAssignmentOperator.multiply:
         {
           result = variableValue * value;
@@ -1197,6 +1202,10 @@ class ASTExpressionVariableAssignment extends ASTExpression {
       case ASTAssignmentOperator.divide:
         {
           return '$variable /= $expression';
+        }
+      case ASTAssignmentOperator.divideAsInt:
+        {
+          return '$variable ~/= $expression';
         }
     }
   }
