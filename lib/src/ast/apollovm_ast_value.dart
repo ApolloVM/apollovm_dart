@@ -436,15 +436,40 @@ abstract class ASTValueNum<T extends num> extends ASTValuePrimitive<T> {
     assert(this.value.isNegative == this.negative);
   }
 
-  static ASTValueNum from(dynamic o, {bool? negative}) {
-    if (o is int) {
-      return ASTValueInt(o, negative: negative);
-    } else if (o is double) {
-      return ASTValueDouble(o, negative: negative);
-    } else if (o is String) {
-      return from(parseNum(o.trim()), negative: negative);
+  static ASTValueNum from(Object? o, {bool? negative, bool? asDouble}) {
+    if (asDouble != null) {
+      if (o is num) {
+        if (asDouble) {
+          return ASTValueDouble(o.toDouble(), negative: negative);
+        } else {
+          return ASTValueInt(o.toInt(), negative: negative);
+        }
+      } else if (o is String) {
+        var s = o.trim();
+        return from(parseNum(s), negative: negative, asDouble: asDouble);
+      }
+
+      throw StateError("Can't parse number as double: $o");
+    } else {
+      if (o is int) {
+        return ASTValueInt(o, negative: negative);
+      } else if (o is double) {
+        return ASTValueDouble(o, negative: negative);
+      } else if (o is String) {
+        var s = o.trim();
+        var n = parseNum(s);
+        // Preserve numeric intent lost after parsing (JS always yields double):
+        // If the original string has a decimal point or exponent but parsing
+        // produced an int, we force the value to be treated as double-like.
+        var asDouble =
+            n is int && (s.contains('.') || s.contains('e') || s.contains('E'))
+            ? true
+            : null;
+        return from(n, negative: negative, asDouble: asDouble);
+      }
+
+      throw StateError("Can't parse number: $o");
     }
-    throw StateError("Can't parse number: $o");
   }
 
   bool get isZero => value == 0;
