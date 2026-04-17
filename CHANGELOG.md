@@ -1,5 +1,11 @@
 ## 0.1.11
 
+- `ASTValueNum`:
+  - `from` method:
+    - Added optional `asDouble` parameter to control numeric type coercion.
+    - Improved parsing logic to preserve numeric intent from strings containing decimal points or exponents by forcing double representation.
+    - Added error handling for unsupported input types when `asDouble` is specified.
+
 - Added `ASTExpressionNullValue` class to represent `null` literal expressions.
 - `ASTScopeVariable`:
   - Special handling for variable named `'null'` to resolve as `ASTValueNull`.
