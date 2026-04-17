@@ -150,6 +150,34 @@ abstract class ASTExpression with ASTNode implements ASTCodeRunner {
   String toString({bool asGroup = false});
 }
 
+/// [ASTExpression] for `null` value.
+class ASTExpressionNullValue extends ASTExpression {
+  ASTExpressionNullValue();
+
+  @override
+  bool get isComplex => false;
+
+  @override
+  Iterable<ASTNode> get children => [];
+
+  @override
+  FutureOr<ASTType> resolveType(VMContext? context) => ASTTypeNull.instance;
+
+  @override
+  ASTNode? getNodeIdentifier(String name, {ASTNode? requester}) =>
+      parentNode?.getNodeIdentifier(name, requester: requester);
+
+  @override
+  FutureOr<ASTValue> run(VMContext parentContext, ASTRunStatus runStatus) {
+    return ASTValueNull.instance;
+  }
+
+  @override
+  String toString({bool asGroup = false}) {
+    return 'null';
+  }
+}
+
 /// [ASTExpression] to access a variable.
 class ASTExpressionVariableAccess extends ASTExpression {
   ASTVariable variable;

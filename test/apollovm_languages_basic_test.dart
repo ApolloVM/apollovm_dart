@@ -6,6 +6,87 @@ Future<void> main() async {
   print('BASIC TESTS DEFINITIONS');
 
   var definitions = <TestDefinition>[
+    TestDefinition('dart_basic_stdv.test.xml', r'''
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="Basic calculateStandardDeviation(List<double> numbers)">
+    <source language="dart">
+        <![CDATA[
+double calculateStandardDeviation(List<double> numbers) {
+  if (numbers == null || numbers.length < 2) {
+    return 0.0; // Cannot calculate std dev for less than 2 points
+  }
+
+  // Calculate the mean
+  double sum = 0;
+  for (var x in numbers) {
+    sum += x;
+  }
+  double mean = sum / numbers.length;
+
+  // Calculate the sum of squared differences from the mean
+  double squaredDifferencesSum = 0;
+  for (var x in numbers) {
+    squaredDifferencesSum += pow(x - mean, 2);
+  }
+
+  // Calculate the sample variance and then the standard deviation
+  double variance = squaredDifferencesSum / (numbers.length - 1);
+  return sqrt(variance);
+}
+
+void main() {
+  // Example usage:
+  List<double> data = [2.0, 4.0, 4.0, 4.0, 5.0, 5.0, 7.0, 9.0];
+  double stdDev = calculateStandardDeviation(data);
+
+  print('The data set is: $data');
+  print('The standard deviation is: $stdDev');
+}
+
+        ]]>
+    </source>
+    <call function="main">
+        []
+    </call>
+    <output>
+         [
+         "The data set is: [2.0, 4.0, 4.0, 4.0, 5.0, 5.0, 7.0, 9.0]",
+         "The standard deviation is: 2.138089935299395"
+         ]
+    </output>
+    <source-generated language="dart"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+  double calculateStandardDeviation(List<double> numbers) {
+    if ((numbers == null) || (numbers.length < 2)) {
+        return 0.0;
+    }
+
+    double sum = 0;
+    for (var x in numbers) {
+      sum += x;
+    }
+    double mean = sum / numbers.length;
+    double squaredDifferencesSum = 0;
+    for (var x in numbers) {
+      squaredDifferencesSum += pow(x - mean, 2);
+    }
+    double variance = squaredDifferencesSum / (numbers.length - 1);
+    return sqrt(variance);
+  }
+
+  void main() {
+    List<double> data = <double>[2.0, 4.0, 4.0, 4.0, 5.0, 5.0, 7.0, 9.0];
+    double stdDev = calculateStandardDeviation(data);
+    print('The data set is: $data');
+    print('The standard deviation is: $stdDev');
+  }
+
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+</test>
+    '''),
     TestDefinition('dart_basic_factorial.test.xml', r'''
 <?xml version="1.0" encoding="UTF-8"?>
 <test title="Basic factorial(int n)">
@@ -986,7 +1067,7 @@ class Foo {
 
   await runTestDefinitions(
     // [definitions[0]],
-    //definitions.sublist(1)
+    // definitions.sublist(1),
     definitions,
   );
 }

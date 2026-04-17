@@ -817,7 +817,14 @@ abstract class ApolloCodeGenerator
     String indent = '',
     bool headIndented = true,
   }) {
-    if (expression is ASTExpressionVariableAccess) {
+    if (expression is ASTExpressionNullValue) {
+      return generateASTExpressionNullValue(
+        expression,
+        out: out,
+        indent: indent,
+        headIndented: headIndented,
+      );
+    } else if (expression is ASTExpressionVariableAccess) {
       return generateASTExpressionVariableAccess(
         expression,
         out: out,
@@ -1228,6 +1235,21 @@ abstract class ApolloCodeGenerator
 
     out.write(expression.name);
 
+    return out;
+  }
+
+  @override
+  StringBuffer generateASTExpressionNullValue(
+    ASTExpressionNullValue expression, {
+    StringBuffer? out,
+    String indent = '',
+    bool headIndented = true,
+  }) {
+    out ??= newOutput();
+
+    if (headIndented) out.write(indent);
+
+    out.write('null');
     return out;
   }
 

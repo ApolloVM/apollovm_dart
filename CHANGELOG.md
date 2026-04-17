@@ -1,3 +1,31 @@
+## 0.1.11
+
+- Added `ASTExpressionNullValue` class to represent `null` literal expressions.
+- `ASTScopeVariable`:
+  - Special handling for variable named `'null'` to resolve as `ASTValueNull`.
+- `ApolloCodeGenerator`:
+  - Added `generateASTExpressionNullValue` method to generate code for `null` expressions.
+  - Updated `generateASTExpression` to handle `ASTExpressionNullValue`.
+- `ApolloGenerator` interface:
+  - Added `generateASTExpressionNullValue` method.
+  - Updated `generateASTExpression` to handle `ASTExpressionNullValue`.
+- `ApolloRunner`:
+  - Added optional `importCorePackageMath` parameter to constructor and `createRunner` method.
+  - When `importCorePackageMath` is true, maps math functions from `CorePackageMath` to external functions.
+- `CorePackageMath`:
+  - New core package providing Dart `dart:math` functions as external functions for ApolloVM.
+  - Includes `pow`, `sqrt`, `sin`, `cos`, `tan`, `asin`, `acos`, `atan`, `atan2`, `log`, `exp`, `abs`, `min`, `max`.
+- Language grammars (`dart`, `java11`):
+  - Added parsing support for `null` literal expressions producing `ASTExpressionNullValue`.
+- Language runners (`dart`, `java11`, `wasm`):
+  - Added support for `importCorePackageMath` parameter in constructors.
+- `ApolloGeneratorWasm`:
+  - Added stub for `generateASTExpressionNullValue` throwing `UnimplementedError`.
+  - Updated `generateASTExpression` to handle `ASTExpressionNullValue`.
+- Test framework:
+  - Added new test `dart_basic_stdv.test.xml` demonstrating usage of math functions (`pow`, `sqrt`) and `null` checks.
+  - Updated test runner to create runners with `importCorePackageMath: true` to enable math functions in tests.
+
 ## 0.1.10
 
 - `ASTAssignmentOperator`:

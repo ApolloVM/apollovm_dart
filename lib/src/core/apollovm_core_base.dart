@@ -3,9 +3,11 @@
 // Please refer to the LICENSE and AUTHORS files for details.
 
 import 'dart:async';
+import 'dart:math';
 
 import '../apollovm_base.dart';
 import '../ast/apollovm_ast_base.dart';
+import '../ast/apollovm_ast_statement.dart';
 import '../ast/apollovm_ast_toplevel.dart';
 import '../ast/apollovm_ast_type.dart';
 import '../ast/apollovm_ast_value.dart';
@@ -27,6 +29,237 @@ class ApolloVMCore {
       default:
         return null;
     }
+  }
+}
+
+abstract class CorePackageBase extends ASTBlock {
+  String get packageName;
+
+  CorePackageBase() : super(null);
+
+  List<ASTExternalFunction> get exportedFunctions;
+
+  ASTExternalFunction<R> _externalStaticFunctionArgs1<R>(
+    String name,
+    ASTType<R> returnType,
+    ASTFunctionParameterDeclaration param1,
+    Function externalFunction, [
+    ParameterValueResolver? parameterValueResolver,
+  ]) {
+    return ASTExternalFunction<R>(
+      name,
+      ASTParametersDeclaration([param1], null, null),
+      returnType,
+      externalFunction,
+      parameterValueResolver,
+    );
+  }
+
+  ASTExternalFunction<R> _externalStaticFunctionArgs2<R>(
+    String name,
+    ASTType<R> returnType,
+    ASTFunctionParameterDeclaration param1,
+    ASTFunctionParameterDeclaration param2,
+    Function externalFunction, [
+    ParameterValueResolver? parameterValueResolver,
+  ]) {
+    return ASTExternalFunction<R>(
+      name,
+      ASTParametersDeclaration([param1, param2], null, null),
+      returnType,
+      externalFunction,
+      parameterValueResolver,
+    );
+  }
+}
+
+class CorePackageMath extends CorePackageBase {
+  @override
+  String get packageName => 'dart:math';
+
+  late final ASTExternalFunction _functionPow;
+  late final ASTExternalFunction _functionSqrt;
+  late final ASTExternalFunction _functionSin;
+  late final ASTExternalFunction _functionCos;
+  late final ASTExternalFunction _functionTan;
+  late final ASTExternalFunction _functionAsin;
+  late final ASTExternalFunction _functionAcos;
+  late final ASTExternalFunction _functionAtan;
+  late final ASTExternalFunction _functionLog;
+  late final ASTExternalFunction _functionExp;
+  late final ASTExternalFunction _functionAbs;
+  late final ASTExternalFunction _functionMin;
+  late final ASTExternalFunction _functionMax;
+  late final ASTExternalFunction _functionAtan2;
+
+  @override
+  List<ASTExternalFunction> get exportedFunctions => [
+    _functionPow,
+    _functionSqrt,
+    _functionSin,
+    _functionCos,
+    _functionTan,
+    _functionAsin,
+    _functionAcos,
+    _functionAtan,
+    _functionLog,
+    _functionExp,
+    _functionAbs,
+    _functionMin,
+    _functionMax,
+    _functionAtan2,
+  ];
+
+  CorePackageMath() {
+    _functionPow = _externalStaticFunctionArgs2(
+      'pow',
+      ASTTypeNum.instance,
+      ASTFunctionParameterDeclaration(ASTTypeNum.instance, 'n', 0, false),
+      ASTFunctionParameterDeclaration(
+        ASTTypeNum.instance,
+        'exponent',
+        0,
+        false,
+      ),
+      (a, b) => pow(a, b),
+    );
+
+    _functionSqrt = _externalStaticFunctionArgs1(
+      'sqrt',
+      ASTTypeNum.instance,
+      ASTFunctionParameterDeclaration(ASTTypeNum.instance, 'x', 0, false),
+      (x) => sqrt(x),
+    );
+
+    _functionSin = _externalStaticFunctionArgs1(
+      'sin',
+      ASTTypeNum.instance,
+      ASTFunctionParameterDeclaration(ASTTypeNum.instance, 'x', 0, false),
+      (x) => sin(x),
+    );
+
+    _functionCos = _externalStaticFunctionArgs1(
+      'cos',
+      ASTTypeNum.instance,
+      ASTFunctionParameterDeclaration(ASTTypeNum.instance, 'x', 0, false),
+      (x) => cos(x),
+    );
+
+    _functionTan = _externalStaticFunctionArgs1(
+      'tan',
+      ASTTypeNum.instance,
+      ASTFunctionParameterDeclaration(ASTTypeNum.instance, 'x', 0, false),
+      (x) => tan(x),
+    );
+
+    _functionAsin = _externalStaticFunctionArgs1(
+      'asin',
+      ASTTypeNum.instance,
+      ASTFunctionParameterDeclaration(ASTTypeNum.instance, 'x', 0, false),
+      (x) => asin(x),
+    );
+
+    _functionAcos = _externalStaticFunctionArgs1(
+      'acos',
+      ASTTypeNum.instance,
+      ASTFunctionParameterDeclaration(ASTTypeNum.instance, 'x', 0, false),
+      (x) => acos(x),
+    );
+
+    _functionAtan = _externalStaticFunctionArgs1(
+      'atan',
+      ASTTypeNum.instance,
+      ASTFunctionParameterDeclaration(ASTTypeNum.instance, 'x', 0, false),
+      (x) => atan(x),
+    );
+
+    _functionAtan2 = _externalStaticFunctionArgs2(
+      'atan2',
+      ASTTypeNum.instance,
+      ASTFunctionParameterDeclaration(ASTTypeNum.instance, 'y', 0, false),
+      ASTFunctionParameterDeclaration(ASTTypeNum.instance, 'x', 0, false),
+      (y, x) => atan2(y, x),
+    );
+
+    _functionLog = _externalStaticFunctionArgs1(
+      'log',
+      ASTTypeNum.instance,
+      ASTFunctionParameterDeclaration(ASTTypeNum.instance, 'x', 0, false),
+      (x) => log(x),
+    );
+
+    _functionExp = _externalStaticFunctionArgs1(
+      'exp',
+      ASTTypeNum.instance,
+      ASTFunctionParameterDeclaration(ASTTypeNum.instance, 'x', 0, false),
+      (x) => exp(x),
+    );
+
+    _functionAbs = _externalStaticFunctionArgs1(
+      'abs',
+      ASTTypeNum.instance,
+      ASTFunctionParameterDeclaration(ASTTypeNum.instance, 'x', 0, false),
+      (x) => x.abs(),
+    );
+
+    _functionMin = _externalStaticFunctionArgs2(
+      'min',
+      ASTTypeNum.instance,
+      ASTFunctionParameterDeclaration(ASTTypeNum.instance, 'a', 0, false),
+      ASTFunctionParameterDeclaration(ASTTypeNum.instance, 'b', 0, false),
+      (a, b) => min(a, b),
+    );
+
+    _functionMax = _externalStaticFunctionArgs2(
+      'max',
+      ASTTypeNum.instance,
+      ASTFunctionParameterDeclaration(ASTTypeNum.instance, 'a', 0, false),
+      ASTFunctionParameterDeclaration(ASTTypeNum.instance, 'b', 0, false),
+      (a, b) => max(a, b),
+    );
+  }
+
+  @override
+  ASTFunctionDeclaration? getFunction(
+    String fName,
+    ASTFunctionSignature parametersSignature,
+    VMContext context, {
+    bool caseInsensitive = false,
+  }) {
+    switch (fName) {
+      case 'pow':
+        return _functionPow;
+      case 'sqrt':
+        return _functionSqrt;
+      case 'sin':
+        return _functionSin;
+      case 'cos':
+        return _functionCos;
+      case 'tan':
+        return _functionTan;
+      case 'asin':
+        return _functionAsin;
+      case 'acos':
+        return _functionAcos;
+      case 'atan':
+        return _functionAtan;
+      case 'atan2':
+        return _functionAtan2;
+      case 'log':
+        return _functionLog;
+      case 'exp':
+        return _functionExp;
+      case 'abs':
+        return _functionAbs;
+      case 'min':
+        return _functionMin;
+      case 'max':
+        return _functionMax;
+    }
+
+    throw StateError(
+      "Can't find core function: $packageName/$fName( $parametersSignature )",
+    );
   }
 }
 

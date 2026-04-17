@@ -483,6 +483,7 @@ class DartGrammarDefinition extends DartGrammarLexer {
               expressionFunctionInvocation() |
               expressionVariableEntryAccess() |
               expressionGetterAccess() |
+              expressionNullValue() |
               expressionVariableAccess())
           .cast<ASTExpression>();
 
@@ -544,6 +545,11 @@ class DartGrammarDefinition extends DartGrammarLexer {
             var expressions = list.whereType<ASTExpression>().toList();
             return expressions;
           });
+
+  Parser<ASTExpressionNullValue> expressionNullValue() =>
+      (nullToken()).map((v) {
+        return ASTExpressionNullValue();
+      });
 
   Parser<ASTExpressionVariableAccess> expressionVariableAccess() =>
       (variable()).map((v) {

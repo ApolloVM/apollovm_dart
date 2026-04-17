@@ -35,7 +35,7 @@ import 'languages/wasm/wasm_runner.dart';
 /// The Apollo VM.
 class ApolloVM implements VMTypeResolver {
   // ignore: non_constant_identifier_names
-  static final String VERSION = '0.1.10';
+  static final String VERSION = '0.1.11';
 
   static int _idCount = 0;
 
@@ -161,15 +161,27 @@ class ApolloVM implements VMTypeResolver {
   }
 
   /// Creates a runner for the [language].
-  ApolloRunner? createRunner(String language) {
+  ApolloRunner? createRunner(
+    String language, {
+    bool importCorePackageMath = false,
+  }) {
     switch (language) {
       case 'dart':
-        return ApolloRunnerDart(this);
+        return ApolloRunnerDart(
+          this,
+          importCorePackageMath: importCorePackageMath,
+        );
       case 'java':
       case 'java11':
-        return ApolloRunnerJava11(this);
+        return ApolloRunnerJava11(
+          this,
+          importCorePackageMath: importCorePackageMath,
+        );
       case 'wasm':
-        return ApolloRunnerWasm(this);
+        return ApolloRunnerWasm(
+          this,
+          importCorePackageMath: importCorePackageMath,
+        );
       default:
         return null;
     }

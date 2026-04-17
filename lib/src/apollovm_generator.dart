@@ -208,7 +208,9 @@ abstract class ApolloGenerator<
   });
 
   O generateASTExpression(ASTExpression expression, {O? out}) {
-    if (expression is ASTExpressionVariableAccess) {
+    if (expression is ASTExpressionNullValue) {
+      return generateASTExpressionNullValue(expression, out: out);
+    } else if (expression is ASTExpressionVariableAccess) {
       return generateASTExpressionVariableAccess(expression, out: out);
     } else if (expression is ASTExpressionVariableAssignment) {
       return generateASTExpressionVariableAssignment(expression, out: out);
@@ -278,6 +280,8 @@ abstract class ApolloGenerator<
     String indent = '',
     bool headIndented = true,
   });
+
+  O generateASTExpressionNullValue(ASTExpressionNullValue expression, {O? out});
 
   O generateASTExpressionVariableAccess(
     ASTExpressionVariableAccess expression, {

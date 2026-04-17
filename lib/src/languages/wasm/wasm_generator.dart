@@ -911,6 +911,16 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
   }
 
   @override
+  BytesOutput generateASTExpressionNullValue(
+    ASTExpressionNullValue expression, {
+    BytesOutput? out,
+    WasmContext? context,
+  }) {
+    // TODO: implement generateASTExpressionNullValue
+    throw UnimplementedError("generateASTExpressionNullValue");
+  }
+
+  @override
   BytesOutput generateASTExpressionVariableAccess(
     ASTExpressionVariableAccess expression, {
     BytesOutput? out,
@@ -1571,6 +1581,13 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     BytesOutput? out,
     WasmContext? context,
   }) {
+    if (expression is ASTExpressionNullValue) {
+      return generateASTExpressionNullValue(
+        expression,
+        out: out,
+        context: context,
+      );
+    }
     if (expression is ASTExpressionVariableAccess) {
       return generateASTExpressionVariableAccess(
         expression,

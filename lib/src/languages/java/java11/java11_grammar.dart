@@ -397,6 +397,7 @@ class Java11GrammarDefinition extends Java11GrammarLexer {
               expressionVariableAssigment() |
               expressionFunctionInvocation() |
               expressionVariableEntryAccess() |
+              expressionNullValue() |
               expressionVariableAccess())
           .cast<ASTExpression>();
 
@@ -445,6 +446,11 @@ class Java11GrammarDefinition extends Java11GrammarLexer {
             var expressions = list.whereType<ASTExpression>().toList();
             return expressions;
           });
+
+  Parser<ASTExpressionNullValue> expressionNullValue() =>
+      (nullToken()).map((v) {
+        return ASTExpressionNullValue();
+      });
 
   Parser<ASTExpressionVariableAccess> expressionVariableAccess() =>
       (variable()).map((v) {

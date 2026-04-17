@@ -235,6 +235,14 @@ class ASTScopeVariable<T> extends ASTVariable {
 
   @override
   FutureOr<ASTVariable> resolveVariable(VMContext context) {
+    if (name == 'null') {
+      return ASTRuntimeVariable(
+        ASTTypeNull.instance,
+        name,
+        ASTValueNull.instance,
+      );
+    }
+
     var variable = context.getVariable(name, true);
 
     return variable.resolveMapped((v) {

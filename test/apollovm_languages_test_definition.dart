@@ -132,7 +132,7 @@ Future<void> runTestDefinitions(List<TestDefinition> testDefinitions) async {
 
           expect(loadOK, isTrue, reason: "Error loading '$language ' code!");
 
-          var runner = vm.createRunner(language)!;
+          var runner = vm.createRunner(language, importCorePackageMath: true)!;
 
           var calls = testDefinition.calls;
           var outputs = testDefinition.outputs;
@@ -182,7 +182,10 @@ Future<void> runTestDefinitions(List<TestDefinition> testDefinitions) async {
 
               print('-- VM: $vmCodeGen');
 
-              var runnerCodeGen = vmCodeGen.createRunner(sourceGenLanguage)!;
+              var runnerCodeGen = vmCodeGen.createRunner(
+                sourceGenLanguage,
+                importCorePackageMath: true,
+              )!;
 
               for (var i = 0; i < calls.length; ++i) {
                 var call = calls[i];

@@ -9,6 +9,7 @@ import 'apollovm_utils.dart';
 import 'ast/apollovm_ast_toplevel.dart';
 import 'ast/apollovm_ast_type.dart';
 import 'ast/apollovm_ast_value.dart';
+import 'core/apollovm_core_base.dart';
 
 @Deprecated("Renamed to `ApolloRunner`")
 typedef ApolloLanguageRunner = ApolloRunner;
@@ -28,7 +29,9 @@ abstract class ApolloRunner implements VMTypeResolver {
 
   ApolloExternalFunctionMapper? externalFunctionMapper;
 
-  ApolloRunner(this.apolloVM) {
+  final bool importCorePackageMath;
+
+  ApolloRunner(this.apolloVM, {this.importCorePackageMath = false}) {
     _languageNamespaces = apolloVM.getLanguageNamespaces(language);
     externalFunctionMapper = createDefaultApolloExternalFunctionMapper();
   }
@@ -49,6 +52,12 @@ abstract class ApolloRunner implements VMTypeResolver {
       'o',
       (o) => externalPrintFunction(o),
     );
+
+    if (importCorePackageMath) {
+      for (var f in CorePackageMath().exportedFunctions) {
+        externalFunctionMapper.addExternalFunction(f);
+      }
+    }
 
     return externalFunctionMapper;
   }

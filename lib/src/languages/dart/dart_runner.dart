@@ -6,7 +6,7 @@ import '../../apollovm_runner.dart';
 
 /// Dart implementation of an [ApolloRunner].
 class ApolloRunnerDart extends ApolloRunner {
-  ApolloRunnerDart(super.apolloVM);
+  ApolloRunnerDart(super.apolloVM, {super.importCorePackageMath});
 
   @override
   String get language => 'dart';

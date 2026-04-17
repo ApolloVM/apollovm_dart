@@ -19,7 +19,7 @@ import 'wasm_runtime.dart';
 class ApolloRunnerWasm extends ApolloRunner {
   final _wasmRuntime = WasmRuntime();
 
-  ApolloRunnerWasm(super.apolloVM);
+  ApolloRunnerWasm(super.apolloVM, {super.importCorePackageMath});
 
   @override
   String get language => 'wasm';

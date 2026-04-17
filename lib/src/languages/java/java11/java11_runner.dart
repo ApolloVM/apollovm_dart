@@ -6,7 +6,7 @@ import '../../../apollovm_runner.dart';
 
 /// Java11 implementation of an [ApolloRunner].
 class ApolloRunnerJava11 extends ApolloRunner {
-  ApolloRunnerJava11(super.apolloVM);
+  ApolloRunnerJava11(super.apolloVM, {super.importCorePackageMath});
 
   @override
   String get language => 'java11';
