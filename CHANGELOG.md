@@ -6,6 +6,11 @@
 - `ApolloCodeGenerator`:
   - Added `generateASTExpressionNullValue` method to generate code for `null` expressions.
   - Updated `generateASTExpression` to handle `ASTExpressionNullValue`.
+  - `generateASTValueDouble`:
+    - Fixed formatting of double values to ensure consistent decimal representation.
+    - Added handling to convert scientific notation doubles to fixed decimal format with appropriate fraction digits.
+  - Added helper method `fractionDigitsFromScientificNotation` to determine the number of fraction digits needed for doubles in scientific notation.
+
 - `ApolloGenerator` interface:
   - Added `generateASTExpressionNullValue` method.
   - Updated `generateASTExpression` to handle `ASTExpressionNullValue`.

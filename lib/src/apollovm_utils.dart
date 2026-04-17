@@ -109,6 +109,24 @@ extension CreateListTypedExtension<T> on List<T> {
   List<E> toListOfType<E>() => _toListWithGenericType<E>(this) as List<E>;
 }
 
+extension DoubleScientificNotationExtension on double {
+  int fractionDigitsFromScientificNotation() {
+    final v = this;
+    final s = v.toString();
+
+    final eIndex = s.indexOf('e');
+    if (eIndex == -1) return 0;
+
+    final exponent = int.parse(s.substring(eIndex + 1));
+
+    if (exponent >= 0) {
+      return 0;
+    }
+
+    return exponent.abs();
+  }
+}
+
 extension MapGetIgnoreCaseExtension<K, V> on Map<K, V> {
   V? lookupValue(Object? key, {bool ignoreCase = false}) {
     if (ignoreCase) {

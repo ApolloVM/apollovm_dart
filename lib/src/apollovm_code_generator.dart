@@ -4,6 +4,7 @@
 
 import 'apollovm_code_storage.dart';
 import 'apollovm_generator.dart';
+import 'apollovm_utils.dart';
 import 'ast/apollovm_ast_base.dart';
 import 'ast/apollovm_ast_expression.dart';
 import 'ast/apollovm_ast_statement.dart';
@@ -1514,7 +1515,22 @@ abstract class ApolloCodeGenerator
     out ??= newOutput();
 
     if (headIndented) out.write(indent);
-    out.write(value.value);
+
+    var v = value.value;
+    var s = v.toString();
+
+    if (v == 0.0) {
+      out.write('0.0');
+    } else if (s.contains('e') || s.contains('E')) {
+      // scientific notation → force decimal format
+      final digits = v.fractionDigitsFromScientificNotation().clamp(0, 20);
+      out.write(v.toStringAsFixed(digits));
+    } else if (!s.contains('.')) {
+      out.write('$s.0');
+    } else {
+      out.write(s);
+    }
+
     return out;
   }
 
