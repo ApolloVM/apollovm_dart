@@ -36,7 +36,7 @@ double calculateStandardDeviation(List<double> numbers) {
 
 void main() {
   // Example usage:
-  List<double> data = [2.0, 4.0, 4.0, 4.0, 5.0, 5.0, 7.0, 9.0];
+  List<double> data = [2.1, 4.4, 4.4, 4.4, 5.5, 5.5, 7.7, 9.9];
   double stdDev = calculateStandardDeviation(data);
 
   print('The data set is: $data');
@@ -50,8 +50,8 @@ void main() {
     </call>
     <output>
          [
-         "The data set is: [2.0, 4.0, 4.0, 4.0, 5.0, 5.0, 7.0, 9.0]",
-         "The standard deviation is: 2.138089935299395"
+         "The data set is: [2.1, 4.4, 4.4, 4.4, 5.5, 5.5, 7.7, 9.9]",
+         "The standard deviation is: 2.37212231676916"
          ]
     </output>
     <source-generated language="dart"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
@@ -76,7 +76,7 @@ void main() {
   }
 
   void main() {
-    List<double> data = <double>[2.0, 4.0, 4.0, 4.0, 5.0, 5.0, 7.0, 9.0];
+    List<double> data = <double>[2.1, 4.4, 4.4, 4.4, 5.5, 5.5, 7.7, 9.9];
     double stdDev = calculateStandardDeviation(data);
     print('The data set is: $data');
     print('The standard deviation is: $stdDev');
