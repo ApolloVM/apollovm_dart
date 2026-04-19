@@ -37,6 +37,10 @@ abstract class ASTStatement with ASTNode implements ASTCodeRunner {
   }
 
   @override
+  FutureOr<ASTType> resolveRuntimeType(VMContext context, ASTNode? node) =>
+      resolveType(context);
+
+  @override
   void associateToType(ASTTypedNode node) {}
 }
 
@@ -173,7 +177,7 @@ class ASTBlock extends ASTStatement {
     return set != null;
   }
 
-  ASTFunctionDeclaration? getFunction(
+  ASTInvocableDeclaration? getFunction(
     String fName,
     ASTFunctionSignature parametersSignature,
     VMContext context, {
@@ -568,7 +572,14 @@ class ASTStatementVariableDeclaration<V> extends ASTStatementTyped {
 
   ASTExpression? value;
 
-  ASTStatementVariableDeclaration(this.type, this.name, this.value) {
+  bool unmodifiable;
+
+  ASTStatementVariableDeclaration(
+    this.type,
+    this.name,
+    this.value, {
+    this.unmodifiable = false,
+  }) {
     final value = this.value;
 
     if (value is ASTExpressionListLiteral) {
@@ -625,7 +636,7 @@ class ASTStatementVariableDeclaration<V> extends ASTStatementTyped {
   ) async {
     var value = this.value;
     if (value != null) {
-      return value.resolveType(parentContext).resolveMapped((
+      return value.resolveRuntimeType(parentContext, value).resolveMapped((
         valueResolvedType,
       ) {
         return _runImpl2(
@@ -656,7 +667,7 @@ class ASTStatementVariableDeclaration<V> extends ASTStatementTyped {
   ) async {
     if (!valueResolvedType.canCastToType(variableResolvedType)) {
       throw ApolloVMRuntimeError(
-        "Can't cast variable type ($variableResolvedType) to type: $type",
+        "Can't cast variable type ($variableResolvedType) to type: $valueResolvedType",
       );
     }
 
@@ -664,7 +675,7 @@ class ASTStatementVariableDeclaration<V> extends ASTStatementTyped {
 
     if (!(await initValue.isInstanceOfAsync(variableResolvedType))) {
       throw ApolloVMRuntimeError(
-        "Can't cast initial ($initValue) value to type: $type",
+        "Can't cast initial ($initValue) value to type: $variableResolvedType",
       );
     }
 

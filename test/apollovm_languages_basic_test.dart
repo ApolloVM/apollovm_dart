@@ -3,9 +3,206 @@ import 'package:apollovm/apollovm.dart';
 import 'apollovm_languages_test_definition.dart';
 
 Future<void> main() async {
+  await _tests();
+}
+
+/*
+Future<void> _benchmark() async {
+  for (var i = 0; i < 100; ++i) {
+    await _tests();
+  }
+
+  tearDownAll(() async {
+    await Future.delayed(Duration(hours: 10));
+  });
+}
+ */
+
+Future<void> _tests() async {
   print('BASIC TESTS DEFINITIONS');
 
   var definitions = <TestDefinition>[
+    TestDefinition('dart_basic_linearRegression.test.xml', r'''
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="Basic linearRegression(List<double> x, List<double> y)">
+    <source language="dart">
+        <![CDATA[
+class LinearModel {
+   final double m;
+   final double b;
+
+   LinearModel(this.m, this.b);
+}
+
+LinearModel linearRegression(List<int> x, List<double> y) {
+  if (x.length != y.length || x.length < 2) {
+    // Input lists must have same length and >= 2 points:
+    return null;
+  }
+
+  final n = x.length;
+
+  double sumX = 0;
+  double sumY = 0;
+
+  for (int i = 0; i < n; i++) {
+    sumX += x[i];
+    sumY += y[i];
+  }
+
+  final meanX = sumX / n;
+  final meanY = sumY / n;
+
+  double num = 0;
+  double den = 0;
+
+  for (int i = 0; i < n; i++) {
+    final dx = x[i] - meanX;
+    final dy = y[i] - meanY;
+    num += dx * dy;
+    den += dx * dx;
+  }
+
+  if (den == 0) {
+    // Cannot compute regression: zero variance in X:
+    return null;
+  }
+
+  final m = num / den;
+  final b = meanY - m * meanX;
+
+  return LinearModel(m, b);
+}
+
+void forecast(int startX, LinearModel model) {
+  final int days = 10;
+  for (int i = 1; i <= days; i++) {
+    final x = startX + i;
+    final y = model.m * x + model.b;
+    print('Forecast for Day $x: ${y.toStringAsFixed(2)}');
+  }
+}
+
+void main() {
+  // Historical BTC/USD rates
+  final rates = [
+    71428.571429, 71428.571429, 71428.571429, 66666.666667, 71428.571429,
+    71428.571429, 71428.571429, 66666.666667, 66666.666667, 66666.666667,
+    66666.666667, 66666.666667, 66666.666667, 66666.666667, 66666.666667,
+    66666.666667, 71428.571429, 71428.571429, 71428.571429, 76923.076923
+  ];
+
+  // X axis: day index starting at 1
+  final x = <int>[];
+  for (int i = 0; i < rates.length; i++) {
+    x.add(i + 1);
+  }
+
+  print('--- Linear Regression ---');
+
+  final model = linearRegression(x, rates);
+
+  print('Slope (m): ${model.m}');
+  print('Intercept (b): ${model.b}');
+
+  print('\n--- Forecast Next 10 Days ---');
+
+  forecast(x.last, model);
+}
+
+        ]]>
+    </source>
+    <call function="main">
+        []
+    </call>
+    <output>
+         [
+          "--- Linear Regression ---",
+          "Slope (m): 28.367622344360782",
+          "Intercept (b): 69024.48428808422",
+          "\n--- Forecast Next 10 Days ---",
+          "Forecast for Day 21: 1958656.22",
+          "Forecast for Day 22: 1958684.59",
+          "Forecast for Day 23: 1958712.96",
+          "Forecast for Day 24: 1958741.33",
+          "Forecast for Day 25: 1958769.69",
+          "Forecast for Day 26: 1958798.06",
+          "Forecast for Day 27: 1958826.43",
+          "Forecast for Day 28: 1958854.80",
+          "Forecast for Day 29: 1958883.16",
+          "Forecast for Day 30: 1958911.53"
+         ]
+    </output>
+    <source-generated language="dart"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+  LinearModel linearRegression(List<int> x, List<double> y) {
+    if ((x.length != y.length) || (x.length < 2)) {
+        return null;
+    }
+
+    final n = x.length;
+    double sumX = 0;
+    double sumY = 0;
+    for (int i = 0; i < n ; i++) {
+      sumX += x[i];
+      sumY += y[i];
+    }
+    final meanX = sumX / n;
+    final meanY = sumY / n;
+    double num = 0;
+    double den = 0;
+    for (int i = 0; i < n ; i++) {
+      final dx = x[i] - meanX;
+      final dy = y[i] - meanY;
+      num += dx * dy;
+      den += dx * dx;
+    }
+    if (den == 0) {
+        return null;
+    }
+
+    final m = num / den;
+    final b = meanY - (m * meanX);
+    return LinearModel(m, b);
+  }
+
+  void forecast(int startX, LinearModel model) {
+    int days = 10;
+    for (int i = 1; i <= days ; i++) {
+      final x = startX + i;
+      final y = model.m * (x + model.b);
+      print('Forecast for Day $x: ${y.toStringAsFixed(2)}');
+    }
+  }
+
+  void main() {
+    final rates = <double>[71428.571429, 71428.571429, 71428.571429, 66666.666667, 71428.571429, 71428.571429, 71428.571429, 66666.666667, 66666.666667, 66666.666667, 66666.666667, 66666.666667, 66666.666667, 66666.666667, 66666.666667, 66666.666667, 71428.571429, 71428.571429, 71428.571429, 76923.076923];
+    final x = <int>[];
+    for (int i = 0; i < rates.length ; i++) {
+      x.add(i + 1);
+    }
+    print('--- Linear Regression ---');
+    final model = linearRegression(x, rates);
+    print('Slope (m): ${model.m}');
+    print('Intercept (b): ${model.b}');
+    print('\n--- Forecast Next 10 Days ---');
+    forecast(x.last, model);
+  }
+
+class LinearModel {
+
+  final double m;
+  final double b;
+
+  LinearModel(this.m, this.b);
+
+}
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+</test>
+    '''),
     TestDefinition('dart_basic_stdv.test.xml', r'''
 <?xml version="1.0" encoding="UTF-8"?>
 <test title="Basic calculateStandardDeviation(List<double> numbers)">
@@ -560,9 +757,9 @@ void main() {
 ]]></source-generated>
 </test>
     '''),
-    TestDefinition('dart_basic_main_print_unnecessary_escape.test.xml', r'''
+    TestDefinition('dart_basic_calculateShippingCost.test.xml', r'''
 <?xml version="1.0" encoding="UTF-8"?>
-<test title="Basic sumOrDouble(int a, int b)">
+<test title="Basic calculateShippingCost(String destination, double weightKg)">
     <source language="dart">
         <![CDATA[
 double calculateShippingCost(String destination, double weightKg) {
@@ -1066,8 +1263,11 @@ class Foo {
   ];
 
   await runTestDefinitions(
-    [definitions[0]],
+    // [definitions[0]],
     // definitions.sublist(1),
-    // definitions,
+    // definitions
+    //     .where((e) => e.fileName.contains('dart_basic_linearRegression'))
+    //     .toList(),
+    definitions,
   );
 }

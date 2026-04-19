@@ -87,10 +87,22 @@ abstract class ASTValue<T> with ASTNode implements ASTTypedNode {
 
   FutureOr<T> getValueNoContext();
 
+  FutureOr<T> getHashcodeValue(VMContext? context) {
+    if (context != null) {
+      return getValue(context);
+    } else {
+      return getValueNoContext();
+    }
+  }
+
   FutureOr<ASTValue<T>> resolve(VMContext context);
 
   @override
   FutureOr<ASTType> resolveType(VMContext? context) => type;
+
+  @override
+  FutureOr<ASTType> resolveRuntimeType(VMContext context, ASTNode? node) =>
+      resolveType(context);
 
   @override
   void associateToType(ASTTypedNode node) {}
@@ -142,8 +154,8 @@ abstract class ASTValue<T> with ASTNode implements ASTTypedNode {
 
     if (other is ASTValue) {
       var context = VMContext.getCurrent();
-      var v1 = _getValueSafe(context, this);
-      var v2 = _getValueSafe(context, other);
+      var v1 = getHashcodeValue(context);
+      var v2 = other.getHashcodeValue(context);
       return v1 == v2;
     }
     return false;
@@ -152,8 +164,12 @@ abstract class ASTValue<T> with ASTNode implements ASTTypedNode {
   @override
   int get hashCode {
     var context = VMContext.getCurrent();
-    var v1 = _getValueSafe(context, this);
-    return v1.hashCode;
+    try {
+      var v1 = getHashcodeValue(context);
+      return v1.hashCode;
+    } catch (_) {
+      return -1;
+    }
   }
 
   FutureOr<bool> equals(Object other) async {
@@ -868,7 +884,23 @@ class ASTValueArray<T extends ASTType<V>, V> extends ASTValueStatic<List<V>> {
     final value = this.value;
 
     var t = componentType ?? (type as ASTTypeArray).componentType;
-    var v = value is List<V2> ? (value as List<V2>) : value.cast<V2>();
+
+    List<V2> v;
+    if (value is List<V2>) {
+      v = (value as List<V2>);
+    } else {
+      if (V2 == double) {
+        v = value.map<V2>((e) {
+          return e is num
+              ? e.toDouble() as V2
+              : (throw ApolloVMRuntimeError(
+                  "Can't cast `${e.runtimeType}` to `$V2`",
+                ));
+        }).toList();
+      } else {
+        v = value.cast<V2>();
+      }
+    }
 
     return ASTValueArray<T2, V2>(t as T2, v);
   }
@@ -1033,6 +1065,15 @@ class ASTValueStringExpression<T> extends ASTValue<String> {
   );
 
   @override
+  FutureOr<String> getHashcodeValue(VMContext? context) {
+    if (context != null) {
+      return getValue(context);
+    } else {
+      return expression.getHashcodeValue(context).resolveMapped((v) => '$v');
+    }
+  }
+
+  @override
   FutureOr<ASTValueString> resolve(VMContext context) {
     return getValue(context).resolveMapped((s) => ASTValueString(s));
   }
@@ -1065,6 +1106,15 @@ class ASTValueStringVariable<T> extends ASTValue<String> {
   );
 
   @override
+  FutureOr<String> getHashcodeValue(VMContext? context) {
+    if (context != null) {
+      return getValue(context);
+    } else {
+      return '\$${variable.name}';
+    }
+  }
+
+  @override
   FutureOr<ASTValue<String>> resolve(VMContext context) {
     return variable.getValue(context).resolveMapped((value) {
       return value is ASTValue<String> ? value : ASTValueAsString(value);
@@ -1095,6 +1145,12 @@ class ASTValueStringConcatenation extends ASTValue<String> {
   @override
   FutureOr<String> getValueNoContext() {
     var vsFuture = values.map((e) => e.getValueNoContext()).toList();
+    return vsFuture.resolveAllJoined((l) => l.join());
+  }
+
+  @override
+  FutureOr<String> getHashcodeValue(VMContext? context) {
+    var vsFuture = values.map((e) => e.getHashcodeValue(context)).toList();
     return vsFuture.resolveAllJoined((l) => l.join());
   }
 
@@ -1230,6 +1286,10 @@ class ASTClassInstance<V extends ASTValue> extends ASTValue<V> {
     if (type.name != clazz.name) {
       throw StateError('Incompatible class with type: $clazz != $type');
     }
+  }
+
+  VMClassContext createContext(VMContext? parentContext) {
+    return clazz.createContext(parentContext?.typeResolver, parentContext);
   }
 
   @override

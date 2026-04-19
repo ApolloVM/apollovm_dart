@@ -80,19 +80,20 @@ class DartGrammarDefinition extends DartGrammarLexer {
       (functionDeclaration() | classDeclaration()).plus();
 
   Parser<ASTFunctionDeclaration> functionDeclaration() =>
-      (type() & identifier() & parametersDeclaration() & codeBlock()).map((v) {
-        var returnType = v[0];
-        var parameters = v[2];
-        var name = v[1];
-        var block = v[3];
-        return ASTFunctionDeclaration(
-          name,
-          parameters,
-          returnType,
-          block: block,
-          modifiers: ASTModifiers.modifierStatic,
-        );
-      });
+      (type() & identifier() & functionParametersDeclaration() & codeBlock())
+          .map((v) {
+            var returnType = v[0];
+            var parameters = v[2];
+            var name = v[1];
+            var block = v[3];
+            return ASTFunctionDeclaration(
+              name,
+              parameters,
+              returnType,
+              block: block,
+              modifiers: ASTModifiers.modifierStatic,
+            );
+          });
 
   Parser<ASTClassNormal> classDeclaration() =>
       (string('class').trimHidden() & identifier() & classCodeBlock()).map((v) {
@@ -105,7 +106,8 @@ class DartGrammarDefinition extends DartGrammarLexer {
 
   Parser<ASTBlock> classCodeBlock() =>
       (char('{').trimHidden() &
-              (ref0(classFunctionDeclaration) |
+              (ref0(classConstructorDefaultDeclaration) |
+                      ref0(classFunctionDeclaration) |
                       ref0(classFieldDeclaration) |
                       ref0(classFieldDeclarationWithValue))
                   .star() &
@@ -113,22 +115,31 @@ class DartGrammarDefinition extends DartGrammarLexer {
           .map((v) {
             var list = v[1] as List;
             var fields = list.whereType<ASTClassField>().toList();
+            var constructors = list
+                .whereType<ASTClassConstructorDeclaration>()
+                .toList();
             var functions = list.whereType<ASTFunctionDeclaration>().toList();
 
             var block = ASTClassNormal('?', ASTType<VMObject>('?'), null);
 
             block.addAllFields(fields);
+            block.addAllConstructors(constructors);
             block.addAllFunctions(functions);
 
             return block;
           });
 
   Parser<ASTClassField> classFieldDeclaration() =>
-      (type() & identifier() & char(';').trimHidden()).map((v) {
-        var type = v[0] as ASTType;
-        var name = v[1] as String;
-        return ASTClassField(type, name, false);
-      });
+      (finalToken().optional() &
+              type().trimHidden() &
+              identifier().trimHidden() &
+              char(';').trimHidden())
+          .map((v) {
+            var finalValue = v[0] != null;
+            var type = v[1] as ASTType;
+            var name = v[2] as String;
+            return ASTClassField(type, name, finalValue);
+          });
 
   Parser<ASTClassField> classFieldDeclarationWithValue() =>
       (type() &
@@ -144,17 +155,87 @@ class DartGrammarDefinition extends DartGrammarLexer {
             return ASTClassFieldWithInitialValue(type, name, expression, false);
           });
 
+  Parser<ASTClassConstructorDeclaration> classConstructorDefaultDeclaration() =>
+      (identifier() &
+              constructorParametersDeclaration() &
+              (char(';').trim() | codeBlock()))
+          .map((v) {
+            var className = v[0];
+            var parameters = v[1] as ASTConstructorParametersDeclaration;
+            var optionalBlock = v[2];
+            var block = optionalBlock is ASTBlock ? optionalBlock : null;
+            return ASTClassConstructorDeclaration(
+              ASTType(className),
+              '',
+              parameters,
+              block: block,
+            );
+          });
+
+  Parser<ASTConstructorParametersDeclaration>
+  constructorParametersDeclaration() =>
+      (functionEmptyParametersDeclaration() |
+              constructorPositionalParametersDeclaration())
+          .cast<ASTConstructorParametersDeclaration>();
+
+  Parser<ASTConstructorParametersDeclaration>
+  constructorEmptyParametersDeclaration() => (char('(') & char(')')).map((v) {
+    return ASTConstructorParametersDeclaration(null, null, null);
+  });
+
+  Parser<ASTConstructorParametersDeclaration>
+  constructorPositionalParametersDeclaration() =>
+      (char('(') & constructorParametersList() & char(')')).map((v) {
+        return ASTConstructorParametersDeclaration(v[1], null, null);
+      });
+
+  Parser<List<ASTConstructorParameterDeclaration>>
+  constructorParametersList() =>
+      (constructorParameterDeclaration() &
+              (char(',') & constructorParameterDeclaration()).star() &
+              char(',').optional())
+          .map((v) {
+            var params = _expandListDeeply(v);
+            return params
+                .whereType<ASTConstructorParameterDeclaration>()
+                .toList();
+          });
+
+  Parser<ASTConstructorParameterDeclaration>
+  constructorParameterDeclaration() =>
+      (constructorThisParameterDeclaration() |
+              constructorTypedParameterDeclaration())
+          .map((v) => v);
+
+  Parser<ASTConstructorParameterDeclaration>
+  constructorThisParameterDeclaration() =>
+      (thisToken().trim() & char('.') & identifier()).map((v) {
+        return ASTConstructorParameterDeclaration(
+          ASTTypeConstructorThis.instance,
+          v[2],
+          -1,
+          false,
+          thisParameter: true,
+        );
+      });
+
+  Parser<ASTConstructorParameterDeclaration>
+  constructorTypedParameterDeclaration() =>
+      (finalToken().trim().optional() & type().trim() & identifier()).map((v) {
+        return ASTConstructorParameterDeclaration(v[1], v[2], -1, false);
+      });
+
   Parser<ASTFunctionDeclaration> classFunctionDeclaration() =>
       (functionModifiers().optional() &
               type() &
               identifier() &
-              parametersDeclaration() &
+              functionParametersDeclaration() &
               codeBlock())
           .map((v) {
             var modifiers = v[0];
             var returnType = v[1] as ASTType;
             var name = v[2] as String;
-            var parameters = v[3] as ASTParametersDeclaration;
+            var parameters = v[3] as ASTFunctionParametersDeclaration;
             var block = v[4] as ASTBlock;
             return ASTClassFunctionDeclaration(
               null,
@@ -263,17 +344,55 @@ class DartGrammarDefinition extends DartGrammarLexer {
       });
 
   Parser<ASTStatementVariableDeclaration> statementVariableDeclaration() =>
-      (type() &
-              identifier() &
+      (
+          // var definition:
+          (
+              // final Type name:
+              (finalToken().trimHidden() & type() & identifier().trimHidden()) |
+                  // final name:
+                  (finalToken() & identifier().trimHidden()) |
+                  // Type name:
+                  (type() & identifier().trimHidden())
+              // end var definition
+              ) &
               (char('=').trimHidden() & ref0(expression)).optional() &
               char(';').trimHidden())
           .map((v) {
-            var type = v[0] as ASTType;
-            var name = v[1] as String;
-            var valueOpt = v[2];
+            var varDef = v[0] as List;
+
+            bool unmodifiable;
+            ASTType type;
+            String name;
+
+            if (varDef.length == 3) {
+              unmodifiable = true;
+              assert((varDef[0] as Token).value == 'final');
+              type = varDef[1];
+              name = varDef[2];
+            } else if (varDef.length == 2) {
+              final varDef0 = varDef[0];
+              if (varDef0 is Token && varDef0.value == 'final') {
+                unmodifiable = true;
+                type = getTypeByName('final');
+                name = varDef[1];
+              } else {
+                unmodifiable = false;
+                type = varDef[0];
+                name = varDef[1];
+              }
+            } else {
+              throw StateError("Invalid var definition: $varDef");
+            }
+
+            var valueOpt = v[1];
             var value = valueOpt != null ? valueOpt[1] as ASTExpression : null;
             if (value != null) type.associateToType(value);
-            return ASTStatementVariableDeclaration(type, name, value);
+            return ASTStatementVariableDeclaration(
+              type,
+              name,
+              value,
+              unmodifiable: unmodifiable,
+            );
           });
 
   Parser<ASTBranch> branch() =>
@@ -709,30 +828,40 @@ class DartGrammarDefinition extends DartGrammarLexer {
     return ASTScopeVariable(v);
   });
 
-  Parser<ASTParametersDeclaration> parametersDeclaration() =>
-      (emptyParametersDeclaration() | positionalParametersDeclaration())
-          .cast<ASTParametersDeclaration>();
+  Parser<ASTFunctionParametersDeclaration> functionParametersDeclaration() =>
+      (functionEmptyParametersDeclaration() |
+              functionPositionalParametersDeclaration())
+          .cast<ASTFunctionParametersDeclaration>();
 
-  Parser<ASTParametersDeclaration> emptyParametersDeclaration() =>
-      (char('(') & char(')')).map((v) {
-        return ASTParametersDeclaration(null, null, null);
-      });
+  Parser<ASTFunctionParametersDeclaration>
+  functionEmptyParametersDeclaration() => (char('(') & char(')')).map((v) {
+    return ASTFunctionParametersDeclaration(null, null, null);
+  });
 
-  Parser<ASTParametersDeclaration> positionalParametersDeclaration() =>
+  Parser<ASTFunctionParametersDeclaration>
+  functionPositionalParametersDeclaration() =>
       (char('(') & parametersList() & char(')')).map((v) {
-        return ASTParametersDeclaration(v[1], null, null);
+        return ASTFunctionParametersDeclaration(v[1], null, null);
       });
 
   Parser<List<ASTFunctionParameterDeclaration>> parametersList() =>
-      (parameterDeclaration() & (char(',') & parameterDeclaration()).star())
+      (parameterDeclaration() &
+              (char(',') & parameterDeclaration()).star() &
+              char(',').optional())
           .map((v) {
             var params = _expandListDeeply(v);
             return params.whereType<ASTFunctionParameterDeclaration>().toList();
           });
 
   Parser<ASTFunctionParameterDeclaration> parameterDeclaration() =>
-      (type() & identifier()).map((v) {
-        return ASTFunctionParameterDeclaration(v[0], v[1], -1, false);
+      (finalToken().trim().optional() & type().trim() & identifier()).map((v) {
+        return ASTFunctionParameterDeclaration(
+          v[1],
+          v[2],
+          -1,
+          false,
+          unmodifiable: v[0] != null,
+        );
       });
 
   Parser<ASTType> type() =>
@@ -858,6 +987,18 @@ class DartGrammarDefinition extends DartGrammarLexer {
     if (l.isEmpty) return l;
     if (l.length == 1 && l[0] is! List) return l;
 
-    return l.expand((e) => e is List ? _expandListDeeply(e) : [e]).toList();
+    final result = [];
+    _expandInto(l, result);
+    return result;
+  }
+
+  static void _expandInto(List source, List target) {
+    for (final e in source) {
+      if (e is List) {
+        _expandInto(e, target);
+      } else {
+        target.add(e);
+      }
+    }
   }
 }

@@ -2,16 +2,9 @@
 // This code is governed by the Apache License, Version 2.0.
 // Please refer to the LICENSE and AUTHORS files for details.
 
-import 'dart:async';
 import 'dart:math';
 
-import '../apollovm_base.dart';
-import '../ast/apollovm_ast_base.dart';
-import '../ast/apollovm_ast_statement.dart';
-import '../ast/apollovm_ast_toplevel.dart';
-import '../ast/apollovm_ast_type.dart';
-import '../ast/apollovm_ast_value.dart';
-import '../ast/apollovm_ast_variable.dart';
+import 'package:apollovm/apollovm.dart';
 
 class ApolloVMCore {
   static ASTClass<V>? getClass<V>(String className, {List<ASTType>? generics}) {
@@ -48,7 +41,7 @@ abstract class CorePackageBase extends ASTBlock {
   ]) {
     return ASTExternalFunction<R>(
       name,
-      ASTParametersDeclaration([param1], null, null),
+      ASTFunctionParametersDeclaration([param1], null, null),
       returnType,
       externalFunction,
       parameterValueResolver,
@@ -65,7 +58,7 @@ abstract class CorePackageBase extends ASTBlock {
   ]) {
     return ASTExternalFunction<R>(
       name,
-      ASTParametersDeclaration([param1, param2], null, null),
+      ASTFunctionParametersDeclaration([param1, param2], null, null),
       returnType,
       externalFunction,
       parameterValueResolver,
@@ -269,13 +262,16 @@ abstract mixin class CoreClassMixin<T> {
   ASTExternalClassGetter<R> _externalClassGetter<R>(
     String name,
     ASTType<R> returnType,
-    Function(Object? o) externalFunction,
-  ) {
+    Function(Object? o) externalFunction, [
+    FutureOr<ASTType> Function(VMContext? context, ASTNode? o)?
+    returnTypeResolver,
+  ]) {
     return ASTExternalClassGetter<R>(
       astClass,
       name,
       returnType,
       externalFunction,
+      returnTypeResolver,
     );
   }
 
@@ -288,7 +284,7 @@ abstract mixin class CoreClassMixin<T> {
     return ASTExternalClassFunction<R>(
       astClass,
       name,
-      ASTParametersDeclaration(null, null, null),
+      ASTFunctionParametersDeclaration(null, null, null),
       returnType,
       externalFunction,
       parameterValueResolver,
@@ -305,7 +301,7 @@ abstract mixin class CoreClassMixin<T> {
     return ASTExternalClassFunction<R>(
       astClass,
       name,
-      ASTParametersDeclaration([param1], null, null),
+      ASTFunctionParametersDeclaration([param1], null, null),
       returnType,
       externalFunction,
       parameterValueResolver,
@@ -323,7 +319,7 @@ abstract mixin class CoreClassMixin<T> {
     return ASTExternalClassFunction<R>(
       astClass,
       name,
-      ASTParametersDeclaration([param1, param2], null, null),
+      ASTFunctionParametersDeclaration([param1, param2], null, null),
       returnType,
       externalFunction,
       parameterValueResolver,
@@ -339,7 +335,7 @@ abstract mixin class CoreClassMixin<T> {
   ]) {
     return ASTExternalFunction<R>(
       name,
-      ASTParametersDeclaration(null, null, null),
+      ASTFunctionParametersDeclaration(null, null, null),
       returnType,
       externalFunction,
       parameterValueResolver,
@@ -355,7 +351,7 @@ abstract mixin class CoreClassMixin<T> {
   ]) {
     return ASTExternalFunction<R>(
       name,
-      ASTParametersDeclaration([param1], null, null),
+      ASTFunctionParametersDeclaration([param1], null, null),
       returnType,
       externalFunction,
       parameterValueResolver,
@@ -964,6 +960,8 @@ class CoreClassList<T> extends CoreClassBase<List<T>> {
   late final ASTExternalClassGetter _getterLength;
   late final ASTExternalClassGetter _getterIsEmpty;
   late final ASTExternalClassGetter _getterIsNotEmpty;
+  late final ASTExternalClassGetter _getterFirst;
+  late final ASTExternalClassGetter _getterLast;
 
   late final ASTExternalClassFunction _functionAdd;
   late final ASTExternalClassFunction _functionAddAll;
@@ -986,6 +984,21 @@ class CoreClassList<T> extends CoreClassBase<List<T>> {
   late final ASTExternalClassFunction _functionSublist;
 
   late final ASTExternalFunction _functionValueOf;
+
+  FutureOr<ASTType> _resolveComponentType(VMContext? context, ASTNode? node) {
+    if (node is ASTValueArray) {
+      var typeAsync = context != null
+          ? node.resolveRuntimeType(context, null)
+          : node.resolveType(null);
+      return typeAsync.resolveMapped((t) {
+        if (t is ASTTypeArray) {
+          return t.componentType;
+        }
+        return ASTTypeDynamic.instance;
+      });
+    }
+    return ASTTypeDynamic.instance;
+  }
 
   CoreClassList._()
     : super(
@@ -1011,6 +1024,20 @@ class CoreClassList<T> extends CoreClassBase<List<T>> {
       'isNotEmpty',
       ASTTypeBool.instance,
       (Object? o) => o is List ? o.isNotEmpty : null,
+    );
+
+    _getterFirst = _externalClassGetter(
+      'first',
+      ASTTypeDynamic.instance,
+      (Object? o) => o is List ? o.first : null,
+      _resolveComponentType,
+    );
+
+    _getterLast = _externalClassGetter(
+      'last',
+      ASTTypeDynamic.instance,
+      (Object? o) => o is List ? o.last : null,
+      _resolveComponentType,
     );
 
     _functionAdd = _externalClassFunctionArgs1(
@@ -1192,6 +1219,10 @@ class CoreClassList<T> extends CoreClassBase<List<T>> {
         return _getterIsEmpty;
       case 'isNotEmpty':
         return _getterIsNotEmpty;
+      case 'first':
+        return _getterFirst;
+      case 'last':
+        return _getterLast;
     }
 
     throw StateError("Can't find core getter: $coreName.$fName");
@@ -1346,4 +1377,21 @@ class CoreClassList<T> extends CoreClassBase<List<T>> {
   }) {
     throw UnimplementedError();
   }
+
+  @override
+  List<ASTConstructorSet> get constructors => [];
+
+  @override
+  List<String> get constructorsNames => [];
+
+  @override
+  ASTClassConstructorDeclaration? getConstructor(
+    String fName,
+    ASTFunctionSignature? parametersSignature,
+    VMContext context, {
+    bool caseInsensitive = false,
+  }) => null;
+
+  @override
+  void resolveNodeConstructors(ASTNode? parentNode) {}
 }

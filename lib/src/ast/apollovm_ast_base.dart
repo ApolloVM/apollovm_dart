@@ -114,6 +114,9 @@ class ASTRunStatus {
 abstract class ASTTypedNode {
   FutureOr<ASTType> resolveType(VMContext? context);
 
+  FutureOr<ASTType> resolveRuntimeType(VMContext context, ASTNode? node) =>
+      resolveType(context);
+
   void associateToType(ASTTypedNode node) {}
 }
 

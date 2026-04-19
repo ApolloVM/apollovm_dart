@@ -23,6 +23,10 @@ abstract class ASTVariable with ASTNode implements ASTTypedNode {
   ASTType? get typeIdentifier => null;
 
   @override
+  FutureOr<ASTType> resolveRuntimeType(VMContext context, ASTNode? node) =>
+      resolveType(context);
+
+  @override
   void associateToType(ASTTypedNode node) {}
 
   FutureOr<ASTVariable> resolveVariable(VMContext context);
@@ -81,6 +85,10 @@ abstract class ASTTypedVariable<T> extends ASTVariable {
 
   @override
   ASTType resolveType(VMContext? context) => type;
+
+  @override
+  FutureOr<ASTType> resolveRuntimeType(VMContext context, ASTNode? node) =>
+      resolveType(context);
 
   @override
   void resolveNode(ASTNode? parentNode) {
