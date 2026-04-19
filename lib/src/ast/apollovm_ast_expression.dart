@@ -60,7 +60,41 @@ abstract class ASTExpression with ASTNode implements ASTCodeRunner {
   }
 
   @override
+  FutureOr<ASTType> resolveRuntimeType(VMContext context, ASTNode? node) {
+    return resolveType(context).resolveMapped((resolvedType) {
+      if (node == null) return resolvedType;
+
+      if (node is ASTTypedNode) {
+        var typedNode = node as ASTTypedNode;
+
+        return typedNode.resolveRuntimeType(context, null).resolveMapped((
+          nodeType,
+        ) {
+          if (resolvedType != nodeType && resolvedType.acceptsType(nodeType)) {
+            return nodeType;
+          }
+          return resolvedType;
+        });
+      }
+
+      return resolvedType;
+    });
+  }
+
+  @override
   void associateToType(ASTTypedNode node) {}
+
+  FutureOr<Object?> getHashcodeValue(VMContext? context) {
+    if (context != null) {
+      var res = run(
+        context,
+        ASTRunStatus(),
+      ).resolveMapped((result) => result.getValue(context));
+      return res;
+    } else {
+      return '$this';
+    }
+  }
 
   bool get hasLiteralString =>
       children.whereType<ASTExpressionLiteral>().any((e) => e.isLiteralString);
@@ -173,6 +207,11 @@ class ASTExpressionNullValue extends ASTExpression {
   }
 
   @override
+  FutureOr<Object?> getHashcodeValue(VMContext? context) {
+    return null;
+  }
+
+  @override
   String toString({bool asGroup = false}) {
     return 'null';
   }
@@ -243,6 +282,11 @@ class ASTExpressionLiteral extends ASTExpression {
   }
 
   @override
+  FutureOr<Object?> getHashcodeValue(VMContext? context) {
+    return value.getHashcodeValue(context);
+  }
+
+  @override
   String toString({bool asGroup = false}) {
     return '$value';
   }
@@ -302,6 +346,11 @@ class ASTExpressionListLiteral extends ASTExpression {
             });
       });
     });
+  }
+
+  @override
+  FutureOr<Object?> getHashcodeValue(VMContext? context) {
+    return valuesExpressions.map((e) => e.getHashcodeValue(context)).toList();
   }
 
   @override
@@ -383,6 +432,18 @@ class ASTExpressionMapLiteral extends ASTExpression {
         });
       });
     });
+  }
+
+  @override
+  FutureOr<Object?> getHashcodeValue(VMContext? context) {
+    return entriesExpressions
+        .map(
+          (e) => (
+            e.key.getHashcodeValue(context),
+            e.value.getHashcodeValue(context),
+          ),
+        )
+        .toList();
   }
 
   @override
@@ -645,6 +706,39 @@ class ASTExpressionOperation extends ASTExpression {
         {
           var retT1 = expression1.resolveType(context);
           var retT2 = expression2.resolveType(context);
+
+          return retT1.resolveBoth(
+            retT2,
+            (t1, t2) => _resolveTypePair(t1, t2, context),
+          );
+        }
+      case ASTExpressionOperator.divideAsInt:
+        return ASTTypeInt.instance;
+      case ASTExpressionOperator.divideAsDouble:
+        return ASTTypeDouble.instance;
+      case ASTExpressionOperator.equals:
+      case ASTExpressionOperator.notEquals:
+      case ASTExpressionOperator.greater:
+      case ASTExpressionOperator.greaterOrEq:
+      case ASTExpressionOperator.lower:
+      case ASTExpressionOperator.lowerOrEq:
+      case ASTExpressionOperator.and:
+      case ASTExpressionOperator.or:
+        return ASTTypeBool.instance;
+    }
+  }
+
+  @override
+  FutureOr<ASTType> resolveRuntimeType(VMContext context, ASTNode? node) {
+    switch (operator) {
+      case ASTExpressionOperator.add:
+      case ASTExpressionOperator.subtract:
+      case ASTExpressionOperator.multiply:
+      case ASTExpressionOperator.divide:
+      case ASTExpressionOperator.remainder:
+        {
+          var retT1 = expression1.resolveRuntimeType(context, null);
+          var retT2 = expression2.resolveRuntimeType(context, null);
 
           return retT1.resolveBoth(
             retT2,
@@ -1361,22 +1455,19 @@ abstract class ASTExpressionFunctionInvocation extends ASTExpression {
     return _functionSignature!;
   }
 
-  FutureOr<ASTFunctionDeclaration> _getFunction(VMContext parentContext);
+  FutureOr<ASTInvocableDeclaration> _getFunction(VMContext parentContext);
 
   @override
-  FutureOr<ASTValue> run(
-    VMContext parentContext,
-    ASTRunStatus runStatus,
-  ) async {
-    var f = await _getFunction(parentContext);
-
-    var argumentsValues = await _resolveArgumentsValues(
-      parentContext,
-      runStatus,
-      arguments,
-    );
-
-    return f.call(parentContext, positionalParameters: argumentsValues);
+  FutureOr<ASTValue> run(VMContext parentContext, ASTRunStatus runStatus) {
+    return _getFunction(parentContext).resolveMapped((f) {
+      return _resolveArgumentsValues(
+        parentContext,
+        runStatus,
+        arguments,
+      ).resolveMapped((argumentsValues) {
+        return f.call(parentContext, positionalParameters: argumentsValues);
+      });
+    });
   }
 
   @override
@@ -1385,16 +1476,14 @@ abstract class ASTExpressionFunctionInvocation extends ASTExpression {
   }
 }
 
-Future<List<ASTValue>> _resolveArgumentsValues(
+FutureOr<List<ASTValue>> _resolveArgumentsValues(
   VMContext parentContext,
   ASTRunStatus runStatus,
   List<ASTExpression> arguments,
-) async {
-  var argumentsFuture = arguments.map((e) async {
-    return await e.run(parentContext, runStatus);
-  }).toList();
-
-  var argumentsValues = await Future.wait(argumentsFuture);
+) {
+  var argumentsValues = arguments
+      .map((a) => a.run(parentContext, runStatus))
+      .resolveAll();
   return argumentsValues;
 }
 
@@ -1407,7 +1496,7 @@ class ASTExpressionLocalFunctionInvocation
   bool get isComplex => false;
 
   @override
-  ASTFunctionDeclaration _getFunction(VMContext parentContext) {
+  ASTInvocableDeclaration _getFunction(VMContext parentContext) {
     var fSignature = _getASTFunctionSignature();
     var f = parentContext.getFunction(name, fSignature);
 
@@ -1473,7 +1562,9 @@ class ASTExpressionObjectFunctionInvocation
   }
 
   @override
-  FutureOr<ASTFunctionDeclaration> _getFunction(VMContext parentContext) async {
+  FutureOr<ASTInvocableDeclaration> _getFunction(
+    VMContext parentContext,
+  ) async {
     var clazz = await _getFunctionClass(parentContext);
     var fSignature = _getASTFunctionSignature();
 
@@ -1623,45 +1714,101 @@ class ASTExpressionObjectGetterAccess extends ASTExpressionGetterAccess {
 
   ASTClass? _getterClass;
 
-  FutureOr<ASTClass> _getGetterClass(VMContext parentContext) async {
-    if (_getterClass == null) {
-      var clazz = await _getObjectClass(parentContext);
-      _getterClass = clazz;
+  FutureOr<ASTClass> _getGetterClass(VMContext parentContext) {
+    final clazz = _getterClass;
+
+    if (clazz == null) {
+      return _getObjectClass(parentContext).resolveMapped((clazz) {
+        return _getterClass = clazz;
+      });
     }
-    return _getterClass!;
+
+    return clazz;
   }
 
   @override
-  FutureOr<ASTGetterDeclaration> _getGetter(VMContext parentContext) async {
-    var clazz = await _getGetterClass(parentContext);
+  FutureOr<ASTGetterDeclaration> _getGetter(VMContext parentContext) {
+    return _getGetterClass(parentContext).resolveMapped((clazz) {
+      var g = clazz.getGetter(name, parentContext);
+      if (g == null) {
+        return _getVariableValue(parentContext).resolveMapped((obj) {
+          throw ApolloVMRuntimeError(
+            "Can't find class[${clazz.name}] getter[$name] for object: $obj",
+          );
+        });
+      }
 
-    var g = clazz.getGetter(name, parentContext);
-
-    if (g == null) {
-      var obj = await _getVariableValue(parentContext);
-      throw ApolloVMRuntimeError(
-        "Can't find class[${clazz.name}] getter[$name] for object: $obj",
-      );
-    }
-
-    return g;
+      return g;
+    });
   }
 
   @override
-  FutureOr<ASTValue> run(
-    VMContext parentContext,
-    ASTRunStatus runStatus,
-  ) async {
-    var f = await _getGetter(parentContext);
-
-    var obj = await _getVariableValue(parentContext);
-
-    if (f is ASTClassGetterDeclaration) {
-      return f.objectCall(parentContext, obj);
-    } else {
-      // Static getter call:
-      return f.call(parentContext);
+  FutureOr<ASTType> resolveType(VMContext? context) {
+    if (context == null) {
+      return super.resolveType(context);
     }
+
+    return _getVariableValue(context).resolveMapped((obj) {
+      if (obj is ASTClassInstance) {
+        var classContext = obj.createContext(context);
+        return obj.getField(classContext, name).resolveMapped((fieldValue) {
+          if (fieldValue != null) {
+            return fieldValue.type;
+          }
+          return super.resolveType(context);
+        });
+      }
+
+      return super.resolveType(context);
+    });
+  }
+
+  @override
+  FutureOr<ASTType<dynamic>> resolveRuntimeType(
+    VMContext context,
+    ASTNode? node,
+  ) {
+    return _getVariableValue(context).resolveMapped((obj) {
+      if (obj is ASTClassInstance) {
+        var classContext = obj.createContext(context);
+        return obj.getField(classContext, name).resolveMapped((fieldValue) {
+          if (fieldValue != null) {
+            return fieldValue.type;
+          }
+          return super.resolveRuntimeType(context, node);
+        });
+      }
+
+      return super.resolveRuntimeType(context, node);
+    });
+  }
+
+  @override
+  FutureOr<ASTValue> run(VMContext parentContext, ASTRunStatus runStatus) {
+    return _getVariableValue(parentContext).resolveMapped((obj) {
+      if (obj is ASTClassInstance) {
+        var classContext = obj.createContext(parentContext);
+        return obj.getField(classContext, name).resolveMapped((fieldValue) {
+          if (fieldValue != null) {
+            return fieldValue;
+          }
+          return _runGetter(parentContext, obj);
+        });
+      }
+
+      return _runGetter(parentContext, obj);
+    });
+  }
+
+  FutureOr<ASTValue> _runGetter(VMContext parentContext, ASTValue obj) {
+    return _getGetter(parentContext).resolveMapped((g) {
+      if (g is ASTClassGetterDeclaration) {
+        return g.objectCall(parentContext, obj);
+      } else {
+        // Static getter call:
+        return g.call(parentContext);
+      }
+    });
   }
 
   @override

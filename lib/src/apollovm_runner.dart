@@ -162,7 +162,7 @@ abstract class ApolloRunner implements VMTypeResolver {
   ///
   /// - [positionalParameters] and [namedParameters] are used to
   /// determine the method parameters signature.
-  FutureOr<ASTFunctionDeclaration?> getClassMethod(
+  FutureOr<ASTInvocableDeclaration?> getClassMethod(
     String namespace,
     String className,
     String methodName, [
@@ -273,18 +273,18 @@ abstract class ApolloRunner implements VMTypeResolver {
   ///
   /// - [positionalParameters] and [namedParameters] are used to
   /// determine the function parameters signature.
-  FutureOr<ASTFunctionDeclaration?> getFunction(
+  FutureOr<ASTInvocableDeclaration?> getFunction(
     String namespace,
     String functionName, [
     List? positionalParameters,
     Map? namedParameters,
-  ]) async {
+  ]) {
     var codeNamespace = _languageNamespaces.get(namespace);
 
     var codeUnit = codeNamespace.getCodeUnitWithFunction(functionName);
     if (codeUnit == null) return null;
 
-    return await codeUnit.root!.getFunctionWithParameters(
+    return codeUnit.root!.getFunctionWithParameters(
       functionName,
       positionalParameters,
       namedParameters,

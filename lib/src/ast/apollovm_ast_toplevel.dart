@@ -4,12 +4,12 @@
 
 import 'dart:math' as math;
 
-import '../apollovm_utils.dart';
 import 'package:async_extension/async_extension.dart';
 import 'package:collection/collection.dart'
     show IterableExtension, equalsIgnoreAsciiCase, CombinedListView;
 
 import '../apollovm_base.dart';
+import '../apollovm_utils.dart';
 import '../core/apollovm_core_base.dart';
 import 'apollovm_ast_base.dart';
 import 'apollovm_ast_statement.dart';
@@ -65,7 +65,7 @@ class ASTEntryPointBlock extends ASTBlock {
       if (!f.modifiers.isStatic) {
         if (this is ASTClass) {
           var clazz = this as ASTClass;
-          var classContext = clazz._createContext(typeResolver, rootContext);
+          var classContext = clazz.createContext(typeResolver, rootContext);
           var obj = (await clazz.createInstance(
             classContext,
             ASTRunStatus.dummy,
@@ -114,7 +114,7 @@ class ASTEntryPointBlock extends ASTBlock {
     }
   }
 
-  FutureOr<ASTFunctionDeclaration?> getFunctionWithParameters(
+  FutureOr<ASTInvocableDeclaration?> getFunctionWithParameters(
     String entryFunctionName,
     List? positionalParameters,
     Map? namedParameters, {
@@ -163,7 +163,7 @@ class ASTEntryPointBlock extends ASTBlock {
     VMTypeResolver? typeResolver,
   ) async {
     if (_rootContext == null) {
-      var rootContext = _createContext(typeResolver);
+      var rootContext = createContext(typeResolver);
       var rootStatus = ASTRunStatus();
       _rootContext = rootContext;
 
@@ -190,7 +190,7 @@ class ASTEntryPointBlock extends ASTBlock {
     return _rootContext!;
   }
 
-  VMContext _createContext(VMTypeResolver? typeResolver) =>
+  VMContext createContext(VMTypeResolver? typeResolver) =>
       VMContext(this, typeResolver: typeResolver);
 }
 
@@ -207,10 +207,23 @@ abstract class ASTClass<T> extends ASTEntryPointBlock {
   }
 
   @override
-  VMClassContext _createContext(
+  VMClassContext createContext(
     VMTypeResolver? typeResolver, [
     VMContext? parentContext,
   ]) => VMClassContext(this, parent: parentContext, typeResolver: typeResolver);
+
+  List<ASTConstructorSet> get constructors;
+
+  void resolveNodeConstructors(ASTNode? parentNode);
+
+  List<String> get constructorsNames;
+
+  ASTClassConstructorDeclaration? getConstructor(
+    String fName,
+    ASTFunctionSignature? parametersSignature,
+    VMContext context, {
+    bool caseInsensitive = false,
+  });
 
   List<ASTClassField> get fields;
 
@@ -325,6 +338,7 @@ abstract class ASTClass<T> extends ASTEntryPointBlock {
   void resolveNode(ASTNode? parentNode) {
     super.resolveNode(parentNode);
     resolveNodeFields(parentNode);
+    resolveNodeConstructors(parentNode);
   }
 
   void resolveNodeFields(ASTNode? parentNode);
@@ -336,6 +350,27 @@ class ASTClassPrimitive<T> extends ASTClass<T> {
 
   @override
   void set(ASTBlock? other) {}
+
+  @override
+  List<ASTConstructorSet> get constructors => <ASTConstructorSet>[];
+
+  @override
+  List<String> get constructorsNames => <String>[];
+
+  @override
+  ASTClassConstructorDeclaration? getConstructor(
+    String fName,
+    ASTFunctionSignature? parametersSignature,
+    VMContext context, {
+    bool caseInsensitive = false,
+  }) => null;
+
+  @override
+  void resolveNodeConstructors(ASTNode? parentNode) {
+    for (var c in constructors) {
+      c.resolveNode(this);
+    }
+  }
 
   @override
   List<ASTClassField> get fields => <ASTClassField>[];
@@ -451,9 +486,94 @@ class ASTClassNormal extends ASTClass<VMObject> {
     if (other is ASTClassNormal) {
       _fields.clear();
       addAllFields(other._fields.values);
+
+      _constructors.clear();
+      addAllConstructors(other._constructors.values.expand((e) => e.functions));
     }
 
     super.set(other);
+  }
+
+  final Map<String, ASTConstructorSet> _constructors =
+      <String, ASTConstructorSet>{};
+
+  @override
+  List<ASTConstructorSet> get constructors => _constructors.values.toList();
+
+  @override
+  void resolveNodeConstructors(ASTNode? parentNode) {
+    for (var f in _constructors.values) {
+      f.resolveNode(this);
+    }
+  }
+
+  @override
+  List<String> get constructorsNames => _constructors.keys.toList();
+
+  ASTConstructorSet? getConstructorWithName(
+    String name, {
+    bool caseInsensitive = false,
+  }) {
+    var c = _constructors[name];
+
+    if (c == null && caseInsensitive) {
+      for (var entry in _constructors.entries) {
+        if (equalsIgnoreAsciiCase(entry.key, name)) {
+          c = entry.value;
+          break;
+        }
+      }
+    }
+
+    return c;
+  }
+
+  bool containsConstructorWithName(
+    String name, {
+    bool caseInsensitive = false,
+  }) {
+    var set = getConstructorWithName(name, caseInsensitive: caseInsensitive);
+    return set != null;
+  }
+
+  @override
+  ASTClassConstructorDeclaration? getConstructor(
+    String fName,
+    ASTFunctionSignature? parametersSignature,
+    VMContext context, {
+    bool caseInsensitive = false,
+  }) {
+    var set = getConstructorWithName(fName, caseInsensitive: caseInsensitive);
+    if (set == null) return null;
+
+    if (parametersSignature == null) {
+      return set.firstFunction;
+    } else {
+      return set.get(parametersSignature, false);
+    }
+  }
+
+  void addConstructor(ASTClassConstructorDeclaration constructor) {
+    var name = constructor.name;
+    constructor.parentBlock = this;
+
+    var set = _constructors[name];
+    if (set == null) {
+      _constructors[name] = ASTConstructorSetSingle(constructor);
+    } else {
+      var set2 = set.add(constructor);
+      if (!identical(set, set2)) {
+        _constructors[name] = set2;
+      }
+    }
+  }
+
+  void addAllConstructors(
+    Iterable<ASTClassConstructorDeclaration> constructors,
+  ) {
+    for (var constructor in constructors) {
+      addConstructor(constructor);
+    }
   }
 
   final Map<String, ASTClassField> _fields = <String, ASTClassField>{};
@@ -668,7 +788,7 @@ class ASTClassNormal extends ASTClass<VMObject> {
       fieldName = vmObject.getFieldNameIgnoreCase(fieldName) ?? fieldName;
     }
 
-    var prevValue = vmObject.setFieldValue(name, value, context);
+    var prevValue = vmObject.setFieldValue(fieldName, value, context);
     return prevValue?.getValue(context);
   }
 
@@ -692,6 +812,11 @@ class ASTClassNormal extends ASTClass<VMObject> {
 
     var fieldValue = vmObject.removeFieldValue(fieldName, context);
     return fieldValue;
+  }
+
+  @override
+  String toString() {
+    return 'class $name';
   }
 }
 
@@ -722,6 +847,33 @@ class ASTRoot extends ASTEntryPointBlock {
   }
 
   String namespace = '';
+
+  @override
+  ASTInvocableDeclaration? getFunction(
+    String fName,
+    ASTFunctionSignature parametersSignature,
+    VMContext context, {
+    bool caseInsensitive = false,
+  }) {
+    var set = getFunctionWithName(fName, caseInsensitive: caseInsensitive);
+    if (set != null) return set.get(parametersSignature, false);
+
+    var clazz = getClass(fName);
+    if (clazz != null) {
+      var constructor = clazz.getConstructor('', null, context);
+      if (constructor != null &&
+          constructor.matchesParametersTypes(parametersSignature, false)) {
+        return constructor;
+      }
+    }
+
+    var fExternal = context.getMappedExternalFunction(
+      fName,
+      parametersSignature,
+    );
+
+    return fExternal;
+  }
 
   final Map<String, ASTClassNormal> _classes = <String, ASTClassNormal>{};
 
@@ -781,11 +933,13 @@ class ASTRoot extends ASTEntryPointBlock {
 
 /// An AST Parameter declaration.
 class ASTParameterDeclaration<T> with ASTNode implements ASTTypedNode {
-  final ASTType<T> type;
+  ASTType<T> _type;
+
+  ASTType<T> get type => _type;
 
   final String name;
 
-  ASTParameterDeclaration(this.type, this.name);
+  ASTParameterDeclaration(ASTType<T> type, this.name) : _type = type;
 
   @override
   Iterable<ASTNode> get children => [type];
@@ -795,6 +949,10 @@ class ASTParameterDeclaration<T> with ASTNode implements ASTTypedNode {
 
   @override
   FutureOr<ASTType> resolveType(VMContext? context) => type;
+
+  @override
+  FutureOr<ASTType> resolveRuntimeType(VMContext context, ASTNode? node) =>
+      resolveType(context);
 
   FutureOr<ASTValue<T>?> toValue(VMContext context, Object? v) =>
       type.toValue(context, v);
@@ -821,18 +979,71 @@ class ASTParameterDeclaration<T> with ASTNode implements ASTTypedNode {
   }
 }
 
+extension IterableASTParameterDeclarationExtension<
+  P extends ASTParameterDeclaration
+>
+    on Iterable<P> {
+  Iterable<P> withThisParameter() => where(
+    (p) =>
+        p.type is ASTTypeConstructorThis ||
+        (p is ASTConstructorParameterDeclaration && p.thisParameter),
+  );
+}
+
+class ASTConstructorParameterDeclaration<T> extends ASTParameterDeclaration {
+  final int index;
+
+  final bool optional;
+
+  final bool thisParameter;
+
+  ASTConstructorParameterDeclaration(
+    super.type,
+    super.name,
+    this.index,
+    this.optional, {
+    this.thisParameter = false,
+  });
+
+  @override
+  void resolveNode(ASTNode? parentNode) {
+    super.resolveNode(parentNode);
+
+    if (identical(type, ASTTypeConstructorThis.instance) &&
+        parentNode is ASTClassConstructorDeclaration) {
+      var parentClass = parentNode.parentClass;
+      var field = parentClass?.getField(name);
+      if (field != null) {
+        _type = field.type;
+      }
+    }
+  }
+
+  ASTFunctionParameterDeclaration toASTFunctionParameterDeclaration() =>
+      ASTFunctionParameterDeclaration(type, name, index, optional);
+}
+
+extension IterableASTConstructorParameterDeclarationExtension
+    on Iterable<ASTConstructorParameterDeclaration> {
+  List<ASTFunctionParameterDeclaration> toASTFunctionParameterDeclaration() =>
+      map((e) => e.toASTFunctionParameterDeclaration()).toList();
+}
+
 /// An AST Function Parameter declaration.
 class ASTFunctionParameterDeclaration<T> extends ASTParameterDeclaration<T> {
   final int index;
 
   final bool optional;
 
+  final bool unmodifiable;
+
   ASTFunctionParameterDeclaration(
     super.type,
     super.name,
     this.index,
-    this.optional,
-  );
+    this.optional, {
+    this.unmodifiable = false,
+  });
 }
 
 /// An AST Function Signature.
@@ -970,58 +1181,24 @@ class ASTFunctionSignature with ASTNode {
   }
 }
 
-/// An AST Function Set.
-abstract class ASTFunctionSet with ASTNode {
+/// Base AST Invokable Set.
+abstract class ASTInvokableSet<
+  P extends ASTParameterDeclaration,
+  PS extends ASTParametersDeclaration<P>,
+  F extends ASTInvocableDeclaration<dynamic, P, PS>
+>
+    with ASTNode {
+  String get invokableTypeName;
+
   String get name => firstFunction.name;
 
-  List<ASTFunctionDeclaration> get functions;
+  List<F> get functions;
 
-  ASTFunctionDeclaration get firstFunction;
+  F get firstFunction;
 
-  ASTFunctionDeclaration get(
-    ASTFunctionSignature parametersSignature,
-    bool exactTypes,
-  );
+  F get(ASTFunctionSignature parametersSignature, bool exactTypes);
 
-  ASTFunctionSet add(ASTFunctionDeclaration f);
-}
-
-/// [ASTFunctionSet] implementation, with 1 entry.
-class ASTFunctionSetSingle extends ASTFunctionSet {
-  final ASTFunctionDeclaration f;
-
-  ASTFunctionSetSingle(this.f);
-
-  @override
-  Iterable<ASTNode> get children => [f];
-
-  @override
-  ASTFunctionDeclaration get firstFunction => f;
-
-  @override
-  List<ASTFunctionDeclaration> get functions => [f];
-
-  @override
-  ASTFunctionDeclaration get(
-    ASTFunctionSignature parametersSignature,
-    bool exactTypes,
-  ) {
-    if (f.matchesParametersTypes(parametersSignature, exactTypes)) {
-      return f;
-    }
-
-    throw StateError(
-      'Function \'${f.name}\' parameters signature not compatible: sign:$parametersSignature != f:${f.parameters}',
-    );
-  }
-
-  @override
-  ASTFunctionSet add(ASTFunctionDeclaration f) {
-    var set = ASTFunctionSetMultiple();
-    set.add(this.f);
-    set.add(f);
-    return set;
-  }
+  ASTInvokableSet<P, PS, F> add(F f);
 
   ASTNode? _parentNode;
 
@@ -1032,41 +1209,82 @@ class ASTFunctionSetSingle extends ASTFunctionSet {
   void resolveNode(ASTNode? parentNode) {
     _parentNode = parentNode;
 
-    f.resolveNode(parentNode);
+    resolveFunctionsNodes(parentNode);
 
     cacheDescendantChildren();
   }
+
+  void resolveFunctionsNodes(ASTNode? parentNode);
 
   @override
   ASTNode? getNodeIdentifier(String name, {ASTNode? requester}) =>
       parentNode?.getNodeIdentifier(name, requester: requester);
 }
 
-/// [ASTFunctionSet] implementation, with multiple entries.
-class ASTFunctionSetMultiple extends ASTFunctionSet {
-  final List<ASTFunctionDeclaration> _functions = <ASTFunctionDeclaration>[];
+/// Base [ASTInvokableSet] implementation, with 1 entry.
+abstract class ASTInvokableSetSingle<
+  P extends ASTParameterDeclaration,
+  PS extends ASTParametersDeclaration<P>,
+  F extends ASTInvocableDeclaration<dynamic, P, PS>
+>
+    extends ASTInvokableSet<P, PS, F> {
+  final F f;
+
+  ASTInvokableSetSingle(this.f);
+
+  @override
+  Iterable<ASTNode> get children => [f];
+
+  @override
+  F get firstFunction => f;
+
+  @override
+  List<F> get functions => [f];
+
+  @override
+  F get(ASTFunctionSignature parametersSignature, bool exactTypes) {
+    if (f.matchesParametersTypes(parametersSignature, exactTypes)) {
+      return f;
+    }
+
+    throw StateError(
+      '$invokableTypeName \'${f.name}\' parameters signature not compatible: sign:$parametersSignature != f:${f.parameters}',
+    );
+  }
+
+  @override
+  void resolveFunctionsNodes(ASTNode? parentNode) {
+    f.resolveNode(parentNode);
+  }
+}
+
+/// Base [ASTInvokableSet] implementation, with multiple entries.
+abstract class ASTInvokableSetMultiple<
+  P extends ASTParameterDeclaration,
+  PS extends ASTParametersDeclaration<P>,
+  F extends ASTInvocableDeclaration<dynamic, P, PS>
+>
+    extends ASTInvokableSet<P, PS, F> {
+  final List<F> _functions = <F>[];
 
   @override
   Iterable<ASTNode> get children => [..._functions];
 
   @override
-  ASTFunctionDeclaration get firstFunction => _functions.first;
+  F get firstFunction => _functions.first;
 
   @override
-  List<ASTFunctionDeclaration> get functions => _functions;
+  List<F> get functions => _functions;
 
   @override
-  ASTFunctionDeclaration get(
-    ASTFunctionSignature parametersSignature,
-    bool exactTypes,
-  ) {
+  F get(ASTFunctionSignature parametersSignature, bool exactTypes) {
     for (var f in _functions) {
       if (f.matchesParametersTypes(parametersSignature, exactTypes)) {
         return f;
       }
     }
 
-    ASTFunctionDeclaration? first;
+    F? first;
     for (var f in _functions) {
       first = f;
       break;
@@ -1076,13 +1294,13 @@ class ASTFunctionSetMultiple extends ASTFunctionSet {
       return first;
     }
 
-    throw StateError(
-      "Can't find function '${first?.name}' with signature: $parametersSignature",
+    throw ApolloVMRuntimeError(
+      "Can't find ${invokableTypeName.toLowerCase()} '${first?.name}' with signature: $parametersSignature",
     );
   }
 
   @override
-  ASTFunctionSet add(ASTFunctionDeclaration f) {
+  ASTInvokableSet<P, PS, F> add(F f) {
     _functions.add(f);
 
     _functions.sort((a, b) {
@@ -1094,34 +1312,156 @@ class ASTFunctionSetMultiple extends ASTFunctionSet {
     return this;
   }
 
-  ASTNode? _parentNode;
-
   @override
-  ASTNode? get parentNode => _parentNode;
-
-  @override
-  void resolveNode(ASTNode? parentNode) {
-    _parentNode = parentNode;
-
+  void resolveFunctionsNodes(ASTNode? parentNode) {
     for (var f in _functions) {
       f.resolveNode(parentNode);
     }
-
-    cacheDescendantChildren();
   }
+}
+
+/// Base AST Function Set.
+abstract class ASTFunctionSet
+    extends
+        ASTInvokableSet<
+          ASTFunctionParameterDeclaration,
+          ASTFunctionParametersDeclaration,
+          ASTFunctionDeclaration
+        > {
+  @override
+  String get invokableTypeName => 'Function';
 
   @override
-  ASTNode? getNodeIdentifier(String name, {ASTNode? requester}) =>
-      parentNode?.getNodeIdentifier(name, requester: requester);
+  ASTFunctionSet add(ASTFunctionDeclaration f);
+}
+
+/// [ASTFunctionSet] implementation, with 1 entry.
+class ASTFunctionSetSingle
+    extends
+        ASTInvokableSetSingle<
+          ASTFunctionParameterDeclaration,
+          ASTFunctionParametersDeclaration,
+          ASTFunctionDeclaration
+        >
+    implements ASTFunctionSet {
+  ASTFunctionSetSingle(super.f);
+
+  @override
+  String get invokableTypeName => 'Function';
+
+  @override
+  ASTFunctionSet add(ASTFunctionDeclaration f) {
+    var set = ASTFunctionSetMultiple();
+    set.add(this.f);
+    set.add(f);
+    return set;
+  }
+}
+
+/// [ASTFunctionSet] implementation, with multiple entries.
+class ASTFunctionSetMultiple
+    extends
+        ASTInvokableSetMultiple<
+          ASTFunctionParameterDeclaration,
+          ASTFunctionParametersDeclaration,
+          ASTFunctionDeclaration
+        >
+    implements ASTFunctionSet {
+  @override
+  String get invokableTypeName => 'Function';
+
+  @override
+  ASTFunctionSet add(ASTFunctionDeclaration f) {
+    super.add(f);
+    return this;
+  }
+}
+
+/// Base AST Constructor Set.
+abstract class ASTConstructorSet
+    extends
+        ASTInvokableSet<
+          ASTConstructorParameterDeclaration,
+          ASTConstructorParametersDeclaration,
+          ASTClassConstructorDeclaration
+        > {
+  @override
+  String get invokableTypeName => 'Constructor';
+
+  @override
+  ASTConstructorSet add(ASTClassConstructorDeclaration c);
+}
+
+/// [ASTConstructorSet] implementation, with 1 entry.
+class ASTConstructorSetSingle
+    extends
+        ASTInvokableSetSingle<
+          ASTConstructorParameterDeclaration,
+          ASTConstructorParametersDeclaration,
+          ASTClassConstructorDeclaration
+        >
+    implements ASTConstructorSet {
+  ASTConstructorSetSingle(super.c);
+
+  @override
+  String get invokableTypeName => 'Constructor';
+
+  @override
+  ASTConstructorSet add(ASTClassConstructorDeclaration c) {
+    var set = ASTConstructorSetMultiple();
+    set.add(f);
+    set.add(c);
+    return set;
+  }
+}
+
+/// [ASTConstructorSet] implementation, with multiple entries.
+class ASTConstructorSetMultiple
+    extends
+        ASTInvokableSetMultiple<
+          ASTConstructorParameterDeclaration,
+          ASTConstructorParametersDeclaration,
+          ASTClassConstructorDeclaration
+        >
+    implements ASTConstructorSet {
+  @override
+  String get invokableTypeName => 'Constructor';
+
+  @override
+  // ignore: avoid_renaming_method_parameters
+  ASTConstructorSet add(ASTClassConstructorDeclaration c) {
+    super.add(c);
+    return this;
+  }
+}
+
+/// An AST Constructor Parameters Declaration
+class ASTConstructorParametersDeclaration
+    extends ASTParametersDeclaration<ASTConstructorParameterDeclaration> {
+  ASTConstructorParametersDeclaration(
+    super.positionalParameters, [
+    super.optionalParameters,
+    super.namedParameters,
+  ]);
+}
+
+/// An AST Function Parameters Declaration
+class ASTFunctionParametersDeclaration
+    extends ASTParametersDeclaration<ASTFunctionParameterDeclaration> {
+  ASTFunctionParametersDeclaration(
+    super.positionalParameters, [
+    super.optionalParameters,
+    super.namedParameters,
+  ]);
 }
 
 /// An AST Parameters Declaration
-class ASTParametersDeclaration {
-  List<ASTFunctionParameterDeclaration>? positionalParameters;
+abstract class ASTParametersDeclaration<P extends ASTParameterDeclaration> {
+  List<P>? positionalParameters;
 
-  List<ASTFunctionParameterDeclaration>? optionalParameters;
+  List<P>? optionalParameters;
 
-  List<ASTFunctionParameterDeclaration>? namedParameters;
+  List<P>? namedParameters;
 
   ASTParametersDeclaration(
     this.positionalParameters, [
@@ -1150,7 +1490,7 @@ class ASTParametersDeclaration {
   }
 
   /// Returns a list with all the [positionalParameters], [optionalParameters] and [namedParameters].
-  List<ASTFunctionParameterDeclaration> get allParameters => [
+  List<P> get allParameters => [
     ...?positionalParameters,
     ...?optionalParameters,
     ...?namedParameters,
@@ -1169,7 +1509,7 @@ class ASTParametersDeclaration {
 
   bool get isNotEmpty => !isEmpty;
 
-  ASTFunctionParameterDeclaration? getParameterByIndex(int index) {
+  P? getParameterByIndex(int index) {
     var positionalParametersSize = this.positionalParametersSize;
 
     if (index < positionalParametersSize) {
@@ -1185,7 +1525,7 @@ class ASTParametersDeclaration {
     return null;
   }
 
-  ASTFunctionParameterDeclaration? getParameterByName(String name) {
+  P? getParameterByName(String name) {
     if (namedParameters != null) {
       var p = namedParameters!.firstWhereOrNull((p) => p.name == name);
       if (p != null) return p;
@@ -1257,7 +1597,7 @@ class ASTParametersDeclaration {
   ///
   /// - [exactType]: if true the [param] should be exact to [type].
   static bool parameterAcceptsType(
-    ASTFunctionParameterDeclaration? param,
+    ASTParameterDeclaration? param,
     ASTType? type,
     bool exactType,
   ) {
@@ -1312,7 +1652,7 @@ class ASTClassFunctionDeclaration<T> extends ASTFunctionDeclaration<T> {
   ASTClassFunctionDeclaration(
     this.clazz,
     String name,
-    ASTParametersDeclaration parameters,
+    ASTFunctionParametersDeclaration parameters,
     ASTType<T> returnType, {
     ASTBlock? block,
     ASTModifiers? modifiers,
@@ -1334,13 +1674,19 @@ class ASTClassFunctionDeclaration<T> extends ASTFunctionDeclaration<T> {
   }
 }
 
-/// An AST Function Declaration.
-class ASTFunctionDeclaration<T> extends ASTBlock {
-  /// Name of this function.
+/// An AST of an invocable block declaration.
+/// See [ASTClassConstructorDeclaration] and [ASTFunctionDeclaration].
+abstract class ASTInvocableDeclaration<
+  T,
+  P extends ASTParameterDeclaration,
+  PS extends ASTParametersDeclaration<P>
+>
+    extends ASTBlock {
+  /// Name of this function/constructor.
   final String name;
 
-  /// Parameters of this function.
-  final ASTParametersDeclaration _parameters;
+  /// Parameters.
+  final PS _parameters;
 
   /// The return type of this function.
   final ASTType<T> returnType;
@@ -1348,7 +1694,7 @@ class ASTFunctionDeclaration<T> extends ASTBlock {
   /// Modifiers of this function.
   final ASTModifiers modifiers;
 
-  ASTFunctionDeclaration(
+  ASTInvocableDeclaration(
     this.name,
     this._parameters,
     this.returnType, {
@@ -1396,15 +1742,13 @@ class ASTFunctionDeclaration<T> extends ASTBlock {
     return super.getNodeIdentifier(name, requester: requester);
   }
 
-  ASTParametersDeclaration get parameters => _parameters;
+  PS get parameters => _parameters;
 
   int get parametersSize => _parameters.size;
 
-  ASTFunctionParameterDeclaration? getParameterByIndex(int index) =>
-      _parameters.getParameterByIndex(index);
+  P? getParameterByIndex(int index) => _parameters.getParameterByIndex(index);
 
-  ASTFunctionParameterDeclaration? getParameterByName(String name) =>
-      _parameters.getParameterByName(name);
+  P? getParameterByName(String name) => _parameters.getParameterByName(name);
 
   FutureOr<ASTValue?> getParameterValueByIndex(VMContext context, int index) {
     var p = getParameterByIndex(index);
@@ -1618,7 +1962,7 @@ class ASTFunctionDeclaration<T> extends ASTBlock {
   }
 
   @override
-  ASTValue run(VMContext parentContext, ASTRunStatus runStatus) {
+  FutureOr<ASTValue> run(VMContext parentContext, ASTRunStatus runStatus) {
     throw UnsupportedError(
       "Can't run this block directly! Should use call(...), since this block needs parameters initialization!",
     );
@@ -1634,9 +1978,13 @@ class ASTFunctionDeclaration<T> extends ASTBlock {
   }
 }
 
-extension IterableASTFunctionDeclarationExtension
-    on Iterable<ASTFunctionDeclaration> {
-  ASTFunctionDeclaration? resolveBestMatchBySignature({
+extension IterableASTFunctionDeclarationExtension<
+  P extends ASTParameterDeclaration,
+  PS extends ASTParametersDeclaration<P>,
+  F extends ASTInvocableDeclaration<dynamic, P, PS>
+>
+    on Iterable<F> {
+  F? resolveBestMatchBySignature({
     List? positionalParameters,
     Map? namedParameters,
   }) {
@@ -1658,6 +2006,170 @@ extension IterableASTFunctionDeclarationExtension
           // Fallback to relaxed match (allowing looser type compatibility)
           firstWhereOrNull((f) => f.matchesParametersTypes(fSignature, false));
     }
+  }
+}
+
+/// An AST Function Declaration.
+class ASTFunctionDeclaration<T>
+    extends
+        ASTInvocableDeclaration<
+          T,
+          ASTFunctionParameterDeclaration,
+          ASTFunctionParametersDeclaration
+        > {
+  ASTFunctionDeclaration(
+    super.name,
+    super._parameters,
+    super.returnType, {
+    super.block,
+    super.modifiers,
+  });
+}
+
+/// An AST Function Declaration.
+class ASTClassConstructorDeclaration<T>
+    extends
+        ASTInvocableDeclaration<
+          T,
+          ASTConstructorParameterDeclaration,
+          ASTConstructorParametersDeclaration
+        > {
+  /// The return type of this function.
+  final ASTType<T> classType;
+
+  ASTClassConstructorDeclaration(
+    this.classType,
+    String name,
+    ASTConstructorParametersDeclaration parameters, {
+    super.block,
+    super.modifiers,
+  }) : super(name, parameters, classType);
+
+  ASTClass? _parentClass;
+
+  ASTClass? get parentClass => _parentClass;
+
+  @override
+  void resolveNode(ASTNode? parentNode) {
+    if (parentNode is ASTClass) {
+      _parentClass = parentNode;
+    }
+
+    super.resolveNode(parentNode);
+  }
+
+  @override
+  ASTType resolveType(VMContext? context) => classType;
+
+  @override
+  FutureOr<ASTClassInstance<ASTValue<T>>> initializeVariables(
+    VMContext context,
+    List? positionalParameters,
+    Map? namedParameters,
+  ) {
+    final parentClass =
+        this.parentClass ??
+        (throw ApolloVMRuntimeError("`parentClass` not defined!"));
+
+    var classContext = parentClass.createContext(context.typeResolver, context);
+
+    return parentClass
+        .createInstance(classContext, ASTRunStatus.dummy)
+        .resolveMapped((obj) {
+          if (obj == null) {
+            throw ApolloVMRuntimeError(
+              "Can't instantiate class `$classType` instance!",
+            );
+          }
+
+          context.declareVariableWithValue(parentClass.type, 'this', obj);
+
+          return super
+              .initializeVariables(
+                context,
+                positionalParameters,
+                namedParameters,
+              )
+              .resolveMapped((_) {
+                return obj as ASTClassInstance<ASTValue<T>>;
+              });
+        });
+  }
+
+  @override
+  FutureOr<ASTValue<T>> call(
+    VMContext parent, {
+    List? positionalParameters,
+    Map? namedParameters,
+  }) async {
+    var context = VMContext(this, parent: parent);
+
+    var prevContext = VMContext.setCurrent(context);
+    try {
+      var obj = await initializeVariables(
+        context,
+        positionalParameters,
+        namedParameters,
+      );
+
+      final parameters = _parameters;
+
+      var constructorParameters = [
+        ...?parameters.positionalParameters?.withThisParameter(),
+        ...?parameters.optionalParameters?.withThisParameter(),
+        ...?parameters.namedParameters?.withThisParameter(),
+      ];
+
+      if (constructorParameters.isNotEmpty) {
+        var classContext = obj.createContext(context);
+        for (var p in constructorParameters.withThisParameter()) {
+          var variable = await context.getVariable(p.name, false);
+          if (variable != null) {
+            var v = await variable.getValue(context);
+            await obj.setField(classContext, p.name, v);
+          } else if (!p.optional) {
+            throw ApolloVMNullPointerException(
+              "Missing required constructor parameter: $p\n"
+              "Constructor: $this",
+            );
+          }
+        }
+      }
+
+      await run(context, ASTRunStatus());
+
+      return obj as ASTValue<T>;
+    } finally {
+      VMContext.setCurrent(prevContext);
+    }
+  }
+
+  @override
+  FutureOr<ASTValue> run(
+    VMContext parentContext,
+    ASTRunStatus runStatus,
+  ) async {
+    var blockContext = defineRunContext(parentContext);
+
+    FutureOr<ASTValue> returnValue = ASTValueVoid.instance;
+
+    for (var stm in statements) {
+      var ret = await stm.run(blockContext, runStatus);
+
+      if (runStatus.returned) {
+        return (runStatus.returnedFutureValue ?? runStatus.returnedValue)!;
+      }
+
+      returnValue = ret;
+    }
+
+    return returnValue;
+  }
+
+  @override
+  String toString() {
+    var block = super.toString();
+    return '$modifiers $classType.$name($_parameters) $block';
   }
 }
 
@@ -1743,7 +2255,7 @@ class ASTGetterDeclaration<T> extends ASTBlock {
     var prevContext = VMContext.setCurrent(context);
     try {
       var result = await super.run(context, ASTRunStatus());
-      return await resolveReturnValue(context, result);
+      return await resolveReturnValue(context, result, result);
     } finally {
       VMContext.setCurrent(prevContext);
     }
@@ -1751,12 +2263,20 @@ class ASTGetterDeclaration<T> extends ASTBlock {
 
   FutureOr<ASTValue<T>> resolveReturnValue(
     VMContext context,
+    ASTNode? node,
     Object? returnValue,
   ) {
-    var ret = returnType.toValue(context, returnValue);
-    return ret.resolveMapped((resolved) {
-      resolved ??= ASTValueVoid.instance as ASTValue<T>;
-      return resolved;
+    return resolveRuntimeType(
+      context,
+      returnValue is ASTNode ? returnValue : node,
+    ).resolveMapped((runtimeReturnType) {
+      var ret = runtimeReturnType is ASTType<T>
+          ? runtimeReturnType.toValue(context, returnValue)
+          : returnType.toValue(context, returnValue);
+      return ret.resolveMapped((resolved) {
+        resolved ??= ASTValueVoid.instance as ASTValue<T>;
+        return resolved;
+      });
     });
   }
 
@@ -1803,9 +2323,9 @@ class ASTExternalGetter<T> extends ASTGetterDeclaration<T> {
 
       if (result is Future) {
         var r = await result;
-        return await resolveReturnValue(context, r);
+        return await resolveReturnValue(context, null, r);
       } else {
-        return await resolveReturnValue(context, result);
+        return await resolveReturnValue(context, null, result);
       }
     } finally {
       VMContext.setCurrent(prevContext);
@@ -1817,37 +2337,61 @@ class ASTExternalGetter<T> extends ASTGetterDeclaration<T> {
 class ASTExternalClassGetter<T> extends ASTClassGetterDeclaration<T> {
   final Function(Object? o) externalFunction;
 
+  final FutureOr<ASTType> Function(VMContext? context, ASTNode? o)?
+  returnTypeResolver;
+
   ASTExternalClassGetter(
     ASTClass super.clazz,
     super.name,
     super.returnType,
-    this.externalFunction,
-  );
+    this.externalFunction, [
+    this.returnTypeResolver,
+  ]);
+
+  @override
+  FutureOr<ASTType<dynamic>> resolveRuntimeType(
+    VMContext context,
+    ASTNode? node,
+  ) {
+    final returnTypeResolver = this.returnTypeResolver;
+    if (returnTypeResolver != null) {
+      return returnTypeResolver(context, node);
+    }
+
+    return super.resolveRuntimeType(context, node);
+  }
 
   @override
   FutureOr<ASTValue<T>> call(
     VMContext parent, {
     List? positionalParameters,
     Map? namedParameters,
-  }) async {
+  }) {
     var classInstance = parent.getClassInstance();
-    var obj = await classInstance!.getValue(parent);
+    return classInstance!.getValue(parent).resolveMapped((obj) {
+      var context = VMContext(this, parent: parent);
 
-    var context = VMContext(this, parent: parent);
-
-    var prevContext = VMContext.setCurrent(context);
-    try {
-      dynamic result = externalFunction(obj);
-
-      if (result is Future) {
-        var r = await result;
-        return await resolveReturnValue(context, r);
-      } else {
-        return await resolveReturnValue(context, result);
+      var prevContext = VMContext.setCurrent(context);
+      try {
+        dynamic result = externalFunction(obj);
+        if (result is Future) {
+          return result
+              .then((r) => resolveReturnValue(context, classInstance, r))
+              .whenComplete(() => VMContext.setCurrent(prevContext));
+        } else {
+          try {
+            return resolveReturnValue(context, classInstance, result);
+          } finally {
+            VMContext.setCurrent(prevContext);
+          }
+        }
+      } catch (_) {
+        if (identical(VMContext.getCurrent(), context)) {
+          VMContext.setCurrent(prevContext);
+        }
+        rethrow;
       }
-    } finally {
-      VMContext.setCurrent(prevContext);
-    }
+    });
   }
 }
 

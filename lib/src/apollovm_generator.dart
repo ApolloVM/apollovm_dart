@@ -72,6 +72,11 @@ abstract class ApolloGenerator<
 
   O generateASTClassField(ASTClassField field, {O? out});
 
+  O generateASTClassConstructorDeclaration(
+    ASTClassConstructorDeclaration constructor, {
+    O? out,
+  });
+
   O generateASTClassFunctionDeclaration(
     ASTClassFunctionDeclaration f, {
     O? out,

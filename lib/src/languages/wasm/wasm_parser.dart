@@ -112,7 +112,7 @@ class ApolloParserWasm extends ApolloCodeParser<Uint8List> {
       if (type == 0) {
         var typeFunction = typeFunctions[index];
 
-        var astParameters = typeFunction.toASTParametersDeclaration();
+        var astParameters = typeFunction.toASTFunctionParametersDeclaration();
 
         var astReturn =
             typeFunction.results.toASTTypes().firstOrNull ??
@@ -147,8 +147,8 @@ class _TypeFunction {
           )
           .toList();
 
-  ASTParametersDeclaration toASTParametersDeclaration() =>
-      ASTParametersDeclaration(toASTFunctionParameterDeclaration());
+  ASTFunctionParametersDeclaration toASTFunctionParametersDeclaration() =>
+      ASTFunctionParametersDeclaration(toASTFunctionParameterDeclaration());
 }
 
 extension _ListIntExtension on List<int> {

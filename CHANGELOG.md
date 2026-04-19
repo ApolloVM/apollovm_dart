@@ -1,3 +1,80 @@
+## 0.1.12
+
+- `ASTInvocableDeclaration`:
+  - Replaced `ASTFunctionDeclaration` with generic `ASTInvocableDeclaration` for function and constructor declarations.
+  - Added `ASTClassConstructorDeclaration` for class constructors with support for `this` parameters.
+  - Added `resolveRuntimeType` method to support runtime type resolution with context and node.
+  - Updated `call` and `run` methods to support async and context-aware execution.
+  - Added `initializeVariables` for constructor variable initialization.
+
+- `ASTParametersDeclaration`:
+  - Made generic over parameter type `P`.
+  - Added `ASTConstructorParametersDeclaration` and `ASTFunctionParametersDeclaration` subclasses.
+  - Updated parameter accessors and type checks to use generic parameter type.
+
+- `ASTParameterDeclaration`:
+  - Added `ASTConstructorParameterDeclaration` with `thisParameter` flag.
+  - Added extensions for filtering `this` parameters.
+
+- `ASTFunctionSet` and `ASTConstructorSet`:
+  - Introduced generic base `ASTInvokableSet` with single and multiple implementations.
+  - Added `ASTConstructorSet` for constructors, similar to function sets.
+
+- `ASTClassNormal`:
+  - Added support for constructors with `ASTConstructorSet`.
+  - Added methods to add, get, and check constructors by name and signature.
+  - Updated `resolveNode` to resolve constructors.
+
+- `ASTRoot`:
+  - Updated `getFunction` to return constructors if matching class name and signature.
+
+- `ASTExpression` and `ASTValue`:
+  - Added `resolveRuntimeType` and `getHashcodeValue` methods for runtime type and value hashing.
+  - Updated equality and hashCode to use `getHashcodeValue`.
+
+- `ASTExpressionFunctionInvocation` and subclasses:
+  - Updated to use `ASTInvocableDeclaration` for function retrieval.
+  - Updated `run` method to support async and context-aware invocation.
+
+- `ASTExpressionObjectGetterAccess`:
+  - Updated getter retrieval and runtime type resolution to support async and context-aware evaluation.
+  - Added `_runGetter` helper for getter invocation.
+
+- `ASTStatementVariableDeclaration`:
+  - Added `unmodifiable` flag.
+  - Updated type resolution and run implementation to use `resolveRuntimeType`.
+
+- `ASTType`:
+  - Added `ASTTypeConstructorThis` singleton for constructor `this` parameter.
+  - Added `resolveRuntimeType` method.
+
+- `ASTVariable`:
+  - Added `resolveRuntimeType` method.
+
+- `CorePackageBase` and `CoreClassMixin`:
+  - Updated external function and class function creation to use `ASTFunctionParametersDeclaration`.
+
+- `CoreClassList`:
+  - Added `first` and `last` getters with runtime component type resolution.
+  - Added empty constructor list and related methods.
+
+- `DartGrammarDefinition` and `Java11GrammarDefinition`:
+  - Added parsing support for class constructors with parameters and optional blocks.
+  - Updated function and constructor parameter parsing to use `ASTFunctionParametersDeclaration` and `ASTConstructorParametersDeclaration`.
+  - Added parsing for `this` constructor parameters.
+
+- `ApolloCodeGeneratorDart` and `ApolloCodeGeneratorJava11`:
+  - Added `generateASTClassConstructorDeclaration` method to generate constructor code.
+  - Updated function parameter generation to use generic parameter declaration.
+
+- `ApolloParserWasm`:
+  - Updated WASM function parsing to use `ASTFunctionParametersDeclaration`.
+
+- `Test`:
+  - Added new test `dart_basic_linearRegression.test.xml` with Dart source for linear regression and forecast.
+  - Added new test `dart_basic_calculateShippingCost.test.xml` for shipping cost calculation.
+  - Updated test runner to include new tests.
+
 ## 0.1.11
 
 - `ASTValueNum`:

@@ -105,6 +105,24 @@ class ApolloCodeGeneratorJava11 extends ApolloCodeGenerator {
   }
 
   @override
+  StringBuffer generateASTClassConstructorDeclaration(
+    ASTClassConstructorDeclaration c, {
+    StringBuffer? out,
+    String indent = '',
+  }) {
+    out ??= newOutput();
+
+    var blockCode = generateASTBlock(c, indent: indent, withBrackets: false);
+
+    out.write(indent);
+
+    out.write(c.classType.name);
+    _generateFunctionParamsAndBlock(c, blockCode, out, indent);
+
+    return out;
+  }
+
+  @override
   StringBuffer generateASTFunctionDeclaration(
     ASTFunctionDeclaration f, {
     StringBuffer? out,
@@ -138,6 +156,17 @@ class ApolloCodeGeneratorJava11 extends ApolloCodeGenerator {
     out.write(typeCode);
     out.write(' ');
     out.write(f.name);
+    _generateFunctionParamsAndBlock(f, blockCode, out, indent);
+
+    return out;
+  }
+
+  void _generateFunctionParamsAndBlock(
+    ASTInvocableDeclaration f,
+    StringBuffer blockCode,
+    StringBuffer out,
+    String indent,
+  ) {
     out.write('(');
 
     if (f.parametersSize > 0) {
@@ -148,8 +177,6 @@ class ApolloCodeGeneratorJava11 extends ApolloCodeGenerator {
     out.write(blockCode);
     out.write(indent);
     out.write('}\n\n');
-
-    return out;
   }
 
   @override
@@ -165,7 +192,7 @@ class ApolloCodeGeneratorJava11 extends ApolloCodeGenerator {
       for (var i = 0; i < positionalParameters.length; ++i) {
         var p = positionalParameters[i];
         if (i > 0) out.write(', ');
-        generateASTFunctionParameterDeclaration(p, out: out);
+        generateASTParameterDeclaration(p, out: out);
       }
     }
 
@@ -174,7 +201,7 @@ class ApolloCodeGeneratorJava11 extends ApolloCodeGenerator {
       for (var i = 0; i < optionalParameters.length; ++i) {
         var p = optionalParameters[i];
         if (i > 0) out.write(', ');
-        generateASTFunctionParameterDeclaration(p, out: out);
+        generateASTParameterDeclaration(p, out: out);
       }
     }
 
@@ -183,7 +210,7 @@ class ApolloCodeGeneratorJava11 extends ApolloCodeGenerator {
       for (var i = 0; i < namedParameters.length; ++i) {
         var p = namedParameters[i];
         if (i > 0) out.write(', ');
-        generateASTFunctionParameterDeclaration(p, out: out);
+        generateASTParameterDeclaration(p, out: out);
       }
     }
 

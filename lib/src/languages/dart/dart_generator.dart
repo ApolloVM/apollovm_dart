@@ -100,6 +100,28 @@ class ApolloCodeGeneratorDart extends ApolloCodeGenerator {
   }
 
   @override
+  StringBuffer generateASTClassConstructorDeclaration(
+    ASTClassConstructorDeclaration c, {
+    StringBuffer? out,
+    String indent = '',
+  }) {
+    out ??= newOutput();
+
+    var blockCode = generateASTBlock(c, indent: indent, withBrackets: false);
+
+    out.write(indent);
+
+    out.write(c.classType.name);
+    if (c.name.isNotEmpty) {
+      out.write('.');
+      out.write(c.name);
+    }
+    _generateFunctionParamsAndBlock(c, blockCode, out, indent);
+
+    return out;
+  }
+
+  @override
   StringBuffer generateASTClassFunctionDeclaration(
     ASTClassFunctionDeclaration f, {
     StringBuffer? out,
@@ -139,18 +161,34 @@ class ApolloCodeGeneratorDart extends ApolloCodeGenerator {
     out.write(typeCode);
     out.write(' ');
     out.write(f.name);
-    out.write('(');
+    _generateFunctionParamsAndBlock(f, blockCode, out, indent);
 
+    return out;
+  }
+
+  void _generateFunctionParamsAndBlock(
+    ASTInvocableDeclaration f,
+    StringBuffer blockCode,
+    StringBuffer out,
+    String indent,
+  ) {
+    out.write('(');
     if (f.parametersSize > 0) {
       generateASTParametersDeclaration(f.parameters, out: out);
     }
+    out.write(')');
 
-    out.write(') {\n');
-    out.write(blockCode);
-    out.write(indent);
-    out.write('}\n\n');
+    var blockStr = blockCode.toString();
+    var emptyBlock = blockStr.trim().isEmpty;
 
-    return out;
+    if (emptyBlock && f is ASTClassConstructorDeclaration) {
+      out.write(';\n\n');
+    } else {
+      out.write(' {\n');
+      out.write(blockCode);
+      out.write(indent);
+      out.write('}\n\n');
+    }
   }
 
   @override
@@ -166,7 +204,7 @@ class ApolloCodeGeneratorDart extends ApolloCodeGenerator {
       for (var i = 0; i < positionalParameters.length; ++i) {
         var p = positionalParameters[i];
         if (i > 0) out.write(', ');
-        generateASTFunctionParameterDeclaration(p, out: out);
+        generateASTParameterDeclaration(p, out: out);
       }
     }
 
@@ -176,7 +214,7 @@ class ApolloCodeGeneratorDart extends ApolloCodeGenerator {
       for (var i = 0; i < optionalParameters.length; ++i) {
         var p = optionalParameters[i];
         if (i > 0) out.write(', ');
-        generateASTFunctionParameterDeclaration(p, out: out);
+        generateASTParameterDeclaration(p, out: out);
       }
       out.write(']');
     }
@@ -187,7 +225,7 @@ class ApolloCodeGeneratorDart extends ApolloCodeGenerator {
       for (var i = 0; i < namedParameters.length; ++i) {
         var p = namedParameters[i];
         if (i > 0) out.write(', ');
-        generateASTFunctionParameterDeclaration(p, out: out);
+        generateASTParameterDeclaration(p, out: out);
       }
       out.write('}');
     }

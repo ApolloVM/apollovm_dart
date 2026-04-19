@@ -115,6 +115,12 @@ abstract class ApolloCodeGenerator
       if (block.fields.isNotEmpty) {
         out.write('\n');
       }
+
+      for (var constructor in block.constructors) {
+        for (var c in constructor.functions) {
+          generateASTClassConstructorDeclaration(c, out: out, indent: indent2);
+        }
+      }
     }
 
     for (var set in block.functions) {
@@ -147,6 +153,13 @@ abstract class ApolloCodeGenerator
   @override
   StringBuffer generateASTClassField(
     ASTClassField field, {
+    StringBuffer? out,
+    String indent = '',
+  });
+
+  @override
+  StringBuffer generateASTClassConstructorDeclaration(
+    ASTClassConstructorDeclaration constructor, {
     StringBuffer? out,
     String indent = '',
   });
@@ -187,11 +200,17 @@ abstract class ApolloCodeGenerator
   }) {
     out ??= newOutput();
 
-    var typeStr = generateASTType(parameter.type);
+    if (parameter is ASTConstructorParameterDeclaration &&
+        parameter.thisParameter) {
+      out.write('this.');
+    } else {
+      var typeStr = generateASTType(parameter.type);
+      out.write(typeStr);
+      out.write(' ');
+    }
 
-    out.write(typeStr);
-    out.write(' ');
     out.write(parameter.name);
+
     return out;
   }
 

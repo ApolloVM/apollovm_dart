@@ -403,6 +403,15 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
   }
 
   @override
+  BytesOutput generateASTClassConstructorDeclaration(
+    ASTClassConstructorDeclaration<dynamic> constructor, {
+    BytesOutput? out,
+  }) {
+    // TODO: implement generateASTClassConstructorDeclaration
+    throw UnimplementedError("generateASTClassConstructorDeclaration");
+  }
+
+  @override
   BytesOutput generateASTClassFunctionDeclaration(
     ASTClassFunctionDeclaration f, {
     BytesOutput? out,
@@ -2239,7 +2248,8 @@ extension _IterableASTFunctionParameterDeclarationExtension
       expand((e) => e.declaredVariables()).toList();
 }
 
-extension _ASTParametersDeclarationExtension on ASTParametersDeclaration {
+extension _ASTParametersDeclarationExtension
+    on ASTFunctionParametersDeclaration {
   List<MapEntry<String, ASTType>> declaredVariables() => [
     ...?positionalParameters?.declaredVariables(),
     ...?optionalParameters?.declaredVariables(),

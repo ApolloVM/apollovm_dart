@@ -35,7 +35,7 @@ import 'languages/wasm/wasm_runner.dart';
 /// The Apollo VM.
 class ApolloVM implements VMTypeResolver {
   // ignore: non_constant_identifier_names
-  static final String VERSION = '0.1.11';
+  static final String VERSION = '0.1.12';
 
   static int _idCount = 0;
 
@@ -580,7 +580,7 @@ class CodeNamespace {
 
   /// Returns a function with [fName] and [parametersSignature]
   /// (using [context] if needed).
-  ASTFunctionDeclaration? getFunction(
+  ASTInvocableDeclaration? getFunction(
     String fName,
     ASTFunctionSignature parametersSignature,
     VMContext context, {
@@ -737,7 +737,7 @@ class ApolloExternalFunctionMapper {
     String fName,
     Function() f,
   ) {
-    var fParameters = ASTParametersDeclaration(null, null, null);
+    var fParameters = ASTFunctionParametersDeclaration(null, null, null);
 
     var fExternal = ASTExternalFunction(fName, fParameters, fReturn, f);
 
@@ -752,7 +752,7 @@ class ApolloExternalFunctionMapper {
     String pName1,
     Function(T p1) f,
   ) {
-    var fParameters = ASTParametersDeclaration(
+    var fParameters = ASTFunctionParametersDeclaration(
       [ASTFunctionParameterDeclaration(pType1, pName1, 0, false)],
       null,
       null,
@@ -773,7 +773,7 @@ class ApolloExternalFunctionMapper {
     String pName2,
     Function(A p1, B p2) f,
   ) {
-    var fParameters = ASTParametersDeclaration(
+    var fParameters = ASTFunctionParametersDeclaration(
       [
         ASTFunctionParameterDeclaration(pType1, pName1, 0, false),
         ASTFunctionParameterDeclaration(pType2, pName2, 1, false),
@@ -799,7 +799,7 @@ class ApolloExternalFunctionMapper {
     String pName3,
     Function(A p1, B p2) f,
   ) {
-    var fParameters = ASTParametersDeclaration(
+    var fParameters = ASTFunctionParametersDeclaration(
       [
         ASTFunctionParameterDeclaration(pType1, pName1, 0, false),
         ASTFunctionParameterDeclaration(pType2, pName2, 1, false),
@@ -828,7 +828,7 @@ class ApolloExternalFunctionMapper {
     String pName4,
     Function(A p1, B p2) f,
   ) {
-    var fParameters = ASTParametersDeclaration(
+    var fParameters = ASTFunctionParametersDeclaration(
       [
         ASTFunctionParameterDeclaration(pType1, pName1, 0, false),
         ASTFunctionParameterDeclaration(pType2, pName2, 1, false),
@@ -1043,7 +1043,7 @@ class VMContext {
   /// Returns a function of [name] and [parametersSignature]
   ///
   /// If [parent] is defined, will also look in the parent context.
-  ASTFunctionDeclaration? getFunction(
+  ASTInvocableDeclaration? getFunction(
     String name,
     ASTFunctionSignature parametersSignature,
   ) {
@@ -1094,6 +1094,9 @@ class VMContext {
 
     return null;
   }
+
+  @override
+  String toString() => 'VMContext@$block';
 }
 
 /// When an error happens while executing some code ([ASTNode]).

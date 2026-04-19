@@ -209,6 +209,10 @@ class ASTType<V> with ASTNode implements ASTTypedNode {
   FutureOr<ASTType> resolveType(VMContext? context) => this;
 
   @override
+  FutureOr<ASTType> resolveRuntimeType(VMContext context, ASTNode? node) =>
+      resolveType(context);
+
+  @override
   void associateToType(ASTTypedNode node) {}
 
   /// Returns true if this type has generics.
@@ -775,6 +779,70 @@ class ASTTypeObject extends ASTType<Object> {
   }
 }
 
+/// [ASTType] for constructor `this` parameter declaration.
+class ASTTypeConstructorThis extends ASTType<dynamic> {
+  static final ASTTypeConstructorThis instance = ASTTypeConstructorThis._();
+
+  ASTTypeConstructorThis._() : super('this');
+
+  @override
+  Iterable<ASTNode> get children => [];
+
+  @override
+  bool acceptsType(ASTType type) => true;
+
+  ASTType? _resolvedType;
+
+  @override
+  FutureOr<ASTType> resolveType(VMContext? context) {
+    final resolvedType = _resolvedType;
+    if (resolvedType != null) return resolvedType;
+
+    return _resolveTypeImpl(context).resolveMapped((resolvedType) {
+      _resolvedType = resolvedType;
+      return resolvedType;
+    });
+  }
+
+  FutureOr<ASTType> _resolveTypeImpl(VMContext? context) {
+    var associatedNode = _associatedNode;
+    return associatedNode == null ? this : associatedNode.resolveType(context);
+  }
+
+  ASTTypedNode? _associatedNode;
+
+  @override
+  void associateToType(ASTTypedNode node) => _associatedNode = node;
+
+  @override
+  FutureOr<ASTValue<dynamic>> toValue(VMContext context, Object? v) {
+    if (v is ASTValue<dynamic> && v.type == this) {
+      return v;
+    }
+
+    if (v is ASTValue) {
+      return v.getValue(context).resolveMapped((v) {
+        return ASTValueStatic<dynamic>(this, v);
+      });
+    }
+
+    return ASTValueStatic<dynamic>(this, v);
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      super == other && other is ASTTypeInt && runtimeType == other.runtimeType;
+
+  @override
+  int get hashCode => name.hashCode;
+
+  @override
+  String toString() {
+    return 'this';
+  }
+}
+
 /// [ASTType] for `var` declaration.
 class ASTTypeVar extends ASTType<dynamic> {
   static final ASTTypeVar instance = ASTTypeVar();
@@ -846,9 +914,9 @@ class ASTTypeVar extends ASTType<dynamic> {
 
 /// [ASTType] for [dynamic] declaration.
 class ASTTypeDynamic extends ASTType<dynamic> {
-  static final ASTTypeDynamic instance = ASTTypeDynamic();
+  static final ASTTypeDynamic instance = ASTTypeDynamic._();
 
-  ASTTypeDynamic() : super('dynamic');
+  ASTTypeDynamic._() : super('dynamic');
 
   @override
   Iterable<ASTNode> get children => [];

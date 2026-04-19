@@ -74,7 +74,8 @@ class Java11GrammarDefinition extends Java11GrammarLexer {
 
   Parser<ASTBlock> classCodeBlock() =>
       (char('{').trimHidden() &
-              (ref0(classFunctionDeclaration) |
+              (ref0(classConstructorDefaultDeclaration) |
+                      ref0(classFunctionDeclaration) |
                       ref0(classFieldDeclaration) |
                       ref0(classFieldDeclarationWithValue))
                   .star() &
@@ -82,11 +83,15 @@ class Java11GrammarDefinition extends Java11GrammarLexer {
           .map((v) {
             var list = v[1] as List;
             var fields = list.whereType<ASTClassField>().toList();
+            var constructors = list
+                .whereType<ASTClassConstructorDeclaration>()
+                .toList();
             var functions = list.whereType<ASTFunctionDeclaration>().toList();
 
             var block = ASTClassNormal('?', ASTType<VMObject>('?'), null);
 
             block.addAllFields(fields);
+            block.addAllConstructors(constructors);
             block.addAllFunctions(functions);
 
             return block;
@@ -123,11 +128,79 @@ class Java11GrammarDefinition extends Java11GrammarLexer {
             );
           });
 
+  Parser<ASTClassConstructorDeclaration> classConstructorDefaultDeclaration() =>
+      (identifier() & constructorParametersDeclaration() & codeBlock()).map((
+        v,
+      ) {
+        var className = v[0];
+        var parameters = v[1] as ASTConstructorParametersDeclaration;
+        var block = v[2];
+        return ASTClassConstructorDeclaration(
+          ASTType(className),
+          '',
+          parameters,
+          block: block,
+        );
+      });
+
+  Parser<ASTConstructorParametersDeclaration>
+  constructorParametersDeclaration() =>
+      (functionEmptyParametersDeclaration() |
+              constructorPositionalParametersDeclaration())
+          .cast<ASTConstructorParametersDeclaration>();
+
+  Parser<ASTConstructorParametersDeclaration>
+  constructorEmptyParametersDeclaration() => (char('(') & char(')')).map((v) {
+    return ASTConstructorParametersDeclaration(null, null, null);
+  });
+
+  Parser<ASTConstructorParametersDeclaration>
+  constructorPositionalParametersDeclaration() =>
+      (char('(') & constructorParametersList() & char(')')).map((v) {
+        return ASTConstructorParametersDeclaration(v[1], null, null);
+      });
+
+  Parser<List<ASTConstructorParameterDeclaration>>
+  constructorParametersList() =>
+      (constructorParameterDeclaration() &
+              (char(',') & constructorParameterDeclaration()).star() &
+              char(',').optional())
+          .map((v) {
+            var params = _expandListDeeply(v);
+            return params
+                .whereType<ASTConstructorParameterDeclaration>()
+                .toList();
+          });
+
+  Parser<ASTConstructorParameterDeclaration>
+  constructorParameterDeclaration() =>
+      (constructorThisParameterDeclaration() |
+              constructorTypedParameterDeclaration())
+          .map((v) => v);
+
+  Parser<ASTConstructorParameterDeclaration>
+  constructorThisParameterDeclaration() =>
+      (thisToken().trim() & char('.') & identifier()).map((v) {
+        return ASTConstructorParameterDeclaration(
+          ASTTypeConstructorThis.instance,
+          v[2],
+          -1,
+          false,
+          thisParameter: true,
+        );
+      });
+
+  Parser<ASTConstructorParameterDeclaration>
+  constructorTypedParameterDeclaration() =>
+      (finalToken().trim().optional() & type().trim() & identifier()).map((v) {
+        return ASTConstructorParameterDeclaration(v[1], v[2], -1, false);
+      });
+
   Parser<ASTFunctionDeclaration> classFunctionDeclaration() =>
       (modifiers().optional() &
               type() &
               identifier() &
-              parametersDeclaration() &
+              functionParametersDeclaration() &
               codeBlock())
           .map((List v) {
             var modifiers = v[0];
@@ -620,18 +693,20 @@ class Java11GrammarDefinition extends Java11GrammarLexer {
     return ASTScopeVariable(v);
   });
 
-  Parser<ASTParametersDeclaration> parametersDeclaration() =>
-      (emptyParametersDeclaration() | positionalParametersDeclaration())
-          .cast<ASTParametersDeclaration>();
+  Parser<ASTFunctionParametersDeclaration> functionParametersDeclaration() =>
+      (functionEmptyParametersDeclaration() |
+              functionPositionalParametersDeclaration())
+          .cast<ASTFunctionParametersDeclaration>();
 
-  Parser<ASTParametersDeclaration> emptyParametersDeclaration() =>
-      (char('(') & char(')')).map((v) {
-        return ASTParametersDeclaration(null, null, null);
-      });
+  Parser<ASTFunctionParametersDeclaration>
+  functionEmptyParametersDeclaration() => (char('(') & char(')')).map((v) {
+    return ASTFunctionParametersDeclaration(null, null, null);
+  });
 
-  Parser<ASTParametersDeclaration> positionalParametersDeclaration() =>
+  Parser<ASTFunctionParametersDeclaration>
+  functionPositionalParametersDeclaration() =>
       (char('(') & parametersList() & char(')')).map((v) {
-        return ASTParametersDeclaration(v[1], null, null);
+        return ASTFunctionParametersDeclaration(v[1], null, null);
       });
 
   Parser<List<ASTFunctionParameterDeclaration>> parametersList() =>
