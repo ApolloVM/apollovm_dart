@@ -263,6 +263,7 @@ class DartGrammarDefinition extends DartGrammarLexer {
       (branch() |
               statementForLoop() |
               statementForEach() |
+              statementWhileLoop() |
               statementReturn() |
               statementVariableDeclaration() |
               statementExpression())
@@ -310,6 +311,18 @@ class DartGrammarDefinition extends DartGrammarLexer {
               iterableExp,
               block,
             );
+          });
+
+  Parser<ASTStatementWhileLoop> statementWhileLoop() =>
+      (string('while').trimHidden() &
+              char('(').trimHidden() &
+              ref0(expression) &
+              char(')').trimHidden() &
+              codeBlock())
+          .map((v) {
+            var condExp = v[2];
+            var block = v[4];
+            return ASTStatementWhileLoop(condExp, block);
           });
 
   Parser<ASTStatementReturn> statementReturn() =>

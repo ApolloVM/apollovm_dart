@@ -136,6 +136,8 @@ abstract class ApolloGenerator<
       return generateASTStatementForLoop(statement, out: out);
     } else if (statement is ASTStatementForEach) {
       return generateASTStatementForEach(statement, out: out);
+    } else if (statement is ASTStatementWhileLoop) {
+      return generateASTStatementWhileLoop(statement, out: out);
     } else if (statement is ASTStatementReturnNull) {
       return generateASTStatementReturnNull(statement, out: out);
     } else if (statement is ASTStatementReturnValue) {
@@ -166,6 +168,8 @@ abstract class ApolloGenerator<
   O generateASTStatementForLoop(ASTStatementForLoop forLoop, {O? out});
 
   O generateASTStatementForEach(ASTStatementForEach forEach, {O? out});
+
+  O generateASTStatementWhileLoop(ASTStatementWhileLoop whileLoop, {O? out});
 
   O generateASTBranchIfBlock(ASTBranchIfBlock branch, {O? out});
 

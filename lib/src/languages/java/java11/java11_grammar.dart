@@ -256,6 +256,8 @@ class Java11GrammarDefinition extends Java11GrammarLexer {
       (branch() |
               statementReturn() |
               statementForLoop() |
+              statementForEach() |
+              statementWhileLoop() |
               statementVariableDeclaration() |
               statementExpression())
           .cast<ASTStatement>();
@@ -302,6 +304,18 @@ class Java11GrammarDefinition extends Java11GrammarLexer {
               iterableExp,
               block,
             );
+          });
+
+  Parser<ASTStatementWhileLoop> statementWhileLoop() =>
+      (string('while').trimHidden() &
+              char('(').trimHidden() &
+              ref0(expression) &
+              char(')').trimHidden() &
+              codeBlock())
+          .map((v) {
+            var condExp = v[2];
+            var block = v[4];
+            return ASTStatementWhileLoop(condExp, block);
           });
 
   Parser<ASTStatementReturn> statementReturn() =>

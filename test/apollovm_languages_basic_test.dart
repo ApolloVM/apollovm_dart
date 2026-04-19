@@ -22,6 +22,87 @@ Future<void> _tests() async {
   print('BASIC TESTS DEFINITIONS');
 
   var definitions = <TestDefinition>[
+    TestDefinition('dart_basic_printFibonacci.test.xml', r'''
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="Basic printFibonacci(int n)">
+    <source language="dart">
+        <![CDATA[
+void printFibonacci(int n) {
+  if (n <= 0) {
+    print("Input must be a positive integer.");
+    return;
+  }
+
+  if (n == 1) {
+    print("Fibonacci sequence up to $n: 1");
+    print("Sum: 1");
+    return;
+  }
+
+  int a = 0;
+  int b = 1;
+  var sequence = <int>[];
+  int sum = 0;
+
+  while (a < n) {
+    sequence.add(a);
+    sum += a;
+
+    int next = a + b;
+    a = b;
+    b = next;
+
+    print("Fibonacci sequence up to $n (sum: $sum): $sequence");
+  }
+}
+
+        ]]>
+    </source>
+    <call function="printFibonacci">
+        [3]
+    </call>
+    <output>
+          [
+            "Fibonacci sequence up to 3 (sum: 0): [0]",
+            "Fibonacci sequence up to 3 (sum: 1): [0, 1]",
+            "Fibonacci sequence up to 3 (sum: 2): [0, 1, 1]",
+            "Fibonacci sequence up to 3 (sum: 4): [0, 1, 1, 2]"
+          ]
+    </output>
+    <source-generated language="dart"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+  void printFibonacci(int n) {
+    if (n <= 0) {
+        print('Input must be a positive integer.');
+        return;
+    }
+
+    if (n == 1) {
+        print('Fibonacci sequence up to $n: 1');
+        print('Sum: 1');
+        return;
+    }
+
+    int a = 0;
+    int b = 1;
+    var sequence = <int>[];
+    int sum = 0;
+    while( a < n ) {
+      sequence.add(a);
+      sum += a;
+      int next = a + b;
+      a = b;
+      b = next;
+      print('Fibonacci sequence up to $n (sum: $sum): $sequence');
+    }
+  }
+
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+</test>
+    '''),
     TestDefinition('dart_basic_linearRegression.test.xml', r'''
 <?xml version="1.0" encoding="UTF-8"?>
 <test title="Basic linearRegression(List<double> x, List<double> y)">

@@ -897,6 +897,76 @@ class ASTBranchIfElseIfsElseBlock extends ASTBranch {
   }
 }
 
+class ASTStatementWhileLoop extends ASTStatement {
+  final ASTExpression conditionExpression;
+
+  final ASTBlock loopBlock;
+
+  ASTStatementWhileLoop(this.conditionExpression, this.loopBlock);
+
+  @override
+  Iterable<ASTNode> get children => [conditionExpression, loopBlock];
+
+  @override
+  void resolveNode(ASTNode? parentNode) {
+    super.resolveNode(parentNode);
+
+    conditionExpression.resolveNode(parentNode);
+
+    loopBlock.resolveNode(parentNode);
+  }
+
+  @override
+  VMContext defineRunContext(VMContext parentContext) {
+    return parentContext;
+  }
+
+  @override
+  FutureOr<ASTValue> run(
+    VMContext parentContext,
+    ASTRunStatus runStatus,
+  ) async {
+    var context = VMContext(parentContext.block, parent: parentContext);
+    var runStatus = ASTRunStatus();
+
+    var prevContext = VMContext.setCurrent(context);
+    try {
+      while (true) {
+        var cond = await conditionExpression.run(context, runStatus);
+
+        if (cond is ASTValueBool) {
+          if (!cond.value) break;
+        } else {
+          var condOK = await cond.getValue(context);
+
+          if (condOK is bool) {
+            if (!condOK) break;
+          } else {
+            throw ApolloVMRuntimeError(
+              'Condition not returning a boolean: $condOK',
+            );
+          }
+        }
+
+        var loopContext = VMContext(parentContext.block, parent: context);
+
+        VMContext.setCurrent(loopContext);
+
+        await loopBlock.run(loopContext, runStatus);
+
+        VMContext.setCurrent(context);
+      }
+    } finally {
+      VMContext.setCurrent(prevContext);
+    }
+
+    return ASTValueVoid.instance;
+  }
+
+  @override
+  ASTType resolveType(VMContext? context) => ASTTypeVoid.instance;
+}
+
 class ASTStatementForLoop extends ASTStatement {
   final ASTStatement initStatement;
 

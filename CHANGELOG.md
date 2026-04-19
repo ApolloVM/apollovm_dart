@@ -1,3 +1,34 @@
+## 0.1.13
+
+- `ASTStatementWhileLoop`:
+  - Added new AST node class representing a while loop statement.
+  - Implemented `run` method to execute the loop with proper context handling.
+  - Added type resolution returning `ASTTypeVoid.instance`.
+  - Added children and node resolution methods.
+
+- `ApolloCodeGenerator`:
+  - Added support for generating code for `ASTStatementWhileLoop` in `generateASTStatement`.
+  - Implemented `generateASTStatementWhileLoop` method to generate while loop source code.
+
+- `ApolloGenerator`:
+  - Added abstract method `generateASTStatementWhileLoop`.
+  - Added dispatch for `ASTStatementWhileLoop` in `generateASTStatement`.
+
+- `DartGrammarDefinition`:
+  - Added `statementWhileLoop` parser to parse while loop statements.
+  - Integrated `statementWhileLoop` into the main `statement` parser.
+
+- `Java11GrammarDefinition`:
+  - Added `statementWhileLoop` parser to parse while loop statements.
+  - Integrated `statementWhileLoop` into the main `statement` parser.
+
+- `ApolloGeneratorWasm`:
+  - Added stub for `generateASTStatementWhileLoop` method throwing `UnimplementedError`.
+  - Added dispatch for `ASTStatementWhileLoop` in `generateASTStatement`.
+
+- Tests:
+  - Added new test `dart_basic_printFibonacci.test.xml` demonstrating while loop usage in Dart source and generated code.
+
 ## 0.1.12
 
 - `ASTInvocableDeclaration`:

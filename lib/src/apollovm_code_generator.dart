@@ -329,6 +329,13 @@ abstract class ApolloCodeGenerator
         indent: indent,
         headIndented: headIndented,
       );
+    } else if (statement is ASTStatementWhileLoop) {
+      return generateASTStatementWhileLoop(
+        statement,
+        out: out,
+        indent: indent,
+        headIndented: headIndented,
+      );
     } else if (statement is ASTStatementReturnNull) {
       return generateASTStatementReturnNull(
         statement,
@@ -480,6 +487,41 @@ abstract class ApolloCodeGenerator
 
     var blockCode = generateASTBlock(
       forEach.loopBlock,
+      indent: indent,
+      withBrackets: false,
+    );
+
+    out.write(blockCode);
+    out.write(indent);
+    out.write('}');
+
+    return out;
+  }
+
+  @override
+  StringBuffer generateASTStatementWhileLoop(
+    ASTStatementWhileLoop whileLoop, {
+    StringBuffer? out,
+    String indent = '',
+    bool headIndented = true,
+  }) {
+    out ??= newOutput();
+
+    if (headIndented) out.write(indent);
+
+    out.write('while( ');
+
+    generateASTExpression(
+      whileLoop.conditionExpression,
+      out: out,
+      indent: indent,
+      headIndented: false,
+    );
+
+    out.write(' ) {\n');
+
+    var blockCode = generateASTBlock(
+      whileLoop.loopBlock,
       indent: indent,
       withBrackets: false,
     );
