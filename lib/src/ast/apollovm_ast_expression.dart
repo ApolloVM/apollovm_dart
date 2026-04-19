@@ -673,6 +673,65 @@ class ASTExpressionNegation extends ASTExpression {
   }
 }
 
+/// [ASTExpression] that makes another [expression] negative.
+class ASTExpressionNegative extends ASTExpression {
+  ASTExpression expression;
+
+  ASTExpressionNegative(this.expression);
+
+  @override
+  bool get isComplex => true;
+
+  @override
+  Iterable<ASTNode> get children => [expression];
+
+  @override
+  FutureOr<ASTType> resolveType(VMContext? context) => ASTTypeNum.instance;
+
+  @override
+  FutureOr<ASTValue> run(VMContext parentContext, ASTRunStatus runStatus) {
+    var context = defineRunContext(parentContext);
+
+    var retVal = expression.run(context, runStatus);
+
+    return retVal.resolveMapped((val) {
+      return operatorNegative(parentContext, val);
+    });
+  }
+
+  Never throwOperationError(ASTType t) {
+    var message = "Can't perform negative operation with type: $t";
+
+    if (t is ASTTypeNull) {
+      throw ApolloVMNullPointerException(message);
+    }
+
+    throw UnsupportedError(message);
+  }
+
+  FutureOr<ASTValueNum> operatorNegative(VMContext context, ASTValue val) {
+    var t = val.type;
+
+    if (t is ASTTypeInt) {
+      var v1 = val.getValue(context) as int;
+      var r = -v1;
+      return ASTValueInt(r);
+    } else if (t is ASTTypeDouble) {
+      var v1 = val.getValue(context) as double;
+      var r = -v1;
+      return ASTValueDouble(r);
+    }
+
+    throwOperationError(t);
+  }
+
+  @override
+  String toString({bool asGroup = false}) {
+    var s = '-$expression';
+    return asGroup ? '($s)' : s;
+  }
+}
+
 /// [ASTExpression] for an operation between 2 expressions.
 class ASTExpressionOperation extends ASTExpression {
   ASTExpression expression1;
@@ -1611,6 +1670,111 @@ class ASTExpressionObjectFunctionInvocation
   String toString({bool asGroup = false}) {
     var f = super.toString();
     return '$variable.$f';
+  }
+}
+
+/// [ASTExpression] to call a function from an expression.
+/// Example: `(-d).toStringAsFixed(4)`
+class ASTExpressionGroupFunctionInvocation
+    extends ASTExpressionFunctionInvocation {
+  ASTExpression expression;
+
+  ASTExpressionGroupFunctionInvocation(
+    this.expression,
+    String name,
+    List<ASTExpression> arguments,
+  ) : super(name, arguments);
+
+  @override
+  bool get isComplex => false;
+
+  @override
+  Iterable<ASTNode> get children => [expression];
+
+  @override
+  void resolveNode(ASTNode? parentNode) {
+    super.resolveNode(parentNode);
+
+    expression.resolveNode(this);
+  }
+
+  FutureOr<ASTValue> _getExpressionValue(VMContext parentContext) {
+    return expression.run(parentContext, ASTRunStatus());
+  }
+
+  FutureOr<ASTClass> _getObjectClass(VMContext parentContext) {
+    var retObj = _getExpressionValue(parentContext);
+
+    return retObj.resolveMapped((obj) {
+      if (obj is ASTClassInstance) {
+        return obj.clazz;
+      }
+
+      var clazz = obj.type.getClass();
+      return clazz;
+    });
+  }
+
+  ASTClass? _functionClass;
+
+  FutureOr<ASTClass> _getFunctionClass(VMContext parentContext) async {
+    if (_functionClass == null) {
+      var clazz = await _getObjectClass(parentContext);
+      _functionClass = clazz;
+    }
+    return _functionClass!;
+  }
+
+  @override
+  FutureOr<ASTInvocableDeclaration> _getFunction(
+    VMContext parentContext,
+  ) async {
+    var clazz = await _getFunctionClass(parentContext);
+    var fSignature = _getASTFunctionSignature();
+
+    var f = clazz.getFunction(name, fSignature, parentContext);
+
+    if (f == null) {
+      var obj = await _getExpressionValue(parentContext);
+      throw ApolloVMRuntimeError(
+        "Can't find class[${clazz.name}] function[$name( $fSignature )] for object: $obj",
+      );
+    }
+
+    return f;
+  }
+
+  @override
+  FutureOr<ASTValue> run(
+    VMContext parentContext,
+    ASTRunStatus runStatus,
+  ) async {
+    var f = await _getFunction(parentContext);
+
+    var argumentsValues = await _resolveArgumentsValues(
+      parentContext,
+      runStatus,
+      arguments,
+    );
+
+    var obj = await _getExpressionValue(parentContext);
+
+    if (f is ASTClassFunctionDeclaration) {
+      return f.objectCall(
+        parentContext,
+        obj,
+        positionalParameters: argumentsValues,
+      );
+    } else {
+      // Static function call:
+      return f.call(parentContext, positionalParameters: argumentsValues);
+    }
+  }
+
+  @override
+  String toString({bool asGroup = false}) {
+    var f = super.toString();
+    return '($expression).$f';
   }
 }
 

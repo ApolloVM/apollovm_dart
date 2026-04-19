@@ -1,3 +1,24 @@
+## 0.1.14
+
+- Added new `ASTExpression` subclass `ASTExpressionNegative` to represent unary negative expressions.
+- Added new `ASTExpression` subclass `ASTExpressionGroupFunctionInvocation` to represent function calls on grouped expressions (e.g., `(-d).toStringAsFixed(4)`).
+- `ApolloCodeGenerator`:
+  - Updated `generateASTExpression` to handle `ASTExpressionNegative` and `ASTExpressionGroupFunctionInvocation`.
+  - Added methods `generateASTExpressionNegative` and `generateASTExpressionGroupFunctionInvocation`.
+  - Refactored function invocation code into private `_generateFunctionInvocation` helper.
+- `ApolloGenerator` interface:
+  - Added abstract methods `generateASTExpressionNegative` and `generateASTExpressionGroupFunctionInvocation`.
+  - Updated `generateASTExpression` to support new expression types.
+- `apollovm_ast_expression.dart`:
+  - Added implementation of `ASTExpressionNegative` with type resolution, runtime evaluation, and string representation.
+  - Added implementation of `ASTExpressionGroupFunctionInvocation` with function resolution and invocation logic.
+- Dart and Java11 grammars:
+  - Added parsing support for unary negative expressions (`-expr`).
+  - Added parsing support for group function invocations (e.g., `(expr).func(args)`).
+- `ApolloGeneratorWasm`:
+  - Added stub implementations for `generateASTExpressionNegative` and `generateASTExpressionGroupFunctionInvocation`.
+  - Updated expression generation dispatch to handle new expression types.
+
 ## 0.1.13
 
 - `ASTStatementWhileLoop`:

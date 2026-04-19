@@ -605,6 +605,7 @@ class DartGrammarDefinition extends DartGrammarLexer {
   Parser<ASTExpression> expressionNoOperation() =>
       (expressionNegate() |
               expressionLiteral() |
+              expressionGroupFunctionInvocation() |
               expressionGroup() |
               expressionListEmptyLiteral() |
               expressionListLiteral() |
@@ -616,7 +617,8 @@ class DartGrammarDefinition extends DartGrammarLexer {
               expressionVariableEntryAccess() |
               expressionGetterAccess() |
               expressionNullValue() |
-              expressionVariableAccess())
+              expressionVariableAccess() |
+              expressionNegative())
           .cast<ASTExpression>();
 
   Parser<ASTExpressionNegation> expressionNegate() =>
@@ -627,10 +629,34 @@ class DartGrammarDefinition extends DartGrammarLexer {
             return ASTExpressionNegation(exp);
           });
 
+  Parser<ASTExpressionNegative> expressionNegative() =>
+      (char('-').trimHidden() &
+              (ref0(expressionNoOperation) | ref0(expressionGroup)))
+          .map((v) {
+            var exp = v[1] as ASTExpression;
+            return ASTExpressionNegative(exp);
+          });
+
   Parser<ASTExpression> expressionGroup() =>
       (char('(').trimHidden() & ref0(expression) & char(')').trimHidden()).map(
         (v) => v[1] as ASTExpression,
       );
+
+  Parser<ASTExpressionGroupFunctionInvocation>
+  expressionGroupFunctionInvocation() =>
+      (ref0(expressionGroup) &
+              char('.') &
+              identifier() &
+              char('(').trimHidden() &
+              ref0(expressionSequence).optional() &
+              char(')').trimHidden())
+          .map((v) {
+            var expression = v[0] as ASTExpression;
+            var name = v[2] as String;
+            var args = v[4] as List<ASTExpression>?;
+            args ??= <ASTExpression>[];
+            return ASTExpressionGroupFunctionInvocation(expression, name, args);
+          });
 
   Parser<ASTExpressionFunctionInvocation> expressionFunctionInvocation() =>
       ((identifier() & char('.')).optional() &

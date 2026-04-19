@@ -471,6 +471,15 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
   }
 
   @override
+  BytesOutput generateASTExpressionGroupFunctionInvocation(
+    ASTExpressionGroupFunctionInvocation expression, {
+    BytesOutput? out,
+  }) {
+    // TODO: implement generateASTExpressionGroupFunctionInvocation
+    throw UnimplementedError("generateASTExpressionGroupFunctionInvocation");
+  }
+
+  @override
   BytesOutput generateASTExpressionMapLiteral(
     ASTExpressionMapLiteral expression, {
     BytesOutput? out,
@@ -486,6 +495,15 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
   }) {
     // TODO: implement generateASTExpressionNegation
     throw UnimplementedError('generateASTExpressionNegation');
+  }
+
+  @override
+  BytesOutput generateASTExpressionNegative(
+    ASTExpressionNegative expression, {
+    BytesOutput? out,
+  }) {
+    // TODO: implement generateASTExpressionNegative
+    throw UnimplementedError('generateASTExpressionNegative');
   }
 
   ASTTypeDouble _fixStackOpsAsFloat64(
@@ -1640,10 +1658,14 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       return generateASTExpressionMapLiteral(expression, out: out);
     } else if (expression is ASTExpressionNegation) {
       return generateASTExpressionNegation(expression, out: out);
+    } else if (expression is ASTExpressionNegative) {
+      return generateASTExpressionNegative(expression, out: out);
     } else if (expression is ASTExpressionLocalFunctionInvocation) {
       return generateASTExpressionLocalFunctionInvocation(expression, out: out);
     } else if (expression is ASTExpressionObjectFunctionInvocation) {
       return generateASTExpressionFunctionInvocation(expression, out: out);
+    } else if (expression is ASTExpressionGroupFunctionInvocation) {
+      return generateASTExpressionGroupFunctionInvocation(expression, out: out);
     } else if (expression is ASTExpressionOperation) {
       return generateASTExpressionOperation(
         expression,

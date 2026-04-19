@@ -22,6 +22,90 @@ Future<void> _tests() async {
   print('BASIC TESTS DEFINITIONS');
 
   var definitions = <TestDefinition>[
+    TestDefinition('dart_basic_exchange_rates.test.xml', r'''
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="Basic main()">
+    <source language="dart">
+        <![CDATA[
+void main() {
+  // Exchange rates obtained from the API calls
+  final double usdToEurRate = 0.84946;      // Rate: 1 USD = X EUR
+  final double usdToBrlRate = 4.981878;     // Rate: 1 USD = X BRL
+  final double eurToBrlRate = 5.864759;     // Rate: 1 EUR = X BRL
+
+  print('--- Currency Exchange Rates ---');
+  print('USD to EUR Rate: $usdToEurRate');
+  print('USD to BRL Rate: $usdToBrlRate');
+  print('EUR to BRL Rate: $eurToBrlRate');
+  print('\n--- Arbitrage Calculation (USD -> EUR -> BRL) ---');
+
+  // Calculate the implied rate for USD -> BRL via EUR
+  // Implied Rate = (USD to EUR Rate) * (EUR to BRL Rate)
+  final double impliedBrlRate = usdToEurRate * eurToBrlRate;
+  print('Implied USD to BRL Rate (via EUR): $impliedBrlRate');
+
+  // Calculate the discrepancy
+  // Discrepancy = Implied Rate - Direct Rate
+  final double discrepancy = impliedBrlRate - usdToBrlRate;
+
+  print('\n--- Arbitrage Discrepancy ---');
+  if (discrepancy > 0) {
+    print('Arbitrage Opportunity: The indirect route is more profitable by: ${discrepancy.toStringAsFixed(8)} BRL per USD.');
+  } else if (discrepancy < 0) {
+    print('No Arbitrage Opportunity: The direct route is more profitable by: ${(-discrepancy).toStringAsFixed(8)} BRL per USD.');
+  } else {
+    print('Rates are perfectly aligned. No arbitrage opportunity found.');
+  }
+}
+
+        ]]>
+    </source>
+    <call function="main">
+        []
+    </call>
+    <output>
+          [
+            "--- Currency Exchange Rates ---",
+            "USD to EUR Rate: 0.84946",
+            "USD to BRL Rate: 4.981878",
+            "EUR to BRL Rate: 5.864759",
+            "\n--- Arbitrage Calculation (USD -> EUR -> BRL) ---",
+            "Implied USD to BRL Rate (via EUR): 4.98187818014",
+            "\n--- Arbitrage Discrepancy ---",
+            "Arbitrage Opportunity: The indirect route is more profitable by: 0.00000018 BRL per USD."
+          ]
+    </output>
+    <source-generated language="dart"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+  void main() {
+    double usdToEurRate = 0.84946;
+    double usdToBrlRate = 4.981878;
+    double eurToBrlRate = 5.864759;
+    print('--- Currency Exchange Rates ---');
+    print('USD to EUR Rate: $usdToEurRate');
+    print('USD to BRL Rate: $usdToBrlRate');
+    print('EUR to BRL Rate: $eurToBrlRate');
+    print('\n--- Arbitrage Calculation (USD -> EUR -> BRL) ---');
+    double impliedBrlRate = usdToEurRate * eurToBrlRate;
+    print('Implied USD to BRL Rate (via EUR): $impliedBrlRate');
+    double discrepancy = impliedBrlRate - usdToBrlRate;
+    print('\n--- Arbitrage Discrepancy ---');
+    if (discrepancy > 0) {
+        print('Arbitrage Opportunity: The indirect route is more profitable by: ${discrepancy.toStringAsFixed(8)} BRL per USD.');
+    } else if (discrepancy < 0) {
+        print('No Arbitrage Opportunity: The direct route is more profitable by: ${(-discrepancy).toStringAsFixed(8)} BRL per USD.');
+    } else {
+        print('Rates are perfectly aligned. No arbitrage opportunity found.');
+    }
+
+  }
+
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+</test>
+    '''),
     TestDefinition('dart_basic_printFibonacci.test.xml', r'''
 <?xml version="1.0" encoding="UTF-8"?>
 <test title="Basic printFibonacci(int n)">

@@ -233,10 +233,14 @@ abstract class ApolloGenerator<
       return generateASTExpressionMapLiteral(expression, out: out);
     } else if (expression is ASTExpressionNegation) {
       return generateASTExpressionNegation(expression, out: out);
+    } else if (expression is ASTExpressionNegative) {
+      return generateASTExpressionNegative(expression, out: out);
     } else if (expression is ASTExpressionLocalFunctionInvocation) {
       return generateASTExpressionLocalFunctionInvocation(expression, out: out);
     } else if (expression is ASTExpressionObjectFunctionInvocation) {
       return generateASTExpressionFunctionInvocation(expression, out: out);
+    } else if (expression is ASTExpressionGroupFunctionInvocation) {
+      return generateASTExpressionGroupFunctionInvocation(expression, out: out);
     } else if (expression is ASTExpressionOperation) {
       return generateASTExpressionOperation(expression, out: out);
     }
@@ -265,6 +269,13 @@ abstract class ApolloGenerator<
   });
 
   O generateASTExpressionNegation(ASTExpressionNegation expression, {O? out});
+
+  O generateASTExpressionNegative(ASTExpressionNegative expression, {O? out});
+
+  O generateASTExpressionGroupFunctionInvocation(
+    ASTExpressionGroupFunctionInvocation expression, {
+    O? out,
+  });
 
   O generateASTExpressionFunctionInvocation(
     ASTExpressionObjectFunctionInvocation expression, {

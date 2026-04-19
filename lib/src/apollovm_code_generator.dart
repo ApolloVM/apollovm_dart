@@ -942,6 +942,13 @@ abstract class ApolloCodeGenerator
         indent: indent,
         headIndented: headIndented,
       );
+    } else if (expression is ASTExpressionNegative) {
+      return generateASTExpressionNegative(
+        expression,
+        out: out,
+        indent: indent,
+        headIndented: headIndented,
+      );
     } else if (expression is ASTExpressionLocalFunctionInvocation) {
       return generateASTExpressionLocalFunctionInvocation(
         expression,
@@ -951,6 +958,13 @@ abstract class ApolloCodeGenerator
       );
     } else if (expression is ASTExpressionObjectFunctionInvocation) {
       return generateASTExpressionFunctionInvocation(
+        expression,
+        out: out,
+        indent: indent,
+        headIndented: headIndented,
+      );
+    } else if (expression is ASTExpressionGroupFunctionInvocation) {
+      return generateASTExpressionGroupFunctionInvocation(
         expression,
         out: out,
         indent: indent,
@@ -1176,6 +1190,58 @@ abstract class ApolloCodeGenerator
   }
 
   @override
+  StringBuffer generateASTExpressionNegative(
+    ASTExpressionNegative expression, {
+    StringBuffer? out,
+    String indent = '',
+    bool headIndented = true,
+  }) {
+    out ??= newOutput();
+
+    if (headIndented) out.write(indent);
+
+    out.write('-');
+
+    generateASTExpression(
+      expression.expression,
+      out: out,
+      indent: indent,
+      headIndented: false,
+    );
+
+    return out;
+  }
+
+  @override
+  StringBuffer generateASTExpressionGroupFunctionInvocation(
+    ASTExpressionGroupFunctionInvocation expression, {
+    StringBuffer? out,
+    String indent = '',
+    bool headIndented = true,
+  }) {
+    out ??= newOutput();
+
+    if (headIndented) out.write(indent);
+
+    out.write('(');
+    generateASTExpression(
+      expression.expression,
+      out: out,
+      indent: indent,
+      headIndented: false,
+    );
+    out.write(')');
+    out.write('.');
+
+    final functionName = expression.name;
+    final arguments = expression.arguments;
+
+    _generateFunctionInvocation(functionName, arguments, out, indent);
+
+    return out;
+  }
+
+  @override
   StringBuffer generateASTExpressionFunctionInvocation(
     ASTExpressionObjectFunctionInvocation expression, {
     StringBuffer? out,
@@ -1202,21 +1268,9 @@ abstract class ApolloCodeGenerator
     );
     out.write('.');
 
-    out.write(functionName);
-    out.write('(');
+    final arguments = expression.arguments;
 
-    var arguments = expression.arguments;
-    for (var i = 0; i < arguments.length; ++i) {
-      var arg = arguments[i];
-      if (i > 0) out.write(', ');
-      generateASTExpression(
-        arg,
-        out: out,
-        indent: '$indent  ',
-        headIndented: false,
-      );
-    }
-    out.write(')');
+    _generateFunctionInvocation(functionName, arguments, out, indent);
 
     return out;
   }
@@ -1232,10 +1286,23 @@ abstract class ApolloCodeGenerator
 
     if (headIndented) out.write(indent);
 
-    out.write(expression.name);
+    final functionName = expression.name;
+    final arguments = expression.arguments;
+
+    _generateFunctionInvocation(functionName, arguments, out, indent);
+
+    return out;
+  }
+
+  void _generateFunctionInvocation(
+    String functionName,
+    List<ASTExpression> arguments,
+    StringBuffer out,
+    String indent,
+  ) {
+    out.write(functionName);
     out.write('(');
 
-    var arguments = expression.arguments;
     for (var i = 0; i < arguments.length; ++i) {
       var arg = arguments[i];
       if (i > 0) out.write(', ');
@@ -1248,8 +1315,6 @@ abstract class ApolloCodeGenerator
       );
     }
     out.write(')');
-
-    return out;
   }
 
   @override
