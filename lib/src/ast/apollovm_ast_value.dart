@@ -996,17 +996,28 @@ class ASTValueAsString<T> extends ASTValue<String> {
 
   @override
   FutureOr<String> getValue(VMContext context) {
-    return value.getValue(context).resolveMapped((v) => '$v');
+    return value
+        .getValue(context)
+        .resolveMapped((v) => valueToString(v, value.type));
   }
 
   @override
   FutureOr<String> getValueNoContext() {
-    return value.getValueNoContext().resolveMapped((v) => '$v');
+    return value.getValueNoContext().resolveMapped(
+      (v) => valueToString(v, value.type),
+    );
   }
 
   @override
   FutureOr<ASTValue<String>> resolve(VMContext context) {
     return getValue(context).resolveMapped((v) => ASTValueString(v));
+  }
+
+  static String valueToString(Object? v, [ASTType? type]) {
+    if (v is num && type is ASTTypeDouble) {
+      return ASTTypeDouble.doubleToString(v);
+    }
+    return v.toString();
   }
 }
 
@@ -1022,23 +1033,34 @@ class ASTValuesListAsString extends ASTValue<String> {
   @override
   FutureOr<String> getValue(VMContext context) {
     var vsFuture = values.map((e) {
-      var val = e.resolve(context).resolveMapped((v) => v.getValue(context));
-      return val.resolveMapped((v) => '$v');
+      return e.resolve(context).resolveMapped((value) {
+        return value.getValue(context).resolveMapped((Object? v) {
+          return v.resolveMapped((v) => valueToString(v, value.type));
+        });
+      });
     }).toList();
     return vsFuture.resolveAllJoined((l) => l.join());
   }
 
   @override
   FutureOr<String> getValueNoContext() {
-    var vsFuture = values.map((e) => e.resolveMapped((v) => '$v')).toList();
+    var vsFuture = values
+        .map(
+          (value) => value.getValueNoContext().resolveMapped(
+            (v) => valueToString(v, value.type),
+          ),
+        )
+        .toList();
     return vsFuture.resolveAllJoined((l) => l.join());
   }
 
   @override
   FutureOr<ASTValueString> resolve(VMContext context) {
-    var value = getValue(context);
-    return value.resolveMapped((v) => ASTValueString(v));
+    return getValue(context).resolveMapped((v) => ASTValueString(v));
   }
+
+  String valueToString(Object? v, [ASTType? type]) =>
+      ASTValueAsString.valueToString(v, type);
 }
 
 /// [ASTValue] for expressions that should be converted to [String].

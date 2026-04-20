@@ -1,3 +1,24 @@
+## 0.1.15
+
+- `ApolloCodeGenerator`:
+  - `generateASTValueDouble`: replaced manual double string formatting with `ASTTypeDouble.doubleToString` for consistent double string representation.
+
+- `ASTStatementVariableDeclaration`:
+  - `_runImpl2`: updated type cast check to allow dynamic type to bypass cast validation.
+
+- `ASTTypeDouble`:
+  - Added static method `doubleToString` to format double values consistently, optionally allowing scientific notation.
+  - Updated `toString` method of `ASTTypeNum` to return `'num'` instead of `'double'`.
+
+- `ASTValueAsString` and `ASTValuesListAsString`:
+  - Updated string conversion to use `valueToString` method that formats doubles using `ASTTypeDouble.doubleToString`.
+
+- `CorePackageMath`:
+  - Updated math function external static function wrappers to explicitly type parameters as `num` and return `ASTTypeDouble.instance` for functions returning double values.
+
+- Test framework (`apollovm_languages_test_definition.dart`):
+  - Moved output printing before output assertion in `_testCall` for clearer test logs.
+
 ## 0.1.14
 
 - Added new `ASTExpression` subclass `ASTExpressionNegative` to represent unary negative expressions.

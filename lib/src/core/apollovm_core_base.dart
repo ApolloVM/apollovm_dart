@@ -114,85 +114,85 @@ class CorePackageMath extends CorePackageBase {
         0,
         false,
       ),
-      (a, b) => pow(a, b),
+      (num a, num b) => pow(a, b),
     );
 
     _functionSqrt = _externalStaticFunctionArgs1(
       'sqrt',
-      ASTTypeNum.instance,
+      ASTTypeDouble.instance,
       ASTFunctionParameterDeclaration(ASTTypeNum.instance, 'x', 0, false),
-      (x) => sqrt(x),
+      (num x) => sqrt(x),
     );
 
     _functionSin = _externalStaticFunctionArgs1(
       'sin',
-      ASTTypeNum.instance,
+      ASTTypeDouble.instance,
       ASTFunctionParameterDeclaration(ASTTypeNum.instance, 'x', 0, false),
-      (x) => sin(x),
+      (num x) => sin(x),
     );
 
     _functionCos = _externalStaticFunctionArgs1(
       'cos',
-      ASTTypeNum.instance,
+      ASTTypeDouble.instance,
       ASTFunctionParameterDeclaration(ASTTypeNum.instance, 'x', 0, false),
-      (x) => cos(x),
+      (num x) => cos(x),
     );
 
     _functionTan = _externalStaticFunctionArgs1(
       'tan',
-      ASTTypeNum.instance,
+      ASTTypeDouble.instance,
       ASTFunctionParameterDeclaration(ASTTypeNum.instance, 'x', 0, false),
-      (x) => tan(x),
+      (num x) => tan(x),
     );
 
     _functionAsin = _externalStaticFunctionArgs1(
       'asin',
-      ASTTypeNum.instance,
+      ASTTypeDouble.instance,
       ASTFunctionParameterDeclaration(ASTTypeNum.instance, 'x', 0, false),
-      (x) => asin(x),
+      (num x) => asin(x),
     );
 
     _functionAcos = _externalStaticFunctionArgs1(
       'acos',
-      ASTTypeNum.instance,
+      ASTTypeDouble.instance,
       ASTFunctionParameterDeclaration(ASTTypeNum.instance, 'x', 0, false),
-      (x) => acos(x),
+      (num x) => acos(x),
     );
 
     _functionAtan = _externalStaticFunctionArgs1(
       'atan',
-      ASTTypeNum.instance,
+      ASTTypeDouble.instance,
       ASTFunctionParameterDeclaration(ASTTypeNum.instance, 'x', 0, false),
-      (x) => atan(x),
+      (num x) => atan(x),
     );
 
     _functionAtan2 = _externalStaticFunctionArgs2(
       'atan2',
-      ASTTypeNum.instance,
+      ASTTypeDouble.instance,
       ASTFunctionParameterDeclaration(ASTTypeNum.instance, 'y', 0, false),
       ASTFunctionParameterDeclaration(ASTTypeNum.instance, 'x', 0, false),
-      (y, x) => atan2(y, x),
+      (num y, num x) => atan2(y, x),
     );
 
     _functionLog = _externalStaticFunctionArgs1(
       'log',
-      ASTTypeNum.instance,
+      ASTTypeDouble.instance,
       ASTFunctionParameterDeclaration(ASTTypeNum.instance, 'x', 0, false),
-      (x) => log(x),
+      (num x) => log(x),
     );
 
     _functionExp = _externalStaticFunctionArgs1(
       'exp',
-      ASTTypeNum.instance,
+      ASTTypeDouble.instance,
       ASTFunctionParameterDeclaration(ASTTypeNum.instance, 'x', 0, false),
-      (x) => exp(x),
+      (num x) => exp(x),
     );
 
     _functionAbs = _externalStaticFunctionArgs1(
       'abs',
       ASTTypeNum.instance,
       ASTFunctionParameterDeclaration(ASTTypeNum.instance, 'x', 0, false),
-      (x) => x.abs(),
+      (num x) => x.abs(),
     );
 
     _functionMin = _externalStaticFunctionArgs2(
@@ -200,7 +200,7 @@ class CorePackageMath extends CorePackageBase {
       ASTTypeNum.instance,
       ASTFunctionParameterDeclaration(ASTTypeNum.instance, 'a', 0, false),
       ASTFunctionParameterDeclaration(ASTTypeNum.instance, 'b', 0, false),
-      (a, b) => min(a, b),
+      (num a, num b) => min(a, b),
     );
 
     _functionMax = _externalStaticFunctionArgs2(
@@ -208,7 +208,7 @@ class CorePackageMath extends CorePackageBase {
       ASTTypeNum.instance,
       ASTFunctionParameterDeclaration(ASTTypeNum.instance, 'a', 0, false),
       ASTFunctionParameterDeclaration(ASTTypeNum.instance, 'b', 0, false),
-      (a, b) => max(a, b),
+      (num a, num b) => max(a, b),
     );
   }
 

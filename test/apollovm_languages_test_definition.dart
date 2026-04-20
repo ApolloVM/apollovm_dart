@@ -274,6 +274,12 @@ Future<void> _testCall(
 
   print('RETURN[$callIndex]: $executionReturn');
 
+  print('OUTPUT[$callIndex]:');
+
+  for (var o in outputList) {
+    print('>> $o');
+  }
+
   if (callReturn != null) {
     expect(
       executionReturn.getValueNoContext().toString(),
@@ -291,12 +297,6 @@ Future<void> _testCall(
   }
 
   expect(outputList, equals(output), reason: 'Output error');
-
-  print('OUTPUT[$callIndex]:');
-
-  for (var o in outputList) {
-    print('>> $o');
-  }
 }
 
 List _parseJsonList(String callParametersJson) {

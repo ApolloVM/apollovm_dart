@@ -665,9 +665,10 @@ class ASTStatementVariableDeclaration<V> extends ASTStatementTyped {
     ASTRunStatus runStatus,
     ASTExpression value,
   ) async {
-    if (!valueResolvedType.canCastToType(variableResolvedType)) {
+    if (valueResolvedType != ASTTypeDynamic.instance &&
+        !valueResolvedType.canCastToType(variableResolvedType)) {
       throw ApolloVMRuntimeError(
-        "Can't cast variable type ($variableResolvedType) to type: $valueResolvedType",
+        "Can't cast value type ($valueResolvedType) to variable type ($variableResolvedType).",
       );
     }
 

@@ -8,6 +8,7 @@ import 'package:swiss_knife/swiss_knife.dart';
 
 import '../apollovm_base.dart';
 import '../apollovm_parser.dart';
+import '../apollovm_utils.dart';
 import '../core/apollovm_core_base.dart';
 import 'apollovm_ast_annotation.dart';
 import 'apollovm_ast_base.dart';
@@ -523,7 +524,7 @@ class ASTTypeNum<T extends num> extends ASTTypeNumber<T> {
 
   @override
   String toString() {
-    return 'double';
+    return 'num';
   }
 }
 
@@ -656,6 +657,27 @@ class ASTTypeDouble extends ASTTypeNum<double> with StrictType {
     if (value == null) return null;
     var n = parseDouble(value) ?? 0.0;
     return ASTValueDouble(n);
+  }
+
+  static String doubleToString(num v, {bool allowScientificNotation = true}) {
+    var s = v.toString();
+    if (v == 0.0) {
+      return '0.0';
+    } else if (s.contains('e') || s.contains('E')) {
+      if (allowScientificNotation) {
+        return s;
+      } else {
+        final digits = v
+            .toDouble()
+            .fractionDigitsFromScientificNotation()
+            .clamp(0, 20);
+        return v.toStringAsFixed(digits);
+      }
+    } else if (!s.contains('.')) {
+      return '$s.0';
+    } else {
+      return s;
+    }
   }
 
   @override

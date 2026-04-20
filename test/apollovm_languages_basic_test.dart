@@ -27,6 +27,153 @@ Future<void> _tests() async {
 <test title="Basic main()">
     <source language="dart">
         <![CDATA[
+
+void main() {
+  // --- Parameters based on the conceptual formula ---
+
+  // Initial State
+  double T0 = 100.0; // Initial Trustworthiness (100%)
+
+  // Model Constants (These are illustrative and must be calibrated for real-world use)
+  double alpha = 0.5;      // Error Amplification Constant (Sensitivity to error compounding)
+  double C = 2.0;          // Context/Complexity Factor (Complexity multiplier)
+  int timeMonths = 6;      // Simulation duration: 6 months
+
+  // --- Simulation Setup ---
+  // We will simulate the accumulation of errors over time based on a hypothetical rate.
+  // For this simulation, we assume an average monthly error introduction rate (E_monthly).
+  // The team size (5 developers) influences the error rate and context factor implicitly.
+
+  // Hypothetical Monthly Error Introduction Rate (This is the variable that changes each month)
+  double monthlyErrorRate = 0.1; // Assume 10% of work introduces errors per month, adjusted by team size/complexity.
+
+  double accumulatedErrors = 0.0;
+  List<double> trustworthinessHistory = [];
+
+  print("--- LLM Trustworthiness Simulation Over $timeMonths Months ---");
+  print("Initial State: T0 = $T0\n");
+
+
+  // --- Iterative Simulation Loop ---
+  for (int t = 1; t <= timeMonths; t++) {
+    // 1. Calculate the new error introduced in this period
+    double monthlyErrors = monthlyErrorRate * C / 5.0; // Adjusting by team size for context factor
+
+    // 2. Update the accumulated errors (E_acc)
+    accumulatedErrors += monthlyErrors;
+
+    // 3. Calculate the compounding risk term using the formula: e^(alpha * E_acc * t)
+    // Note: We use 't' as the total time elapsed for this calculation step, reflecting cumulative history.
+    double compoundingFactor = exp(alpha * accumulatedErrors * t);
+
+    // 4. Calculate the Trustworthiness (T_t)
+    double currentTrustworthiness = T0 - (accumulatedErrors * compoundingFactor);
+
+    // Ensure trustworthiness does not fall below zero or become negative
+    if (currentTrustworthiness < 0) {
+      currentTrustworthiness = 0.0;
+    }
+
+    trustworthinessHistory.add(currentTrustworthiness);
+
+    print("Month $t:");
+    print("  Accumulated Errors (E_acc): ${accumulatedErrors.toStringAsFixed(3)}");
+    print("  Compounding Factor: ${compoundingFactor.toStringAsFixed(2)}");
+    print("  Current Trustworthiness (T_$t): ${currentTrustworthiness.toStringAsFixed(2)}%\n");
+  }
+
+  // --- Final Result ---
+  double finalTrust = trustworthinessHistory.last;
+  print("==================================================");
+  print("SIMULATION COMPLETE");
+  print("Final Trustworthiness after $timeMonths Months: ${finalTrust.toStringAsFixed(2)}%");
+  print("==================================================");
+}
+
+        ]]>
+    </source>
+    <call function="main">
+        []
+    </call>
+    <output>
+          [
+            "--- LLM Trustworthiness Simulation Over 6 Months ---",
+            "Initial State: T0 = 100.0\n",
+            "Month 1:",
+            "  Accumulated Errors (E_acc): 0.040",
+            "  Compounding Factor: 1.02",
+            "  Current Trustworthiness (T_1): 99.96%\n",
+            "Month 2:",
+            "  Accumulated Errors (E_acc): 0.080",
+            "  Compounding Factor: 1.08",
+            "  Current Trustworthiness (T_2): 99.91%\n",
+            "Month 3:",
+            "  Accumulated Errors (E_acc): 0.120",
+            "  Compounding Factor: 1.20",
+            "  Current Trustworthiness (T_3): 99.86%\n",
+            "Month 4:",
+            "  Accumulated Errors (E_acc): 0.160",
+            "  Compounding Factor: 1.38",
+            "  Current Trustworthiness (T_4): 99.78%\n",
+            "Month 5:",
+            "  Accumulated Errors (E_acc): 0.200",
+            "  Compounding Factor: 1.65",
+            "  Current Trustworthiness (T_5): 99.67%\n",
+            "Month 6:",
+            "  Accumulated Errors (E_acc): 0.240",
+            "  Compounding Factor: 2.05",
+            "  Current Trustworthiness (T_6): 99.51%\n",
+            "==================================================",
+            "SIMULATION COMPLETE",
+            "Final Trustworthiness after 6 Months: 99.51%",
+            "=================================================="
+          ]
+    </output>
+    <source-generated language="dart"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+  void main() {
+    double T0 = 100.0;
+    double alpha = 0.5;
+    double C = 2.0;
+    int timeMonths = 6;
+    double monthlyErrorRate = 0.1;
+    double accumulatedErrors = 0.0;
+    List<double> trustworthinessHistory = <double>[];
+    print('--- LLM Trustworthiness Simulation Over $timeMonths Months ---');
+    print('Initial State: T0 = $T0\n');
+    for (int t = 1; t <= timeMonths ; t++) {
+      double monthlyErrors = monthlyErrorRate * (C / 5.0);
+      accumulatedErrors += monthlyErrors;
+      double compoundingFactor = exp(alpha * (accumulatedErrors * t));
+      double currentTrustworthiness = T0 - (accumulatedErrors * compoundingFactor);
+      if (currentTrustworthiness < 0) {
+          currentTrustworthiness = 0.0;
+      }
+
+      trustworthinessHistory.add(currentTrustworthiness);
+      print('Month $t:');
+      print('  Accumulated Errors (E_acc): ${accumulatedErrors.toStringAsFixed(3)}');
+      print('  Compounding Factor: ${compoundingFactor.toStringAsFixed(2)}');
+      print('  Current Trustworthiness (T_$t): ${currentTrustworthiness.toStringAsFixed(2)}%\n');
+    }
+    double finalTrust = trustworthinessHistory.last;
+    print('==================================================');
+    print('SIMULATION COMPLETE');
+    print('Final Trustworthiness after $timeMonths Months: ${finalTrust.toStringAsFixed(2)}%');
+    print('==================================================');
+  }
+
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+</test>
+    '''),
+    TestDefinition('dart_basic_exchange_rates.test.xml', r'''
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="Basic main()">
+    <source language="dart">
+        <![CDATA[
 void main() {
   // Exchange rates obtained from the API calls
   final double usdToEurRate = 0.84946;      // Rate: 1 USD = X EUR
