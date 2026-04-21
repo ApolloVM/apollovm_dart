@@ -2,6 +2,7 @@
 // This code is governed by the Apache License, Version 2.0.
 // Please refer to the LICENSE and AUTHORS files for details.
 
+import 'dart:collection';
 import 'dart:math' as math;
 
 import 'package:async_extension/async_extension.dart';
@@ -25,15 +26,23 @@ class ASTEntryPointBlock extends ASTBlock {
     String entryFunctionName,
     List? positionalParameters,
     Map? namedParameters, {
+    ApolloImportManager? importManager,
     ApolloExternalFunctionMapper? externalFunctionMapper,
     VMObject? classInstanceObject,
     Map<String, ASTValue>? classInstanceFields,
     VMTypeResolver? typeResolver,
   }) async {
     var rootContext = await _initializeEntryPointBlock(
+      importManager,
       externalFunctionMapper,
       typeResolver,
     );
+
+    ApolloImportManager? prevImportManager;
+    if (importManager != null) {
+      prevImportManager = rootContext.importManager;
+      rootContext.importManager = importManager;
+    }
 
     ApolloExternalFunctionMapper? prevExternalFunctionMapper;
     if (externalFunctionMapper != null) {
@@ -105,6 +114,11 @@ class ASTEntryPointBlock extends ASTBlock {
       );
     } finally {
       VMContext.setCurrent(prevContext);
+
+      if (identical(rootContext.importManager, importManager)) {
+        rootContext.importManager = prevImportManager;
+      }
+
       if (identical(
         rootContext.externalFunctionMapper,
         externalFunctionMapper,
@@ -118,13 +132,21 @@ class ASTEntryPointBlock extends ASTBlock {
     String entryFunctionName,
     List? positionalParameters,
     Map? namedParameters, {
+    ApolloImportManager? importManager,
     ApolloExternalFunctionMapper? externalFunctionMapper,
     VMTypeResolver? typeResolver,
   }) async {
     var rootContext = await _initializeEntryPointBlock(
+      importManager,
       externalFunctionMapper,
       typeResolver,
     );
+
+    ApolloImportManager? prevImportManager;
+    if (importManager != null) {
+      prevImportManager = rootContext.importManager;
+      rootContext.importManager = importManager;
+    }
 
     ApolloExternalFunctionMapper? prevExternalFunctionMapper;
     if (externalFunctionMapper != null) {
@@ -147,6 +169,11 @@ class ASTEntryPointBlock extends ASTBlock {
       }
     } finally {
       VMContext.setCurrent(prevContext);
+
+      if (identical(rootContext.importManager, importManager)) {
+        rootContext.importManager = prevImportManager;
+      }
+
       if (identical(
         rootContext.externalFunctionMapper,
         externalFunctionMapper,
@@ -159,6 +186,7 @@ class ASTEntryPointBlock extends ASTBlock {
   VMContext? _rootContext;
 
   Future<VMContext> _initializeEntryPointBlock(
+    ApolloImportManager? importManager,
     ApolloExternalFunctionMapper? externalFunctionMapper,
     VMTypeResolver? typeResolver,
   ) async {
@@ -166,6 +194,12 @@ class ASTEntryPointBlock extends ASTBlock {
       var rootContext = createContext(typeResolver);
       var rootStatus = ASTRunStatus();
       _rootContext = rootContext;
+
+      ApolloImportManager? prevImportManager;
+      if (importManager != null) {
+        prevImportManager = rootContext.importManager;
+        rootContext.importManager = importManager;
+      }
 
       ApolloExternalFunctionMapper? prevExternalFunctionMapper;
       if (externalFunctionMapper != null) {
@@ -179,6 +213,10 @@ class ASTEntryPointBlock extends ASTBlock {
       } finally {
         VMContext.setCurrent(prevContext);
 
+        if (identical(rootContext.importManager, importManager)) {
+          rootContext.importManager = prevImportManager;
+        }
+
         if (identical(
           rootContext.externalFunctionMapper,
           externalFunctionMapper,
@@ -191,7 +229,7 @@ class ASTEntryPointBlock extends ASTBlock {
   }
 
   VMContext createContext(VMTypeResolver? typeResolver) =>
-      VMContext(this, typeResolver: typeResolver);
+      VMScopeContext(this, typeResolver: typeResolver);
 }
 
 /// AST base of a Class.
@@ -263,7 +301,7 @@ abstract class ASTClass<T> extends ASTEntryPointBlock {
     var map = Map<String, Object>.fromEntries(fieldsEntries);
 
     if (fieldOverwrite != null && fieldOverwrite.isNotEmpty) {
-      context ??= VMContext(ASTBlock(null));
+      context ??= VMScopeContext(ASTBlock(null));
       for (var entry in fieldOverwrite.entries) {
         var value = await entry.value.getValue(context);
         map[entry.key] = value ?? Null;
@@ -848,6 +886,12 @@ class ASTRoot extends ASTEntryPointBlock {
 
   String namespace = '';
 
+  final Set<ASTStatementImport> _imports = {};
+
+  Set<ASTStatementImport> get imports => UnmodifiableSetView(_imports);
+
+  void addImport(ASTStatementImport import) => _imports.add(import);
+
   @override
   ASTInvocableDeclaration? getFunction(
     String fName,
@@ -866,6 +910,9 @@ class ASTRoot extends ASTEntryPointBlock {
         return constructor;
       }
     }
+
+    var fImported = context.getImportedFunction(fName, parametersSignature);
+    if (fImported != null) return fImported;
 
     var fExternal = context.getMappedExternalFunction(
       fName,
@@ -929,6 +976,22 @@ class ASTRoot extends ASTEntryPointBlock {
 
   ASTClassNormal? getClassWithMethod(String methodName) => _classes.values
       .firstWhereOrNull((c) => c.containsFunctionWithName(methodName));
+
+  @override
+  FutureOr<ASTValue> run(
+    VMContext parentContext,
+    ASTRunStatus runStatus,
+  ) async {
+    var imports = _imports;
+
+    if (imports.isNotEmpty) {
+      for (var import in imports) {
+        await import.run(parentContext, runStatus);
+      }
+    }
+
+    return super.run(parentContext, runStatus);
+  }
 }
 
 /// An AST Parameter declaration.
@@ -1777,7 +1840,7 @@ abstract class ASTInvocableDeclaration<
     List? positionalParameters,
     Map? namedParameters,
   }) async {
-    var context = VMContext(this, parent: parent);
+    var context = VMScopeContext(this, parent: parent);
 
     var prevContext = VMContext.setCurrent(context);
     try {
@@ -2102,7 +2165,7 @@ class ASTClassConstructorDeclaration<T>
     List? positionalParameters,
     Map? namedParameters,
   }) async {
-    var context = VMContext(this, parent: parent);
+    var context = VMScopeContext(this, parent: parent);
 
     var prevContext = VMContext.setCurrent(context);
     try {
@@ -2250,7 +2313,7 @@ class ASTGetterDeclaration<T> extends ASTBlock {
   }
 
   FutureOr<ASTValue<T>> call(VMContext parent) async {
-    var context = VMContext(this, parent: parent);
+    var context = VMScopeContext(this, parent: parent);
 
     var prevContext = VMContext.setCurrent(context);
     try {
@@ -2315,7 +2378,7 @@ class ASTExternalGetter<T> extends ASTGetterDeclaration<T> {
 
   @override
   FutureOr<ASTValue<T>> call(VMContext parent) async {
-    var context = VMContext(this, parent: parent);
+    var context = VMScopeContext(this, parent: parent);
 
     var prevContext = VMContext.setCurrent(context);
     try {
@@ -2369,7 +2432,7 @@ class ASTExternalClassGetter<T> extends ASTClassGetterDeclaration<T> {
   }) {
     var classInstance = parent.getClassInstance();
     return classInstance!.getValue(parent).resolveMapped((obj) {
-      var context = VMContext(this, parent: parent);
+      var context = VMScopeContext(this, parent: parent);
 
       var prevContext = VMContext.setCurrent(context);
       try {
@@ -2428,7 +2491,7 @@ class ASTExternalFunction<T> extends ASTFunctionDeclaration<T> {
     List? positionalParameters,
     Map? namedParameters,
   }) async {
-    var context = VMContext(this, parent: parent);
+    var context = VMScopeContext(this, parent: parent);
 
     var prevContext = VMContext.setCurrent(context);
     try {
@@ -2532,7 +2595,7 @@ class ASTExternalClassFunction<T> extends ASTClassFunctionDeclaration<T> {
     var classInstance = parent.getClassInstance();
     var obj = await classInstance!.getValue(parent);
 
-    var context = VMContext(this, parent: parent);
+    var context = VMScopeContext(this, parent: parent);
 
     var prevContext = VMContext.setCurrent(context);
     try {

@@ -6,6 +6,7 @@ import '../../../apollovm_code_generator.dart';
 import '../../../apollovm_code_storage.dart';
 import '../../../apollovm_parser.dart';
 import '../../../ast/apollovm_ast_expression.dart';
+import '../../../ast/apollovm_ast_statement.dart';
 import '../../../ast/apollovm_ast_toplevel.dart';
 import '../../../ast/apollovm_ast_type.dart';
 import '../../../ast/apollovm_ast_value.dart';
@@ -45,6 +46,23 @@ class ApolloCodeGeneratorJava11 extends ApolloCodeGenerator {
       default:
         return functionName;
     }
+  }
+
+  @override
+  StringBuffer generateASTStatementImport(
+    ASTStatementImport import, {
+    StringBuffer? out,
+    String indent = '',
+  }) {
+    final path = import.path;
+
+    out ??= newOutput();
+
+    out.write('import ');
+    out.write(path);
+    out.write(';\n');
+
+    return out;
   }
 
   @override

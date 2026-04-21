@@ -44,6 +44,48 @@ abstract class ASTStatement with ASTNode implements ASTCodeRunner {
   void associateToType(ASTTypedNode node) {}
 }
 
+/// [ASTStatement] to import a package/library.
+class ASTStatementImport extends ASTStatement {
+  final String path;
+
+  final String? prefix;
+
+  ASTStatementImport(this.path, {this.prefix});
+
+  @override
+  Iterable<ASTNode> get children => [];
+
+  @override
+  FutureOr<ASTValueVoid> run(VMContext parentContext, ASTRunStatus runStatus) {
+    return parentContext.import(path).resolveMapped((ok) {
+      if (!ok) {
+        throw ApolloVMRuntimeError("Can't import: $path");
+      }
+      return runStatus.returnVoid();
+    });
+  }
+
+  @override
+  FutureOr<ASTType> resolveType(VMContext? context) => ASTTypeVoid.instance;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ASTStatementImport &&
+          runtimeType == other.runtimeType &&
+          path == other.path &&
+          prefix == other.prefix;
+
+  @override
+  int get hashCode => Object.hash(path, prefix);
+
+  @override
+  String toString() {
+    final prefix = this.prefix;
+    return ['import "$path"', if (prefix != null) ' as $prefix', ';'].join();
+  }
+}
+
 /// An AST Block of code (statements).
 class ASTBlock extends ASTStatement {
   ASTBlock? parentBlock;
@@ -185,6 +227,9 @@ class ASTBlock extends ASTStatement {
   }) {
     var set = getFunctionWithName(fName, caseInsensitive: caseInsensitive);
     if (set != null) return set.get(parametersSignature, false);
+
+    var fImported = context.getImportedFunction(fName, parametersSignature);
+    if (fImported != null) return fImported;
 
     var fExternal = context.getMappedExternalFunction(
       fName,
@@ -927,7 +972,7 @@ class ASTStatementWhileLoop extends ASTStatement {
     VMContext parentContext,
     ASTRunStatus runStatus,
   ) async {
-    var context = VMContext(parentContext.block, parent: parentContext);
+    var context = VMScopeContext(parentContext.block, parent: parentContext);
     var runStatus = ASTRunStatus();
 
     var prevContext = VMContext.setCurrent(context);
@@ -949,7 +994,7 @@ class ASTStatementWhileLoop extends ASTStatement {
           }
         }
 
-        var loopContext = VMContext(parentContext.block, parent: context);
+        var loopContext = VMScopeContext(parentContext.block, parent: context);
 
         VMContext.setCurrent(loopContext);
 
@@ -1013,7 +1058,7 @@ class ASTStatementForLoop extends ASTStatement {
     VMContext parentContext,
     ASTRunStatus runStatus,
   ) async {
-    var context = VMContext(parentContext.block, parent: parentContext);
+    var context = VMScopeContext(parentContext.block, parent: parentContext);
     var runStatus = ASTRunStatus();
 
     var prevContext = VMContext.setCurrent(context);
@@ -1037,7 +1082,7 @@ class ASTStatementForLoop extends ASTStatement {
           }
         }
 
-        var loopContext = VMContext(parentContext.block, parent: context);
+        var loopContext = VMScopeContext(parentContext.block, parent: context);
 
         VMContext.setCurrent(loopContext);
 
@@ -1092,7 +1137,7 @@ class ASTStatementForEach extends ASTStatement {
     VMContext parentContext,
     ASTRunStatus runStatus,
   ) async {
-    var context = VMContext(parentContext.block, parent: parentContext);
+    var context = VMScopeContext(parentContext.block, parent: parentContext);
     var prevContext = VMContext.setCurrent(context);
 
     try {
@@ -1112,7 +1157,7 @@ class ASTStatementForEach extends ASTStatement {
       for (var element in iterable) {
         var astElement = await elementType.toValue(parentContext, element);
 
-        var loopContext = VMContext(parentContext.block, parent: context);
+        var loopContext = VMScopeContext(parentContext.block, parent: context);
 
         loopContext.declareVariableWithValue(
           elementType,
