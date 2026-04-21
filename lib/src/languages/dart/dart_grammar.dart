@@ -506,7 +506,7 @@ class DartGrammarDefinition extends DartGrammarLexer {
                 .toList();
 
             // Resolve the final expression:
-            ASTExpressionOperation? finalExpressionOp;
+            ASTExpression? finalExpressionOp;
 
             for (var i = 0; i < blocks.length; ++i) {
               final block = blocks[i];
@@ -558,7 +558,7 @@ class DartGrammarDefinition extends DartGrammarLexer {
               }
               assert(block.length == 1);
 
-              var expressionOp = block.single as ASTExpressionOperation;
+              var expressionOp = block.single as ASTExpression;
 
               if (finalExpressionOp == null) {
                 finalExpressionOp = expressionOp;

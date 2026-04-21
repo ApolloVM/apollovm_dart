@@ -1,3 +1,9 @@
+## 0.1.16
+
+- `DartGrammarDefinition`:
+  - Changed type of `finalExpressionOp` from `ASTExpressionOperation?` to `ASTExpression?`.
+  - Updated cast of `expressionOp` from `ASTExpressionOperation` to `ASTExpression`.
+
 ## 0.1.15
 
 - `ApolloCodeGenerator`:

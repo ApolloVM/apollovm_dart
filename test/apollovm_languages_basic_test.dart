@@ -27,6 +27,77 @@ Future<void> _tests() async {
 <test title="Basic main()">
     <source language="dart">
         <![CDATA[
+double calculateStdDev(List<double> values) {        
+  if (values == null || values.isEmpty) {
+    return 0.0;
+  }
+
+  double sum = 0;
+  for (var value in values) {
+    sum += value;
+  }
+  double mean = sum / values.length;
+
+  double sqDiffSum = 0;
+  for (var value in values) {
+    sqDiffSum += (value - mean) * (value - mean);
+  }
+  double variance = sqDiffSum / values.length;
+  return sqrt(variance);
+}
+
+void main() {
+  // Rates from the API response, excluding the first and last element which are the current/end date
+  List<double> rates = [71428.571429, 66666.666667, 71428.571429, 71428.571429, 71428.571429, 66666.666667, 66666.666667, 66666.666667, 66666.666667, 66666.666667, 66666.666667, 66666.666667, 66666.666667, 66666.666667, 66666.666667, 66666.666667, 66666.666667, 71428.571429, 76923.076923];
+  double stdDev = calculateStdDev(rates);
+  print('Standard Deviation: $stdDev');
+}
+
+        ]]>
+    </source>
+    <call function="main">
+        []
+    </call>
+    <output>
+           ["Standard Deviation: 2879.092762172585"]
+    </output>
+    <source-generated language="dart"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+  double calculateStdDev(List<double> values) {
+    if ((values == null) || values.isEmpty) {
+        return 0.0;
+    }
+
+    double sum = 0;
+    for (var value in values) {
+      sum += value;
+    }
+    double mean = sum / values.length;
+    double sqDiffSum = 0;
+    for (var value in values) {
+      sqDiffSum += (value - mean) * (value - mean);
+    }
+    double variance = sqDiffSum / values.length;
+    return sqrt(variance);
+  }
+
+  void main() {
+    List<double> rates = <double>[71428.571429, 66666.666667, 71428.571429, 71428.571429, 71428.571429, 66666.666667, 66666.666667, 66666.666667, 66666.666667, 66666.666667, 66666.666667, 66666.666667, 66666.666667, 66666.666667, 66666.666667, 66666.666667, 66666.666667, 71428.571429, 76923.076923];
+    double stdDev = calculateStdDev(rates);
+    print('Standard Deviation: $stdDev');
+  }
+
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+</test>
+    '''),
+    TestDefinition('dart_basic_exchange_rates.test.xml', r'''
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="Basic main()">
+    <source language="dart">
+        <![CDATA[
 
 void main() {
   // --- Parameters based on the conceptual formula ---
@@ -1575,11 +1646,11 @@ class Foo {
   ];
 
   await runTestDefinitions(
-    // [definitions[0]],
+    [definitions[0]],
     // definitions.sublist(1),
     // definitions
     //     .where((e) => e.fileName.contains('dart_basic_linearRegression'))
     //     .toList(),
-    definitions,
+    // definitions,
   );
 }
