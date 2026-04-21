@@ -35,7 +35,7 @@ import 'languages/wasm/wasm_runner.dart';
 /// The Apollo VM.
 class ApolloVM implements VMTypeResolver {
   // ignore: non_constant_identifier_names
-  static final String VERSION = '0.1.16';
+  static final String VERSION = '0.1.17';
 
   static int _idCount = 0;
 
@@ -695,6 +695,62 @@ class BinaryCodeUnit extends CodeUnit<Uint8List> {
   }
 }
 
+/// A package/library import manager.
+class ApolloImportManager {
+  FutureOr<bool> import(String path) {
+    var corePackage = resolveCorePackage(path);
+    if (corePackage != null) {
+      return importCorePackage(corePackage);
+    }
+    return false;
+  }
+
+  CorePackageBase? resolveCorePackage(String path) {
+    switch (path) {
+      case 'dart:math':
+        return CorePackageMath();
+    }
+    return null;
+  }
+
+  bool importCorePackage(CorePackageBase corePackage) {
+    final path = corePackage.path;
+    for (var f in corePackage.exportedFunctions) {
+      addFunction(path, f);
+    }
+    return true;
+  }
+
+  final Map<String, ASTFunctionSet> _functions = {};
+
+  /// Returns a mapped functions with [fName] and optional [parametersSignature].
+  ASTFunctionDeclaration<R>? getImportedFunction<R>(
+    VMContext context,
+    String fName, [
+    ASTFunctionSignature? parametersSignature,
+  ]) {
+    var fSet = _functions[fName];
+    if (fSet == null) return null;
+
+    if (parametersSignature != null) {
+      return fSet.get(parametersSignature, false) as ASTFunctionDeclaration<R>;
+    } else {
+      return fSet.firstFunction as ASTFunctionDeclaration<R>;
+    }
+  }
+
+  void addFunction(String path, ASTFunctionDeclaration f) {
+    var fName = f.name;
+    var fSet = _functions[fName];
+
+    if (fSet == null) {
+      _functions[fName] = ASTFunctionSetSingle(f);
+    } else {
+      _functions[fName] = fSet.add(f);
+    }
+  }
+}
+
 /// A mapper for a function that is external to the [ApolloVM].
 ///
 /// Used to map normal Dart functions to the [ApolloVM] instance.
@@ -875,7 +931,7 @@ class ApolloExternalGetterMapper {
 /// A runtime context, for classes, of the VM.
 ///
 /// Implements the object instance reference of a running class.
-class VMClassContext<T> extends VMContext {
+final class VMClassContext<T> extends VMContext {
   /// The class of this context.
   ASTClass<T> clazz;
 
@@ -907,11 +963,23 @@ abstract class VMTypeResolver {
   });
 }
 
-/// A runtime context of the VM.
+/// A runtime context, for current scope, of the VM.
+///
+/// See [VMContext]
+final class VMScopeContext extends VMContext {
+  VMScopeContext(
+    super.block, {
+    super.parent,
+    super.typeResolver,
+    super.importManager,
+  });
+}
+
+/// Base class for a runtime context of the VM.
 ///
 /// Any code executed inside the VM has a context, that holds blocks
 /// variables, functions and classes instances.
-class VMContext {
+sealed class VMContext {
   static VMContext? _current;
 
   /// Static setter for the current [VMContext].
@@ -939,11 +1007,35 @@ class VMContext {
   /// The [root] should have a defined [typeResolver].
   VMTypeResolver get typeResolver => _typeResolver ??= parent!.typeResolver;
 
+  /// The import manager.
+  ApolloImportManager? importManager;
+
+  /// The external function mapper.
+  ApolloExternalFunctionMapper? externalFunctionMapper;
+
   /// The runtime block of this context.
   final ASTBlock block;
 
-  VMContext(this.block, {this.parent, VMTypeResolver? typeResolver})
-    : _typeResolver = typeResolver;
+  VMContext(
+    this.block, {
+    this.parent,
+    VMTypeResolver? typeResolver,
+    this.importManager,
+  }) : _typeResolver = typeResolver;
+
+  FutureOr<bool> import(String path) {
+    final parent = this.parent;
+    final importManager = this.importManager;
+
+    if (importManager != null) {
+      return importManager.import(path).resolveMapped((ok) {
+        if (ok) return true;
+        return parent == null ? false : parent.import(path);
+      });
+    }
+
+    return parent == null ? false : parent.import(path);
+  }
 
   final Map<String, ASTTypedVariable> _variables = {};
 
@@ -1047,12 +1139,26 @@ class VMContext {
     String name,
     ASTFunctionSignature parametersSignature,
   ) {
-    var f = block.getFunction(name, parametersSignature, this);
-    if (f != null) return f;
-    return parent?.getFunction(name, parametersSignature);
+    for (VMContext? current = this; current != null; current = current.parent) {
+      final f = current.block.getFunction(name, parametersSignature, current);
+      if (f != null) return f;
+    }
+    return null;
   }
 
-  ApolloExternalFunctionMapper? externalFunctionMapper;
+  ASTFunctionDeclaration<R>? getImportedFunction<R>(
+    String fName, [
+    ASTFunctionSignature? parametersSignature,
+  ]) {
+    for (VMContext? current = this; current != null; current = current.parent) {
+      final im = current.importManager;
+      if (im == null) continue;
+
+      final f = im.getImportedFunction<R>(current, fName, parametersSignature);
+      if (f != null) return f;
+    }
+    return null;
+  }
 
   /// Returns an [ASTExternalFunction] of [fName] and [parametersSignature].
   ///
@@ -1061,19 +1167,17 @@ class VMContext {
     String fName, [
     ASTFunctionSignature? parametersSignature,
   ]) {
-    if (externalFunctionMapper != null) {
-      var f = externalFunctionMapper!.getMappedFunction(
-        this,
+    for (VMContext? current = this; current != null; current = current.parent) {
+      final mapper = current.externalFunctionMapper;
+      if (mapper == null) continue;
+
+      final f = mapper.getMappedFunction<R>(
+        current,
         fName,
         parametersSignature,
       );
-      if (f != null) return f as ASTExternalFunction<R>;
+      if (f != null) return f;
     }
-
-    if (parent != null) {
-      return parent!.getMappedExternalFunction(fName, parametersSignature);
-    }
-
     return null;
   }
 
@@ -1145,7 +1249,7 @@ class VMObject extends ASTValue<dynamic> {
 
   /// Returns a [Map] with fields names and values.
   Map<String, ASTValue> getFieldsValues([VMContext? context]) {
-    context ??= VMContext(ASTBlock(null));
+    context ??= VMScopeContext(ASTBlock(null));
 
     var fieldsValues = <String, ASTValue>{};
 
@@ -1172,7 +1276,7 @@ class VMObject extends ASTValue<dynamic> {
   ASTValue? getFieldValue(String fieldName, [VMContext? context]) {
     var prev = _fieldsValues[fieldName];
     if (prev == null) return null;
-    context ??= VMContext(ASTBlock(null));
+    context ??= VMScopeContext(ASTBlock(null));
     var value = prev.getValue(context);
     return value;
   }
@@ -1181,7 +1285,7 @@ class VMObject extends ASTValue<dynamic> {
   ASTValue? removeFieldValue(String fieldName, [VMContext? context]) {
     var prev = _fieldsValues.remove(fieldName);
     if (prev == null) return null;
-    context ??= VMContext(ASTBlock(null));
+    context ??= VMScopeContext(ASTBlock(null));
     var value = prev.getValue(context);
     return value;
   }

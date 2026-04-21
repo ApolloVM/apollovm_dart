@@ -81,6 +81,14 @@ abstract class ApolloCodeGenerator
   }) {
     out ??= newOutput();
 
+    var imports = root.imports;
+    if (imports.isNotEmpty) {
+      for (var import in imports) {
+        generateASTStatementImport(import, out: out);
+      }
+      out.write('\n');
+    }
+
     generateASTBlock(root, out: out, withBrackets: false);
 
     for (var clazz in root.classes) {
@@ -141,6 +149,13 @@ abstract class ApolloCodeGenerator
 
     return out;
   }
+
+  @override
+  StringBuffer generateASTStatementImport(
+    ASTStatementImport import, {
+    StringBuffer? out,
+    String indent = '',
+  });
 
   @override
   StringBuffer generateASTClass(

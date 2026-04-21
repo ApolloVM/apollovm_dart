@@ -7,6 +7,7 @@ import 'package:collection/collection.dart';
 import '../../apollovm_code_generator.dart';
 import '../../apollovm_code_storage.dart';
 import '../../ast/apollovm_ast_expression.dart';
+import '../../ast/apollovm_ast_statement.dart';
 import '../../ast/apollovm_ast_toplevel.dart';
 import '../../ast/apollovm_ast_type.dart';
 import '../../ast/apollovm_ast_value.dart';
@@ -44,6 +45,28 @@ class ApolloCodeGeneratorDart extends ApolloCodeGenerator {
       default:
         return functionName;
     }
+  }
+
+  @override
+  StringBuffer generateASTStatementImport(
+    ASTStatementImport import, {
+    StringBuffer? out,
+    String indent = '',
+  }) {
+    final path = import.path;
+    final prefix = import.prefix;
+
+    out ??= newOutput();
+
+    out.write('import ');
+    out.write("'$path'");
+    if (prefix != null) {
+      out.write(' as ');
+      out.write(prefix);
+    }
+    out.write(';\n');
+
+    return out;
   }
 
   @override

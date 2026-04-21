@@ -28,6 +28,8 @@ class ApolloVMCore {
 abstract class CorePackageBase extends ASTBlock {
   String get packageName;
 
+  String get path;
+
   CorePackageBase() : super(null);
 
   List<ASTExternalFunction> get exportedFunctions;
@@ -69,6 +71,9 @@ abstract class CorePackageBase extends ASTBlock {
 class CorePackageMath extends CorePackageBase {
   @override
   String get packageName => 'dart:math';
+
+  @override
+  String get path => 'dart:math';
 
   late final ASTExternalFunction _functionPow;
   late final ASTExternalFunction _functionSqrt;

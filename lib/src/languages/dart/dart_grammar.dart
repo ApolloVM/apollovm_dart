@@ -54,12 +54,19 @@ class DartGrammarDefinition extends DartGrammarLexer {
   Parser<ASTRoot> compilationUnit() =>
       (ref0(hashbangLexicalToken).optional() &
               //ref0(libraryDirective).optional() &
-              //ref0(importDirective).star() &
+              ref0(statementImport).star() &
               ref0(topLevelDefinition).star())
           .map((v) {
-            var topDef = v[1] as List;
+            var imports = v[1] as List;
+            var topDef = v[2] as List;
 
             var root = ASTRoot();
+
+            for (var import in imports) {
+              if (import is ASTStatementImport) {
+                root.addImport(import);
+              }
+            }
 
             for (var defList in topDef) {
               for (var def in defList) {
@@ -93,6 +100,18 @@ class DartGrammarDefinition extends DartGrammarLexer {
               block: block,
               modifiers: ASTModifiers.modifierStatic,
             );
+          });
+
+  Parser<ASTStatementImport> statementImport() =>
+      (importToken().trimHidden() &
+              stringLexicalToken() &
+              char(';').trimHidden())
+          .map((v) {
+            var parsedPath = v[1] as ParsedString;
+            var path =
+                parsedPath.literalString ??
+                (throw StateError("Invalid import parsed path: $parsedPath"));
+            return ASTStatementImport(path);
           });
 
   Parser<ASTClassNormal> classDeclaration() =>

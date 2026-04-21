@@ -1,3 +1,36 @@
+## 0.1.17
+
+- Added `ApolloImportManager` to manage package/library imports and resolve core packages.
+- `VMContext`:
+  - Made sealed class.
+  - Added `importManager` field and `import` method to support import resolution and delegation to parent contexts.
+  - Updated function and external function lookup to consider imported functions.
+- Added `VMScopeContext` as a final subclass of `VMContext` for scoped runtime contexts.
+- Updated `VMClassContext` and other runtime contexts to be final and use `VMScopeContext` for nested scopes.
+- `ASTStatementImport`:
+  - New AST node to represent import statements.
+  - Supports running import in a context, throwing on failure.
+- `ASTRoot`:
+  - Supports tracking and running import statements.
+  - Considers imported functions in function resolution.
+- `ApolloRunner`:
+  - Added `importManager` field and initialization with default import manager.
+  - Supports auto-import of `dart:math` core package.
+  - Passes `importManager` to execution and function lookup calls.
+- `CorePackageBase` and `CorePackageMath`:
+  - Added `path` getter for core package identification.
+- Code generators (`dart`, `java11`, `wasm`):
+  - Added support for generating import statements (`ASTStatementImport`).
+- Dart and Java11 grammar:
+  - Added parsing of import statements into `ASTStatementImport`.
+- Test framework:
+  - Added support for `auto-import-dart-math` attribute in test XML.
+  - Tests updated to import `dart:math` and use `pow` function.
+- Various runtime and AST classes:
+  - Updated to use `VMScopeContext` instead of base `VMContext` for nested scopes.
+  - Updated `VMObject` field value methods to use `VMScopeContext`.
+- Minor fixes and improvements in import handling, context management, and code generation.
+
 ## 0.1.16
 
 - `DartGrammarDefinition`:

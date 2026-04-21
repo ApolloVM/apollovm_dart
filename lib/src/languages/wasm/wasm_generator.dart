@@ -391,6 +391,15 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
   }
 
   @override
+  BytesOutput generateASTStatementImport(
+    ASTStatementImport import, {
+    BytesOutput? out,
+  }) {
+    // TODO: implement generateASTStatementImport
+    throw UnimplementedError("generateASTStatementImport");
+  }
+
+  @override
   BytesOutput generateASTClass(ASTClassNormal clazz, {BytesOutput? out}) {
     // TODO: implement generateASTClass
     throw UnimplementedError('generateASTClass');

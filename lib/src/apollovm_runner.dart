@@ -9,7 +9,6 @@ import 'apollovm_utils.dart';
 import 'ast/apollovm_ast_toplevel.dart';
 import 'ast/apollovm_ast_type.dart';
 import 'ast/apollovm_ast_value.dart';
-import 'core/apollovm_core_base.dart';
 
 @Deprecated("Renamed to `ApolloRunner`")
 typedef ApolloLanguageRunner = ApolloRunner;
@@ -27,17 +26,33 @@ abstract class ApolloRunner implements VMTypeResolver {
 
   late LanguageNamespaces _languageNamespaces;
 
+  ApolloImportManager? importManager;
+
   ApolloExternalFunctionMapper? externalFunctionMapper;
 
   final bool importCorePackageMath;
 
   ApolloRunner(this.apolloVM, {this.importCorePackageMath = false}) {
     _languageNamespaces = apolloVM.getLanguageNamespaces(language);
+    importManager = createDefaultApolloImportManager();
     externalFunctionMapper = createDefaultApolloExternalFunctionMapper();
   }
 
   /// Returns a copy of this instance.
   ApolloRunner copy();
+
+  ApolloImportManager? createDefaultApolloImportManager() {
+    var apolloImportManager = ApolloImportManager();
+
+    if (importCorePackageMath) {
+      var ok = apolloImportManager.import('dart:math') as bool;
+      if (!ok) {
+        throw ApolloVMRuntimeError("Can't auto import `dart:math`");
+      }
+    }
+
+    return apolloImportManager;
+  }
 
   /// The default [ApolloExternalFunctionMapper] for this target language runner.
   ///
@@ -52,12 +67,6 @@ abstract class ApolloRunner implements VMTypeResolver {
       'o',
       (o) => externalPrintFunction(o),
     );
-
-    if (importCorePackageMath) {
-      for (var f in CorePackageMath().exportedFunctions) {
-        externalFunctionMapper.addExternalFunction(f);
-      }
-    }
 
     return externalFunctionMapper;
   }
@@ -112,6 +121,7 @@ abstract class ApolloRunner implements VMTypeResolver {
       namedParameters,
       classInstanceObject: classInstanceObject,
       classInstanceFields: classInstanceFields,
+      importManager: importManager,
       externalFunctionMapper: externalFunctionMapper,
       typeResolver: this,
     );
@@ -176,6 +186,7 @@ abstract class ApolloRunner implements VMTypeResolver {
       methodName,
       positionalParameters,
       namedParameters,
+      importManager: importManager,
       externalFunctionMapper: externalFunctionMapper,
       typeResolver: this,
     );
@@ -261,6 +272,7 @@ abstract class ApolloRunner implements VMTypeResolver {
         functionName,
         positionalParameters,
         namedParameters,
+        importManager: importManager,
         externalFunctionMapper: externalFunctionMapper,
         typeResolver: this,
       );
@@ -288,6 +300,7 @@ abstract class ApolloRunner implements VMTypeResolver {
       functionName,
       positionalParameters,
       namedParameters,
+      importManager: importManager,
       externalFunctionMapper: externalFunctionMapper,
       typeResolver: this,
     );

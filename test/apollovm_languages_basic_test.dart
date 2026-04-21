@@ -27,6 +27,8 @@ Future<void> _tests() async {
 <test title="Basic main()">
     <source language="dart">
         <![CDATA[
+import 'dart:math';
+
 double calculateStdDev(List<double> values) {        
   if (values == null || values.isEmpty) {
     return 0.0;
@@ -40,7 +42,7 @@ double calculateStdDev(List<double> values) {
 
   double sqDiffSum = 0;
   for (var value in values) {
-    sqDiffSum += (value - mean) * (value - mean);
+    sqDiffSum += pow(value - mean, 2);
   }
   double variance = sqDiffSum / values.length;
   return sqrt(variance);
@@ -64,6 +66,8 @@ void main() {
     <source-generated language="dart"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
 <<<< NAMESPACE="" >>>>
 <<<< CODE_UNIT_START="/test" >>>>
+import 'dart:math';
+
   double calculateStdDev(List<double> values) {
     if ((values == null) || values.isEmpty) {
         return 0.0;
@@ -76,7 +80,7 @@ void main() {
     double mean = sum / values.length;
     double sqDiffSum = 0;
     for (var value in values) {
-      sqDiffSum += (value - mean) * (value - mean);
+      sqDiffSum += pow(value - mean, 2);
     }
     double variance = sqDiffSum / values.length;
     return sqrt(variance);
@@ -96,7 +100,7 @@ void main() {
     TestDefinition('dart_basic_exchange_rates.test.xml', r'''
 <?xml version="1.0" encoding="UTF-8"?>
 <test title="Basic main()">
-    <source language="dart">
+    <source language="dart" auto-import-dart-math="true">
         <![CDATA[
 
 void main() {
@@ -591,6 +595,8 @@ class LinearModel {
 <test title="Basic calculateStandardDeviation(List<double> numbers)">
     <source language="dart">
         <![CDATA[
+import "dart:math" ;
+
 double calculateStandardDeviation(List<double> numbers) {
   if (numbers == null || numbers.length < 2) {
     return 0.0; // Cannot calculate std dev for less than 2 points
@@ -637,6 +643,8 @@ void main() {
     <source-generated language="dart"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
 <<<< NAMESPACE="" >>>>
 <<<< CODE_UNIT_START="/test" >>>>
+import 'dart:math';
+
   double calculateStandardDeviation(List<double> numbers) {
     if ((numbers == null) || (numbers.length < 2)) {
         return 0.0;
@@ -1646,11 +1654,11 @@ class Foo {
   ];
 
   await runTestDefinitions(
-    [definitions[0]],
+    // [definitions[0]],
     // definitions.sublist(1),
     // definitions
     //     .where((e) => e.fileName.contains('dart_basic_linearRegression'))
     //     .toList(),
-    // definitions,
+    definitions,
   );
 }

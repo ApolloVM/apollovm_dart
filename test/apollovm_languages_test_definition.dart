@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:apollovm/apollovm.dart';
 import 'package:collection/collection.dart';
+import 'package:swiss_knife/swiss_knife.dart';
 import 'package:test/test.dart';
 import 'package:xml/xml.dart';
 
@@ -23,6 +24,9 @@ class TestDefinition implements Comparable<TestDefinition> {
   XmlElement get source => rootElement.findElements('source').first;
 
   String get language => source.getAttribute('language')!;
+
+  bool get autoImportDartMath =>
+      parseBool(source.getAttribute('auto-import-dart-math')) ?? false;
 
   String get sourceCode => source.innerText;
 
@@ -104,8 +108,9 @@ Future<void> runTestDefinitions(List<TestDefinition> testDefinitions) async {
             '\n======================================================================\n',
           );
 
-          var language = testDefinition.language;
-          var sourcesGenerated = testDefinition.sourcesGenerated;
+          final language = testDefinition.language;
+          final autoImportDartMath = testDefinition.autoImportDartMath;
+          final sourcesGenerated = testDefinition.sourcesGenerated;
 
           print('FILE: ${testDefinition.fileName}');
           print('');
@@ -113,6 +118,7 @@ Future<void> runTestDefinitions(List<TestDefinition> testDefinitions) async {
           print('TEST: ${testDefinition.title}');
 
           print('  - language: $language ');
+          print('  - autoImportDartMath: $autoImportDartMath ');
           print('  - sourcesGenerated: ${sourcesGenerated.length}');
           print('');
           print('SOURCE:');
@@ -132,7 +138,10 @@ Future<void> runTestDefinitions(List<TestDefinition> testDefinitions) async {
 
           expect(loadOK, isTrue, reason: "Error loading '$language ' code!");
 
-          var runner = vm.createRunner(language, importCorePackageMath: true)!;
+          var runner = vm.createRunner(
+            language,
+            importCorePackageMath: autoImportDartMath,
+          )!;
 
           var calls = testDefinition.calls;
           var outputs = testDefinition.outputs;

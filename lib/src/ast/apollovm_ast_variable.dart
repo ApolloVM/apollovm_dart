@@ -141,7 +141,7 @@ class ASTClassFieldWithInitialValue<T> extends ASTClassField<T> {
   }
 
   FutureOr<ASTValue> getInitialValueNoContext() {
-    var context = VMContext(ASTBlock(null));
+    var context = VMScopeContext(ASTBlock(null));
     var runStatus = ASTRunStatus();
     return _initialValueExpression.run(context, runStatus);
   }
