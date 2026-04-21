@@ -439,6 +439,17 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
   }
 
   @override
+  BytesOutput generateASTExpressionObjectEntryFunctionInvocation(
+    ASTExpressionObjectEntryFunctionInvocation expression, {
+    BytesOutput? out,
+  }) {
+    // TODO: implement generateASTExpressionObjectEntryFunctionInvocation
+    throw UnimplementedError(
+      "generateASTExpressionObjectEntryFunctionInvocation",
+    );
+  }
+
+  @override
   BytesOutput generateASTExpressionListLiteral(
     ASTExpressionListLiteral expression, {
     BytesOutput? out,

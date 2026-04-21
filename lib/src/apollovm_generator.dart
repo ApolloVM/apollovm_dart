@@ -286,6 +286,11 @@ abstract class ApolloGenerator<
     O? out,
   });
 
+  O generateASTExpressionObjectEntryFunctionInvocation(
+    ASTExpressionObjectEntryFunctionInvocation expression, {
+    O? out,
+  });
+
   O generateASTExpressionLocalFunctionInvocation(
     ASTExpressionLocalFunctionInvocation expression, {
     O? out,

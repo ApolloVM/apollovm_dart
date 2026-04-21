@@ -27,6 +27,168 @@ Future<void> _tests() async {
 <test title="Basic main()">
     <source language="dart">
         <![CDATA[
+
+
+import 'dart:math';
+
+// Function to calculate the standard deviation of a list of numbers without using lambdas
+double calculateStandardDeviation(List<double> numbers) {
+  if (numbers.isEmpty) {
+    return 0.0;
+  }
+
+  // 1. Calculate the mean (average)
+  double sum = 0.0;
+  for (var number in numbers) {
+    sum = sum + number;
+  }
+  double mean = sum / numbers.length;
+
+  // 2. Calculate the sum of the squared differences from the mean
+  double sumOfSquaredDifferences = 0.0;
+  for (var number in numbers) {
+    double difference = number - mean;
+    sumOfSquaredDifferences = sumOfSquaredDifferences + pow(difference, 2);
+  }
+
+  // 3. Calculate the variance (average of the squared differences)
+  double variance = sumOfSquaredDifferences / numbers.length;
+
+  // 4. Calculate the standard deviation (square root of the variance)
+  return sqrt(variance);
+}
+
+void main() {
+  // Data fetched from the API for BTC to USD over the last 30 days + 1 extra day (31 total points)
+  // NOTE: These values are manually entered based on the previous API response.
+  List<double> dailyRates = [
+    66666.666667, // 2026-03-22
+    71428.571429, // 2026-03-23
+    71428.571429, // 2026-03-24
+    71428.571429, // 2026-03-25
+    66666.666667, // 2026-03-26
+    66666.666667, // 2026-03-27
+    66666.666667, // 2026-03-28
+    66666.666667, // 2026-03-29
+    66666.666667, // 2026-03-30
+    66666.666667, // 2026-03-31
+    66666.666667, // 2026-04-01
+    66666.666667, // 2026-04-02
+    66666.666667, // 2026-04-03
+    66666.666667, // 2026-04-04
+    66666.666667, // 2026-04-05
+    66666.666667, // 2026-04-06
+    71428.571429, // 2026-04-07
+    71428.571429, // 2026-04-08
+    71428.571429, // 2026-04-09
+    71428.571429, // 2026-04-10
+    71428.571429, // 2026-04-11
+    71428.571429, // 2026-04-12
+    76923.076923, // 2026-04-13
+    76923.076923, // 2026-04-14
+    76923.076923, // 2026-04-15
+  ];
+
+  print("--- BTC to USD Exchange Rates (Data for Calculation) ---");
+  for (int i = 0; i < dailyRates.length; i++) {
+    String dateStr = "Day ${i + 1} (Date: 2026-03-${22 + i})";
+    print("$dateStr: ${dailyRates[i].toStringAsFixed(2)} USD");
+  }
+
+  print("\n--- Standard Deviation Calculation ---");
+  double stdDev = calculateStandardDeviation(dailyRates);
+
+  print("\nResult:");
+  print("The calculated Standard Deviation for the recorded dates is: $stdDev");
+}
+
+
+
+        ]]>
+    </source>
+    <call function="main">
+        []
+    </call>
+    <output>
+[
+  "--- BTC to USD Exchange Rates (Data for Calculation) ---",
+  "Day 1 (Date: 2026-03-22): 66666.67 USD",
+  "Day 2 (Date: 2026-03-23): 71428.57 USD",
+  "Day 3 (Date: 2026-03-24): 71428.57 USD",
+  "Day 4 (Date: 2026-03-25): 71428.57 USD",
+  "Day 5 (Date: 2026-03-26): 66666.67 USD",
+  "Day 6 (Date: 2026-03-27): 66666.67 USD",
+  "Day 7 (Date: 2026-03-28): 66666.67 USD",
+  "Day 8 (Date: 2026-03-29): 66666.67 USD",
+  "Day 9 (Date: 2026-03-30): 66666.67 USD",
+  "Day 10 (Date: 2026-03-31): 66666.67 USD",
+  "Day 11 (Date: 2026-03-32): 66666.67 USD",
+  "Day 12 (Date: 2026-03-33): 66666.67 USD",
+  "Day 13 (Date: 2026-03-34): 66666.67 USD",
+  "Day 14 (Date: 2026-03-35): 66666.67 USD",
+  "Day 15 (Date: 2026-03-36): 66666.67 USD",
+  "Day 16 (Date: 2026-03-37): 66666.67 USD",
+  "Day 17 (Date: 2026-03-38): 71428.57 USD",
+  "Day 18 (Date: 2026-03-39): 71428.57 USD",
+  "Day 19 (Date: 2026-03-40): 71428.57 USD",
+  "Day 20 (Date: 2026-03-41): 71428.57 USD",
+  "Day 21 (Date: 2026-03-42): 71428.57 USD",
+  "Day 22 (Date: 2026-03-43): 71428.57 USD",
+  "Day 23 (Date: 2026-03-44): 76923.08 USD",
+  "Day 24 (Date: 2026-03-45): 76923.08 USD",
+  "Day 25 (Date: 2026-03-46): 76923.08 USD",
+  "\n--- Standard Deviation Calculation ---",
+  "\nResult:",
+  "The calculated Standard Deviation for the recorded dates is: 3480.400959353717"
+]
+    </output>
+    <source-generated language="dart"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+import 'dart:math';
+
+  double calculateStandardDeviation(List<double> numbers) {
+    if (numbers.isEmpty) {
+        return 0.0;
+    }
+
+    double sum = 0.0;
+    for (var number in numbers) {
+      sum = sum + number;
+    }
+    double mean = sum / numbers.length;
+    double sumOfSquaredDifferences = 0.0;
+    for (var number in numbers) {
+      double difference = number - mean;
+      sumOfSquaredDifferences = sumOfSquaredDifferences + pow(difference, 2);
+    }
+    double variance = sumOfSquaredDifferences / numbers.length;
+    return sqrt(variance);
+  }
+
+  void main() {
+    List<double> dailyRates = <double>[66666.666667, 71428.571429, 71428.571429, 71428.571429, 66666.666667, 66666.666667, 66666.666667, 66666.666667, 66666.666667, 66666.666667, 66666.666667, 66666.666667, 66666.666667, 66666.666667, 66666.666667, 66666.666667, 71428.571429, 71428.571429, 71428.571429, 71428.571429, 71428.571429, 71428.571429, 76923.076923, 76923.076923, 76923.076923];
+    print('--- BTC to USD Exchange Rates (Data for Calculation) ---');
+    for (int i = 0; i < dailyRates.length ; i++) {
+      String dateStr = 'Day ${i + 1} (Date: 2026-03-${22 + i})';
+      print('$dateStr: ${dailyRates[i].toStringAsFixed(2)} USD');
+    }
+    print('\n--- Standard Deviation Calculation ---');
+    double stdDev = calculateStandardDeviation(dailyRates);
+    print('\nResult:');
+    print('The calculated Standard Deviation for the recorded dates is: $stdDev');
+  }
+
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+</test>
+    '''),
+    TestDefinition('dart_basic_exchange_rates.test.xml', r'''
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="Basic main()">
+    <source language="dart">
+        <![CDATA[
 import 'dart:math';
 
 double calculateStdDev(List<double> values) {        

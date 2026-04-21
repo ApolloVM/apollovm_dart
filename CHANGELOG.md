@@ -1,3 +1,23 @@
+## 0.1.18
+
+- `ASTExpressionObjectEntryFunctionInvocation`:
+  - Added new AST expression class to represent calls to class object entry functions.
+  - Implements function resolution and invocation on class instances or static context.
+  - Overrides `run` and `toString` methods for execution and debugging.
+
+- `ApolloCodeGenerator`:
+  - Added support for generating code for `ASTExpressionObjectEntryFunctionInvocation`.
+  - Updated `generateASTExpression` method to handle `ASTExpressionObjectEntryFunctionInvocation`.
+
+- `ApolloGenerator` interface:
+  - Added abstract method `generateASTExpressionObjectEntryFunctionInvocation`.
+
+- `ApolloGeneratorWasm`:
+  - Added stub implementation for `generateASTExpressionObjectEntryFunctionInvocation` throwing `UnimplementedError`.
+
+- Dart and Java11 grammars:
+  - Added parsing rule `expressionObjectEntryFunctionInvocation` to support syntax for object entry function invocation expressions.
+
 ## 0.1.17
 
 - Added `ApolloImportManager` to manage package/library imports and resolve core packages.

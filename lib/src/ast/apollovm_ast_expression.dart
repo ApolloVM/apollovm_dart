@@ -1673,6 +1673,112 @@ class ASTExpressionObjectFunctionInvocation
   }
 }
 
+/// [ASTExpression] to call a class object entry function.
+class ASTExpressionObjectEntryFunctionInvocation
+    extends ASTExpressionFunctionInvocation {
+  ASTExpressionVariableEntryAccess variableAccess;
+
+  ASTExpressionObjectEntryFunctionInvocation(
+    ASTVariable variable,
+    ASTExpression expression,
+    super.name,
+    super.arguments,
+  ) : variableAccess = ASTExpressionVariableEntryAccess(variable, expression);
+
+  @override
+  bool get isComplex => false;
+
+  @override
+  Iterable<ASTNode> get children => variableAccess.children;
+
+  @override
+  void resolveNode(ASTNode? parentNode) {
+    super.resolveNode(parentNode);
+
+    variableAccess.resolveNode(this);
+  }
+
+  FutureOr<ASTClass> _getObjectClass(VMContext parentContext, ASTValue obj) {
+    if (obj is ASTClassInstance) {
+      return obj.clazz;
+    }
+
+    var clazz = obj.type.getClass();
+    return clazz;
+  }
+
+  ASTClass? _functionClass;
+
+  FutureOr<ASTClass> _getFunctionClass(
+    VMContext parentContext,
+    ASTValue obj,
+  ) async {
+    if (_functionClass == null) {
+      var clazz = await _getObjectClass(parentContext, obj);
+      _functionClass = clazz;
+    }
+    return _functionClass!;
+  }
+
+  @override
+  FutureOr<ASTInvocableDeclaration> _getFunction(
+    VMContext parentContext, [
+    ASTValue? obj,
+  ]) async {
+    if (obj == null) {
+      throw ApolloVMNullPointerException(
+        "Null variable entry: $variableAccess",
+      );
+    }
+
+    var clazz = await _getFunctionClass(parentContext, obj);
+    var fSignature = _getASTFunctionSignature();
+
+    var f = clazz.getFunction(name, fSignature, parentContext);
+
+    if (f == null) {
+      throw ApolloVMRuntimeError(
+        "Can't find class[${clazz.name}] function[$name( $fSignature )] for object: $obj",
+      );
+    }
+
+    return f;
+  }
+
+  @override
+  FutureOr<ASTValue> run(
+    VMContext parentContext,
+    ASTRunStatus runStatus,
+  ) async {
+    var obj = await variableAccess.run(parentContext, runStatus);
+
+    var f = await _getFunction(parentContext, obj);
+
+    var argumentsValues = await _resolveArgumentsValues(
+      parentContext,
+      runStatus,
+      arguments,
+    );
+
+    if (f is ASTClassFunctionDeclaration) {
+      return f.objectCall(
+        parentContext,
+        obj,
+        positionalParameters: argumentsValues,
+      );
+    } else {
+      // Static function call:
+      return f.call(parentContext, positionalParameters: argumentsValues);
+    }
+  }
+
+  @override
+  String toString({bool asGroup = false}) {
+    var f = super.toString();
+    return '$variableAccess.$f';
+  }
+}
+
 /// [ASTExpression] to call a function from an expression.
 /// Example: `(-d).toStringAsFixed(4)`
 class ASTExpressionGroupFunctionInvocation

@@ -977,6 +977,13 @@ abstract class ApolloCodeGenerator
         indent: indent,
         headIndented: headIndented,
       );
+    } else if (expression is ASTExpressionObjectEntryFunctionInvocation) {
+      return generateASTExpressionObjectEntryFunctionInvocation(
+        expression,
+        out: out,
+        indent: indent,
+        headIndented: headIndented,
+      );
     } else if (expression is ASTExpressionGroupFunctionInvocation) {
       return generateASTExpressionGroupFunctionInvocation(
         expression,
@@ -1280,6 +1287,36 @@ abstract class ApolloCodeGenerator
       indent: indent,
       headIndented: false,
     );
+    out.write('.');
+
+    final arguments = expression.arguments;
+
+    _generateFunctionInvocation(functionName, arguments, out, indent);
+
+    return out;
+  }
+
+  @override
+  StringBuffer generateASTExpressionObjectEntryFunctionInvocation(
+    ASTExpressionObjectEntryFunctionInvocation expression, {
+    StringBuffer? out,
+    String indent = '',
+    bool headIndented = true,
+  }) {
+    out ??= newOutput();
+
+    if (headIndented) out.write(indent);
+
+    final variableAccess = expression.variableAccess;
+
+    var functionName = expression.name;
+
+    if (variableAccess.variable.isTypeIdentifier) {
+      var typeIdentifier = variableAccess.variable.typeIdentifier;
+      functionName = normalizeTypeFunction(typeIdentifier!.name, functionName);
+    }
+
+    generateASTExpressionVariableEntryAccess(variableAccess, out: out);
     out.write('.');
 
     final arguments = expression.arguments;
