@@ -27,6 +27,182 @@ Future<void> _tests() async {
 <test title="Basic main()">
     <source language="dart">
         <![CDATA[
+
+import 'dart:math';
+
+// --- DADOS HISTÓRICOS (SUBSTITUA ESTES VALORES PELOS RESULTADOS REAIS DAS SUAS CONSULTAS) ---
+List<double> usdData = [
+  66666.67, 71428.57, 71428.57, 71428.57, 66666.67, 66666.67, 66666.67,
+  66666.67, 66666.67, 66666.67, 66666.67, 66666.67, 66666.67, 66666.67,
+  66666.67, 66666.67, 71428.57, 71428.57, 71428.57, 76923.08, 76923.08,
+  76923.08
+];
+
+List<double> eurData = [
+  57723.80, 61667.50, 61559.43, 61746.29, 57778.40, 57743.27, 57774.07,
+  58014.60, 58194.47, 57636.87, 57511.47, 57757.67, 57873.47, 57874.53,
+  57919.40, 57766.53, 61151.79, 61260.36, 61081.93, 60923.50, 60920.93,
+  61199.43, 65381.00, 65198.77, 65156.54, 65273.38, 65240.00, 65339.77,
+  60828.57, 65277.46, 65567.38
+];
+
+List<double> brlData = [
+  354906.93, 373796.64, 373876.21, 374064.21, 349252.07, 349463.40,
+  349458.80, 349274.00, 350766.73, 346151.53, 343726.67, 343902.20,
+  343910.20, 344840.27, 343923.07, 342827.67, 368091.00, 364361.86,
+  363221.36, 357680.21, 357534.21, 357649.86, 384353.85, 383614.08,
+  384123.69, 383965.46, 382975.62, 383204.15, 356644.43, 381191.23,
+  383085.31
+];
+
+// --- FUNÇÕES AUXILIARES ---
+
+double calculateChange(List<double> data) {
+  if (data.length < 2) return 0.0;
+  double startValue = data[0];
+  double endValue = data[data.length - 1];
+  return ((endValue / startValue) - 1.0) * 100.0;
+}
+
+double calculateAverage(List<double> data) {
+  double sum = 0.0;
+  for (var v in data) {
+    sum += v;
+  }
+  return sum / data.length;
+}
+
+void main() {
+  print("=========================================================");
+  print("ANÁLISE DE Variação e Desvio (30 Dias)");
+  print("=========================================================\n");
+
+  double usdChange = calculateChange(usdData);
+  double eurChange = calculateChange(eurData);
+  double brlChange = calculateChange(brlData);
+
+  print("--- Variação Percentual (Início vs Fim do Período) ---");
+  print("BTC/USD: ${usdChange.toStringAsFixed(2)}%");
+  print("BTC/EUR: ${eurChange.toStringAsFixed(2)}%");
+  print("BTC/BRL: ${brlChange.toStringAsFixed(2)}%");
+  print("\n---------------------------------------------------------\n");
+
+  double avgUsd = calculateAverage(usdData);
+  double avgEur = calculateAverage(eurData);
+  double avgBrl = calculateAverage(brlData);
+
+  print("--- Médias das Oscilações no Período ---");
+  print("Média USD: ${avgUsd.toStringAsFixed(2)}");
+  print("Média EUR: ${avgEur.toStringAsFixed(2)}");
+  print("Média BRL: ${avgBrl.toStringAsFixed(2)}");
+  print("\n---------------------------------------------------------\n");
+
+  print("--- Desvio em Relação à Média das Outras Moedas ---");
+
+  double avgEurBrl = (avgEur + avgBrl) / 2.0;
+  double usdDeviation = usdChange - avgEurBrl;
+  print("Desvio USD vs (EUR+BRL): ${usdDeviation.toStringAsFixed(2)}%");
+
+  double avgUsdBrl = (avgUsd + avgBrl) / 2.0;
+  double eurDeviation = eurChange - avgUsdBrl;
+  print("Desvio EUR vs (USD+BRL): ${eurDeviation.toStringAsFixed(2)}%");
+
+  double avgUsdEur = (avgUsd + avgEur) / 2.0;
+  double brlDeviation = brlChange - avgUsdEur;
+  print("Desvio BRL vs (USD+EUR): ${brlDeviation.toStringAsFixed(2)}%");
+}
+        ]]>
+    </source>
+    <call function="main">
+        []
+    </call>
+    <output>
+[
+  "=========================================================",
+  "ANÁLISE DE Variação e Desvio (30 Dias)",
+  "=========================================================\n",
+  "--- Variação Percentual (Início vs Fim do Período) ---",
+  "BTC/USD: 15.38%",
+  "BTC/EUR: 13.59%",
+  "BTC/BRL: 7.94%",
+  "\n---------------------------------------------------------\n",
+  "--- Médias das Oscilações no Período ---",
+  "Média USD: 69363.97",
+  "Média EUR: 60849.76",
+  "Média BRL: 362123.77",
+  "\n---------------------------------------------------------\n",
+  "--- Desvio em Relação à Média das Outras Moedas ---",
+  "Desvio USD vs (EUR+BRL): -211471.38%",
+  "Desvio EUR vs (USD+BRL): -215730.28%",
+  "Desvio BRL vs (USD+EUR): -65098.93%"
+]
+    </output>
+    <source-generated language="dart"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+import 'dart:math';
+
+  double calculateChange(List<double> data) {
+    if (data.length < 2) return 0.0;
+
+    double startValue = data[0];
+    double endValue = data[data.length - 1];
+    return ((endValue / startValue) - 1.0) * 100.0;
+  }
+
+  double calculateAverage(List<double> data) {
+    double sum = 0.0;
+    for (var v in data) {
+      sum += v;
+    }
+    return sum / data.length;
+  }
+
+  void main() {
+    print('=========================================================');
+    print('ANÁLISE DE Variação e Desvio (30 Dias)');
+    print('=========================================================\n');
+    double usdChange = calculateChange(usdData);
+    double eurChange = calculateChange(eurData);
+    double brlChange = calculateChange(brlData);
+    print('--- Variação Percentual (Início vs Fim do Período) ---');
+    print('BTC/USD: ${usdChange.toStringAsFixed(2)}%');
+    print('BTC/EUR: ${eurChange.toStringAsFixed(2)}%');
+    print('BTC/BRL: ${brlChange.toStringAsFixed(2)}%');
+    print('\n---------------------------------------------------------\n');
+    double avgUsd = calculateAverage(usdData);
+    double avgEur = calculateAverage(eurData);
+    double avgBrl = calculateAverage(brlData);
+    print('--- Médias das Oscilações no Período ---');
+    print('Média USD: ${avgUsd.toStringAsFixed(2)}');
+    print('Média EUR: ${avgEur.toStringAsFixed(2)}');
+    print('Média BRL: ${avgBrl.toStringAsFixed(2)}');
+    print('\n---------------------------------------------------------\n');
+    print('--- Desvio em Relação à Média das Outras Moedas ---');
+    double avgEurBrl = (avgEur + avgBrl) / 2.0;
+    double usdDeviation = usdChange - avgEurBrl;
+    print('Desvio USD vs (EUR+BRL): ${usdDeviation.toStringAsFixed(2)}%');
+    double avgUsdBrl = (avgUsd + avgBrl) / 2.0;
+    double eurDeviation = eurChange - avgUsdBrl;
+    print('Desvio EUR vs (USD+BRL): ${eurDeviation.toStringAsFixed(2)}%');
+    double avgUsdEur = (avgUsd + avgEur) / 2.0;
+    double brlDeviation = brlChange - avgUsdEur;
+    print('Desvio BRL vs (USD+EUR): ${brlDeviation.toStringAsFixed(2)}%');
+  }
+
+  List<double> usdData = <double>[66666.67, 71428.57, 71428.57, 71428.57, 66666.67, 66666.67, 66666.67, 66666.67, 66666.67, 66666.67, 66666.67, 66666.67, 66666.67, 66666.67, 66666.67, 66666.67, 71428.57, 71428.57, 71428.57, 76923.08, 76923.08, 76923.08];
+  List<double> eurData = <double>[57723.8, 61667.5, 61559.43, 61746.29, 57778.4, 57743.27, 57774.07, 58014.6, 58194.47, 57636.87, 57511.47, 57757.67, 57873.47, 57874.53, 57919.4, 57766.53, 61151.79, 61260.36, 61081.93, 60923.5, 60920.93, 61199.43, 65381.0, 65198.77, 65156.54, 65273.38, 65240.0, 65339.77, 60828.57, 65277.46, 65567.38];
+  List<double> brlData = <double>[354906.93, 373796.64, 373876.21, 374064.21, 349252.07, 349463.4, 349458.8, 349274.0, 350766.73, 346151.53, 343726.67, 343902.2, 343910.2, 344840.27, 343923.07, 342827.67, 368091.0, 364361.86, 363221.36, 357680.21, 357534.21, 357649.86, 384353.85, 383614.08, 384123.69, 383965.46, 382975.62, 383204.15, 356644.43, 381191.23, 383085.31];
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+</test>
+    '''),
+    TestDefinition('dart_basic_exchange_rates.test.xml', r'''
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="Basic main()">
+    <source language="dart">
+        <![CDATA[
 import 'dart:math';
 
 // --- DADOS HISTÓRICOS (SUBSTITUA ESTES VALORES PELOS RESULTADOS REAIS DAS SUAS CONSULTAS) ---

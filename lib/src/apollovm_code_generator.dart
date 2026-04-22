@@ -50,6 +50,12 @@ abstract class ApolloCodeGenerator
       return generateASTRoot(node, out: out, indent: indent);
     } else if (node is ASTClassNormal) {
       return generateASTClass(node, out: out, indent: indent);
+    } else if (node is ASTSingleLineStatementBlock) {
+      return generateASTSingleLineStatementBlock(
+        node,
+        out: out,
+        indent: indent,
+      );
     } else if (node is ASTBlock) {
       return generateASTBlock(node, out: out, indent: indent);
     } else if (node is ASTStatement) {
@@ -106,6 +112,14 @@ abstract class ApolloCodeGenerator
     bool withBrackets = true,
     bool withBlankHeadLine = false,
   }) {
+    if (block is ASTSingleLineStatementBlock) {
+      return generateASTSingleLineStatementBlock(
+        block,
+        out: out,
+        indent: indent,
+      );
+    }
+
     out ??= newOutput();
 
     var indent2 = '$indent  ';
@@ -146,6 +160,21 @@ abstract class ApolloCodeGenerator
     }
 
     if (withBrackets) out.write('$indent}\n');
+
+    return out;
+  }
+
+  @override
+  StringBuffer generateASTSingleLineStatementBlock(
+    ASTSingleLineStatementBlock block, {
+    StringBuffer? out,
+    String indent = '',
+  }) {
+    out ??= newOutput();
+
+    var stm = block.statements.single;
+    generateASTStatement(stm, out: out, indent: indent);
+    out.write('\n');
 
     return out;
   }
@@ -579,15 +608,23 @@ abstract class ApolloCodeGenerator
       indent: indent,
       headIndented: false,
     );
-    out.write(') {\n');
-    generateASTBlock(
-      branch.block,
-      out: out,
-      indent: '$indent  ',
-      withBrackets: false,
-    );
-    out.write(indent);
-    out.write('}\n');
+    out.write(') ');
+
+    final block = branch.block;
+
+    if (block is ASTSingleLineStatementBlock) {
+      generateASTSingleLineStatementBlock(block, out: out);
+    } else {
+      out.write('{\n');
+      generateASTBlock(
+        block,
+        out: out,
+        indent: '$indent  ',
+        withBrackets: false,
+      );
+      out.write(indent);
+      out.write('}\n');
+    }
 
     return out;
   }

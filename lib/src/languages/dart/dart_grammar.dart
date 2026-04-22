@@ -286,6 +286,18 @@ class DartGrammarDefinition extends DartGrammarLexer {
             return ASTBlock(null)..addAllStatements(statements);
           });
 
+  Parser<ASTBlock> codeBlockOrSingleLineBlock() =>
+      ((codeBlock() | singleLineCodeBlock())).cast<ASTBlock>();
+
+  Parser<ASTSingleLineStatementBlock> singleLineCodeBlock() =>
+      (singleLineStatement().trimHidden()).map((v) {
+        var statements = v;
+        return ASTSingleLineStatementBlock(null)..addStatement(statements);
+      });
+
+  Parser<ASTStatement> singleLineStatement() =>
+      (statementReturn() | statementExpression()).cast<ASTStatement>();
+
   Parser<ASTStatement> statement() =>
       (branch() |
               statementForLoop() |
@@ -472,7 +484,7 @@ class DartGrammarDefinition extends DartGrammarLexer {
               char('(').trimHidden() &
               ref0(expression) &
               char(')').trimHidden() &
-              codeBlock())
+              codeBlockOrSingleLineBlock())
           .map((v) {
             var condition = v[2];
             var block = v[4];

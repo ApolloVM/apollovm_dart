@@ -43,6 +43,8 @@ abstract class ApolloGenerator<
       return generateASTStatementImport(node, out: out);
     } else if (node is ASTClassNormal) {
       return generateASTClass(node, out: out);
+    } else if (node is ASTSingleLineStatementBlock) {
+      return generateASTSingleLineStatementBlock(node, out: out);
     } else if (node is ASTBlock) {
       return generateASTBlock(node, out: out);
     } else if (node is ASTStatement) {
@@ -69,6 +71,11 @@ abstract class ApolloGenerator<
   }
 
   O generateASTBlock(ASTBlock block, {O? out});
+
+  O generateASTSingleLineStatementBlock(
+    ASTSingleLineStatementBlock block, {
+    O? out,
+  });
 
   O generateASTStatementImport(ASTStatementImport import, {O? out});
 

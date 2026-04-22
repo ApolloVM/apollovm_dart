@@ -221,6 +221,19 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
   }
 
   @override
+  BytesOutput generateASTSingleLineStatementBlock(
+    ASTSingleLineStatementBlock block, {
+    BytesOutput? out,
+    WasmContext? context,
+  }) {
+    out ??= newOutput();
+
+    var stm = block.statements.single;
+
+    return generateASTStatement(stm, out: out, context: context);
+  }
+
+  @override
   BytesOutput generateASTBranch(
     ASTBranch branch, {
     BytesOutput? out,

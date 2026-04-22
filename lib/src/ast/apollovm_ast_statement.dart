@@ -323,6 +323,26 @@ class ASTBlock extends ASTStatement {
   }
 }
 
+class ASTSingleLineStatementBlock extends ASTBlock {
+  ASTSingleLineStatementBlock(super.parentBlock);
+
+  @override
+  void addStatement(ASTStatement statement) {
+    if (_statements.isNotEmpty) {
+      throw StateError(
+        "Block already with a statement: only a single statement is allowed!",
+      );
+    }
+    super.addStatement(statement);
+  }
+
+  @override
+  String toString() {
+    var stm = _statements.single;
+    return stm.toString();
+  }
+}
+
 abstract class ASTStatementTyped extends ASTStatement implements ASTTypedNode {}
 
 class ASTStatementValue extends ASTStatementTyped {

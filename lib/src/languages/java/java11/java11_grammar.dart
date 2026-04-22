@@ -252,6 +252,18 @@ class Java11GrammarDefinition extends Java11GrammarLexer {
             return ASTBlock(null)..addAllStatements(statements);
           });
 
+  Parser<ASTBlock> codeBlockOrSingleLineBlock() =>
+      ((codeBlock() | singleLineCodeBlock())).cast<ASTBlock>();
+
+  Parser<ASTSingleLineStatementBlock> singleLineCodeBlock() =>
+      (singleLineStatement().trimHidden()).map((v) {
+        var statements = v;
+        return ASTSingleLineStatementBlock(null)..addStatement(statements);
+      });
+
+  Parser<ASTStatement> singleLineStatement() =>
+      (statementReturn() | statementExpression()).cast<ASTStatement>();
+
   Parser<ASTStatement> statement() =>
       (branch() |
               statementReturn() |
@@ -371,7 +383,7 @@ class Java11GrammarDefinition extends Java11GrammarLexer {
               char('(').trimHidden() &
               ref0(expression) &
               char(')').trimHidden() &
-              codeBlock())
+              codeBlockOrSingleLineBlock())
           .map((v) {
             var condition = v[2];
             var block = v[4];

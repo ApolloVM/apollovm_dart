@@ -1,3 +1,28 @@
+## 0.1.20
+
+- `ASTSingleLineStatementBlock`:
+  - Added new subclass of `ASTBlock` that allows only a single statement.
+  - Overrides `addStatement` to enforce single statement constraint.
+  - Overrides `toString` to output the single statement without braces.
+
+- `ApolloCodeGenerator`:
+  - Added support for `ASTSingleLineStatementBlock` in `generateASTNode` dispatch.
+  - Added `generateASTSingleLineStatementBlock` method to generate single-line statement blocks.
+  - Updated `generateASTBlock` to delegate to `generateASTSingleLineStatementBlock` if block is single-line.
+  - Updated `generateASTBranchIfBlock` to generate single-line blocks without braces.
+
+- `ApolloGenerator`:
+  - Added abstract method `generateASTSingleLineStatementBlock`.
+  - Added support for `ASTSingleLineStatementBlock` in `generateASTNode` dispatch.
+
+- `ApolloGeneratorWasm`:
+  - Implemented `generateASTSingleLineStatementBlock` to generate the single statement.
+
+- Dart and Java11 grammars:
+  - Added `ASTSingleLineStatementBlock` parsing support.
+  - Added `codeBlockOrSingleLineBlock` parser to accept either a block or a single-line block.
+  - Updated `branchIfBlock` parser to accept single-line blocks as branch bodies.
+
 ## 0.1.19
 
 - Added new AST statement classes:
