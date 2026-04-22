@@ -111,7 +111,7 @@ abstract class ASTValue<T> with ASTNode implements ASTTypedNode {
     throw UnsupportedError("Can't read index for type: $type");
   }
 
-  FutureOr<V> readKey<V>(VMContext context, Object key) {
+  FutureOr<V> readKey<V>(VMContext context, Object? key) {
     throw UnsupportedError("Can't read key for type: $type");
   }
 
@@ -306,7 +306,7 @@ class ASTValueStatic<T> extends ASTValue<T> {
   }
 
   @override
-  V readKey<V>(VMContext context, Object key) {
+  V readKey<V>(VMContext context, Object? key) {
     final value = this.value;
 
     if (value is Map) {

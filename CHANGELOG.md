@@ -1,3 +1,20 @@
+## 0.1.22
+
+- `ASTExpressionVariableEntryAccess`:
+  - Refactored `run` method to use nested `resolveMapped` calls for asynchronous handling.
+  - Added private helper `_asyncTry` to unify index/key reading logic with async support.
+  - Added private helper `__throwReadNPE` to throw detailed `ApolloVMNullPointerException` with stack trace on read failures.
+  - Improved error messages for index/key read failures including variable, index/key, size, and value details.
+
+- `ASTExpressionObjectEntryFunctionInvocation`:
+  - Added class-level documentation with code examples for usage of object entry function calls like `obj[i].fx(args)` and `obj[key].fx(args)`.
+
+- `ASTValue`:
+  - Updated `readKey` method signature to accept nullable `Object? key` parameter for better null safety.
+
+- `ASTValueStatic`:
+  - Updated `readKey` method signature to accept nullable `Object? key`.
+
 ## 0.1.21
 
 - `CoreClassBase` and `CoreClassPrimitive`:

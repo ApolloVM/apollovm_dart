@@ -490,38 +490,91 @@ class ASTExpressionVariableEntryAccess extends ASTExpression {
       parentNode?.getNodeIdentifier(name, requester: requester);
 
   @override
-  FutureOr<ASTValue> run(
-    VMContext parentContext,
-    ASTRunStatus runStatus,
-  ) async {
+  FutureOr<ASTValue> run(VMContext parentContext, ASTRunStatus runStatus) {
     var context = defineRunContext(parentContext);
 
-    var key = await expression.run(context, runStatus);
-    var value = await variable.getValue(context);
+    return expression.run(context, runStatus).resolveMapped((key) {
+      return variable.getValue(context).resolveMapped((value) {
+        if (key is ASTValueNum) {
+          var idx = key.getValue(context).toInt();
+          return _asyncTry(context, value, idx: idx, readIndex: true);
+        } else {
+          return key
+              .getValue(context)
+              .resolveMapped(
+                (Object? k) =>
+                    _asyncTry(context, value, key: k, readIndex: false),
+              );
+        }
+      });
+    });
+  }
 
-    dynamic readValue;
+  FutureOr<ASTValue> _asyncTry(
+    VMContext context,
+    ASTValue value, {
+    int? idx,
+    Object? key,
+    required bool readIndex,
+  }) {
+    try {
+      dynamic readValue = readIndex
+          ? value.readIndex(context, idx!)
+          : value.readKey(context, key);
 
-    if (key is ASTValueNum) {
-      var idx = key.getValue(context).toInt();
-      try {
-        readValue = await value.readIndex(context, idx);
-      } on ApolloVMNullPointerException {
-        throw ApolloVMNullPointerException(
-          "Can't read variable index: $variable[$idx] (size: ${value.size(context)} ; value: $value)",
+      if (readValue is Future<ASTValue>) {
+        return readValue.then(
+          (readValue) => ASTValue.fromValue(readValue),
+          onError: (e, s) => _throwReadNPE(
+            context,
+            value,
+            idx: idx,
+            key: key,
+            readIndex: readIndex,
+            e,
+            s,
+          ),
         );
+      } else {
+        return ASTValue.fromValue(readValue);
       }
-    } else {
-      var k = await key.getValue(context);
-      try {
-        readValue = await value.readKey(context, k);
-      } on ApolloVMNullPointerException {
-        throw ApolloVMNullPointerException(
-          "Can't read variable key: $variable[$k]  (size: ${value.size(context)} ; value: $value)",
-        );
-      }
+    } on ApolloVMNullPointerException catch (e, s) {
+      _throwReadNPE(
+        context,
+        value,
+        idx: idx,
+        key: key,
+        readIndex: readIndex,
+        e,
+        s,
+      );
     }
+  }
 
-    return ASTValue.fromValue(readValue);
+  Never _throwReadNPE(
+    VMContext context,
+    ASTValue value,
+    Object? error,
+    StackTrace stackTrace, {
+    Object? key,
+    int? idx,
+    required bool readIndex,
+  }) {
+    if (readIndex) {
+      Error.throwWithStackTrace(
+        ApolloVMNullPointerException(
+          "Can't read variable index: $variable[$idx] (size: ${value.size(context)} ; value: $value)",
+        ),
+        stackTrace,
+      );
+    } else {
+      Error.throwWithStackTrace(
+        ApolloVMNullPointerException(
+          "Can't read variable key: $variable[$key]  (size: ${value.size(context)} ; value: $value)",
+        ),
+        stackTrace,
+      );
+    }
   }
 
   @override
@@ -1674,6 +1727,9 @@ class ASTExpressionObjectFunctionInvocation
 }
 
 /// [ASTExpression] to call a class object entry function.
+/// Code example:
+/// - `obj[i].fx(args)`
+/// - `obj[key].fx(args)`
 class ASTExpressionObjectEntryFunctionInvocation
     extends ASTExpressionFunctionInvocation {
   ASTExpressionVariableEntryAccess variableAccess;
