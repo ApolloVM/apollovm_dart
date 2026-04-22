@@ -148,3 +148,5 @@ extension MapGetIgnoreCaseExtension<K, V> on Map<K, V> {
     }
   }
 }
+
+Type resolveGeneric<T>() => T;

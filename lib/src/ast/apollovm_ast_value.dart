@@ -1543,4 +1543,70 @@ class ASTValueFuture<T extends ASTType<V>, V> extends ASTValue<Future<V>> {
 
     return super == (other);
   }
+
+  @override
+  String toString() {
+    return '$future';
+  }
+}
+
+/// [ASTValue] for a [Function].
+class ASTValueFunction<F extends Function> extends ASTValue<F> {
+  final ASTFunctionDeclaration astFunction;
+
+  F? function;
+
+  ASTValueFunction(ASTType type, this.astFunction, [this.function])
+    : super(
+        type is ASTTypeFunction
+            ? type as ASTTypeFunction<F>
+            : ASTTypeFunction<F>(),
+      );
+
+  @override
+  Iterable<ASTNode> get children => [];
+
+  @override
+  F getValue(VMContext context) => function ??= astFunction.toFunction(context);
+
+  @override
+  F getValueNoContext() =>
+      function ??
+      (throw ApolloVMRuntimeError("Can't resolve Function without context!"));
+
+  @override
+  ASTValueFunction<F> resolve(VMContext context) {
+    return this;
+  }
+
+  FutureOr<ASTValue> call(
+    VMContext parent, {
+    List? positionalParameters,
+    Map? namedParameters,
+  }) async {
+    return astFunction.call(
+      parent,
+      positionalParameters: positionalParameters,
+      namedParameters: namedParameters,
+    );
+  }
+
+  @override
+  bool operator ==(Object other) {
+    if (identical(this, other)) return true;
+
+    if (other is ASTValueFunction) {
+      return astFunction == other.astFunction;
+    }
+
+    return super == other;
+  }
+
+  @override
+  int get hashCode => astFunction.hashCode;
+
+  @override
+  String toString() {
+    return '$astFunction';
+  }
 }

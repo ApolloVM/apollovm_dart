@@ -74,6 +74,8 @@ class DartGrammarDefinition extends DartGrammarLexer {
                   root.addFunction(def);
                 } else if (def is ASTClassNormal) {
                   root.addClass(def);
+                } else if (def is ASTStatementVariableDeclaration) {
+                  root.addStatement(def);
                 }
               }
             }
@@ -84,12 +86,18 @@ class DartGrammarDefinition extends DartGrammarLexer {
           });
 
   Parser topLevelDefinition() =>
-      (functionDeclaration() | classDeclaration()).plus();
+      (functionDeclaration() |
+              classDeclaration() |
+              statementVariableDeclaration())
+          .plus();
 
   Parser<ASTFunctionDeclaration> functionDeclaration() =>
-      (type() & identifier() & functionParametersDeclaration() & codeBlock())
+      (type().optional() &
+              identifier() &
+              functionParametersDeclaration() &
+              codeBlock())
           .map((v) {
-            var returnType = v[0];
+            var returnType = v[0] as ASTType? ?? ASTTypeDynamic.instance;
             var parameters = v[2];
             var name = v[1];
             var block = v[3];
@@ -246,13 +254,13 @@ class DartGrammarDefinition extends DartGrammarLexer {
 
   Parser<ASTFunctionDeclaration> classFunctionDeclaration() =>
       (functionModifiers().optional() &
-              type() &
+              type().optional() &
               identifier() &
               functionParametersDeclaration() &
               codeBlock())
           .map((v) {
             var modifiers = v[0];
-            var returnType = v[1] as ASTType;
+            var returnType = v[1] as ASTType? ?? ASTTypeDynamic.instance;
             var name = v[2] as String;
             var parameters = v[3] as ASTFunctionParametersDeclaration;
             var block = v[4] as ASTBlock;
@@ -284,7 +292,9 @@ class DartGrammarDefinition extends DartGrammarLexer {
               statementForEach() |
               statementWhileLoop() |
               statementReturn() |
+              statementFunctionDeclaration() |
               statementVariableDeclaration() |
+              statementBlock() |
               statementExpression())
           .cast<ASTStatement>();
 
@@ -374,6 +384,30 @@ class DartGrammarDefinition extends DartGrammarLexer {
       (expression() & char(';').trimHidden()).map((v) {
         return ASTStatementExpression(v[0]);
       });
+
+  Parser<ASTStatementBlock> statementBlock() =>
+      (codeBlock()).map((v) => ASTStatementBlock(v));
+
+  Parser<ASTStatementFunctionDeclaration> statementFunctionDeclaration() =>
+      (type().optional() &
+              identifier() &
+              functionParametersDeclaration() &
+              codeBlock())
+          .map((v) {
+            var returnType = v[0] as ASTType? ?? ASTTypeDynamic.instance;
+            var parameters = v[2];
+            var name = v[1];
+            var block = v[3];
+            return ASTStatementFunctionDeclaration(
+              ASTFunctionDeclaration(
+                name,
+                parameters,
+                returnType,
+                block: block,
+                modifiers: ASTModifiers.modifierStatic,
+              ),
+            );
+          });
 
   Parser<ASTStatementVariableDeclaration> statementVariableDeclaration() =>
       (

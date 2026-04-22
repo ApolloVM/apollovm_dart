@@ -142,6 +142,10 @@ abstract class ApolloGenerator<
       return generateASTStatementForEach(statement, out: out);
     } else if (statement is ASTStatementWhileLoop) {
       return generateASTStatementWhileLoop(statement, out: out);
+    } else if (statement is ASTStatementBlock) {
+      return generateASTStatementBlock(statement, out: out);
+    } else if (statement is ASTStatementFunctionDeclaration) {
+      return generateASTStatementFunctionDeclaration(statement, out: out);
     } else if (statement is ASTStatementReturnNull) {
       return generateASTStatementReturnNull(statement, out: out);
     } else if (statement is ASTStatementReturnValue) {
@@ -191,6 +195,11 @@ abstract class ApolloGenerator<
     O? out,
   });
 
+  O generateASTStatementFunctionDeclaration(
+    ASTStatementFunctionDeclaration statement, {
+    O? out,
+  });
+
   O generateASTExpressionVariableAssignment(
     ASTExpressionVariableAssignment expression, {
     O? out,
@@ -200,6 +209,8 @@ abstract class ApolloGenerator<
     ASTExpressionVariableDirectOperation expression, {
     O? out,
   });
+
+  O generateASTStatementBlock(ASTStatementBlock statement, {O? out});
 
   O generateASTStatementReturn(ASTStatementReturn statement, {O? out});
 

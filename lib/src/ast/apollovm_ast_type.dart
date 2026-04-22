@@ -300,6 +300,10 @@ class ASTType<V> with ASTNode implements ASTTypedNode {
     return value == null ? null : ASTValue.from(this, value as V);
   }
 
+  R callCasted<R>(R Function<T>() call) {
+    return call<V>();
+  }
+
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -1415,6 +1419,33 @@ class ASTTypeFuture<T extends ASTType<V>, V> extends ASTType<Future<V>> {
           : (value is Future
                 ? value.then((v) => v as V)
                 : Future.value(value as V)),
+    );
+  }
+}
+
+/// [ASTType] for a [Function].
+class ASTTypeFunction<F extends Function> extends ASTType<F> {
+  ASTTypeFunction([ASTType? returnType, List<ASTType>? parameters])
+    : super('Function', generics: [?returnType, ...?parameters]);
+
+  @override
+  Iterable<ASTNode> get children => [];
+
+  @override
+  ASTValueFunction<F>? toValue(VMContext context, Object? v) {
+    if (v == null) return null;
+
+    throw UnsupportedError(
+      "Can't resolve an `ASTValueFunction` from a: ${v.runtimeType}",
+    );
+  }
+
+  @override
+  ASTValueFunction<F>? toASTValue(Object? value) {
+    if (value == null) return null;
+
+    throw UnsupportedError(
+      "Can't resolve an `ASTValueFunction` from a: ${value.runtimeType}",
     );
   }
 }
