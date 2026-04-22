@@ -2087,6 +2087,47 @@ class ASTFunctionDeclaration<T>
     super.block,
     super.modifiers,
   });
+
+  FutureOr<ASTValueFunction<F>> toASTValueFunction<F extends Function>(
+    VMContext parentContext,
+  ) {
+    return ASTValueFunction(ASTTypeFunction<F>(), this);
+  }
+
+  F toFunction<F extends Function>(VMContext parentContext) {
+    final parameters = this.parameters;
+
+    if (parameters.isEmpty) {
+      return returnType.callCasted(<R>() {
+            return () {
+              return call(parentContext).resolveMapped((astValue) {
+                    return astValue.getValue(parentContext);
+                  })
+                  as R;
+            };
+          })
+          as F;
+    } else if (parameters.positionalParametersSize == 1) {
+      if (parameters.optionalParametersSize == 0) {
+        if (parameters.namedParametersSize == 0) {
+          return returnType.callCasted(<R>() {
+                return (Object? a0) {
+                  return call(
+                        parentContext,
+                        positionalParameters: [a0],
+                      ).resolveMapped((astValue) {
+                        return astValue.getValue(parentContext);
+                      })
+                      as R;
+                };
+              })
+              as F;
+        }
+      }
+    }
+
+    throw UnsupportedError("Can't resolve to a Function: $this");
+  }
 }
 
 /// An AST Function Declaration.

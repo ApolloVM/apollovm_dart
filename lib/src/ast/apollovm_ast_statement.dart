@@ -61,7 +61,7 @@ class ASTStatementImport extends ASTStatement {
       if (!ok) {
         throw ApolloVMRuntimeError("Can't import: $path");
       }
-      return runStatus.returnVoid();
+      return ASTValueVoid.instance;
     });
   }
 
@@ -469,6 +469,75 @@ class ASTStatementExpression extends ASTStatement {
   @override
   String toString() {
     return '$expression ;';
+  }
+}
+
+class ASTStatementBlock extends ASTStatement {
+  ASTBlock block;
+
+  ASTStatementBlock(this.block);
+
+  @override
+  Iterable<ASTNode> get children => block.children;
+
+  @override
+  void resolveNode(ASTNode? parentNode) {
+    super.resolveNode(parentNode);
+
+    block.resolveNode(parentNode);
+  }
+
+  @override
+  VMContext defineRunContext(VMContext parentContext) {
+    return VMScopeContext(block, parent: parentContext);
+  }
+
+  @override
+  FutureOr<ASTValue> run(VMContext parentContext, ASTRunStatus runStatus) {
+    var context = defineRunContext(parentContext);
+    return block.run(context, runStatus);
+  }
+
+  @override
+  FutureOr<ASTType> resolveType(VMContext? context) =>
+      block.resolveType(context);
+
+  @override
+  String toString() {
+    return block.toString();
+  }
+}
+
+class ASTStatementFunctionDeclaration extends ASTStatement {
+  ASTFunctionDeclaration functionDeclaration;
+
+  ASTStatementFunctionDeclaration(this.functionDeclaration);
+
+  @override
+  Iterable<ASTNode> get children => functionDeclaration.children;
+
+  @override
+  void resolveNode(ASTNode? parentNode) {
+    super.resolveNode(parentNode);
+
+    functionDeclaration.resolveNode(parentNode);
+  }
+
+  @override
+  FutureOr<ASTValueFunction> run(
+    VMContext parentContext,
+    ASTRunStatus runStatus,
+  ) {
+    parentContext.block.addFunction(functionDeclaration);
+    return functionDeclaration.toASTValueFunction(parentContext);
+  }
+
+  @override
+  FutureOr<ASTType> resolveType(VMContext? context) => ASTTypeFunction();
+
+  @override
+  String toString() {
+    return functionDeclaration.toString();
   }
 }
 

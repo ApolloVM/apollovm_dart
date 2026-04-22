@@ -1,3 +1,48 @@
+## 0.1.19
+
+- Added new AST statement classes:
+  - `ASTStatementBlock` representing a block of statements.
+  - `ASTStatementFunctionDeclaration` representing a function declaration statement.
+
+- `ApolloCodeGenerator`:
+  - Added support for generating code for `ASTStatementFunctionDeclaration` and `ASTStatementBlock`.
+  - Added methods `generateASTStatementFunctionDeclaration` and `generateASTStatementBlock`.
+
+- `ApolloGenerator` interface:
+  - Added abstract methods `generateASTStatementFunctionDeclaration` and `generateASTStatementBlock`.
+  - Updated statement dispatch to handle `ASTStatementFunctionDeclaration` and `ASTStatementBlock`.
+
+- `ApolloGeneratorWasm`:
+  - Added `generateASTStatementBlock` implementation.
+  - Added stub for `generateASTStatementFunctionDeclaration` (throws `UnimplementedError`).
+
+- `apollovm_ast_statement.dart`:
+  - Added `ASTStatementBlock` class wrapping an `ASTBlock` with proper context and run behavior.
+  - Added `ASTStatementFunctionDeclaration` class wrapping an `ASTFunctionDeclaration` with run behavior registering the function in the context.
+
+- `apollovm_ast_toplevel.dart`:
+  - Extended `ASTFunctionDeclaration` with:
+    - `toASTValueFunction` method to convert to `ASTValueFunction`.
+    - `toFunction` method to convert to a Dart `Function` with limited support for zero or one positional parameter.
+    - `resolveFunctionType` and `callFunctionTyped` helpers for function type resolution and invocation.
+
+- `apollovm_ast_type.dart`:
+  - Added `ASTTypeFunction` representing function types with optional return type and parameters.
+  - Added `callCasted` helper method for generic type casting.
+
+- `apollovm_ast_value.dart`:
+  - Added `ASTValueFunction` wrapping a Dart `Function` with proper type and invocation support.
+  - Implemented equality, hashCode, and string representation for `ASTValueFunction`.
+
+- `apollovm_utils.dart`:
+  - Added `resolveGeneric<T>()` helper function for generic type resolution.
+
+- `dart_grammar.dart`:
+  - Extended grammar to parse function declarations as top-level definitions and statements.
+  - Added parsing support for `ASTStatementFunctionDeclaration` and `ASTStatementBlock`.
+  - Allowed optional return type in function declarations.
+  - Updated statement parser to include function declarations and blocks.
+
 ## 0.1.18
 
 - `ASTExpressionObjectEntryFunctionInvocation`:

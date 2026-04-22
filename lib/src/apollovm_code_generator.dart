@@ -322,6 +322,13 @@ abstract class ApolloCodeGenerator
         indent: indent,
         headIndented: headIndented,
       );
+    } else if (statement is ASTStatementFunctionDeclaration) {
+      return generateASTStatementFunctionDeclaration(
+        statement,
+        out: out,
+        indent: indent,
+        headIndented: headIndented,
+      );
     } else if (statement is ASTBranch) {
       return generateASTBranch(
         statement,
@@ -345,6 +352,13 @@ abstract class ApolloCodeGenerator
       );
     } else if (statement is ASTStatementWhileLoop) {
       return generateASTStatementWhileLoop(
+        statement,
+        out: out,
+        indent: indent,
+        headIndented: headIndented,
+      );
+    } else if (statement is ASTStatementBlock) {
+      return generateASTStatementBlock(
         statement,
         out: out,
         indent: indent,
@@ -734,6 +748,24 @@ abstract class ApolloCodeGenerator
   }
 
   @override
+  StringBuffer generateASTStatementFunctionDeclaration(
+    ASTStatementFunctionDeclaration statement, {
+    StringBuffer? out,
+    String indent = '',
+    bool headIndented = true,
+  }) {
+    out ??= newOutput();
+
+    if (headIndented) out.write(indent);
+
+    return generateASTFunctionDeclaration(
+      statement.functionDeclaration,
+      out: out,
+      indent: indent,
+    );
+  }
+
+  @override
   StringBuffer generateASTExpressionVariableAssignment(
     ASTExpressionVariableAssignment expression, {
     StringBuffer? out,
@@ -794,6 +826,16 @@ abstract class ApolloCodeGenerator
     }
 
     return out;
+  }
+
+  @override
+  StringBuffer generateASTStatementBlock(
+    ASTStatementBlock statement, {
+    StringBuffer? out,
+    String indent = '',
+    bool headIndented = true,
+  }) {
+    return generateASTBlock(statement.block, out: out, indent: indent);
   }
 
   @override
