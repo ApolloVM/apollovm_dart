@@ -28,6 +28,57 @@ Future<void> _tests() async {
     <source language="dart">
         <![CDATA[
 
+void main() {
+
+  var d = 1.1;
+  
+  var s = d.toString();
+  
+  print('[$s]');
+  print('s: '+ s.toString());
+
+  var l = [2.2,3.3];
+  print('[$l]');
+  print('l: ' + l.toString());
+}
+
+        ]]>
+    </source>
+    <call function="main">
+        []
+    </call>
+    <output>
+[
+"[1.1]",
+"s: 1.1",
+"[[2.2, 3.3]]",
+"l: [2.2, 3.3]"
+]
+    </output>
+    <source-generated language="dart"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+  void main() {
+    var d = 1.1;
+    var s = d.toString();
+    print('[$s]');
+    print('s: ' + s.toString());
+    var l = <double>[2.2, 3.3];
+    print('[$l]');
+    print('l: ' + l.toString());
+  }
+
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+</test>
+    '''),
+    TestDefinition('dart_basic_exchange_rates.test.xml', r'''
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="Basic main()">
+    <source language="dart">
+        <![CDATA[
+
 import 'dart:math';
 
 // --- DADOS HISTÓRICOS (SUBSTITUA ESTES VALORES PELOS RESULTADOS REAIS DAS SUAS CONSULTAS) ---

@@ -370,8 +370,16 @@ abstract class CoreClassBase<T> extends ASTClass<T> with CoreClassMixin {
   @override
   ASTClass<T> get astClass => this;
 
+  late final ASTExternalClassFunction _functionToString;
+
   CoreClassBase(ASTType<T> type, this.coreName) : super(coreName, type, null) {
     type.setClass(this);
+
+    _functionToString = _externalClassFunctionArgs0(
+      'toString',
+      ASTTypeString.instance,
+      (Object self) => self.toString(),
+    );
   }
 }
 
@@ -382,8 +390,16 @@ abstract class CoreClassPrimitive<T> extends ASTClassPrimitive<T>
   @override
   ASTClass<T> get astClass => this;
 
+  late final ASTExternalClassFunction _functionToString;
+
   CoreClassPrimitive(super.type, this.coreName) {
     type.setClass(this);
+
+    _functionToString = _externalClassFunctionArgs0(
+      'toString',
+      ASTTypeString.instance,
+      (Object self) => self.toString(),
+    );
   }
 }
 
@@ -582,6 +598,9 @@ class CoreClassString extends CoreClassPrimitive<String> {
 
       case 'valueOf':
         return _functionValueOf;
+
+      case 'toString':
+        return _functionToString;
     }
 
     throw StateError(
@@ -707,6 +726,9 @@ class CoreClassInt extends CoreClassPrimitive<int> {
         return _functionToRadixString;
       case 'toDouble':
         return _functionToDouble;
+
+      case 'toString':
+        return _functionToString;
     }
 
     throw StateError(
@@ -925,6 +947,9 @@ class CoreClassDouble extends CoreClassPrimitive<double> {
         return _functionCeil;
       case 'truncate':
         return _functionTruncate;
+
+      case 'toString':
+        return _functionToString;
     }
 
     throw StateError(
@@ -1277,6 +1302,9 @@ class CoreClassList<T> extends CoreClassBase<List<T>> {
 
       case 'valueOf':
         return _functionValueOf;
+
+      case 'toString':
+        return _functionToString;
     }
 
     throw StateError(

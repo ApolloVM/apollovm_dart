@@ -1,3 +1,10 @@
+## 0.1.21
+
+- `CoreClassBase` and `CoreClassPrimitive`:
+  - Added `_functionToString` external function returning the string representation of the instance.
+- `CoreClassString`, `CoreClassInt`, `CoreClassDouble`, `CoreClassList`:
+  - Added support for the `toString` core function, returning the respective `_functionToString`.
+
 ## 0.1.20
 
 - `ASTSingleLineStatementBlock`:
