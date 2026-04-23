@@ -531,13 +531,23 @@ class Java11GrammarDefinition extends Java11GrammarLexer {
               identifier() &
               char('(').trimHidden() &
               ref0(expressionSequence).optional() &
-              char(')').trimHidden())
+              char(')').trimHidden() &
+              expressionChainFunctionInvocation().star())
           .map((v) {
             var expression = v[0] as ASTExpression;
             var name = v[2] as String;
             var args = v[4] as List<ASTExpression>?;
             args ??= <ASTExpression>[];
-            return ASTExpressionGroupFunctionInvocation(expression, name, args);
+            var chainFunctions = (v[6] as List)
+                .whereType<ASTExpressionChainFunctionInvocation>()
+                .toList();
+
+            return ASTExpressionGroupFunctionInvocation(
+              expression,
+              name,
+              args,
+              chainFunctions,
+            );
           });
 
   Parser<ASTExpressionFunctionInvocation> expressionFunctionInvocation() =>
@@ -545,13 +555,17 @@ class Java11GrammarDefinition extends Java11GrammarLexer {
               identifier() &
               char('(').trimHidden() &
               ref0(expressionSequence).optional() &
-              char(')').trimHidden())
+              char(')').trimHidden() &
+              expressionChainFunctionInvocation().star())
           .map((v) {
             var objOpt = v[0] as List?;
             var obj = objOpt != null ? objOpt[0] as String : null;
             var name = v[1] as String;
             var args = v[3] as List<ASTExpression>?;
             args ??= <ASTExpression>[];
+            var chainFunctions = (v[5] as List)
+                .whereType<ASTExpressionChainFunctionInvocation>()
+                .toList();
 
             if (obj != null && obj != 'this') {
               var variable = ASTScopeVariable(obj);
@@ -559,10 +573,29 @@ class Java11GrammarDefinition extends Java11GrammarLexer {
                 variable,
                 name,
                 args,
+                chainFunctions,
               );
             } else {
-              return ASTExpressionLocalFunctionInvocation(name, args);
+              return ASTExpressionLocalFunctionInvocation(
+                name,
+                args,
+                chainFunctions,
+              );
             }
+          });
+
+  Parser<ASTExpressionChainFunctionInvocation>
+  expressionChainFunctionInvocation() =>
+      (char('.').trimHidden() &
+              identifier() &
+              char('(').trimHidden() &
+              ref0(expressionSequence).optional() &
+              char(')').trimHidden())
+          .map((v) {
+            var fName = v[1];
+            var args = v[3];
+            args ??= <ASTExpression>[];
+            return ASTExpressionChainFunctionInvocation(fName, args);
           });
 
   Parser<List<ASTExpression>> expressionSequence() =>
@@ -604,18 +637,24 @@ class Java11GrammarDefinition extends Java11GrammarLexer {
               identifier() &
               char('(').trimHidden() &
               ref0(expressionSequence).optional() &
-              char(')').trimHidden())
+              char(')').trimHidden() &
+              expressionChainFunctionInvocation().star())
           .map((v) {
             var variable = v[0];
             var expression = v[2];
             var fName = v[5];
             var args = v[7];
             args ??= <ASTExpression>[];
+            var chainFunctions = (v[9] as List)
+                .whereType<ASTExpressionChainFunctionInvocation>()
+                .toList();
+
             return ASTExpressionObjectEntryFunctionInvocation(
               variable,
               expression,
               fName,
               args,
+              chainFunctions,
             );
           });
 

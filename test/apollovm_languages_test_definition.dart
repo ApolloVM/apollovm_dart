@@ -285,9 +285,7 @@ Future<void> _testCall(
 
   print('OUTPUT[$callIndex]:');
 
-  for (var o in outputList) {
-    print('>> $o');
-  }
+  print(JsonEncoder.withIndent('  ').convert(outputList));
 
   if (callReturn != null) {
     expect(

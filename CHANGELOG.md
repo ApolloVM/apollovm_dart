@@ -1,3 +1,41 @@
+## 0.1.23
+
+- `ASTExpressionVariableEntryAccess`:
+  - Replaced `_asyncTry` with `_run2` to improve element access with proper type casting.
+  - Added generic `_readElement<V>` method to read elements with type safety.
+  - Updated `readIndexASTValue` and `readKeyASTValue` to return typed `ASTValue<V>`.
+
+- `ASTExpressionFunctionInvocation` and subclasses:
+  - Added support for chained function invocations via new `chainFunctionInvocation` field.
+  - Updated `run` methods to invoke chained functions sequentially after the initial call.
+  - Added `_callChainFunction` helper to process chained calls asynchronously.
+  - Added `ASTExpressionChainFunctionInvocation` class representing chained function calls.
+  - Updated `toString` methods to include chained function calls.
+  - Updated constructors and parsing to support chained function invocations.
+
+- `ASTExpressionObjectFunctionInvocation`, `ASTExpressionObjectEntryFunctionInvocation`, `ASTExpressionGroupFunctionInvocation`:
+  - Updated constructors and `run` methods to support chained function invocations.
+  - Added caching of function class for performance.
+  - Improved error handling and function resolution with chained calls.
+
+- `lib/src/apollovm_code_generator.dart`:
+  - Updated code generator to output chained function invocations in generated code.
+
+- Grammar updates (`dart_grammar.dart`, `java11_grammar.dart`):
+  - Added parsing rules for chained function invocations (`expressionChainFunctionInvocation`).
+  - Updated function invocation parsers to parse and attach chained function calls.
+
+- `ASTValue`:
+  - Added generic static method `fromValue<V>` to convert dynamic values to typed `ASTValue<V>`.
+  - Added `readIndexASTValue<V>` and `readKeyASTValue<V>` methods returning typed `ASTValue<V>`.
+
+- `CoreClassString`:
+  - Added new external string functions: `replaceFirst`, `trimLeft`, `trimRight`, `padLeft`, `padRight`, `lastIndexOf`, `codeUnitAt`.
+  - Registered new functions in `getFunction` with case-insensitive support.
+
+- `ASTClass`:
+  - Added `toString` override for better debug output.
+
 ## 0.1.22
 
 - `ASTExpressionVariableEntryAccess`:

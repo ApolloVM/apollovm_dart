@@ -45,18 +45,34 @@ abstract class ASTValue<T> with ASTNode implements ASTTypedNode {
     }
   }
 
-  static ASTValue fromValue(dynamic o) {
-    if (o == null) return ASTValueNull.instance;
+  static ASTValue<V> fromValue<V>(dynamic o) {
+    if (o == null) return ASTValueNull.instance as ASTValue<V>;
 
-    if (o is ASTValue) return o;
+    if (o is ASTValue) return o as ASTValue<V>;
 
-    if (o is String) return ASTValueString(o);
-    if (o is int) return ASTValueInt(o);
-    if (o is double) return ASTValueDouble(o);
-    if (o is bool) return ASTValueBool(o);
+    if (o is String) return ASTValueString(o) as ASTValue<V>;
+
+    if (o is int) {
+      if (V == double) {
+        return ASTValueDouble(o.toDouble()) as ASTValue<V>;
+      }
+      return ASTValueInt(o) as ASTValue<V>;
+    }
+
+    if (o is double) {
+      if (V == int) {
+        var n = o.toInt();
+        if (n == o) {
+          return ASTValueInt(n) as ASTValue<V>;
+        }
+      }
+      return ASTValueDouble(o) as ASTValue<V>;
+    }
+
+    if (o is bool) return ASTValueBool(o) as ASTValue<V>;
 
     var t = ASTType.from(o);
-    return ASTValue.from(t, o);
+    return ASTValue<V>.from(t as ASTType<V>, o);
   }
 
   ASTType<T> type;
@@ -106,6 +122,17 @@ abstract class ASTValue<T> with ASTNode implements ASTTypedNode {
 
   @override
   void associateToType(ASTTypedNode node) {}
+
+  FutureOr<ASTValue<V>> readIndexASTValue<V>(VMContext context, int index) {
+    return readIndex(
+      context,
+      index,
+    ).resolveMapped((v) => ASTValue.fromValue<V>(v));
+  }
+
+  FutureOr<ASTValue<V>> readKeyASTValue<V>(VMContext context, Object? key) {
+    return readKey(context, key).resolveMapped((v) => ASTValue.fromValue<V>(v));
+  }
 
   FutureOr<V> readIndex<V>(VMContext context, int index) {
     throw UnsupportedError("Can't read index for type: $type");

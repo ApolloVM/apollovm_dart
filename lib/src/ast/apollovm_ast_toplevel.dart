@@ -380,6 +380,11 @@ abstract class ASTClass<T> extends ASTEntryPointBlock {
   }
 
   void resolveNodeFields(ASTNode? parentNode);
+
+  @override
+  String toString() {
+    return 'ASTClass[$name]@$type';
+  }
 }
 
 /// AST of a primitive type VM Class.

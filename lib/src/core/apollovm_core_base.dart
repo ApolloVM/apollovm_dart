@@ -422,6 +422,17 @@ class CoreClassString extends CoreClassPrimitive<String> {
   late final ASTExternalClassFunction _functionTrim;
   late final ASTExternalClassFunction _functionSplit;
   late final ASTExternalClassFunction _functionReplaceAll;
+  late final ASTExternalClassFunction _functionReplaceFirst;
+
+  late final ASTExternalClassFunction _functionTrimLeft;
+  late final ASTExternalClassFunction _functionTrimRight;
+
+  late final ASTExternalClassFunction _functionPadLeft;
+  late final ASTExternalClassFunction _functionPadRight;
+
+  late final ASTExternalClassFunction _functionLastIndexOf;
+
+  late final ASTExternalClassFunction _functionCodeUnitAt;
 
   late final ASTExternalFunction _functionValueOf;
 
@@ -538,6 +549,78 @@ class CoreClassString extends CoreClassPrimitive<String> {
       (String o, dynamic from, dynamic replace) => o.replaceAll(from, replace),
     );
 
+    _functionReplaceFirst = _externalClassFunctionArgs2(
+      'replaceFirst',
+      ASTTypeString.instance,
+      ASTFunctionParameterDeclaration(ASTTypeString.instance, 'from', 0, false),
+      ASTFunctionParameterDeclaration(
+        ASTTypeString.instance,
+        'replace',
+        1,
+        false,
+      ),
+      (String o, String from, String replace) => o.replaceFirst(from, replace),
+    );
+
+    _functionTrimLeft = _externalClassFunctionArgs0(
+      'trimLeft',
+      ASTTypeString.instance,
+      (String o) => o.trimLeft(),
+    );
+
+    _functionTrimRight = _externalClassFunctionArgs0(
+      'trimRight',
+      ASTTypeString.instance,
+      (String o) => o.trimRight(),
+    );
+
+    _functionPadLeft = _externalClassFunctionArgs2(
+      'padLeft',
+      ASTTypeString.instance,
+      ASTFunctionParameterDeclaration(ASTTypeInt.instance, 'width', 0, false),
+      ASTFunctionParameterDeclaration(
+        ASTTypeString.instance,
+        'padding',
+        1,
+        true,
+      ),
+      (String o, dynamic width, dynamic padding) =>
+          o.padLeft(width, padding ?? ' '),
+    );
+
+    _functionPadRight = _externalClassFunctionArgs2(
+      'padRight',
+      ASTTypeString.instance,
+      ASTFunctionParameterDeclaration(ASTTypeInt.instance, 'width', 0, false),
+      ASTFunctionParameterDeclaration(
+        ASTTypeString.instance,
+        'padding',
+        1,
+        true,
+      ),
+      (String o, dynamic width, dynamic padding) =>
+          o.padRight(width, padding ?? ' '),
+    );
+
+    _functionLastIndexOf = _externalClassFunctionArgs1(
+      'lastIndexOf',
+      ASTTypeInt.instance,
+      ASTFunctionParameterDeclaration(
+        ASTTypeString.instance,
+        'pattern',
+        0,
+        false,
+      ),
+      (String o, String p1) => o.lastIndexOf(p1),
+    );
+
+    _functionCodeUnitAt = _externalClassFunctionArgs1(
+      'codeUnitAt',
+      ASTTypeInt.instance,
+      ASTFunctionParameterDeclaration(ASTTypeInt.instance, 'index', 0, false),
+      (String o, int index) => o.codeUnitAt(index),
+    );
+
     _functionValueOf = _externalStaticFunctionArgs1(
       'valueOf',
       ASTTypeString.instance,
@@ -565,6 +648,10 @@ class CoreClassString extends CoreClassPrimitive<String> {
     VMContext context, {
     bool caseInsensitive = false,
   }) {
+    if (caseInsensitive) {
+      fName = fName.toLowerCase();
+    }
+
     switch (fName) {
       case 'contains':
         return _functionContains;
@@ -595,6 +682,27 @@ class CoreClassString extends CoreClassPrimitive<String> {
         return _functionSplit;
       case 'replaceAll':
         return _functionReplaceAll;
+
+      case 'replaceFirst':
+        return _functionReplaceFirst;
+
+      case 'trimLeft':
+        return _functionTrimLeft;
+
+      case 'trimRight':
+        return _functionTrimRight;
+
+      case 'padLeft':
+        return _functionPadLeft;
+
+      case 'padRight':
+        return _functionPadRight;
+
+      case 'lastIndexOf':
+        return _functionLastIndexOf;
+
+      case 'codeUnitAt':
+        return _functionCodeUnitAt;
 
       case 'valueOf':
         return _functionValueOf;

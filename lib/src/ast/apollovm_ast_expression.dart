@@ -497,46 +497,68 @@ class ASTExpressionVariableEntryAccess extends ASTExpression {
       return variable.getValue(context).resolveMapped((value) {
         if (key is ASTValueNum) {
           var idx = key.getValue(context).toInt();
-          return _asyncTry(context, value, idx: idx, readIndex: true);
+          return _run2(context, value, idx: idx, readIndex: true);
         } else {
           return key
               .getValue(context)
               .resolveMapped(
-                (Object? k) =>
-                    _asyncTry(context, value, key: k, readIndex: false),
+                (Object? k) => _run2(context, value, key: k, readIndex: false),
               );
         }
       });
     });
   }
 
-  FutureOr<ASTValue> _asyncTry(
+  FutureOr<ASTValue> _run2(
     VMContext context,
     ASTValue value, {
     int? idx,
     Object? key,
     required bool readIndex,
   }) {
-    try {
-      dynamic readValue = readIndex
-          ? value.readIndex(context, idx!)
-          : value.readKey(context, key);
+    var valueType = value.type;
 
-      if (readValue is Future<ASTValue>) {
-        return readValue.then(
-          (readValue) => ASTValue.fromValue(readValue),
-          onError: (e, s) => _throwReadNPE(
-            context,
-            value,
-            idx: idx,
-            key: key,
-            readIndex: readIndex,
-            e,
-            s,
-          ),
-        );
+    var elementType = valueType;
+    if (valueType is ASTTypeArray) {
+      elementType = valueType.componentType;
+    } else if (valueType is ASTTypeMap) {
+      elementType = valueType.valueType;
+    }
+
+    return elementType.callCasted(<V>() {
+      return _readElement<V>(context, value, idx, key, readIndex);
+    });
+  }
+
+  FutureOr<ASTValue<V>> _readElement<V>(
+    VMContext context,
+    ASTValue<dynamic> value,
+    int? idx,
+    Object? key,
+    bool readIndex,
+  ) {
+    try {
+      var readValue = readIndex
+          ? value.readIndexASTValue<V>(context, idx!)
+          : value.readKeyASTValue<V>(context, key);
+
+      if (readValue is Future<ASTValue<V>>) {
+        return readValue.catchError((e, s) {
+          if (e is ApolloVMNullPointerException) {
+            _throwReadNPE(
+              context,
+              value,
+              idx: idx,
+              key: key,
+              readIndex: readIndex,
+              e,
+              s,
+            );
+          }
+          Error.throwWithStackTrace(e, s);
+        });
       } else {
-        return ASTValue.fromValue(readValue);
+        return readValue;
       }
     } on ApolloVMNullPointerException catch (e, s) {
       _throwReadNPE(
@@ -1529,7 +1551,16 @@ abstract class ASTExpressionFunctionInvocation extends ASTExpression {
   String name;
   List<ASTExpression> arguments;
 
-  ASTExpressionFunctionInvocation(this.name, this.arguments);
+  List<ASTExpressionChainFunctionInvocation>? chainFunctionInvocation;
+
+  ASTExpressionFunctionInvocation(
+    this.name,
+    this.arguments, [
+    List<ASTExpressionChainFunctionInvocation>? chainFunctionInvocation,
+  ]) : chainFunctionInvocation =
+           chainFunctionInvocation != null && chainFunctionInvocation.isNotEmpty
+           ? chainFunctionInvocation
+           : null;
 
   @override
   Iterable<ASTNode> get children => arguments;
@@ -1577,14 +1608,105 @@ abstract class ASTExpressionFunctionInvocation extends ASTExpression {
         runStatus,
         arguments,
       ).resolveMapped((argumentsValues) {
-        return f.call(parentContext, positionalParameters: argumentsValues);
+        return _run2(parentContext, runStatus, f, argumentsValues);
       });
     });
+  }
+
+  FutureOr<ASTValue> _run2(
+    VMContext parentContext,
+    ASTRunStatus runStatus,
+    ASTInvocableDeclaration f,
+    List<ASTValue> argumentsValues,
+  ) {
+    var ret = f.call(parentContext, positionalParameters: argumentsValues);
+
+    final chainFunctionInvocation = this.chainFunctionInvocation;
+    if (chainFunctionInvocation == null || chainFunctionInvocation.isEmpty) {
+      return ret;
+    }
+
+    return ret.resolveMapped((prevObj) {
+      return _callChainFunction(
+        parentContext,
+        runStatus,
+        prevObj,
+        chainFunctionInvocation,
+      );
+    });
+  }
+
+  FutureOr<ASTValue> _callFunctionAndChain(
+    VMContext parentContext,
+    ASTRunStatus runStatus,
+    ASTValue obj,
+    ASTInvocableDeclaration f,
+    List<ASTValue> argumentsValues,
+  ) {
+    var ret = _callFunction(parentContext, obj, f, argumentsValues);
+
+    final chainFunctionInvocation = this.chainFunctionInvocation;
+    if (chainFunctionInvocation == null || chainFunctionInvocation.isEmpty) {
+      return ret;
+    }
+
+    return ret.resolveMapped((prevObj) {
+      return _callChainFunction(
+        parentContext,
+        runStatus,
+        prevObj,
+        chainFunctionInvocation,
+      );
+    });
+  }
+
+  FutureOr<ASTValue> _callFunction(
+    VMContext parentContext,
+    ASTValue obj,
+    ASTInvocableDeclaration f,
+    List<ASTValue> argumentsValues,
+  ) {
+    if (f is ASTClassFunctionDeclaration) {
+      return f.objectCall(
+        parentContext,
+        obj,
+        positionalParameters: argumentsValues,
+      );
+    } else {
+      // Static function call:
+      return f.call(parentContext, positionalParameters: argumentsValues);
+    }
+  }
+
+  Future<ASTValue> _callChainFunction(
+    VMContext parentContext,
+    ASTRunStatus runStatus,
+    ASTValue prevObj,
+    List<ASTExpressionChainFunctionInvocation> chainFunctionInvocation,
+  ) async {
+    for (var f in chainFunctionInvocation) {
+      var ret = await f.run(parentContext, runStatus, prevObj);
+      if (runStatus.returned) {
+        return ret;
+      }
+      prevObj = ret;
+    }
+
+    return prevObj;
   }
 
   @override
   String toString({bool asGroup = false}) {
     return '$name( $arguments )';
+  }
+
+  String _appendChainFunction(String s) {
+    final chainFunctionInvocation = this.chainFunctionInvocation;
+    if (chainFunctionInvocation != null && chainFunctionInvocation.isNotEmpty) {
+      return '$s${chainFunctionInvocation.join()}';
+    } else {
+      return s;
+    }
   }
 }
 
@@ -1602,7 +1724,11 @@ FutureOr<List<ASTValue>> _resolveArgumentsValues(
 /// [ASTExpression] to call a local context function.
 class ASTExpressionLocalFunctionInvocation
     extends ASTExpressionFunctionInvocation {
-  ASTExpressionLocalFunctionInvocation(super.name, super.arguments);
+  ASTExpressionLocalFunctionInvocation(
+    super.name,
+    super.arguments, [
+    super.chainFunctionInvocation,
+  ]);
 
   @override
   bool get isComplex => false;
@@ -1623,6 +1749,98 @@ class ASTExpressionLocalFunctionInvocation
 }
 
 /// [ASTExpression] to call a class object function.
+class ASTExpressionChainFunctionInvocation
+    extends ASTExpressionFunctionInvocation {
+  ASTExpressionChainFunctionInvocation(super.name, super.arguments);
+
+  @override
+  bool get isComplex => false;
+
+  @override
+  Iterable<ASTNode> get children => [];
+
+  FutureOr<ASTClass> _getObjectClass(ASTValue? obj) {
+    if (obj == null) {
+      throw ApolloVMRuntimeError("Can't resolve object clazz");
+    }
+
+    if (obj is ASTClassInstance) {
+      return obj.clazz;
+    }
+
+    var clazz = obj.type.getClass();
+    return clazz;
+  }
+
+  ASTClass? _functionClass;
+
+  FutureOr<ASTClass> _getFunctionClass(ASTValue? previousValue) {
+    if (_functionClass == null) {
+      return _getObjectClass(previousValue).resolveMapped((clazz) {
+        return _functionClass = clazz;
+      });
+    }
+    return _functionClass!;
+  }
+
+  @override
+  FutureOr<ASTInvocableDeclaration> _getFunction(
+    VMContext parentContext, [
+    ASTValue? previousValue,
+  ]) {
+    return _getFunctionClass(previousValue).resolveMapped((clazz) {
+      var fSignature = _getASTFunctionSignature();
+
+      var f = clazz.getFunction(name, fSignature, parentContext);
+
+      if (f == null) {
+        throw ApolloVMRuntimeError(
+          "Can't find class[${clazz.name}] function[$name( $fSignature )] for previous object in function chain: $previousValue",
+        );
+      }
+
+      return f;
+    });
+  }
+
+  @override
+  FutureOr<ASTValue> run(
+    VMContext parentContext,
+    ASTRunStatus runStatus, [
+    ASTValue? previousValue,
+  ]) {
+    if (previousValue == null) {
+      return runStatus.returnNull();
+    }
+
+    return _getFunction(parentContext, previousValue).resolveMapped((f) {
+      return _resolveArgumentsValues(
+        parentContext,
+        runStatus,
+        arguments,
+      ).resolveMapped((argumentsValues) {
+        if (f is ASTClassFunctionDeclaration) {
+          return f.objectCall(
+            parentContext,
+            previousValue,
+            positionalParameters: argumentsValues,
+          );
+        } else {
+          // Static function call:
+          return f.call(parentContext, positionalParameters: argumentsValues);
+        }
+      });
+    });
+  }
+
+  @override
+  String toString({bool asGroup = false}) {
+    var f = super.toString();
+    return '.$f';
+  }
+}
+
+/// [ASTExpression] to call a class object function.
 class ASTExpressionObjectFunctionInvocation
     extends ASTExpressionFunctionInvocation {
   ASTVariable variable;
@@ -1630,8 +1848,9 @@ class ASTExpressionObjectFunctionInvocation
   ASTExpressionObjectFunctionInvocation(
     this.variable,
     String name,
-    List<ASTExpression> arguments,
-  ) : super(name, arguments);
+    List<ASTExpression> arguments, [
+    List<ASTExpressionChainFunctionInvocation>? chainFunctionInvocation,
+  ]) : super(name, arguments, chainFunctionInvocation);
 
   @override
   bool get isComplex => false;
@@ -1665,64 +1884,57 @@ class ASTExpressionObjectFunctionInvocation
 
   ASTClass? _functionClass;
 
-  FutureOr<ASTClass> _getFunctionClass(VMContext parentContext) async {
+  FutureOr<ASTClass> _getFunctionClass(VMContext parentContext) {
     if (_functionClass == null) {
-      var clazz = await _getObjectClass(parentContext);
-      _functionClass = clazz;
+      return _getObjectClass(parentContext).resolveMapped((clazz) {
+        return _functionClass = clazz;
+      });
     }
     return _functionClass!;
   }
 
   @override
-  FutureOr<ASTInvocableDeclaration> _getFunction(
-    VMContext parentContext,
-  ) async {
-    var clazz = await _getFunctionClass(parentContext);
-    var fSignature = _getASTFunctionSignature();
+  FutureOr<ASTInvocableDeclaration> _getFunction(VMContext parentContext) {
+    return _getFunctionClass(parentContext).resolveMapped((clazz) {
+      var fSignature = _getASTFunctionSignature();
 
-    var f = clazz.getFunction(name, fSignature, parentContext);
+      var f = clazz.getFunction(name, fSignature, parentContext);
+      if (f == null) {
+        throw ApolloVMRuntimeError(
+          "Can't find class[${clazz.name}] function[$name( $fSignature )] for object!",
+        );
+      }
 
-    if (f == null) {
-      var obj = await _getVariableValue(parentContext);
-      throw ApolloVMRuntimeError(
-        "Can't find class[${clazz.name}] function[$name( $fSignature )] for object: $obj",
-      );
-    }
-
-    return f;
+      return f;
+    });
   }
 
   @override
-  FutureOr<ASTValue> run(
-    VMContext parentContext,
-    ASTRunStatus runStatus,
-  ) async {
-    var f = await _getFunction(parentContext);
-
-    var argumentsValues = await _resolveArgumentsValues(
-      parentContext,
-      runStatus,
-      arguments,
-    );
-
-    var obj = await _getVariableValue(parentContext);
-
-    if (f is ASTClassFunctionDeclaration) {
-      return f.objectCall(
+  FutureOr<ASTValue> run(VMContext parentContext, ASTRunStatus runStatus) {
+    return _getFunction(parentContext).resolveMapped((f) {
+      return _resolveArgumentsValues(
         parentContext,
-        obj,
-        positionalParameters: argumentsValues,
-      );
-    } else {
-      // Static function call:
-      return f.call(parentContext, positionalParameters: argumentsValues);
-    }
+        runStatus,
+        arguments,
+      ).resolveMapped((argumentsValues) {
+        return _getVariableValue(parentContext).resolveMapped((obj) {
+          return _callFunctionAndChain(
+            parentContext,
+            runStatus,
+            obj,
+            f,
+            argumentsValues,
+          );
+        });
+      });
+    });
   }
 
   @override
   String toString({bool asGroup = false}) {
     var f = super.toString();
-    return '$variable.$f';
+    var s = '$variable.$f';
+    return _appendChainFunction(s);
   }
 }
 
@@ -1738,8 +1950,9 @@ class ASTExpressionObjectEntryFunctionInvocation
     ASTVariable variable,
     ASTExpression expression,
     super.name,
-    super.arguments,
-  ) : variableAccess = ASTExpressionVariableEntryAccess(variable, expression);
+    super.arguments, [
+    super.chainFunctionInvocation,
+  ]) : variableAccess = ASTExpressionVariableEntryAccess(variable, expression);
 
   @override
   bool get isComplex => false;
@@ -1765,13 +1978,11 @@ class ASTExpressionObjectEntryFunctionInvocation
 
   ASTClass? _functionClass;
 
-  FutureOr<ASTClass> _getFunctionClass(
-    VMContext parentContext,
-    ASTValue obj,
-  ) async {
+  FutureOr<ASTClass> _getFunctionClass(VMContext parentContext, ASTValue obj) {
     if (_functionClass == null) {
-      var clazz = await _getObjectClass(parentContext, obj);
-      _functionClass = clazz;
+      return _getObjectClass(parentContext, obj).resolveMapped((clazz) {
+        return _functionClass = clazz;
+      });
     }
     return _functionClass!;
   }
@@ -1780,58 +1991,53 @@ class ASTExpressionObjectEntryFunctionInvocation
   FutureOr<ASTInvocableDeclaration> _getFunction(
     VMContext parentContext, [
     ASTValue? obj,
-  ]) async {
+  ]) {
     if (obj == null) {
       throw ApolloVMNullPointerException(
         "Null variable entry: $variableAccess",
       );
     }
 
-    var clazz = await _getFunctionClass(parentContext, obj);
-    var fSignature = _getASTFunctionSignature();
+    return _getFunctionClass(parentContext, obj).resolveMapped((clazz) {
+      var fSignature = _getASTFunctionSignature();
 
-    var f = clazz.getFunction(name, fSignature, parentContext);
+      var f = clazz.getFunction(name, fSignature, parentContext);
+      if (f == null) {
+        throw ApolloVMRuntimeError(
+          "Can't find class[${clazz.name}] function[$name( $fSignature )] for object: $obj",
+        );
+      }
 
-    if (f == null) {
-      throw ApolloVMRuntimeError(
-        "Can't find class[${clazz.name}] function[$name( $fSignature )] for object: $obj",
-      );
-    }
-
-    return f;
+      return f;
+    });
   }
 
   @override
-  FutureOr<ASTValue> run(
-    VMContext parentContext,
-    ASTRunStatus runStatus,
-  ) async {
-    var obj = await variableAccess.run(parentContext, runStatus);
-
-    var f = await _getFunction(parentContext, obj);
-
-    var argumentsValues = await _resolveArgumentsValues(
-      parentContext,
-      runStatus,
-      arguments,
-    );
-
-    if (f is ASTClassFunctionDeclaration) {
-      return f.objectCall(
-        parentContext,
-        obj,
-        positionalParameters: argumentsValues,
-      );
-    } else {
-      // Static function call:
-      return f.call(parentContext, positionalParameters: argumentsValues);
-    }
+  FutureOr<ASTValue> run(VMContext parentContext, ASTRunStatus runStatus) {
+    return variableAccess.run(parentContext, runStatus).resolveMapped((obj) {
+      return _getFunction(parentContext, obj).resolveMapped((f) {
+        return _resolveArgumentsValues(
+          parentContext,
+          runStatus,
+          arguments,
+        ).resolveMapped((argumentsValues) {
+          return _callFunctionAndChain(
+            parentContext,
+            runStatus,
+            obj,
+            f,
+            argumentsValues,
+          );
+        });
+      });
+    });
   }
 
   @override
   String toString({bool asGroup = false}) {
     var f = super.toString();
-    return '$variableAccess.$f';
+    var s = '$variableAccess.$f';
+    return _appendChainFunction(s);
   }
 }
 
@@ -1844,8 +2050,9 @@ class ASTExpressionGroupFunctionInvocation
   ASTExpressionGroupFunctionInvocation(
     this.expression,
     String name,
-    List<ASTExpression> arguments,
-  ) : super(name, arguments);
+    List<ASTExpression> arguments, [
+    List<ASTExpressionChainFunctionInvocation>? chainFunctionInvocation,
+  ]) : super(name, arguments, chainFunctionInvocation);
 
   @override
   bool get isComplex => false;
@@ -1879,64 +2086,57 @@ class ASTExpressionGroupFunctionInvocation
 
   ASTClass? _functionClass;
 
-  FutureOr<ASTClass> _getFunctionClass(VMContext parentContext) async {
+  FutureOr<ASTClass> _getFunctionClass(VMContext parentContext) {
     if (_functionClass == null) {
-      var clazz = await _getObjectClass(parentContext);
-      _functionClass = clazz;
+      return _getObjectClass(parentContext).resolveMapped((clazz) {
+        return _functionClass = clazz;
+      });
     }
     return _functionClass!;
   }
 
   @override
-  FutureOr<ASTInvocableDeclaration> _getFunction(
-    VMContext parentContext,
-  ) async {
-    var clazz = await _getFunctionClass(parentContext);
-    var fSignature = _getASTFunctionSignature();
+  FutureOr<ASTInvocableDeclaration> _getFunction(VMContext parentContext) {
+    return _getFunctionClass(parentContext).resolveMapped((clazz) {
+      var fSignature = _getASTFunctionSignature();
 
-    var f = clazz.getFunction(name, fSignature, parentContext);
+      var f = clazz.getFunction(name, fSignature, parentContext);
+      if (f == null) {
+        throw ApolloVMRuntimeError(
+          "Can't find class[${clazz.name}] function[$name( $fSignature )] for object!",
+        );
+      }
 
-    if (f == null) {
-      var obj = await _getExpressionValue(parentContext);
-      throw ApolloVMRuntimeError(
-        "Can't find class[${clazz.name}] function[$name( $fSignature )] for object: $obj",
-      );
-    }
-
-    return f;
+      return f;
+    });
   }
 
   @override
-  FutureOr<ASTValue> run(
-    VMContext parentContext,
-    ASTRunStatus runStatus,
-  ) async {
-    var f = await _getFunction(parentContext);
-
-    var argumentsValues = await _resolveArgumentsValues(
-      parentContext,
-      runStatus,
-      arguments,
-    );
-
-    var obj = await _getExpressionValue(parentContext);
-
-    if (f is ASTClassFunctionDeclaration) {
-      return f.objectCall(
+  FutureOr<ASTValue> run(VMContext parentContext, ASTRunStatus runStatus) {
+    return _getFunction(parentContext).resolveMapped((f) {
+      return _resolveArgumentsValues(
         parentContext,
-        obj,
-        positionalParameters: argumentsValues,
-      );
-    } else {
-      // Static function call:
-      return f.call(parentContext, positionalParameters: argumentsValues);
-    }
+        runStatus,
+        arguments,
+      ).resolveMapped((argumentsValues) {
+        return _getExpressionValue(parentContext).resolveMapped((obj) {
+          return _callFunctionAndChain(
+            parentContext,
+            runStatus,
+            obj,
+            f,
+            argumentsValues,
+          );
+        });
+      });
+    });
   }
 
   @override
   String toString({bool asGroup = false}) {
     var f = super.toString();
-    return '($expression).$f';
+    var s = '($expression).$f';
+    return _appendChainFunction(s);
   }
 }
 

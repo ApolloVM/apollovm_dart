@@ -1402,6 +1402,15 @@ abstract class ApolloCodeGenerator
 
     _generateFunctionInvocation(functionName, arguments, out, indent);
 
+    final chainFunctionInvocation = expression.chainFunctionInvocation;
+
+    if (chainFunctionInvocation != null && chainFunctionInvocation.isNotEmpty) {
+      for (var f in chainFunctionInvocation) {
+        out.write('.');
+        _generateFunctionInvocation(f.name, f.arguments, out, indent);
+      }
+    }
+
     return out;
   }
 
