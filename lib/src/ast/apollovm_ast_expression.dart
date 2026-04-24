@@ -1546,21 +1546,56 @@ class ASTExpressionVariableDirectOperation extends ASTExpression {
   }
 }
 
+mixin WithCallChainFunction on ASTExpression {
+  List<ASTExpressionChainFunctionInvocation>? chainFunctionInvocation;
+
+  bool get hasChainFunctionInvocation =>
+      chainFunctionInvocation?.isNotEmpty ?? false;
+
+  void _setChainFunctionInvocation(
+    List<ASTExpressionChainFunctionInvocation>? chainFunctionInvocation,
+  ) {
+    this.chainFunctionInvocation =
+        chainFunctionInvocation != null && chainFunctionInvocation.isNotEmpty
+        ? chainFunctionInvocation
+        : null;
+  }
+
+  Future<ASTValue> _callChainFunction(
+    VMContext parentContext,
+    ASTRunStatus runStatus,
+    ASTValue prevObj,
+  ) async {
+    final chainFunctionInvocation = this.chainFunctionInvocation;
+    if (chainFunctionInvocation == null) {
+      return prevObj;
+    }
+
+    for (var f in chainFunctionInvocation) {
+      var ret = await f.run(parentContext, runStatus, prevObj);
+      if (runStatus.returned) {
+        return ret;
+      }
+      prevObj = ret;
+    }
+
+    return prevObj;
+  }
+}
+
 /// [ASTExpression] base class to call a function.
-abstract class ASTExpressionFunctionInvocation extends ASTExpression {
+abstract class ASTExpressionFunctionInvocation extends ASTExpression
+    with WithCallChainFunction {
   String name;
   List<ASTExpression> arguments;
-
-  List<ASTExpressionChainFunctionInvocation>? chainFunctionInvocation;
 
   ASTExpressionFunctionInvocation(
     this.name,
     this.arguments, [
     List<ASTExpressionChainFunctionInvocation>? chainFunctionInvocation,
-  ]) : chainFunctionInvocation =
-           chainFunctionInvocation != null && chainFunctionInvocation.isNotEmpty
-           ? chainFunctionInvocation
-           : null;
+  ]) {
+    _setChainFunctionInvocation(chainFunctionInvocation);
+  }
 
   @override
   Iterable<ASTNode> get children => arguments;
@@ -1620,19 +1655,12 @@ abstract class ASTExpressionFunctionInvocation extends ASTExpression {
     List<ASTValue> argumentsValues,
   ) {
     var ret = f.call(parentContext, positionalParameters: argumentsValues);
-
-    final chainFunctionInvocation = this.chainFunctionInvocation;
-    if (chainFunctionInvocation == null || chainFunctionInvocation.isEmpty) {
+    if (!hasChainFunctionInvocation) {
       return ret;
     }
 
     return ret.resolveMapped((prevObj) {
-      return _callChainFunction(
-        parentContext,
-        runStatus,
-        prevObj,
-        chainFunctionInvocation,
-      );
+      return _callChainFunction(parentContext, runStatus, prevObj);
     });
   }
 
@@ -1644,19 +1672,12 @@ abstract class ASTExpressionFunctionInvocation extends ASTExpression {
     List<ASTValue> argumentsValues,
   ) {
     var ret = _callFunction(parentContext, obj, f, argumentsValues);
-
-    final chainFunctionInvocation = this.chainFunctionInvocation;
-    if (chainFunctionInvocation == null || chainFunctionInvocation.isEmpty) {
+    if (!hasChainFunctionInvocation) {
       return ret;
     }
 
     return ret.resolveMapped((prevObj) {
-      return _callChainFunction(
-        parentContext,
-        runStatus,
-        prevObj,
-        chainFunctionInvocation,
-      );
+      return _callChainFunction(parentContext, runStatus, prevObj);
     });
   }
 
@@ -1676,23 +1697,6 @@ abstract class ASTExpressionFunctionInvocation extends ASTExpression {
       // Static function call:
       return f.call(parentContext, positionalParameters: argumentsValues);
     }
-  }
-
-  Future<ASTValue> _callChainFunction(
-    VMContext parentContext,
-    ASTRunStatus runStatus,
-    ASTValue prevObj,
-    List<ASTExpressionChainFunctionInvocation> chainFunctionInvocation,
-  ) async {
-    for (var f in chainFunctionInvocation) {
-      var ret = await f.run(parentContext, runStatus, prevObj);
-      if (runStatus.returned) {
-        return ret;
-      }
-      prevObj = ret;
-    }
-
-    return prevObj;
   }
 
   @override
@@ -2166,13 +2170,7 @@ abstract class ASTExpressionGetterAccess extends ASTExpression {
   FutureOr<ASTGetterDeclaration> _getGetter(VMContext parentContext);
 
   @override
-  FutureOr<ASTValue> run(
-    VMContext parentContext,
-    ASTRunStatus runStatus,
-  ) async {
-    var g = await _getGetter(parentContext);
-    return g.call(parentContext);
-  }
+  FutureOr<ASTValue> run(VMContext parentContext, ASTRunStatus runStatus);
 
   @override
   String toString({bool asGroup = false}) {
@@ -2181,8 +2179,14 @@ abstract class ASTExpressionGetterAccess extends ASTExpression {
 }
 
 /// [ASTExpression] to call a local context function.
-class ASTExpressionLocalGetterAccess extends ASTExpressionGetterAccess {
-  ASTExpressionLocalGetterAccess(super.name);
+class ASTExpressionLocalGetterAccess extends ASTExpressionGetterAccess
+    with WithCallChainFunction {
+  ASTExpressionLocalGetterAccess(
+    super.name, [
+    List<ASTExpressionChainFunctionInvocation>? chainFunctionInvocation,
+  ]) {
+    _setChainFunctionInvocation(chainFunctionInvocation);
+  }
 
   @override
   bool get isComplex => false;
@@ -2200,13 +2204,30 @@ class ASTExpressionLocalGetterAccess extends ASTExpressionGetterAccess {
 
     return g;
   }
+
+  @override
+  FutureOr<ASTValue> run(VMContext parentContext, ASTRunStatus runStatus) {
+    var g = _getGetter(parentContext);
+    return g
+        .call(parentContext)
+        .resolveMapped(
+          (ret) => _callChainFunction(parentContext, runStatus, ret),
+        );
+  }
 }
 
 /// [ASTExpression] to call a class object function.
-class ASTExpressionObjectGetterAccess extends ASTExpressionGetterAccess {
+class ASTExpressionObjectGetterAccess extends ASTExpressionGetterAccess
+    with WithCallChainFunction {
   ASTVariable variable;
 
-  ASTExpressionObjectGetterAccess(this.variable, String name) : super(name);
+  ASTExpressionObjectGetterAccess(
+    this.variable,
+    String name, [
+    List<ASTExpressionChainFunctionInvocation>? chainFunctionInvocation,
+  ]) : super(name) {
+    _setChainFunctionInvocation(chainFunctionInvocation);
+  }
 
   @override
   bool get isComplex => false;
@@ -2318,11 +2339,15 @@ class ASTExpressionObjectGetterAccess extends ASTExpressionGetterAccess {
           if (fieldValue != null) {
             return fieldValue;
           }
-          return _runGetter(parentContext, obj);
+          return _runGetter(parentContext, obj).resolveMapped(
+            (ret) => _callChainFunction(parentContext, runStatus, ret),
+          );
         });
       }
 
-      return _runGetter(parentContext, obj);
+      return _runGetter(parentContext, obj).resolveMapped(
+        (ret) => _callChainFunction(parentContext, runStatus, ret),
+      );
     });
   }
 

@@ -27,6 +27,384 @@ Future<void> _tests() async {
 <test title="Basic main()">
     <source language="dart">
         <![CDATA[
+ void main() {
+  // --- Populated Data from FX Calls (BTC Rates for 31 Days: March 23 to April 22, 2026) ---
+
+  // BTC/USD Rates (Index corresponds to the date)
+  List<double> btcUsdRates = [
+    71428.571429, // 2026-03-23
+    71428.571429, // 2026-03-24
+    71428.571429, // 2026-03-25
+    66666.666667, // 2026-03-26
+    66666.666667, // 2026-03-27
+    66666.666667, // 2026-03-28
+    66666.666667, // 2026-03-29
+    66666.666667, // 2026-03-30
+    66666.666667, // 2026-03-31
+    66666.666667, // 2026-04-01
+    66666.666667, // 2026-04-02
+    66666.666667, // 2026-04-03
+    66666.666667, // 2026-04-04
+    66666.666667, // 2026-04-05
+    66666.666667, // 2026-04-06
+    71428.571429, // 2026-04-07
+    71428.571429, // 2026-04-08
+    71428.571429, // 2026-04-09
+    71428.571429, // 2026-04-10
+    71428.571429, // 2026-04-11
+    71428.571429, // 2026-04-12
+    76923.076923, // 2026-04-13
+    76923.076923, // 2026-04-14
+    76923.076923, // 2026-04-15
+    76923.076923, // 2026-04-16
+    76923.076923, // 2026-04-17
+    76923.076923, // 2026-04-18
+    71428.571429, // 2026-04-19
+    76923.076923, // 2026-04-20
+    76923.076923, // 2026-04-21
+    76923.076923, // 2026-04-22
+  ];
+
+  // BTC/EUR Rates (Index corresponds to the date)
+  List<double> btcEurRates = [
+    61667.50, // 2026-03-23
+    61559.428571, // 2026-03-24
+    61746.285714, // 2026-03-25
+    57778.40, // 2026-03-26
+    57743.266667, // 2026-03-27
+    57774.066667, // 2026-03-28
+    58014.60, // 2026-03-29
+    58194.466667, // 2026-03-30
+    57636.866667, // 2026-03-31
+    57511.466667, // 2026-04-01
+    57757.666667, // 2026-04-02
+    57873.466667, // 2026-04-03
+    57874.533333, // 2026-04-04
+    57919.40, // 2026-04-05
+    57766.533333, // 2026-04-06
+    61151.785714, // 2026-04-07
+    61260.357143, // 2026-04-08
+    61081.928571, // 2026-04-09
+    60923.50, // 2026-04-10
+    60920.928571, // 2026-04-11
+    61199.428571, // 2026-04-12
+    65381.00, // 2026-04-13
+    65198.769231, // 2026-04-14
+    65156.538462, // 2026-04-15
+    65273.384615, // 2026-04-16
+    65240.00, // 2026-04-17
+    65339.769231, // 2026-04-18
+    60828.571429, // 2026-04-19
+    65277.461538, // 2026-04-20
+    65516.538462, // 2026-04-21
+    65711.538462, // 2026-04-22
+  ];
+
+  // BTC/BRL Rates (Index corresponds to the date)
+  List<double> btcBrlRates = [
+    373796.642857, // 2026-03-23
+    373876.214286, // 2026-03-24
+    374064.214286, // 2026-03-25
+    349252.066667, // 2026-03-26
+    349463.4, // 2026-03-27
+    349458.8, // 2026-03-28
+    349274.0, // 2026-03-29
+    350766.733333, // 2026-03-30
+    346151.533333, // 2026-03-31
+    343726.666667, // 2026-04-01
+    343902.2, // 2026-04-02
+    343910.2, // 2026-04-03
+    344840.266667, // 2026-04-04
+    343923.066667, // 2026-04-05
+    342827.666667, // 2026-04-06
+    368091.0, // 2026-04-07
+    364361.857143, // 2026-04-08
+    363221.357143, // 2026-04-09
+    357680.214286, // 2026-04-10
+    357534.214286, // 2026-04-11
+    357649.857143, // 2026-04-12
+    384353.846154, // 2026-04-13
+    383614.076923, // 2026-04-14
+    384123.692308, // 2026-04-15
+    383965.461538, // 2026-04-16
+    382975.615385, // 2026-04-17
+    383204.153846, // 2026-04-18
+    356644.428571, // 2026-04-19
+    381191.230769, // 2026-04-20
+    384182.846154, // 2026-04-21
+    382959.923077, // 2026-04-22
+  ];
+
+  // --- Calculations ---
+  List<double> usdChanges = [];
+  List<double> eurChanges = [];
+  List<double> brlChanges = [];
+
+  for (int i = 1; i < btcUsdRates.length; i++) {
+    usdChanges.add(btcUsdRates[i] - btcUsdRates[i - 1]);
+    eurChanges.add(btcEurRates[i] - btcEurRates[i - 1]);
+    brlChanges.add(btcBrlRates[i] - btcBrlRates[i - 1]);
+  }
+
+  // Calculate Averages
+  double avgUsdChange = 0.0;
+  double avgEurChange = 0.0;
+  double avgBrlChange = 0.0;
+
+  for (double change in usdChanges) {
+    avgUsdChange += change;
+  }
+  if (usdChanges.isNotEmpty) {
+    avgUsdChange = avgUsdChange / usdChanges.length;
+  }
+
+  for (double change in eurChanges) {
+    avgEurChange += change;
+  }
+  if (eurChanges.isNotEmpty) {
+    avgEurChange = avgEurChange / eurChanges.length;
+  }
+
+  for (double change in brlChanges) {
+    avgBrlChange += change;
+  }
+  if (brlChanges.isNotEmpty) {
+    avgBrlChange = avgBrlChange / brlChanges.length;
+  }
+
+
+  // --- Display Results ---
+  print("=============================================");
+  print("        BTC Daily Ratio Change Analysis       ");
+  print("=============================================\n");
+
+  print("--- 1. Daily Ratio Changes (USD) ---");
+  for (int i = 0; i < usdChanges.length; i++) {
+    print("Change from ${btcUsdRates[i].toString().padRight(15)} to ${btcUsdRates[i+1].toString().padRight(15)}: ${usdChanges[i].toStringAsFixed(2)}\n");
+  }
+
+  print("\n--- 2. Daily Ratio Changes (EUR) ---");
+  for (int i = 0; i < eurChanges.length; i++) {
+    print("Change from ${btcEurRates[i].toString().padRight(15)} to ${btcEurRates[i+1].toString().padRight(15)}: ${eurChanges[i].toStringAsFixed(2)}\n");
+  }
+
+  print("\n--- 3. Daily Ratio Changes (BRL) ---");
+  for (int i = 0; i < brlChanges.length; i++) {
+    print("Change from ${btcBrlRates[i].toString().padRight(15)} to ${btcBrlRates[i+1].toString().padRight(15)}: ${brlChanges[i].toStringAsFixed(2)}\n");
+  }
+
+  print("\n=============================================");
+  print("        Average Ratio Changes (30 Days)      ");
+  print("=============================================\n");
+
+  print("Average BTC/USD Change over period: ${avgUsdChange.toStringAsFixed(2)}");
+  print("Average BTC/EUR Change over period: ${avgEurChange.toStringAsFixed(2)}");
+  print("Average BTC/BRL Change over period: ${avgBrlChange.toStringAsFixed(2)}\n");
+
+  // Deviation Calculation (Comparing the final rate to the initial rate)
+  print("--- 4. Final Rate Deviation (vs Start Date: 2026-03-23) ---");
+  final startDateUsd = btcUsdRates[0];
+  final endDateUsd = btcUsdRates.last;
+
+  print("BTC/EUR: Started at ${btcEurRates[0].toStringAsFixed(2)}, Ended at ${btcEurRates.last.toStringAsFixed(2)}. Net Change: ${(btcEurRates.last - btcEurRates[0]).toStringAsFixed(2)}");
+  print("BTC/EUR: Started at ${btcEurRates[0].toStringAsFixed(2)}, Ended at ${btcEurRates.last.toStringAsFixed(2)}. Net Change: ${(btcEurRates.last - btcEurRates[0]).toStringAsFixed(2)}");
+  print("BTC/BRL: Started at ${btcBrlRates[0].toStringAsFixed(2)}, Ended at ${btcBrlRates.last.toStringAsFixed(2)}. Net Change: ${(btcBrlRates.last - btcBrlRates[0]).toStringAsFixed(2)}");
+  
+}
+
+        ]]>
+    </source>
+    <call function="main">
+        []
+    </call>
+    <output>
+[
+  "=============================================",
+  "        BTC Daily Ratio Change Analysis       ",
+  "=============================================\n",
+  "--- 1. Daily Ratio Changes (USD) ---",
+  "Change from 71428.571429    to 71428.571429   : 0.00\n",
+  "Change from 71428.571429    to 71428.571429   : 0.00\n",
+  "Change from 71428.571429    to 66666.666667   : -4761.90\n",
+  "Change from 66666.666667    to 66666.666667   : 0.00\n",
+  "Change from 66666.666667    to 66666.666667   : 0.00\n",
+  "Change from 66666.666667    to 66666.666667   : 0.00\n",
+  "Change from 66666.666667    to 66666.666667   : 0.00\n",
+  "Change from 66666.666667    to 66666.666667   : 0.00\n",
+  "Change from 66666.666667    to 66666.666667   : 0.00\n",
+  "Change from 66666.666667    to 66666.666667   : 0.00\n",
+  "Change from 66666.666667    to 66666.666667   : 0.00\n",
+  "Change from 66666.666667    to 66666.666667   : 0.00\n",
+  "Change from 66666.666667    to 66666.666667   : 0.00\n",
+  "Change from 66666.666667    to 66666.666667   : 0.00\n",
+  "Change from 66666.666667    to 71428.571429   : 4761.90\n",
+  "Change from 71428.571429    to 71428.571429   : 0.00\n",
+  "Change from 71428.571429    to 71428.571429   : 0.00\n",
+  "Change from 71428.571429    to 71428.571429   : 0.00\n",
+  "Change from 71428.571429    to 71428.571429   : 0.00\n",
+  "Change from 71428.571429    to 71428.571429   : 0.00\n",
+  "Change from 71428.571429    to 76923.076923   : 5494.51\n",
+  "Change from 76923.076923    to 76923.076923   : 0.00\n",
+  "Change from 76923.076923    to 76923.076923   : 0.00\n",
+  "Change from 76923.076923    to 76923.076923   : 0.00\n",
+  "Change from 76923.076923    to 76923.076923   : 0.00\n",
+  "Change from 76923.076923    to 76923.076923   : 0.00\n",
+  "Change from 76923.076923    to 71428.571429   : -5494.51\n",
+  "Change from 71428.571429    to 76923.076923   : 5494.51\n",
+  "Change from 76923.076923    to 76923.076923   : 0.00\n",
+  "Change from 76923.076923    to 76923.076923   : 0.00\n",
+  "\n--- 2. Daily Ratio Changes (EUR) ---",
+  "Change from 61667.5         to 61559.428571   : -108.07\n",
+  "Change from 61559.428571    to 61746.285714   : 186.86\n",
+  "Change from 61746.285714    to 57778.4        : -3967.89\n",
+  "Change from 57778.4         to 57743.266667   : -35.13\n",
+  "Change from 57743.266667    to 57774.066667   : 30.80\n",
+  "Change from 57774.066667    to 58014.6        : 240.53\n",
+  "Change from 58014.6         to 58194.466667   : 179.87\n",
+  "Change from 58194.466667    to 57636.866667   : -557.60\n",
+  "Change from 57636.866667    to 57511.466667   : -125.40\n",
+  "Change from 57511.466667    to 57757.666667   : 246.20\n",
+  "Change from 57757.666667    to 57873.466667   : 115.80\n",
+  "Change from 57873.466667    to 57874.533333   : 1.07\n",
+  "Change from 57874.533333    to 57919.4        : 44.87\n",
+  "Change from 57919.4         to 57766.533333   : -152.87\n",
+  "Change from 57766.533333    to 61151.785714   : 3385.25\n",
+  "Change from 61151.785714    to 61260.357143   : 108.57\n",
+  "Change from 61260.357143    to 61081.928571   : -178.43\n",
+  "Change from 61081.928571    to 60923.5        : -158.43\n",
+  "Change from 60923.5         to 60920.928571   : -2.57\n",
+  "Change from 60920.928571    to 61199.428571   : 278.50\n",
+  "Change from 61199.428571    to 65381.0        : 4181.57\n",
+  "Change from 65381.0         to 65198.769231   : -182.23\n",
+  "Change from 65198.769231    to 65156.538462   : -42.23\n",
+  "Change from 65156.538462    to 65273.384615   : 116.85\n",
+  "Change from 65273.384615    to 65240.0        : -33.38\n",
+  "Change from 65240.0         to 65339.769231   : 99.77\n",
+  "Change from 65339.769231    to 60828.571429   : -4511.20\n",
+  "Change from 60828.571429    to 65277.461538   : 4448.89\n",
+  "Change from 65277.461538    to 65516.538462   : 239.08\n",
+  "Change from 65516.538462    to 65711.538462   : 195.00\n",
+  "\n--- 3. Daily Ratio Changes (BRL) ---",
+  "Change from 373796.642857   to 373876.214286  : 79.57\n",
+  "Change from 373876.214286   to 374064.214286  : 188.00\n",
+  "Change from 374064.214286   to 349252.066667  : -24812.15\n",
+  "Change from 349252.066667   to 349463.4       : 211.33\n",
+  "Change from 349463.4        to 349458.8       : -4.60\n",
+  "Change from 349458.8        to 349274.0       : -184.80\n",
+  "Change from 349274.0        to 350766.733333  : 1492.73\n",
+  "Change from 350766.733333   to 346151.533333  : -4615.20\n",
+  "Change from 346151.533333   to 343726.666667  : -2424.87\n",
+  "Change from 343726.666667   to 343902.2       : 175.53\n",
+  "Change from 343902.2        to 343910.2       : 8.00\n",
+  "Change from 343910.2        to 344840.266667  : 930.07\n",
+  "Change from 344840.266667   to 343923.066667  : -917.20\n",
+  "Change from 343923.066667   to 342827.666667  : -1095.40\n",
+  "Change from 342827.666667   to 368091.0       : 25263.33\n",
+  "Change from 368091.0        to 364361.857143  : -3729.14\n",
+  "Change from 364361.857143   to 363221.357143  : -1140.50\n",
+  "Change from 363221.357143   to 357680.214286  : -5541.14\n",
+  "Change from 357680.214286   to 357534.214286  : -146.00\n",
+  "Change from 357534.214286   to 357649.857143  : 115.64\n",
+  "Change from 357649.857143   to 384353.846154  : 26703.99\n",
+  "Change from 384353.846154   to 383614.076923  : -739.77\n",
+  "Change from 383614.076923   to 384123.692308  : 509.62\n",
+  "Change from 384123.692308   to 383965.461538  : -158.23\n",
+  "Change from 383965.461538   to 382975.615385  : -989.85\n",
+  "Change from 382975.615385   to 383204.153846  : 228.54\n",
+  "Change from 383204.153846   to 356644.428571  : -26559.73\n",
+  "Change from 356644.428571   to 381191.230769  : 24546.80\n",
+  "Change from 381191.230769   to 384182.846154  : 2991.62\n",
+  "Change from 384182.846154   to 382959.923077  : -1222.92\n",
+  "\n=============================================",
+  "        Average Ratio Changes (30 Days)      ",
+  "=============================================\n",
+  "Average BTC/USD Change over period: 183.15",
+  "Average BTC/EUR Change over period: 134.80",
+  "Average BTC/BRL Change over period: 305.44\n",
+  "--- 4. Final Rate Deviation (vs Start Date: 2026-03-23) ---",
+  "BTC/EUR: Started at 61667.50, Ended at 65711.54. Net Change: 4044.04",
+  "BTC/EUR: Started at 61667.50, Ended at 65711.54. Net Change: 4044.04",
+  "BTC/BRL: Started at 373796.64, Ended at 382959.92. Net Change: 9163.28"
+]
+    </output>
+    <source-generated language="dart"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+  void main() {
+    List<double> btcUsdRates = <double>[71428.571429, 71428.571429, 71428.571429, 66666.666667, 66666.666667, 66666.666667, 66666.666667, 66666.666667, 66666.666667, 66666.666667, 66666.666667, 66666.666667, 66666.666667, 66666.666667, 66666.666667, 71428.571429, 71428.571429, 71428.571429, 71428.571429, 71428.571429, 71428.571429, 76923.076923, 76923.076923, 76923.076923, 76923.076923, 76923.076923, 76923.076923, 71428.571429, 76923.076923, 76923.076923, 76923.076923];
+    List<double> btcEurRates = <double>[61667.5, 61559.428571, 61746.285714, 57778.4, 57743.266667, 57774.066667, 58014.6, 58194.466667, 57636.866667, 57511.466667, 57757.666667, 57873.466667, 57874.533333, 57919.4, 57766.533333, 61151.785714, 61260.357143, 61081.928571, 60923.5, 60920.928571, 61199.428571, 65381.0, 65198.769231, 65156.538462, 65273.384615, 65240.0, 65339.769231, 60828.571429, 65277.461538, 65516.538462, 65711.538462];
+    List<double> btcBrlRates = <double>[373796.642857, 373876.214286, 374064.214286, 349252.066667, 349463.4, 349458.8, 349274.0, 350766.733333, 346151.533333, 343726.666667, 343902.2, 343910.2, 344840.266667, 343923.066667, 342827.666667, 368091.0, 364361.857143, 363221.357143, 357680.214286, 357534.214286, 357649.857143, 384353.846154, 383614.076923, 384123.692308, 383965.461538, 382975.615385, 383204.153846, 356644.428571, 381191.230769, 384182.846154, 382959.923077];
+    List<double> usdChanges = <double>[];
+    List<double> eurChanges = <double>[];
+    List<double> brlChanges = <double>[];
+    for (int i = 1; i < btcUsdRates.length ; i++) {
+      usdChanges.add(btcUsdRates[i] - btcUsdRates[i - 1]);
+      eurChanges.add(btcEurRates[i] - btcEurRates[i - 1]);
+      brlChanges.add(btcBrlRates[i] - btcBrlRates[i - 1]);
+    }
+    double avgUsdChange = 0.0;
+    double avgEurChange = 0.0;
+    double avgBrlChange = 0.0;
+    for (var change in usdChanges) {
+      avgUsdChange += change;
+    }
+    if (usdChanges.isNotEmpty) {
+        avgUsdChange = avgUsdChange / usdChanges.length;
+    }
+
+    for (var change in eurChanges) {
+      avgEurChange += change;
+    }
+    if (eurChanges.isNotEmpty) {
+        avgEurChange = avgEurChange / eurChanges.length;
+    }
+
+    for (var change in brlChanges) {
+      avgBrlChange += change;
+    }
+    if (brlChanges.isNotEmpty) {
+        avgBrlChange = avgBrlChange / brlChanges.length;
+    }
+
+    print('=============================================');
+    print('        BTC Daily Ratio Change Analysis       ');
+    print('=============================================\n');
+    print('--- 1. Daily Ratio Changes (USD) ---');
+    for (int i = 0; i < usdChanges.length ; i++) {
+      print('Change from ${btcUsdRates[i].toString().padRight(15)} to ${btcUsdRates[i + 1].toString().padRight(15)}: ${usdChanges[i].toStringAsFixed(2)}\n');
+    }
+    print('\n--- 2. Daily Ratio Changes (EUR) ---');
+    for (int i = 0; i < eurChanges.length ; i++) {
+      print('Change from ${btcEurRates[i].toString().padRight(15)} to ${btcEurRates[i + 1].toString().padRight(15)}: ${eurChanges[i].toStringAsFixed(2)}\n');
+    }
+    print('\n--- 3. Daily Ratio Changes (BRL) ---');
+    for (int i = 0; i < brlChanges.length ; i++) {
+      print('Change from ${btcBrlRates[i].toString().padRight(15)} to ${btcBrlRates[i + 1].toString().padRight(15)}: ${brlChanges[i].toStringAsFixed(2)}\n');
+    }
+    print('\n=============================================');
+    print('        Average Ratio Changes (30 Days)      ');
+    print('=============================================\n');
+    print('Average BTC/USD Change over period: ${avgUsdChange.toStringAsFixed(2)}');
+    print('Average BTC/EUR Change over period: ${avgEurChange.toStringAsFixed(2)}');
+    print('Average BTC/BRL Change over period: ${avgBrlChange.toStringAsFixed(2)}\n');
+    print('--- 4. Final Rate Deviation (vs Start Date: 2026-03-23) ---');
+    final startDateUsd = btcUsdRates[0];
+    final endDateUsd = btcUsdRates.last;
+    print('BTC/EUR: Started at ${btcEurRates[0].toStringAsFixed(2)}, Ended at ${btcEurRates.last.toStringAsFixed(2)}. Net Change: ${(btcEurRates.last - btcEurRates[0]).toStringAsFixed(2)}');
+    print('BTC/EUR: Started at ${btcEurRates[0].toStringAsFixed(2)}, Ended at ${btcEurRates.last.toStringAsFixed(2)}. Net Change: ${(btcEurRates.last - btcEurRates[0]).toStringAsFixed(2)}');
+    print('BTC/BRL: Started at ${btcBrlRates[0].toStringAsFixed(2)}, Ended at ${btcBrlRates.last.toStringAsFixed(2)}. Net Change: ${(btcBrlRates.last - btcBrlRates[0]).toStringAsFixed(2)}');
+  }
+
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+</test>
+    '''),
+    TestDefinition('dart_basic_exchange_rates.test.xml', r'''
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="Basic main()">
+    <source language="dart">
+        <![CDATA[
 
  void main() {
   // --- Populated Data from FX Calls (BTC Rates for 31 Days: March 23 to April 22, 2026) ---

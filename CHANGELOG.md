@@ -1,3 +1,15 @@
+## 0.1.24
+
+- `ASTExpressionFunctionInvocation` and related classes:
+  - Added mixin `WithCallChainFunction` to support chained function invocations.
+  - Added field `chainFunctionInvocation` to hold chained calls.
+  - Updated function invocation methods to generate chained calls in code generation (`ApolloCodeGenerator`).
+  - Updated runtime execution to process chained function calls after the main call.
+- `ApolloCodeGenerator`:
+  - Refactored function invocation code to use `_generateChainFunctionInvocation` helper for chained calls.
+- Dart grammar (`dart_grammar.dart`):
+  - Updated `expressionGetterAccess` parser to parse and attach chained function invocations.
+
 ## 0.1.23
 
 - `ASTExpressionVariableEntryAccess`:

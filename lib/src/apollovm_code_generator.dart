@@ -1338,6 +1338,8 @@ abstract class ApolloCodeGenerator
 
     _generateFunctionInvocation(functionName, arguments, out, indent);
 
+    _generateChainFunctionInvocation(expression, out, indent);
+
     return out;
   }
 
@@ -1372,6 +1374,8 @@ abstract class ApolloCodeGenerator
 
     _generateFunctionInvocation(functionName, arguments, out, indent);
 
+    _generateChainFunctionInvocation(expression, out, indent);
+
     return out;
   }
 
@@ -1402,14 +1406,7 @@ abstract class ApolloCodeGenerator
 
     _generateFunctionInvocation(functionName, arguments, out, indent);
 
-    final chainFunctionInvocation = expression.chainFunctionInvocation;
-
-    if (chainFunctionInvocation != null && chainFunctionInvocation.isNotEmpty) {
-      for (var f in chainFunctionInvocation) {
-        out.write('.');
-        _generateFunctionInvocation(f.name, f.arguments, out, indent);
-      }
-    }
+    _generateChainFunctionInvocation(expression, out, indent);
 
     return out;
   }
@@ -1429,6 +1426,8 @@ abstract class ApolloCodeGenerator
     final arguments = expression.arguments;
 
     _generateFunctionInvocation(functionName, arguments, out, indent);
+
+    _generateChainFunctionInvocation(expression, out, indent);
 
     return out;
   }
@@ -1454,6 +1453,21 @@ abstract class ApolloCodeGenerator
       );
     }
     out.write(')');
+  }
+
+  void _generateChainFunctionInvocation(
+    WithCallChainFunction expression,
+    StringBuffer out,
+    String indent,
+  ) {
+    final chainFunctionInvocation = expression.chainFunctionInvocation;
+
+    if (chainFunctionInvocation != null && chainFunctionInvocation.isNotEmpty) {
+      for (var f in chainFunctionInvocation) {
+        out.write('.');
+        _generateFunctionInvocation(f.name, f.arguments, out, indent);
+      }
+    }
   }
 
   @override
@@ -1485,6 +1499,8 @@ abstract class ApolloCodeGenerator
 
     out.write(getterName);
 
+    _generateChainFunctionInvocation(expression, out, indent);
+
     return out;
   }
 
@@ -1500,6 +1516,8 @@ abstract class ApolloCodeGenerator
     if (headIndented) out.write(indent);
 
     out.write(expression.name);
+
+    _generateChainFunctionInvocation(expression, out, indent);
 
     return out;
   }

@@ -769,17 +769,27 @@ class DartGrammarDefinition extends DartGrammarLexer {
           });
 
   Parser<ASTExpressionGetterAccess> expressionGetterAccess() =>
-      ((identifier() & char('.')) & identifier().trimHidden()).map((v) {
-        var obj = v[0] as String?;
-        var name = v[2] as String;
+      ((identifier() & char('.')) &
+              identifier().trimHidden() &
+              expressionChainFunctionInvocation().star())
+          .map((v) {
+            var obj = v[0] as String?;
+            var name = v[2] as String;
+            var chainFunctions = (v[3] as List)
+                .whereType<ASTExpressionChainFunctionInvocation>()
+                .toList();
 
-        if (obj != null && obj != 'this') {
-          var variable = ASTScopeVariable(obj);
-          return ASTExpressionObjectGetterAccess(variable, name);
-        } else {
-          return ASTExpressionLocalGetterAccess(name);
-        }
-      });
+            if (obj != null && obj != 'this') {
+              var variable = ASTScopeVariable(obj);
+              return ASTExpressionObjectGetterAccess(
+                variable,
+                name,
+                chainFunctions,
+              );
+            } else {
+              return ASTExpressionLocalGetterAccess(name, chainFunctions);
+            }
+          });
 
   Parser<List<ASTExpression>> expressionSequence() =>
       (ref0(expression) & (char(',').trimHidden() & ref0(expression)).star())
