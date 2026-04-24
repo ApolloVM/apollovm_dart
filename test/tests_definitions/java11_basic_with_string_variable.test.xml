@@ -32,7 +32,7 @@ class Foo {
   static void main(List<String> args) {
     var a = 123;
     var b = 123 * 2;
-    var sv1 = 'a: <' + a + '>;\t\$b->a*2: ' + b + ' ;\ta*3: ' + String.valueOf(a * 3) + '!';
+    var sv1 = 'a: <$a>;\t\$b->a*2: $b ;\ta*3: ' + String.valueOf(a * 3) + '!';
     print(sv1);
     var sv2 = String.valueOf(a) + a;
     print(sv2);

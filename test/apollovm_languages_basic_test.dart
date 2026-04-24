@@ -22,6 +22,292 @@ Future<void> _tests() async {
   print('BASIC TESTS DEFINITIONS');
 
   var definitions = <TestDefinition>[
+    TestDefinition('dart_basic_calculate.test.xml', r'''
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="Basic calculate()">
+    <source language="dart">
+        <![CDATA[
+int calculate1(int x, int y) {
+  return x * x + y;
+}
+
+int calculate2(int x, int y) {
+  return (x * x) + y;
+}
+
+int calculate3(int x, int y) {
+  return x * (x + y);
+}
+
+// --- New arithmetic tests ---
+int calcAddSub(int x, int y) {
+  return x + y - x;
+}
+
+int calcMulDiv(int x, int y) {
+  var divisor = x;
+  if (divisor == 0) {
+    divisor = 1;
+  }
+  return x * y ~/ divisor;
+}
+
+int calcMixed1(int x, int y) {
+  return x + y * x;
+}
+
+int calcMixed2(int x, int y) {
+  return (x + y) * x;
+}
+
+int calcRemainder(int x, int y) {
+  var divisor = y;
+  if (divisor == 0) {
+    divisor = 1;
+  }
+  return (x * y) % divisor;
+}
+
+// --- Double / mixed numeric test ---
+double calcDeviation(double usdChange, double eurChange, double brlChange) {
+  return usdChange - (eurChange + brlChange) / 2.0;
+}
+
+// --- Comparison tests ---
+bool cmp1(int x, int y) {
+  return x > y;
+}
+
+bool cmp2(int x, int y) {
+  return x * x >= y;
+}
+
+bool cmp3(int x, int y) {
+  return (x + y) == (y + x);
+}
+
+// --- Logical tests ---
+bool logic1(int x, int y) {
+  return x > 0 && y > 0;
+}
+
+bool logic2(int x, int y) {
+  return x > 0 || y > 0;
+}
+
+bool logic3(int x, int y) {
+  return x > 0 && y > 0 || x == y;
+}
+
+bool logic4(int x, int y) {
+  return x > 0 && (y > 0 || x == y);
+}
+
+// --- Complex expression ---
+int complex(int x, int y) {
+  var divisor = y;
+  if (divisor == 0) {
+    divisor = 1;
+  }
+  return (x + y) * (x - y) + x * y % divisor;
+}
+
+// --- Main aggregator ---
+List<dynamic> calculate(int x, int y) {
+  var out = <dynamic>[];
+
+  void log(String label, dynamic value) {
+    print("$label: $x, $y -> $value");
+    out.add(value); // only the raw value
+  }
+
+  // Original
+  log("calculate1", calculate1(x, y));
+  log("calculate2", calculate2(x, y));
+  log("calculate3", calculate3(x, y));
+
+  // Arithmetic
+  log("calcAddSub", calcAddSub(x, y));
+  log("calcMulDiv", calcMulDiv(x, y));
+  log("calcMixed1", calcMixed1(x, y));
+  log("calcMixed2", calcMixed2(x, y));
+  log("calcRemainder", calcRemainder(x, y));
+
+  // Double test (derive values from x,y just for consistency)
+  double usd = x.toDouble();
+  double eur = y.toDouble();
+  double brl = (x + y).toDouble();
+  log("calcDeviation", calcDeviation(usd, eur, brl));
+  
+  // Comparisons
+  log("cmp1", cmp1(x, y));
+  log("cmp2", cmp2(x, y));
+  log("cmp3", cmp3(x, y));
+
+  // Logical
+  log("logic1", logic1(x, y));
+  log("logic2", logic2(x, y));
+  log("logic3", logic3(x, y));
+  log("logic4", logic4(x, y));
+
+  // Complex
+  log("complex", complex(x, y));
+
+  return out;
+}
+        ]]>
+    </source>
+    <call function="calculate" return="[14, 14, 24, 5, 5, 18, 24, 0, -3.5, false, true, true, true, true, true, true, -16]">
+        [3,5]
+    </call>
+    <output>
+[
+  "calculate1: 3, 5 -> 14",
+  "calculate2: 3, 5 -> 14",
+  "calculate3: 3, 5 -> 24",
+  "calcAddSub: 3, 5 -> 5",
+  "calcMulDiv: 3, 5 -> 5",
+  "calcMixed1: 3, 5 -> 18",
+  "calcMixed2: 3, 5 -> 24",
+  "calcRemainder: 3, 5 -> 0",
+  "calcDeviation: 3, 5 -> -3.5",
+  "cmp1: 3, 5 -> false",
+  "cmp2: 3, 5 -> true",
+  "cmp3: 3, 5 -> true",
+  "logic1: 3, 5 -> true",
+  "logic2: 3, 5 -> true",
+  "logic3: 3, 5 -> true",
+  "logic4: 3, 5 -> true",
+  "complex: 3, 5 -> -16"
+]
+    </output>
+    <source-generated language="dart"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+  int calculate1(int x, int y) {
+    return (x * x) + y;
+  }
+
+  int calculate2(int x, int y) {
+    return (x * x) + y;
+  }
+
+  int calculate3(int x, int y) {
+    return x * (x + y);
+  }
+
+  int calcAddSub(int x, int y) {
+    return (x + y) - x;
+  }
+
+  int calcMulDiv(int x, int y) {
+    var divisor = x;
+    if (divisor == 0) {
+        divisor = 1;
+    }
+
+    return (x * y) ~/ divisor;
+  }
+
+  int calcMixed1(int x, int y) {
+    return x + (y * x);
+  }
+
+  int calcMixed2(int x, int y) {
+    return (x + y) * x;
+  }
+
+  int calcRemainder(int x, int y) {
+    var divisor = y;
+    if (divisor == 0) {
+        divisor = 1;
+    }
+
+    return (x * y) % divisor;
+  }
+
+  double calcDeviation(double usdChange, double eurChange, double brlChange) {
+    return usdChange - ((eurChange + brlChange) / 2.0);
+  }
+
+  bool cmp1(int x, int y) {
+    return x > y;
+  }
+
+  bool cmp2(int x, int y) {
+    return (x * x) >= y;
+  }
+
+  bool cmp3(int x, int y) {
+    return (x + y) == (y + x);
+  }
+
+  bool logic1(int x, int y) {
+    return (x > 0) && (y > 0);
+  }
+
+  bool logic2(int x, int y) {
+    return (x > 0) || (y > 0);
+  }
+
+  bool logic3(int x, int y) {
+    return ((x > 0) && (y > 0)) || (x == y);
+  }
+
+  bool logic4(int x, int y) {
+    return (x > 0) && ((y > 0) || (x == y));
+  }
+
+  int complex(int x, int y) {
+    var divisor = y;
+    if (divisor == 0) {
+        divisor = 1;
+    }
+
+    return ((x + y) * (x - y)) + ((x * y) % divisor);
+  }
+
+  List<dynamic> calculate(int x, int y) {
+    void log(String label, dynamic value) {
+      print('$label: $x, $y -> $value');
+      out.add(value);
+    }
+
+    var out = <dynamic>[];
+        void log(String label, dynamic value) {
+      print('$label: $x, $y -> $value');
+      out.add(value);
+    }
+
+
+    log('calculate1', calculate1(x, y));
+    log('calculate2', calculate2(x, y));
+    log('calculate3', calculate3(x, y));
+    log('calcAddSub', calcAddSub(x, y));
+    log('calcMulDiv', calcMulDiv(x, y));
+    log('calcMixed1', calcMixed1(x, y));
+    log('calcMixed2', calcMixed2(x, y));
+    log('calcRemainder', calcRemainder(x, y));
+    double usd = x.toDouble();
+    double eur = y.toDouble();
+    double brl = (x + y).toDouble();
+    log('calcDeviation', calcDeviation(usd, eur, brl));
+    log('cmp1', cmp1(x, y));
+    log('cmp2', cmp2(x, y));
+    log('cmp3', cmp3(x, y));
+    log('logic1', logic1(x, y));
+    log('logic2', logic2(x, y));
+    log('logic3', logic3(x, y));
+    log('logic4', logic4(x, y));
+    log('complex', complex(x, y));
+    return out;
+  }
+
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+</test>
+    '''),
     TestDefinition('dart_basic_exchange_rates.test.xml', r'''
 <?xml version="1.0" encoding="UTF-8"?>
 <test title="Basic main()">
@@ -1317,7 +1603,7 @@ void main() {
     var x = 10;
     var y = 20;
     {
-      var z = x + (y + 10);
+      var z = (x + y) + 10;
       print('z1: $z');
     }
 
@@ -1526,9 +1812,9 @@ void main() {
     print('--- LLM Trustworthiness Simulation Over $timeMonths Months ---');
     print('Initial State: T0 = $T0\n');
     for (int t = 1; t <= timeMonths ; t++) {
-      double monthlyErrors = monthlyErrorRate * (C / 5.0);
+      double monthlyErrors = (monthlyErrorRate * C) / 5.0;
       accumulatedErrors += monthlyErrors;
-      double compoundingFactor = exp(alpha * (accumulatedErrors * t));
+      double compoundingFactor = exp((alpha * accumulatedErrors) * t);
       double currentTrustworthiness = T0 - (accumulatedErrors * compoundingFactor);
       if (currentTrustworthiness < 0) {
           currentTrustworthiness = 0.0;
@@ -1811,22 +2097,22 @@ void main() {
         []
     </call>
     <output>
-         [
-          "--- Linear Regression ---",
-          "Slope (m): 28.367622344360782",
-          "Intercept (b): 69024.48428808422",
-          "\n--- Forecast Next 10 Days ---",
-          "Forecast for Day 21: 1958656.22",
-          "Forecast for Day 22: 1958684.59",
-          "Forecast for Day 23: 1958712.96",
-          "Forecast for Day 24: 1958741.33",
-          "Forecast for Day 25: 1958769.69",
-          "Forecast for Day 26: 1958798.06",
-          "Forecast for Day 27: 1958826.43",
-          "Forecast for Day 28: 1958854.80",
-          "Forecast for Day 29: 1958883.16",
-          "Forecast for Day 30: 1958911.53"
-         ]
+[
+  "--- Linear Regression ---",
+  "Slope (m): 28.367622344360782",
+  "Intercept (b): 69024.48428808422",
+  "\n--- Forecast Next 10 Days ---",
+  "Forecast for Day 21: 69620.20",
+  "Forecast for Day 22: 69648.57",
+  "Forecast for Day 23: 69676.94",
+  "Forecast for Day 24: 69705.31",
+  "Forecast for Day 25: 69733.67",
+  "Forecast for Day 26: 69762.04",
+  "Forecast for Day 27: 69790.41",
+  "Forecast for Day 28: 69818.78",
+  "Forecast for Day 29: 69847.15",
+  "Forecast for Day 30: 69875.51"
+]
     </output>
     <source-generated language="dart"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
 <<<< NAMESPACE="" >>>>
@@ -1866,7 +2152,7 @@ void main() {
     int days = 10;
     for (int i = 1; i <= days ; i++) {
       final x = startX + i;
-      final y = model.m * (x + model.b);
+      final y = (model.m * x) + model.b;
       print('Forecast for Day $x: ${y.toStringAsFixed(2)}');
     }
   }
@@ -2612,7 +2898,7 @@ void main() {
     var b = args[2];
     var c = args[3];
     var sumAB = a + b;
-    var sumABC = a + (b + c);
+    var sumABC = (a + b) + c;
     print(title);
     print(sumAB);
     print(sumABC);
@@ -2664,7 +2950,7 @@ class Foo {
     var b = args[2];
     var c = args[3];
     var sumAB = a + b;
-    var sumABC = a + (b + c);
+    var sumABC = (a + b) + c;
     print(title);
     print(sumAB);
     print(sumABC);
@@ -2686,7 +2972,7 @@ class Foo {
     var b = args[2];
     var c = args[3];
     var sumAB = a + b;
-    var sumABC = a + (b + c);
+    var sumABC = (a + b) + c;
     print(title);
     print(sumAB);
     print(sumABC);
@@ -2709,7 +2995,7 @@ class Foo {
               var b = args[2];
               var c = args[3];
               var sumAB = a + b ;
-              var sumABC = a + (b + c);
+              var sumABC = (a + b) + c;
               print(title);
               print(sumAB);
               print(sumABC);
@@ -2740,7 +3026,7 @@ class Foo {
     var b = args[2];
     var c = args[3];
     var sumAB = a + b;
-    var sumABC = a + (b + c);
+    var sumABC = (a + b) + c;
     print(title);
     print(sumAB);
     print(sumABC);
@@ -2813,7 +3099,7 @@ class Foo {
     var b = args[2];
     var c = args[3];
     var sumAB = a + b;
-    var sumABC = a + (b + c);
+    var sumABC = (a + b) + c;
     print(title);
     print(sumAB);
     print(sumABC);
@@ -2841,7 +3127,7 @@ class Foo {
     var b = args[2];
     var c = args[3];
     var sumAB = a + b;
-    var sumABC = a + (b + c);
+    var sumABC = (a + b) + c;
     print(title);
     print(sumAB);
     print(sumABC);
@@ -2915,7 +3201,7 @@ class Foo {
   }
 
   int calcB(int b1, int b2) {
-    return y * (b1 * b2);
+    return (y * b1) * b2;
   }
 
   void test(int a) {
@@ -2943,7 +3229,7 @@ class Foo {
   }
 
   int calcB(int b1, int b2) {
-    return y * (b1 * b2);
+    return (y * b1) * b2;
   }
 
   void test(int a) {
@@ -2962,11 +3248,11 @@ class Foo {
   ];
 
   await runTestDefinitions(
-    [definitions[0]],
+    // [definitions[0]],
     // definitions.sublist(1),
     // definitions
     //     .where((e) => e.fileName.contains('dart_basic_linearRegression'))
     //     .toList(),
-    // definitions,
+    definitions,
   );
 }

@@ -453,19 +453,9 @@ class Java11GrammarDefinition extends Java11GrammarLexer {
             }
 
             var extra = _expandListDeeply(rest);
-
             var all = <dynamic>[exp1, ...extra];
 
-            while (all.length >= 3) {
-              var e2 = all.removeLast();
-              var op = all.removeLast();
-              var e1 = all.removeLast();
-              var exp = ASTExpressionOperation(e1, op, e2);
-              all.add(exp);
-            }
-            assert(all.length == 1);
-
-            return all[0] as ASTExpressionOperation;
+            return computeFinalExpression(all);
           });
 
   Parser<ASTExpressionOperator> expressionOperator() =>

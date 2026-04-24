@@ -13,9 +13,11 @@
                  var c = s1 + " \t\t " + s2;
                  var sumAB = a + b ;
                  var sumABC = a + b + c;
+                 var sumCAB = c + a + b;
                  print(title);
                  print(sumAB);
                  print(sumABC);
+                 print(sumCAB);
                }
             }
 
@@ -27,7 +29,12 @@
         ]
     </call>
     <output>
-        ["Operations:", 30, "1020inline \t\t string"]
+        [
+            "Operations:",
+            30,
+            "30inline \t\t string",
+            "inline \t\t string1020"
+        ]
     </output>
     <source-generated language="dart"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
 <<<< NAMESPACE="" >>>>
@@ -42,10 +49,12 @@ class Foo {
     var s2 = 'string';
     var c = '$s1 \t\t $s2';
     var sumAB = a + b;
-    var sumABC = a + (b + c);
+    var sumABC = (a + b) + c;
+    var sumCAB = (c + a) + b;
     print(title);
     print(sumAB);
     print(sumABC);
+    print(sumCAB);
   }
 
 }
@@ -66,10 +75,12 @@ class Foo {
     var s2 = "string";
     var c = s1 + " \t\t " + s2;
     var sumAB = a + b;
-    var sumABC = a + (b + c);
+    var sumABC = (a + b) + c;
+    var sumCAB = (c + a) + b;
     print(title);
     print(sumAB);
     print(sumABC);
+    print(sumCAB);
   }
 
 }

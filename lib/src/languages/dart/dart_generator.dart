@@ -606,40 +606,54 @@ class ApolloCodeGeneratorDart extends ApolloCodeGenerator {
 
     // Merge into string template:
     if (operator == ASTExpressionOperator.add) {
-      if (expression1.isVariableAccess) {
+      if (expression2.isVariableAccess) {
         var s1 = generateASTExpression(expression1).toString();
         var s2 = generateASTExpression(expression2).toString();
 
-        if (expression2.isLiteralString ||
-            expression2.hasDescendantLiteralString) {
+        if (expression1.isLiteralString ||
+            expression1.hasDescendantLiteralString) {
           groupComplexExpressions = false;
         }
 
-        if (_isVariable(s1) &&
-            (_isSingleQuoteString(s2) || _isDoubleQuoteString(s2))) {
-          var sMerge = '${s2.substring(0, 1)}\$$s1${s2.substring(1)}';
+        if ((_isSingleQuoteString(s1) || _isDoubleQuoteString(s1)) &&
+            _isVariable(s2)) {
+          var s1End = s1.length - 1;
+          var sMerge = '${s1.substring(0, s1End)}\$$s2${s1.substring(s1End)}';
           out.write(sMerge);
           return out;
         }
-      } else if (expression1.isLiteralString) {
+      } else if (expression2.isLiteralString) {
         groupComplexExpressions = false;
 
         var s1 = generateASTExpression(expression1).toString();
         var s2 = generateASTExpression(expression2).toString();
 
-        if ((_isSingleQuoteString(s1) && _isSingleQuoteString(s2)) ||
-            (_isDoubleQuoteString(s1) && _isDoubleQuoteString(s2))) {
-          var sMerge = s1.substring(0, s1.length - 1) + s2.substring(1);
-          out.write(sMerge);
+        var s1SingleQuote = _isSingleQuoteString(s1);
+        var s1DoubleQuote = _isDoubleQuoteString(s1);
+
+        var s2SingleQuote = _isSingleQuoteString(s2);
+        var s2DoubleQuote = _isDoubleQuoteString(s2);
+
+        if ((s1SingleQuote && s2SingleQuote) ||
+            (s1DoubleQuote && s2DoubleQuote)) {
+          var merged = _mergeQuotedStrings(s1, s2);
+          out.write(merged);
           return out;
-        } else if ((_isSingleQuoteString(s1) || _isDoubleQuoteString(s1)) &&
-            _isVariable(s2)) {
-          var sMerge =
-              '${s1.substring(0, s1.length - 1)}\$$s2${s1.substring(s1.length - 1)}';
+        } else if ((s1SingleQuote || s1DoubleQuote) &&
+            (s2SingleQuote || s2DoubleQuote)) {
+          final merged = _tryMergeQuotedStrings(s1, s2);
+          if (merged != null) {
+            out.write(merged);
+            return out;
+          }
+        }
+
+        if (_isVariable(s1) && (s2SingleQuote || s2DoubleQuote)) {
+          var sMerge = '${s2.substring(0, 1)}\$$s1${s2.substring(1)}';
           out.write(sMerge);
           return out;
         }
-      } else if (expression2.isLiteralString) {
+      } else if (expression1.isLiteralString) {
         groupComplexExpressions = false;
       } else if (expression1.hasDescendantLiteralString ||
           expression2.hasDescendantLiteralString) {
@@ -680,31 +694,106 @@ class ApolloCodeGeneratorDart extends ApolloCodeGenerator {
     return _regexpWORD.hasMatch(s);
   }
 
-  static bool _isSingleQuoteString(String s) {
-    var quoted =
-        s.startsWith("'") &&
-        !s.startsWith("'''") &&
-        s.endsWith("'") &&
-        !s.endsWith("'''");
+  static bool _isDoubleQuoteString(String s) => _isQuotedString(s, '"');
 
-    if (!quoted) return false;
-    var idx = s.indexOf("'", 1);
-    if (idx < s.length - 1) return false;
+  static bool _isSingleQuoteString(String s) => _isQuotedString(s, "'");
+
+  static bool _isQuotedString(String s, String quote) {
+    if (quote != '"' && quote != "'") return false;
+
+    final triple = quote * 3;
+
+    // Basic shape: "..." or '...'
+    if (!(s.startsWith(quote) &&
+        !s.startsWith(triple) &&
+        s.endsWith(quote) &&
+        !s.endsWith(triple))) {
+      return false;
+    }
+
+    // Scan for unescaped inner quotes
+    for (int i = 1; i < s.length - 1; i++) {
+      if (s[i] == quote) {
+        int backslashCount = 0;
+        int j = i - 1;
+
+        while (j >= 0 && s[j] == r'\') {
+          backslashCount++;
+          j--;
+        }
+
+        // Even number of backslashes → not escaped
+        if (backslashCount % 2 == 0) {
+          return false;
+        }
+      }
+    }
 
     return true;
   }
 
-  static bool _isDoubleQuoteString(String s) {
-    var quoted =
-        s.startsWith('"') &&
-        !s.startsWith('"""') &&
-        s.endsWith('"') &&
-        !s.endsWith('"""');
+  static bool _canConvertQuote(String s, String fromQuote, String toQuote) {
+    if (!_isQuotedString(s, fromQuote)) return false;
 
-    if (!quoted) return false;
-    var idx = s.indexOf('"', 1);
-    if (idx < s.length - 1) return false;
+    // Check if there is any UNESCAPED target quote inside
+    for (int i = 1; i < s.length - 1; i++) {
+      if (s[i] == toQuote) {
+        int backslashCount = 0;
+        int j = i - 1;
+
+        while (j >= 0 && s[j] == r'\') {
+          backslashCount++;
+          j--;
+        }
+
+        // Even → not escaped → would need escaping → reject
+        if (backslashCount % 2 == 0) {
+          return false;
+        }
+      }
+    }
 
     return true;
+  }
+
+  static String _convertQuote(String s, String fromQuote, String toQuote) {
+    final inner = s.substring(1, s.length - 1);
+
+    // Remove escapes from the original quote type
+    final unescaped = inner.replaceAll('\\$fromQuote', fromQuote);
+
+    return '$toQuote$unescaped$toQuote';
+  }
+
+  String _mergeQuotedStrings(String a, String b) =>
+      a.substring(0, a.length - 1) + b.substring(1);
+
+  String? _tryMergeQuotedStrings(String s1, String s2) {
+    final q1 = s1[0];
+    final q2 = s2[0];
+
+    // only handle simple quoted strings
+    if ((q1 != '"' && q1 != "'") || (q2 != '"' && q2 != "'")) {
+      return null;
+    }
+
+    // same quote → direct merge
+    if (q1 == q2) {
+      return _mergeQuotedStrings(s1, s2);
+    }
+
+    // try converting s2 → q1
+    if (_canConvertQuote(s2, q2, q1)) {
+      final s2c = _convertQuote(s2, q2, q1);
+      return _mergeQuotedStrings(s1, s2c);
+    }
+
+    // try converting s1 → q2
+    if (_canConvertQuote(s1, q1, q2)) {
+      final s1c = _convertQuote(s1, q1, q2);
+      return _mergeQuotedStrings(s1c, s2);
+    }
+
+    return null;
   }
 }

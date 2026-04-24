@@ -58,7 +58,7 @@ class Foo {
   }
 
   int calcB(int b1, int b2) {
-    return y * (b1 * b2);
+    return (y * b1) * b2;
   }
 
   int IF(bool b, int p1, int p2) {
@@ -98,7 +98,7 @@ class Foo {
   }
 
   int calcB(int b1, int b2) {
-    return y * (b1 * b2);
+    return (y * b1) * b2;
   }
 
   int IF(bool b, int p1, int p2) {

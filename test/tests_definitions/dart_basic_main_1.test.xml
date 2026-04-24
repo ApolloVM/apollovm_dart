@@ -37,7 +37,7 @@
     var b = args[2];
     var c = args[3];
     var sumAB = a + b;
-    var sumABC = a + (b + c);
+    var sumABC = (a + b) + c;
     var greater = sumABC > sumAB;
     print(title);
     print(sumAB);

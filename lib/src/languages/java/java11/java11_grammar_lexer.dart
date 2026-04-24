@@ -3,24 +3,9 @@
 // Please refer to the LICENSE and AUTHORS files for details.
 
 import 'package:petitparser/petitparser.dart';
+import '../../grammar.dart';
 
-abstract class Java11GrammarLexer extends GrammarDefinition {
-  Parser token(Object input) {
-    if (input is Parser) {
-      return input.token().trim(ref0(hiddenStuffWhitespace));
-    } else if (input is String) {
-      return token(input.toParser());
-    } else if (input is Parser Function()) {
-      return token(ref0(input));
-    }
-    throw ArgumentError.value(input, 'invalid token parser');
-  }
-
-  Parser<String> identifier() =>
-      ref1(token, ref0(identifierLexicalToken)).map((t) {
-        return t is Token ? t.value : '$t';
-      });
-
+abstract class Java11GrammarLexer extends BaseGrammarLexer {
   // Copyright (c) 2011, the Dart project authors. Please see the AUTHORS file
   // for details. All rights reserved. Use of this source code is governed by a
   // BSD-style license that can be found in the LICENSE file.
@@ -127,11 +112,6 @@ abstract class Java11GrammarLexer extends GrammarDefinition {
 
   Parser typedefToken() => ref1(token, 'typedef');
 
-  Parser<String> identifierLexicalToken() =>
-      (ref0(identifierStartLexicalToken) &
-              ref0(identifierPartLexicalToken).star())
-          .map((ts) => ts.expand((e) => e is Iterable ? e : [e]).join());
-
   Parser hexNumberLexicalToken() =>
       string('0x') & ref0(hexDigitLexicalToken).plus() |
       string('0X') & ref0(hexDigitLexicalToken).plus();
@@ -153,19 +133,6 @@ abstract class Java11GrammarLexer extends GrammarDefinition {
   Parser numberOptIllegalEndLexicalToken() => epsilon();
 
   Parser hexDigitLexicalToken() => pattern('0-9a-fA-F');
-
-  Parser identifierStartLexicalToken() =>
-      ref0(identifierStartNoDollarLexicalToken) | char('\$');
-
-  Parser identifierStartNoDollarLexicalToken() =>
-      ref0(letterLexicalToken) | char('_');
-
-  Parser identifierPartLexicalToken() =>
-      ref0(identifierStartLexicalToken) | ref0(digitLexicalToken);
-
-  Parser<String> letterLexicalToken() => letter();
-
-  Parser<String> digitLexicalToken() => digit();
 
   Parser exponentLexicalToken() =>
       pattern('eE') & pattern('+-').optional() & ref0(digitLexicalToken).plus();
@@ -207,9 +174,13 @@ abstract class Java11GrammarLexer extends GrammarDefinition {
   // -----------------------------------------------------------------
   // Whitespace and comments.
   // -----------------------------------------------------------------
+  @override
   Parser hiddenWhitespace() => ref0(hiddenStuffWhitespace).plus();
 
-  static Parser hiddenStuffWhitespace() =>
+  @override
+  Parser hiddenStuffWhitespace() => hiddenStuffWhitespaceStatic();
+
+  static Parser hiddenStuffWhitespaceStatic() =>
       ref0(visibleWhitespace) |
       ref0(singleLineComment) |
       ref0(multiLineComment);
@@ -228,5 +199,6 @@ abstract class Java11GrammarLexer extends GrammarDefinition {
 }
 
 extension TrimHiddenStuffWhitespaceParserExtension<R> on Parser<R> {
-  Parser<R> trimHidden() => trim(Java11GrammarLexer.hiddenStuffWhitespace());
+  Parser<R> trimHidden() =>
+      trim(Java11GrammarLexer.hiddenStuffWhitespaceStatic());
 }
