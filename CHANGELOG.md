@@ -10,6 +10,21 @@
 - Dart grammar (`dart_grammar.dart`):
   - Updated `expressionGetterAccess` parser to parse and attach chained function invocations.
 
+
+- `CoreClassPrimitive`:
+  - Removed `_functionToString` field and initialization.
+
+- `CoreClassString`:
+  - Added `_functionToString` external class function returning `self.toString()`.
+
+- `CoreClassInt`:
+  - Added `_functionToString` external class function returning `self.toString()`.
+
+- `CoreClassDouble`:
+  - Added `_functionToString` external class function with custom logic:
+    - If the double is an integer value, returns string with `.0` suffix.
+    - Otherwise, returns standard `toString()`.
+
 ## 0.1.23
 
 - `ASTExpressionVariableEntryAccess`:

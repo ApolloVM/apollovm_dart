@@ -390,21 +390,15 @@ abstract class CoreClassPrimitive<T> extends ASTClassPrimitive<T>
   @override
   ASTClass<T> get astClass => this;
 
-  late final ASTExternalClassFunction _functionToString;
-
   CoreClassPrimitive(super.type, this.coreName) {
     type.setClass(this);
-
-    _functionToString = _externalClassFunctionArgs0(
-      'toString',
-      ASTTypeString.instance,
-      (Object self) => self.toString(),
-    );
   }
 }
 
 class CoreClassString extends CoreClassPrimitive<String> {
   static final CoreClassString instance = CoreClassString._();
+
+  late final ASTExternalClassFunction _functionToString;
 
   late final ASTExternalClassFunction _functionContains;
   late final ASTExternalClassFunction _functionToUpperCase;
@@ -437,6 +431,12 @@ class CoreClassString extends CoreClassPrimitive<String> {
   late final ASTExternalFunction _functionValueOf;
 
   CoreClassString._() : super(ASTTypeString.instance, 'String') {
+    _functionToString = _externalClassFunctionArgs0(
+      'toString',
+      ASTTypeString.instance,
+      (Object self) => self.toString(),
+    );
+
     _functionContains = _externalClassFunctionArgs1(
       'contains',
       ASTTypeBool.instance,
@@ -720,6 +720,8 @@ class CoreClassString extends CoreClassPrimitive<String> {
 class CoreClassInt extends CoreClassPrimitive<int> {
   static final CoreClassInt instance = CoreClassInt._();
 
+  late final ASTExternalClassFunction _functionToString;
+
   late final ASTExternalFunction _functionValueOf;
   late final ASTExternalFunction _functionParseInt;
   late final ASTExternalFunction _functionTryParse;
@@ -733,6 +735,12 @@ class CoreClassInt extends CoreClassPrimitive<int> {
   late final ASTExternalClassFunction _functionToDouble;
 
   CoreClassInt._() : super(ASTTypeInt.instance, 'int') {
+    _functionToString = _externalClassFunctionArgs0(
+      'toString',
+      ASTTypeString.instance,
+      (Object self) => self.toString(),
+    );
+
     _functionParseInt = _externalStaticFunctionArgs1(
       'parseInt',
       ASTTypeInt.instance,
@@ -848,6 +856,8 @@ class CoreClassInt extends CoreClassPrimitive<int> {
 class CoreClassDouble extends CoreClassPrimitive<double> {
   static final CoreClassDouble instance = CoreClassDouble._();
 
+  late final ASTExternalClassFunction _functionToString;
+
   // static
   late final ASTExternalFunction _functionParseDouble;
   late final ASTExternalFunction _functionTryParse;
@@ -869,6 +879,21 @@ class CoreClassDouble extends CoreClassPrimitive<double> {
   late final ASTExternalClassFunction _functionTruncate;
 
   CoreClassDouble._() : super(ASTTypeDouble.instance, 'double') {
+    _functionToString = _externalClassFunctionArgs0(
+      'toString',
+      ASTTypeString.instance,
+      (num self) {
+        var n = self.toInt();
+        if (n == self) {
+          var s = n.toString();
+          var sDec = '$s.0';
+          return sDec;
+        }
+
+        return self.toString();
+      },
+    );
+
     _functionParseDouble = _externalStaticFunctionArgs1(
       'parseDouble',
       ASTTypeDouble.instance,

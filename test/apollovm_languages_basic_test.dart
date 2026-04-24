@@ -2962,11 +2962,11 @@ class Foo {
   ];
 
   await runTestDefinitions(
-    // [definitions[0]],
+    [definitions[0]],
     // definitions.sublist(1),
     // definitions
     //     .where((e) => e.fileName.contains('dart_basic_linearRegression'))
     //     .toList(),
-    definitions,
+    // definitions,
   );
 }
