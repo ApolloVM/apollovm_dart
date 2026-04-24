@@ -27,6 +27,108 @@ Future<void> _tests() async {
 <test title="Basic calculate()">
     <source language="dart">
         <![CDATA[
+import 'dart:math';
+
+// Function to calculate percentage change
+double calculatePercentageChange(double startRate, double endRate) {
+  if (startRate == 0) return 0.0; // Avoid division by zero
+  return ((endRate - startRate) / startRate) * 100.0;
+}
+
+// Function to calculate the discrepancy between rates on a given day
+// For simplicity, we will check the absolute difference between USD and EUR final rates.
+double calculateDiscrepancy(double usdRate, double eurRate) {
+  return (usdRate - eurRate).abs();
+}
+
+void main() {
+  // --- 1. Overall Change Calculation (Using Start vs End Rates for illustration) ---
+  
+  // Data extracted from the previous calls:
+  const startUsd = 71428.57; // BTC/USD on 2026-03-25
+  const endUsd = 76923.08;   // BTC/USD on 2026-04-24
+
+  const startEur = 61746.29; // BTC/EUR on 2026-03-25
+  const endEur = 65852.31;   // BTC/EUR on 2026-04-24
+
+  const startBrl = 374064.21; // BTC/BRL on 2026-03-25
+  const endBrl = 386519.77;   // BTC/BRL on 2026-04-24
+
+  final usdChangePct = calculatePercentageChange(startUsd, endUsd);
+  final eurChangePct = calculatePercentageChange(startEur, endEur);
+  final brlChangePct = calculatePercentageChange(startBrl, endBrl);
+
+  print('--- Overall Percentage Change (Start vs End) ---');
+  print('BTC/USD: ${usdChangePct.toStringAsFixed(2)}%');
+  print('BTC/EUR: ${eurChangePct.toStringAsFixed(2)}%');
+  print('BTC/BRL: ${brlChangePct.toStringAsFixed(2)}%');
+
+  // --- 2. Discrepancy Calculation (Using End Rates) ---
+  double discrepancy = calculateDiscrepancy(endUsd, endEur);
+  
+  print('\n--- Discrepancy Analysis (Comparing End Rates on 2026-04-24) ---');
+  print('Absolute difference between BTC/USD and BTC/EUR rates: ${discrepancy.toStringAsFixed(2)}');
+}
+
+        ]]>
+    </source>
+    <call function="main">
+        []
+    </call>
+    <output>
+[
+  "--- Overall Percentage Change (Start vs End) ---",
+  "BTC/USD: 7.69%",
+  "BTC/EUR: 6.65%",
+  "BTC/BRL: 3.33%",
+  "\n--- Discrepancy Analysis (Comparing End Rates on 2026-04-24) ---",
+  "Absolute difference between BTC/USD and BTC/EUR rates: 11070.77"
+]
+    </output>
+    <source-generated language="dart"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+import 'dart:math';
+
+  double calculatePercentageChange(double startRate, double endRate) {
+    if (startRate == 0) return 0.0;
+
+    return ((endRate - startRate) / startRate) * 100.0;
+  }
+
+  double calculateDiscrepancy(double usdRate, double eurRate) {
+    return (usdRate - eurRate).abs();
+  }
+
+  void main() {
+    final startUsd = 71428.57;
+    final endUsd = 76923.08;
+    final startEur = 61746.29;
+    final endEur = 65852.31;
+    final startBrl = 374064.21;
+    final endBrl = 386519.77;
+    final usdChangePct = calculatePercentageChange(startUsd, endUsd);
+    final eurChangePct = calculatePercentageChange(startEur, endEur);
+    final brlChangePct = calculatePercentageChange(startBrl, endBrl);
+    print('--- Overall Percentage Change (Start vs End) ---');
+    print('BTC/USD: ${usdChangePct.toStringAsFixed(2)}%');
+    print('BTC/EUR: ${eurChangePct.toStringAsFixed(2)}%');
+    print('BTC/BRL: ${brlChangePct.toStringAsFixed(2)}%');
+    double discrepancy = calculateDiscrepancy(endUsd, endEur);
+    print('\n--- Discrepancy Analysis (Comparing End Rates on 2026-04-24) ---');
+    print('Absolute difference between BTC/USD and BTC/EUR rates: ${discrepancy.toStringAsFixed(2)}');
+  }
+
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+</test>
+    '''),
+    TestDefinition('dart_basic_calculate.test.xml', r'''
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="Basic calculate()">
+    <source language="dart">
+        <![CDATA[
 int calculate1(int x, int y) {
   return x * x + y;
 }

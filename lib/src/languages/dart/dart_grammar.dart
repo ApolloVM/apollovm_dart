@@ -41,6 +41,7 @@ class DartGrammarDefinition extends DartGrammarLexer {
       case 'var':
         return ASTTypeVar();
       case 'final':
+      case 'const':
         return ASTTypeVar(unmodifiable: true);
       default:
         return ASTType(name);
@@ -156,7 +157,7 @@ class DartGrammarDefinition extends DartGrammarLexer {
           });
 
   Parser<ASTClassField> classFieldDeclaration() =>
-      (finalToken().optional() &
+      ((finalToken() | constToken()).optional() &
               type().trimHidden() &
               identifier().trimHidden() &
               char(';').trimHidden())
@@ -247,9 +248,12 @@ class DartGrammarDefinition extends DartGrammarLexer {
 
   Parser<ASTConstructorParameterDeclaration>
   constructorTypedParameterDeclaration() =>
-      (finalToken().trim().optional() & type().trim() & identifier()).map((v) {
-        return ASTConstructorParameterDeclaration(v[1], v[2], -1, false);
-      });
+      ((finalToken() | constToken()).trim().optional() &
+              type().trim() &
+              identifier())
+          .map((v) {
+            return ASTConstructorParameterDeclaration(v[1], v[2], -1, false);
+          });
 
   Parser<ASTFunctionDeclaration> classFunctionDeclaration() =>
       (functionModifiers().optional() &
@@ -425,9 +429,11 @@ class DartGrammarDefinition extends DartGrammarLexer {
           // var definition:
           (
               // final Type name:
-              (finalToken().trimHidden() & type() & identifier().trimHidden()) |
+              ((finalToken() | constToken()).trimHidden() &
+                      type() &
+                      identifier().trimHidden()) |
                   // final name:
-                  (finalToken() & identifier().trimHidden()) |
+                  ((finalToken() | constToken()) & identifier().trimHidden()) |
                   // Type name:
                   (type() & identifier().trimHidden())
               // end var definition
@@ -443,14 +449,15 @@ class DartGrammarDefinition extends DartGrammarLexer {
 
             if (varDef.length == 3) {
               unmodifiable = true;
-              assert((varDef[0] as Token).value == 'final');
+              assert(['final', 'const'].contains((varDef[0] as Token).value));
               type = varDef[1];
               name = varDef[2];
             } else if (varDef.length == 2) {
               final varDef0 = varDef[0];
-              if (varDef0 is Token && varDef0.value == 'final') {
+              if (varDef0 is Token &&
+                  (varDef0.value == 'final' || varDef0.value == 'const')) {
                 unmodifiable = true;
-                type = getTypeByName('final');
+                type = getTypeByName(varDef0.value);
                 name = varDef[1];
               } else {
                 unmodifiable = false;
@@ -951,15 +958,18 @@ class DartGrammarDefinition extends DartGrammarLexer {
           });
 
   Parser<ASTFunctionParameterDeclaration> parameterDeclaration() =>
-      (finalToken().trim().optional() & type().trim() & identifier()).map((v) {
-        return ASTFunctionParameterDeclaration(
-          v[1],
-          v[2],
-          -1,
-          false,
-          unmodifiable: v[0] != null,
-        );
-      });
+      ((finalToken() | constToken()).trim().optional() &
+              type().trim() &
+              identifier())
+          .map((v) {
+            return ASTFunctionParameterDeclaration(
+              v[1],
+              v[2],
+              -1,
+              false,
+              unmodifiable: v[0] != null,
+            );
+          });
 
   Parser<ASTType> type() =>
       (arrayTyped() |

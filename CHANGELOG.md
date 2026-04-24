@@ -1,3 +1,10 @@
+## 0.1.26
+
+- `DartGrammarDefinition`:
+  - Updated `getTypeByName` to treat `'const'` as an unmodifiable variable type alongside `'final'`.
+  - Modified `classFieldDeclaration`, `constructorTypedParameterDeclaration`, `statementVariableDeclaration`, and `parameterDeclaration` parsers to accept both `final` and `const` tokens as optional modifiers.
+  - Adjusted logic in `statementVariableDeclaration` to recognize `'const'` as unmodifiable and handle it similarly to `'final'`.
+
 ## 0.1.25
 
 - `ApolloCodeGeneratorDart`:
