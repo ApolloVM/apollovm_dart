@@ -359,6 +359,28 @@ void main() {
 
       expect(r.value, equals('abc'));
     });
+
+    test('for-in over a list held by a dynamic variable', () async {
+      // Regression: the iterable resolved to a plain `ASTValueStatic` (not an
+      // `ASTValueArray`) when bound to a `dynamic`/`Object` variable, which
+      // for-each previously rejected.
+      var r = await runDart(
+        r'''
+        class M {
+          int run(List a) {
+            dynamic l = <int>[1, 2, 3, 4];
+            var total = 0;
+            for (var x in l) { total = total + x; }
+            return total;
+          }
+        }
+      ''',
+        'M',
+        'run',
+      );
+
+      expect(r.value, equals(10));
+    });
   });
 
   group('Arithmetic and precedence', () {

@@ -9,6 +9,7 @@
   - Tests: added `javascript_basic_*` definitions (parse + execute + round-trip + cross-translation to Dart/Java) and a JavaScript generation block to the Dart class-function test.
   - Follow-ups: arrow functions, destructuring, spread, async/await, true `constructor` semantics with `this.x` parameters, and full ESM are not yet supported.
 - CLI bug fix: `apollovm translate` printed `Instance of 'Future<StringBuffer>'` instead of the translated source — `writeAllSources()` was stringified without `await`. Fixed for all languages.
+- Runtime fix — `for-each` / `for...of` over any iterable: `ASTStatementForEach` only accepted an `ASTValueArray`, so iterating a list bound to a `dynamic`/`Object` variable (which resolves to a plain `ASTValueStatic`) threw at runtime. It now iterates any resolved `Iterable` (and `Map` values), and wraps each element into a concretely-typed `ASTValue` (via `ASTValue.fromValue`) so per-element operations (e.g. arithmetic, string concatenation) work. Affects all languages; enables JavaScript `for...of` over arrays.
 
 ## 0.1.27
 
