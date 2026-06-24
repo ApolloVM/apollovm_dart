@@ -1501,6 +1501,104 @@ class ASTExpressionVariableAssignment extends ASTExpression {
   }
 }
 
+/// [ASTExpression] that assigns to a container entry: `m[k] = v` (map) or
+/// `a[i] = v` (list). Supports compound operators (`+=`, `-=`, …).
+class ASTExpressionVariableEntryAssignment extends ASTExpression {
+  ASTVariable variable;
+
+  ASTExpression keyExpression;
+
+  ASTAssignmentOperator operator;
+
+  ASTExpression expression;
+
+  ASTExpressionVariableEntryAssignment(
+    this.variable,
+    this.keyExpression,
+    this.operator,
+    this.expression,
+  );
+
+  @override
+  bool get isComplex => true;
+
+  @override
+  Iterable<ASTNode> get children => [variable, keyExpression, expression];
+
+  @override
+  void resolveNode(ASTNode? parentNode) {
+    super.resolveNode(parentNode);
+    variable.resolveNode(parentNode);
+    keyExpression.resolveNode(parentNode);
+    expression.resolveNode(parentNode);
+  }
+
+  @override
+  ASTNode? getNodeIdentifier(String name, {ASTNode? requester}) =>
+      parentNode?.getNodeIdentifier(name, requester: requester);
+
+  @override
+  FutureOr<ASTType> resolveType(VMContext? context) =>
+      expression.resolveType(context);
+
+  @override
+  FutureOr<ASTValue> run(
+    VMContext parentContext,
+    ASTRunStatus runStatus,
+  ) async {
+    var context = defineRunContext(parentContext);
+
+    var keyValue = await keyExpression.run(context, runStatus);
+    var value = await expression.run(context, runStatus);
+    var container = await variable.getValue(context);
+
+    // A Map is always accessed by key (even a numeric one); a positional
+    // container (List) by index.
+    var isMap = container.type is ASTTypeMap;
+    var key = await keyValue.getValue(context);
+
+    ASTValue result;
+    if (operator == ASTAssignmentOperator.set) {
+      result = value;
+    } else {
+      var currentRaw = isMap
+          ? await container.readKey(context, key)
+          : await container.readIndex(context, (key as num).toInt());
+      var current = ASTValue.fromValue(currentRaw);
+      result = await switch (operator) {
+        ASTAssignmentOperator.sum => current + value,
+        ASTAssignmentOperator.subtract => current - value,
+        ASTAssignmentOperator.divide => current / value,
+        ASTAssignmentOperator.divideAsInt => current ~/ value,
+        ASTAssignmentOperator.multiply => current * value,
+        ASTAssignmentOperator.set => value,
+      };
+    }
+
+    var resultRaw = await result.getValue(context);
+    if (isMap) {
+      await container.writeKey(context, key, resultRaw);
+    } else {
+      await container.writeIndex(context, (key as num).toInt(), resultRaw);
+    }
+
+    return result;
+  }
+
+  @override
+  String toString({bool asGroup = false}) {
+    var op = switch (operator) {
+      ASTAssignmentOperator.set => '=',
+      ASTAssignmentOperator.sum => '+=',
+      ASTAssignmentOperator.subtract => '-=',
+      ASTAssignmentOperator.multiply => '*=',
+      ASTAssignmentOperator.divide => '/=',
+      ASTAssignmentOperator.divideAsInt => '~/=',
+    };
+    return '$variable[$keyExpression] $op $expression';
+  }
+}
+
 /// [ASTExpression] to directly apply a change to a variable.
 /// - Operators examples: `++` and `--`
 class ASTExpressionVariableDirectOperation extends ASTExpression {

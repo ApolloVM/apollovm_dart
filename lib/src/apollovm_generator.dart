@@ -212,6 +212,11 @@ abstract class ApolloGenerator<
     O? out,
   });
 
+  O generateASTExpressionVariableEntryAssignment(
+    ASTExpressionVariableEntryAssignment expression, {
+    O? out,
+  }) => throw UnsupportedError("Can't generate entry assignment: $expression");
+
   O generateASTExpressionVariableDirectOperation(
     ASTExpressionVariableDirectOperation expression, {
     O? out,
@@ -245,6 +250,8 @@ abstract class ApolloGenerator<
       return generateASTExpressionVariableAccess(expression, out: out);
     } else if (expression is ASTExpressionVariableAssignment) {
       return generateASTExpressionVariableAssignment(expression, out: out);
+    } else if (expression is ASTExpressionVariableEntryAssignment) {
+      return generateASTExpressionVariableEntryAssignment(expression, out: out);
     } else if (expression is ASTExpressionVariableEntryAccess) {
       return generateASTExpressionVariableEntryAccess(expression, out: out);
     } else if (expression is ASTExpressionLiteral) {

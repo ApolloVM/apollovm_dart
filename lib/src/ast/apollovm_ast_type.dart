@@ -1356,6 +1356,22 @@ class ASTTypeMap<TK extends ASTType<K>, TV extends ASTType<V>, K, V>
   Iterable<ASTNode> get children => [keyType, valueType];
 
   @override
+  bool acceptsType(ASTType type) {
+    // A `dynamic` key/value component acts as a wildcard, so an empty `{}`
+    // literal (typed `Map<dynamic,dynamic>`) is assignable to a typed map like
+    // `Map<String,int>`. Mirrors how lists ignore their element type here.
+    if (type is ASTTypeMap) {
+      bool accepts(ASTType a, ASTType b) =>
+          a is ASTTypeDynamic || b is ASTTypeDynamic || a.acceptsType(b);
+      if (accepts(keyType, type.keyType) &&
+          accepts(valueType, type.valueType)) {
+        return true;
+      }
+    }
+    return super.acceptsType(type);
+  }
+
+  @override
   FutureOr<ASTValue<Map<K, V>>?> toValue(VMContext context, Object? v) {
     if (v == null) return null;
     if (v is ASTValueMap) return v as ASTValueMap<TK, TV, K, V>;

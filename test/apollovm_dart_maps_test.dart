@@ -267,4 +267,180 @@ void main() {
       );
     });
   });
+
+  group('Dart maps: subscript assignment m[k] = v', () {
+    test('add a new key', () async {
+      await _testReturn(
+        '''
+        int f() {
+          Map<int,int> m = {1: 10};
+          m[2] = 20;
+          return m[2];
+        }
+      ''',
+        'f',
+        [],
+        20,
+      );
+    });
+
+    test('update an existing key', () async {
+      await _testReturn(
+        '''
+        int f() {
+          Map<int,int> m = {1: 10};
+          m[1] = 99;
+          return m[1];
+        }
+      ''',
+        'f',
+        [],
+        99,
+      );
+    });
+
+    test('set with String key', () async {
+      await _testReturn(
+        '''
+        int f() {
+          Map<String,int> m = {"a": 1};
+          m["b"] = 2;
+          return m["b"];
+        }
+      ''',
+        'f',
+        [],
+        2,
+      );
+    });
+
+    test('set grows length', () async {
+      await _testReturn(
+        '''
+        int f() {
+          Map<int,int> m = {1: 10};
+          m[2] = 20;
+          m[3] = 30;
+          return m.length;
+        }
+      ''',
+        'f',
+        [],
+        3,
+      );
+    });
+
+    test('set with a variable key', () async {
+      await _testReturn(
+        '''
+        int f(int k) {
+          Map<int,int> m = {1: 10};
+          m[k] = 77;
+          return m[k];
+        }
+      ''',
+        'f',
+        [5],
+        77,
+      );
+    });
+
+    test('set a String value', () async {
+      await _testReturn(
+        '''
+        String f() {
+          Map<int,String> m = {1: "a"};
+          m[2] = "b";
+          return m[2];
+        }
+      ''',
+        'f',
+        [],
+        'b',
+      );
+    });
+
+    test('compound += on a key', () async {
+      await _testReturn(
+        '''
+        int f() {
+          Map<int,int> m = {1: 10};
+          m[1] += 5;
+          return m[1];
+        }
+      ''',
+        'f',
+        [],
+        15,
+      );
+    });
+
+    test('build a frequency map', () async {
+      await _testReturn(
+        '''
+        int f() {
+          Map<String,int> m = {};
+          m["x"] = 0;
+          m["x"] += 1;
+          m["x"] += 1;
+          m["x"] += 1;
+          return m["x"];
+        }
+      ''',
+        'f',
+        [],
+        3,
+      );
+    });
+  });
+
+  group('Dart lists: index assignment a[i] = v', () {
+    test('assign by index', () async {
+      await _testReturn(
+        '''
+        int f() {
+          List<int> a = [1, 2, 3];
+          a[1] = 99;
+          return a[1];
+        }
+      ''',
+        'f',
+        [],
+        99,
+      );
+    });
+
+    test('compound += by index', () async {
+      await _testReturn(
+        '''
+        int f() {
+          List<int> a = [1, 2, 3];
+          a[0] += 10;
+          return a[0];
+        }
+      ''',
+        'f',
+        [],
+        11,
+      );
+    });
+
+    test('reverse a list in place', () async {
+      await _testReturn(
+        '''
+        int f() {
+          List<int> a = [1, 2, 3, 4, 5];
+          a[0] = 5;
+          a[1] = 4;
+          a[3] = 2;
+          a[4] = 1;
+          return a[0] + a[4];
+        }
+      ''',
+        'f',
+        [],
+        6,
+      );
+    });
+  });
 }
