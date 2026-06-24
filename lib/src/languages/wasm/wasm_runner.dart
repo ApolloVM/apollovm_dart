@@ -119,20 +119,7 @@ class ApolloRunnerWasm extends ApolloRunner {
       bd.setInt32(header + 8, dataPtr, Endian.little);
 
       for (var i = 0; i < n; ++i) {
-        var addr = dataPtr + i * elemSize;
-        var v = list[i];
-        switch (elemTag) {
-          case _tagInt:
-            _writeI64(bd, addr, v is BigInt ? v.toInt() : (v as num).toInt());
-          case _tagDouble:
-            bd.setFloat64(addr, (v as num).toDouble(), Endian.little);
-          case _tagBool:
-            bd.setInt32(addr, (v as bool) ? 1 : 0, Endian.little);
-          case _tagString:
-            bd.setInt32(addr, strPtrs![i], Endian.little);
-          default:
-            throw StateError("Unsupported Wasm list element tag: $elemTag");
-        }
+        _writeElem(bd, dataPtr + i * elemSize, elemTag, list[i], strPtrs?[i]);
       }
       return header;
     }
@@ -148,18 +135,80 @@ class ApolloRunnerWasm extends ApolloRunner {
       var out = [];
       for (var i = 0; i < n; ++i) {
         var addr = dataPtr + i * elemSize;
-        switch (elemTag) {
-          case _tagInt:
-            out.add(_readI64(bd, addr));
-          case _tagDouble:
-            out.add(bd.getFloat64(addr, Endian.little));
-          case _tagBool:
-            out.add(bd.getInt32(addr, Endian.little) != 0);
-          case _tagString:
-            out.add(decodeString(bd.getInt32(addr, Endian.little)));
-          default:
-            throw StateError("Unsupported Wasm list element tag: $elemTag");
-        }
+        out.add(_readElem(bd, addr, elemTag, decodeString));
+      }
+      return out;
+    }
+
+    // Encodes a Dart [map] into module memory as the generator's map layout
+    // `[len][cap][keysPtr][valuesPtr]` + parallel key/value buffers, returning
+    // the header pointer. Element encodings as for lists.
+    int encodeMap(Map map, int keyTag, int valTag) {
+      var m = loadedModule!;
+      var entries = map.entries.toList();
+      var n = entries.length;
+      var keySize = elemSizeOf(keyTag);
+      var valSize = elemSizeOf(valTag);
+
+      // Pre-allocate String keys/values first (each alloc grows the bump ptr).
+      List<int>? keyStrPtrs;
+      if (keyTag == _tagString) {
+        keyStrPtrs = [
+          for (var e in entries) allocAndWriteString(e.key as String),
+        ];
+      }
+      List<int>? valStrPtrs;
+      if (valTag == _tagString) {
+        valStrPtrs = [
+          for (var e in entries) allocAndWriteString(e.value as String),
+        ];
+      }
+
+      var keysPtr = m.invokeExport('__alloc', [n * keySize]) as int;
+      var valsPtr = m.invokeExport('__alloc', [n * valSize]) as int;
+      var header = m.invokeExport('__alloc', [16]) as int;
+
+      var mem = m.readMemory()!;
+      var bd = ByteData.sublistView(mem);
+      bd.setInt32(header + 0, n, Endian.little);
+      bd.setInt32(header + 4, n, Endian.little);
+      bd.setInt32(header + 8, keysPtr, Endian.little);
+      bd.setInt32(header + 12, valsPtr, Endian.little);
+
+      for (var i = 0; i < n; ++i) {
+        _writeElem(
+          bd,
+          keysPtr + i * keySize,
+          keyTag,
+          entries[i].key,
+          keyStrPtrs?[i],
+        );
+        _writeElem(
+          bd,
+          valsPtr + i * valSize,
+          valTag,
+          entries[i].value,
+          valStrPtrs?[i],
+        );
+      }
+      return header;
+    }
+
+    // Decodes a module-memory map ([header] pointer) into a Dart `Map`.
+    Map decodeMap(int header, int keyTag, int valTag) {
+      var mem = loadedModule!.readMemory()!;
+      var bd = ByteData.sublistView(mem);
+      var n = bd.getInt32(header + 0, Endian.little);
+      var keysPtr = bd.getInt32(header + 8, Endian.little);
+      var valsPtr = bd.getInt32(header + 12, Endian.little);
+      var keySize = elemSizeOf(keyTag);
+      var valSize = elemSizeOf(valTag);
+
+      var out = {};
+      for (var i = 0; i < n; ++i) {
+        var key = _readElem(bd, keysPtr + i * keySize, keyTag, decodeString);
+        var val = _readElem(bd, valsPtr + i * valSize, valTag, decodeString);
+        out[key] = val;
       }
       return out;
     }
@@ -218,6 +267,8 @@ class ApolloRunnerWasm extends ApolloRunner {
           allParams[i] = allocAndWriteString(arg);
         } else if (pt.isList && arg is List) {
           allParams[i] = encodeList(arg, pt.elemTag);
+        } else if (pt.isMap && arg is Map) {
+          allParams[i] = encodeMap(arg, pt.elemTag, pt.valTag);
         }
       }
     }
@@ -290,6 +341,17 @@ class ApolloRunnerWasm extends ApolloRunner {
       var listReturn = astFunction?.returnType is ASTTypeArray
           ? _elemTagOf((astFunction!.returnType as ASTTypeArray).componentType)
           : (sigReturn != null && sigReturn.isList ? sigReturn.elemTag : null);
+      // `Map` return: an i32 pointer to a map header.
+      ({int keyTag, int valTag})? mapReturn;
+      if (astFunction?.returnType is ASTTypeMap) {
+        var mt = astFunction!.returnType as ASTTypeMap;
+        mapReturn = (
+          keyTag: _elemTagOf(mt.keyType),
+          valTag: _elemTagOf(mt.valueType),
+        );
+      } else if (sigReturn != null && sigReturn.isMap) {
+        mapReturn = (keyTag: sigReturn.elemTag, valTag: sigReturn.valTag);
+      }
 
       if (returnsString) {
         res = decodeString(res as int);
@@ -297,6 +359,8 @@ class ApolloRunnerWasm extends ApolloRunner {
         res = (res as num) != 0;
       } else if (listReturn != null) {
         res = decodeList(res as int, listReturn);
+      } else if (mapReturn != null) {
+        res = decodeMap(res as int, mapReturn.keyTag, mapReturn.valTag);
       }
     }
 
@@ -327,6 +391,54 @@ class ApolloRunnerWasm extends ApolloRunner {
     return b.toSigned(64).toInt();
   }
 
+  /// Writes a collection element of [tag] at [addr]. `String` elements use the
+  /// pre-allocated [strPtr]; numerics/bools are written inline.
+  static void _writeElem(
+    ByteData bd,
+    int addr,
+    int tag,
+    Object? value,
+    int? strPtr,
+  ) {
+    switch (tag) {
+      case _tagInt:
+        _writeI64(
+          bd,
+          addr,
+          value is BigInt ? value.toInt() : (value as num).toInt(),
+        );
+      case _tagDouble:
+        bd.setFloat64(addr, (value as num).toDouble(), Endian.little);
+      case _tagBool:
+        bd.setInt32(addr, (value as bool) ? 1 : 0, Endian.little);
+      case _tagString:
+        bd.setInt32(addr, strPtr!, Endian.little);
+      default:
+        throw StateError("Unsupported Wasm element tag: $tag");
+    }
+  }
+
+  /// Reads a collection element of [tag] at [addr].
+  static Object? _readElem(
+    ByteData bd,
+    int addr,
+    int tag,
+    String Function(int) decodeString,
+  ) {
+    switch (tag) {
+      case _tagInt:
+        return _readI64(bd, addr);
+      case _tagDouble:
+        return bd.getFloat64(addr, Endian.little);
+      case _tagBool:
+        return bd.getInt32(addr, Endian.little) != 0;
+      case _tagString:
+        return decodeString(bd.getInt32(addr, Endian.little));
+      default:
+        throw StateError("Unsupported Wasm element tag: $tag");
+    }
+  }
+
   /// Element tag for an AST list-component type (mirrors the generator's
   /// `_typeTag`). Returns `-1` for unsupported element types.
   static int _elemTagOf(ASTType t) {
@@ -343,6 +455,7 @@ class ApolloRunnerWasm extends ApolloRunner {
   static const int _tagBool = 3;
   static const int _tagString = 4;
   static const int _tagList = 6;
+  static const int _tagMap = 7;
 
   /// Per-module signature cache, keyed by the wasm binary's identity.
   final Map<Uint8List, Map<String, _WasmSig>> _signaturesCache = {};
@@ -381,6 +494,11 @@ class ApolloRunnerWasm extends ApolloRunner {
       var tag = b[pos++];
       if (tag == _tagList) {
         return _WasmType(tag, b[pos++]);
+      }
+      if (tag == _tagMap) {
+        var keyTag = b[pos++];
+        var valTag = b[pos++];
+        return _WasmType(tag, keyTag, valTag);
       }
       return _WasmType(tag, -1);
     }
@@ -471,13 +589,17 @@ class ApolloRunnerWasm extends ApolloRunner {
 }
 
 /// A high-level type from the `apollovm_sig` custom section: a [tag] plus, for a
-/// list ([ApolloRunnerWasm._tagList]), the element tag in [elemTag] (else `-1`).
+/// list ([ApolloRunnerWasm._tagList]), the element tag in [elemTag]; for a map
+/// ([ApolloRunnerWasm._tagMap]), [elemTag] is the key tag and [valTag] the value
+/// tag. Unused sub-tags are `-1`.
 class _WasmType {
   final int tag;
   final int elemTag;
-  const _WasmType(this.tag, this.elemTag);
+  final int valTag;
+  const _WasmType(this.tag, this.elemTag, [this.valTag = -1]);
 
   bool get isList => tag == ApolloRunnerWasm._tagList;
+  bool get isMap => tag == ApolloRunnerWasm._tagMap;
 }
 
 /// A parsed public-function signature (return type + parameter types).

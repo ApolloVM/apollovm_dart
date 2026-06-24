@@ -122,7 +122,7 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
   }
 
   /// Type tag used by the `apollovm_sig` custom section.
-  /// 0=void, 1=int, 2=double, 3=bool, 4=String, 5=other, 6=list.
+  /// 0=void, 1=int, 2=double, 3=bool, 4=String, 5=other, 6=list, 7=map.
   static int _typeTag(ASTType t) {
     if (t is ASTTypeVoid) return 0;
     if (t is ASTTypeInt) return 1;
@@ -130,42 +130,58 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     if (t is ASTTypeBool) return 3;
     if (t is ASTTypeString) return 4;
     if (t is ASTTypeArray) return 6;
+    if (t is ASTTypeMap) return 7;
     return 5;
   }
 
   /// Encodes a type as a descriptor for the `apollovm_sig` section. Scalars are
-  /// a single tag byte; a list is `[6, <element tag>]` so the runner can marshal
-  /// the whole collection across the host boundary.
+  /// a single tag byte; a list is `[6, <element tag>]` and a map is
+  /// `[7, <key tag>, <value tag>]` so the runner can marshal the whole
+  /// collection across the host boundary.
   static List<int> _typeDescriptor(ASTType t) {
     if (t is ASTTypeArray) {
       return [6, _typeTag(t.componentType)];
+    }
+    if (t is ASTTypeMap) {
+      return [7, _typeTag(t.keyType), _typeTag(t.valueType)];
     }
     return [_typeTag(t)];
   }
 
   /// Whether the module needs the `apollovm_sig` custom section: any public
   /// function with a return/param the runner must marshal from/to its raw Wasm
-  /// value — a String, a `bool` return, or a list (param or return).
+  /// value — a String, a `bool` return, or a list/map (param or return).
   bool _requiresSignatureSection(WasmModuleContext module) {
     bool needs(ASTType t) =>
-        t is ASTTypeString || t is ASTTypeBool || t is ASTTypeArray;
+        t is ASTTypeString ||
+        t is ASTTypeBool ||
+        t is ASTTypeArray ||
+        t is ASTTypeMap;
     for (var f in module.functions) {
       if (f.modifiers.isPrivate) continue;
       if (needs(f.returnType)) return true;
       for (var p in f.parameters.allParameters) {
-        if (p.type is ASTTypeString || p.type is ASTTypeArray) return true;
+        if (p.type is ASTTypeString ||
+            p.type is ASTTypeArray ||
+            p.type is ASTTypeMap) {
+          return true;
+        }
       }
     }
     return false;
   }
 
   /// Whether any public function has a parameter the host must allocate into
-  /// module memory (a String or a List), requiring an exported `__alloc`.
+  /// module memory (a String, List, or Map), requiring an exported `__alloc`.
   bool _hasMarshalledParam(WasmModuleContext module) {
     for (var f in module.functions) {
       if (f.modifiers.isPrivate) continue;
       for (var p in f.parameters.allParameters) {
-        if (p.type is ASTTypeString || p.type is ASTTypeArray) return true;
+        if (p.type is ASTTypeString ||
+            p.type is ASTTypeArray ||
+            p.type is ASTTypeMap) {
+          return true;
+        }
       }
     }
     return false;
