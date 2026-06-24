@@ -92,8 +92,7 @@ class KotlinGrammarDefinition extends KotlinGrammarLexer {
 
   Parser<ASTStatementImport> importDirective() =>
       (importToken().trimHidden() &
-              ((identifier() &
-                          (char('.') & (identifier() | char('*'))).star())
+              ((identifier() & (char('.') & (identifier() | char('*'))).star())
                       .flatten())
                   .trimHidden() &
               char(';').trimHidden().optional())
@@ -713,7 +712,9 @@ class KotlinGrammarDefinition extends KotlinGrammarLexer {
             var entries = <MapEntry<ASTExpression, ASTExpression>>[];
             var entriesOpt = v[2];
             if (entriesOpt != null) {
-              entries.add(entriesOpt[0] as MapEntry<ASTExpression, ASTExpression>);
+              entries.add(
+                entriesOpt[0] as MapEntry<ASTExpression, ASTExpression>,
+              );
               for (var tail in (entriesOpt[1] as List)) {
                 entries.add(tail[1] as MapEntry<ASTExpression, ASTExpression>);
               }
@@ -860,10 +861,9 @@ class KotlinGrammarDefinition extends KotlinGrammarLexer {
         return ASTValueNum.from(value, negative: negative);
       });
 
-  Parser<ASTValue<String>> literalString() =>
-      (stringLexicalToken()).map((v) {
-        return v.asValue();
-      });
+  Parser<ASTValue<String>> literalString() => (stringLexicalToken()).map((v) {
+    return v.asValue();
+  });
 
   static List _expandListDeeply(List l) {
     if (l.isEmpty) return l;

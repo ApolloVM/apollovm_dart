@@ -113,11 +113,7 @@ class Calc {
     });
 
     test('parse + run class method', () async {
-      var output = await _run(
-        'kotlin',
-        kotlinClass,
-        className: 'Calc',
-      );
+      var output = await _run('kotlin', kotlinClass, className: 'Calc');
       expect(output, equals(['square=81']));
     });
 

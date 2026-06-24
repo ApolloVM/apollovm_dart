@@ -82,8 +82,7 @@ abstract class KotlinGrammarLexer extends BaseGrammarLexer {
   // template expressions, and `"""` raw multi-line strings).
   // -----------------------------------------------------------------
   Parser<ParsedString> stringLexicalToken() =>
-      (ref0(multiLineStringLexicalToken) |
-              ref0(singleLineStringLexicalToken))
+      (ref0(multiLineStringLexicalToken) | ref0(singleLineStringLexicalToken))
           .trim()
           .cast<ParsedString>();
 
