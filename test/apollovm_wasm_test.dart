@@ -1326,6 +1326,126 @@ void main() async {
         },
       ),
     );
+    test(
+      'call simple (function calling function)',
+      () => _testWasm(
+        language: 'dart',
+        code: r'''
+
+          int sq(int x) {
+            return x * x;
+          }
+
+          int f(int a) {
+            return sq(a) + 1;
+          }
+
+        ''',
+        functionName: 'f',
+        executions: {
+          [3]: 10,
+          [5]: 26,
+        },
+      ),
+    );
+
+    test(
+      'call chain (3-function chain)',
+      () => _testWasm(
+        language: 'dart',
+        code: r'''
+
+          int a(int x) {
+            return x + 1;
+          }
+
+          int b(int x) {
+            return a(x) * 2;
+          }
+
+          int c(int x) {
+            return b(x) - 3;
+          }
+
+        ''',
+        functionName: 'c',
+        executions: {
+          [5]: 9,
+          [10]: 19,
+        },
+      ),
+    );
+
+    test(
+      'call mixed int/double params',
+      () => _testWasm(
+        language: 'dart',
+        code: r'''
+
+          double half(double v) {
+            return v / 2.0;
+          }
+
+          double g(int n) {
+            return half(n) + 1.0;
+          }
+
+        ''',
+        functionName: 'g',
+        executions: {
+          [4]: 3.0,
+          [10]: 6.0,
+        },
+      ),
+    );
+
+    test(
+      'call recursion (factorial)',
+      () => _testWasm(
+        language: 'dart',
+        code: r'''
+
+          int fact(int n) {
+            if (n < 2) {
+              return 1;
+            }
+            return n * fact(n - 1);
+          }
+
+        ''',
+        functionName: 'fact',
+        executions: {
+          [0]: 1,
+          [1]: 1,
+          [5]: 120,
+          [6]: 720,
+        },
+      ),
+    );
+
+    test(
+      'call recursion (sum-to-n)',
+      () => _testWasm(
+        language: 'dart',
+        code: r'''
+
+          int sumTo(int n) {
+            if (n < 1) {
+              return 0;
+            }
+            return n + sumTo(n - 1);
+          }
+
+        ''',
+        functionName: 'sumTo',
+        executions: {
+          [0]: 0,
+          [1]: 1,
+          [5]: 15,
+          [10]: 55,
+        },
+      ),
+    );
   });
 }
 
