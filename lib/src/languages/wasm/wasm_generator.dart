@@ -525,18 +525,75 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
   BytesOutput generateASTExpressionNegation(
     ASTExpressionNegation expression, {
     BytesOutput? out,
+    WasmContext? context,
   }) {
-    // TODO: implement generateASTExpressionNegation
-    throw UnimplementedError('generateASTExpressionNegation');
+    out ??= newOutput();
+    context ??= WasmContext();
+
+    final stackLng0 = context.stackLength;
+
+    generateASTExpression(expression.expression, out: out, context: context);
+
+    context.assertStackLength(stackLng0 + 1, "After negation operand");
+
+    var stackType = context.stackGet(0)!.type;
+    if (stackType != _astTypeInt32) {
+      throw StateError(
+        "Logical negation `!` needs a boolean (i32) value: $stackType",
+      );
+    }
+
+    out.writeByte(
+      Wasm32.i32EqualsToZero,
+      description: "[OP] operator: not (i32.eqz)",
+    );
+    context.stackOperationUnary(_astTypeInt32, "i32.eqz (not)");
+
+    context.assertStackLength(stackLng0 + 1, "After negation result");
+
+    return out;
   }
 
   @override
   BytesOutput generateASTExpressionNegative(
     ASTExpressionNegative expression, {
     BytesOutput? out,
+    WasmContext? context,
   }) {
-    // TODO: implement generateASTExpressionNegative
-    throw UnimplementedError('generateASTExpressionNegative');
+    out ??= newOutput();
+    context ??= WasmContext();
+
+    final stackLng0 = context.stackLength;
+
+    generateASTExpression(expression.expression, out: out, context: context);
+
+    context.assertStackLength(stackLng0 + 1, "After negative operand");
+
+    var stackType = context.stackGet(0)!.type;
+
+    if (stackType == _astTypeDouble64 || stackType == _astTypeDouble) {
+      out.writeByte(
+        Wasm64.f64Negation,
+        description: "[OP] operator: negative (f64.neg)",
+      );
+      // Unary: top stays f64 (stack length unchanged).
+    } else {
+      // No `i64.neg` opcode: negate via `x * -1`.
+      out.write(
+        Wasm64.i64Const(-1),
+        description: "[OP] push constant(i64): -1 (negate)",
+      );
+      context.stackPush(_astTypeInt64, "negate -1");
+      out.writeByte(
+        Wasm64.i64Multiply,
+        description: "[OP] operator: negative (i64.mul -1)",
+      );
+      context.stackOperationBinary(_astTypeInt64, "i64.mul (negate)");
+    }
+
+    context.assertStackLength(stackLng0 + 1, "After negative result");
+
+    return out;
   }
 
   ASTTypeDouble _fixStackOpsAsFloat64(
@@ -948,6 +1005,43 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
             Wasm64.i64LessThanOrEqualsSigned,
             "lowerEquals(i64)",
             "i64.lowerOrEqualsSigned",
+          );
+        }
+      case ASTExpressionOperator.remainder:
+        {
+          // Dart `%` on doubles has no direct Wasm f64 opcode (and i64.rem_s
+          // gives a truncated remainder, matching Dart only for non-negative
+          // operands). Support the common integer, non-negative case.
+          if (stackType2 == _astTypeDouble64 || stackType2 == _astTypeDouble) {
+            throw UnsupportedError(
+              "Wasm Operator not supported for double: remainder (%)",
+            );
+          }
+          writeOperation(
+            _astTypeInt64,
+            Wasm64.i64RemainderSigned,
+            "remainder(i64)",
+            "i64.rem_s",
+          );
+        }
+      case ASTExpressionOperator.and:
+        {
+          // Non-short-circuit logical AND on i32 booleans (0/1).
+          writeOperation(
+            _astTypeInt32,
+            Wasm32.i32BitwiseAnd,
+            "and(i32)",
+            "i32.and",
+          );
+        }
+      case ASTExpressionOperator.or:
+        {
+          // Non-short-circuit logical OR on i32 booleans (0/1).
+          writeOperation(
+            _astTypeInt32,
+            Wasm32.i32BitwiseOr,
+            "or(i32)",
+            "i32.or",
           );
         }
       default:
@@ -1711,9 +1805,17 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     } else if (expression is ASTExpressionMapLiteral) {
       return generateASTExpressionMapLiteral(expression, out: out);
     } else if (expression is ASTExpressionNegation) {
-      return generateASTExpressionNegation(expression, out: out);
+      return generateASTExpressionNegation(
+        expression,
+        out: out,
+        context: context,
+      );
     } else if (expression is ASTExpressionNegative) {
-      return generateASTExpressionNegative(expression, out: out);
+      return generateASTExpressionNegative(
+        expression,
+        out: out,
+        context: context,
+      );
     } else if (expression is ASTExpressionLocalFunctionInvocation) {
       return generateASTExpressionLocalFunctionInvocation(expression, out: out);
     } else if (expression is ASTExpressionObjectFunctionInvocation) {
@@ -1776,6 +1878,8 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       return generateASTValueInt(value, out: out, context: context);
     } else if (value is ASTValueDouble) {
       return generateASTValueDouble(value, out: out, context: context);
+    } else if (value is ASTValueBool) {
+      return generateASTValueBool(value, out: out, context: context);
     } else if (value is ASTValueNull) {
       return generateASTValueNull(value, out: out);
     } else if (value is ASTValueVar) {
@@ -1858,6 +1962,25 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
 
     out.write(Wasm64.i64Const(v), description: "[OP] push constant(i64): $v");
     context.stackPush(_astTypeInt64, "int literal: $v");
+
+    return out;
+  }
+
+  BytesOutput generateASTValueBool(
+    ASTValueBool value, {
+    BytesOutput? out,
+    WasmContext? context,
+  }) {
+    out ??= newOutput();
+    context ??= WasmContext();
+
+    var v = value.value;
+
+    out.write(
+      Wasm32.i32Const(v ? 1 : 0),
+      description: "[OP] push constant(bool/i32): $v",
+    );
+    context.stackPush(_astTypeInt32, "bool literal: $v");
 
     return out;
   }
@@ -2218,6 +2341,8 @@ extension _ASTTypeExtension on ASTType {
       return WasmType.i64Type;
     } else if (this is ASTTypeDouble) {
       return WasmType.f64Type;
+    } else if (this is ASTTypeBool) {
+      return WasmType.i32Type;
     } else if (this is ASTTypeVoid) {
       return WasmType.voidType;
     } else if (name == 'void') {
