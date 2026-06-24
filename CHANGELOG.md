@@ -1,5 +1,8 @@
 ## 0.1.27
 
+- Wasm collections — map `.keys` / `.values` + iteration (P3, part 7):
+  - `m.keys` and `m.values` now compile to Wasm: each materializes a fresh list by copying the map's parallel key (or value) buffer (which already has the list element layout), so `for (var k in m.keys)` / `for (var v in m.values)` work via the existing list for-each. Matches the interpreter on both `wasm_run` and Chrome.
+  - The for-each loop-variable type resolver now derives the element type from the map (`m.keys` → key type, `m.values` → value type) so the loop variable is correctly typed.
 - Wasm collections — maps with `String` keys (P3, part 6):
   - `Map<String, V>` now compiles to Wasm (`V` = `int`/`double`/`String`/`bool`): literals, `m[k]` get, `m[k] = v` set, `.length`/`.isEmpty`/`.isNotEmpty`, and `.containsKey(k)`. Matches the interpreter on both `wasm_run` and Chrome.
   - String keys are stored as i32 pointers and compared by content via a synthesized `__streq(a, b)` helper (length check + byte loop), so e.g. `containsKey("app")` correctly returns `false` for a map keyed by `"apple"`, and multi-byte UTF-8 keys work.

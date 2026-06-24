@@ -457,4 +457,99 @@ void main() {
       );
     });
   });
+
+  group('Wasm maps: .keys / .values iteration', () {
+    test('sum keys (int keys)', () async {
+      await _testWasmReturn(
+        '''
+        int f() {
+          Map<int,int> m = {1: 10, 2: 20, 3: 30};
+          int s = 0;
+          for (var k in m.keys) {
+            s = s + k;
+          }
+          return s;
+        }
+      ''',
+        'f',
+        [],
+        6,
+      );
+    });
+
+    test('sum values (int keys)', () async {
+      await _testWasmReturn(
+        '''
+        int f() {
+          Map<int,int> m = {1: 10, 2: 20, 3: 30};
+          int s = 0;
+          for (var v in m.values) {
+            s = s + v;
+          }
+          return s;
+        }
+      ''',
+        'f',
+        [],
+        60,
+      );
+    });
+
+    test('values reflect prior sets (incl. grow)', () async {
+      await _testWasmReturn(
+        '''
+        int f() {
+          Map<int,int> m = {1: 10};
+          m[2] = 20;
+          m[3] = 30;
+          m[4] = 40;
+          int s = 0;
+          for (var v in m.values) {
+            s = s + v;
+          }
+          return s;
+        }
+      ''',
+        'f',
+        [],
+        100,
+      );
+    });
+
+    test('count keys (String keys)', () async {
+      await _testWasmReturn(
+        '''
+        int f() {
+          Map<String,int> m = {"a": 1, "bb": 2, "ccc": 3};
+          int c = 0;
+          for (var k in m.keys) {
+            c = c + 1;
+          }
+          return c;
+        }
+      ''',
+        'f',
+        [],
+        3,
+      );
+    });
+
+    test('sum values (String keys)', () async {
+      await _testWasmReturn(
+        '''
+        int f() {
+          Map<String,int> m = {"x": 5, "y": 7, "z": 9};
+          int s = 0;
+          for (var v in m.values) {
+            s = s + v;
+          }
+          return s;
+        }
+      ''',
+        'f',
+        [],
+        21,
+      );
+    });
+  });
 }
