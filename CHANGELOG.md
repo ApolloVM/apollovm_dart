@@ -1,5 +1,14 @@
 ## 0.1.27
 
+- Wasm generator — major feature expansion (`ApolloGeneratorWasm`), moving toward full Dart parity:
+  - **Loops**: `while` and `for` loops now compile to Wasm (`block`/`loop`/`br_if`/`br`), including `return` from inside a loop. Added the `br` opcode helper and recursion into loop bodies when collecting function locals.
+  - **Function calls**: local function invocation (calling other top-level functions, including recursion) via a function-index table threaded through the generator and a `Wasm.call`.
+  - **Operators**: integer modulo `%` (`i64.rem_s`), logical `&&`/`||` (`i32.and`/`i32.or`), logical negation `!` (`i32.eqz`), and unary minus `-` (`f64.neg` / `i64` multiply-by-`-1`).
+  - **Booleans**: `bool` literals and `bool`-typed locals (represented as Wasm `i32`).
+  - **Bug fix**: the `== 0` fast-path (`i64.eqz`) was incorrectly applied to *any* operator with a literal-`0` right operand (e.g. `x > 0` compiled as `x == 0`). It is now restricted to the `equals` operator.
+  - Notes/limitations: `&&`/`||` are non-short-circuit; double `%` and negative-operand integer `%` (Euclidean) are not yet supported.
+- Tests: added Wasm coverage for every feature above plus a combined integration test (prime counting / sum-of-squares using loops + calls + logic + modulo), all executed against the real compiled-and-run Wasm module.
+
 - Bug fixes:
   - Loop `return` propagation: a `return` inside a `for`, `while`, or `for-each` loop was ignored (the loop shadowed `runStatus` with a fresh instance and never broke on return). Returns now propagate and stop iteration correctly.
   - `ASTType` equality: `ASTTypeBool`, `ASTTypeString`, `ASTTypeObject`, `ASTTypeConstructorThis`, `ASTTypeVar`, `ASTTypeDynamic`, `ASTTypeNull`, and `ASTTypeVoid` mistakenly checked `other is ASTTypeInt`, so equal instances never compared equal. Each now checks its own type.

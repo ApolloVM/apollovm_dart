@@ -1203,6 +1203,249 @@ void main() async {
         },
       ),
     );
+
+    test(
+      'whileSum',
+      () => _testWasm(
+        language: 'dart',
+        code: r'''
+
+          int whileSum(int n) {
+            int sum = 0;
+            int i = 0;
+            while (i <= n) {
+              sum = sum + i;
+              i = i + 1;
+            }
+            return sum;
+          }
+
+        ''',
+        functionName: 'whileSum',
+        executions: {
+          [0]: 0,
+          [5]: 15,
+          [10]: 55,
+        },
+      ),
+    );
+
+    test(
+      'forSum',
+      () => _testWasm(
+        language: 'dart',
+        code: r'''
+
+          int forSum(int n) {
+            int sum = 0;
+            for (int i = 1; i <= n; i = i + 1) {
+              sum = sum + i;
+            }
+            return sum;
+          }
+
+        ''',
+        functionName: 'forSum',
+        executions: {
+          [0]: 0,
+          [4]: 10,
+          [5]: 15,
+        },
+      ),
+    );
+
+    test(
+      'forFactorial',
+      () => _testWasm(
+        language: 'dart',
+        code: r'''
+
+          int forFactorial(int n) {
+            int p = 1;
+            for (int i = 1; i <= n; i = i + 1) {
+              p = p * i;
+            }
+            return p;
+          }
+
+        ''',
+        functionName: 'forFactorial',
+        executions: {
+          [1]: 1,
+          [4]: 24,
+          [5]: 120,
+        },
+      ),
+    );
+
+    test(
+      'nestedLoop',
+      () => _testWasm(
+        language: 'dart',
+        code: r'''
+
+          int nestedLoop(int a, int b) {
+            int count = 0;
+            for (int i = 1; i <= a; i = i + 1) {
+              for (int j = 1; j <= b; j = j + 1) {
+                count = count + 1;
+              }
+            }
+            return count;
+          }
+
+        ''',
+        functionName: 'nestedLoop',
+        executions: {
+          [3, 4]: 12,
+          [2, 5]: 10,
+        },
+      ),
+    );
+
+    test(
+      'doubleAccumLoop',
+      () => _testWasm(
+        language: 'dart',
+        code: r'''
+
+          double doubleAccumLoop(int n) {
+            double acc = 0.0;
+            for (int i = 0; i < n; i = i + 1) {
+              acc = acc + 0.5;
+            }
+            return acc;
+          }
+
+        ''',
+        functionName: 'doubleAccumLoop',
+        executions: {
+          [0]: 0.0,
+          [4]: 2.0,
+          [10]: 5.0,
+        },
+      ),
+    );
+    test(
+      'call simple (function calling function)',
+      () => _testWasm(
+        language: 'dart',
+        code: r'''
+
+          int sq(int x) {
+            return x * x;
+          }
+
+          int f(int a) {
+            return sq(a) + 1;
+          }
+
+        ''',
+        functionName: 'f',
+        executions: {
+          [3]: 10,
+          [5]: 26,
+        },
+      ),
+    );
+
+    test(
+      'call chain (3-function chain)',
+      () => _testWasm(
+        language: 'dart',
+        code: r'''
+
+          int a(int x) {
+            return x + 1;
+          }
+
+          int b(int x) {
+            return a(x) * 2;
+          }
+
+          int c(int x) {
+            return b(x) - 3;
+          }
+
+        ''',
+        functionName: 'c',
+        executions: {
+          [5]: 9,
+          [10]: 19,
+        },
+      ),
+    );
+
+    test(
+      'call mixed int/double params',
+      () => _testWasm(
+        language: 'dart',
+        code: r'''
+
+          double half(double v) {
+            return v / 2.0;
+          }
+
+          double g(int n) {
+            return half(n) + 1.0;
+          }
+
+        ''',
+        functionName: 'g',
+        executions: {
+          [4]: 3.0,
+          [10]: 6.0,
+        },
+      ),
+    );
+
+    test(
+      'call recursion (factorial)',
+      () => _testWasm(
+        language: 'dart',
+        code: r'''
+
+          int fact(int n) {
+            if (n < 2) {
+              return 1;
+            }
+            return n * fact(n - 1);
+          }
+
+        ''',
+        functionName: 'fact',
+        executions: {
+          [0]: 1,
+          [1]: 1,
+          [5]: 120,
+          [6]: 720,
+        },
+      ),
+    );
+
+    test(
+      'call recursion (sum-to-n)',
+      () => _testWasm(
+        language: 'dart',
+        code: r'''
+
+          int sumTo(int n) {
+            if (n < 1) {
+              return 0;
+            }
+            return n + sumTo(n - 1);
+          }
+
+        ''',
+        functionName: 'sumTo',
+        executions: {
+          [0]: 0,
+          [1]: 1,
+          [5]: 15,
+          [10]: 55,
+        },
+      ),
+    );
   });
 }
 
@@ -1393,14 +1636,14 @@ Future<void> _testWasm({
     );
   }
 
-  expect(expectedWasmBytes, isNotNull, reason: "Null `expectedWasmBytes`");
-
-  print('<< EXPECTED WASM: HEX>>\n${hex.encode(expectedWasmBytes!)}');
-
   var output = compiledWasm?.output();
   print('<< GENERATED WASM: HEX>>\n${hex.encode(output!)}');
 
-  expect(output, expectedWasmBytes);
+  // Only assert exact bytes when an expectation was provided.
+  if (expectedWasmBytes != null) {
+    print('<< EXPECTED WASM: HEX>>\n${hex.encode(expectedWasmBytes)}');
+    expect(output, expectedWasmBytes);
+  }
 }
 
 /*
