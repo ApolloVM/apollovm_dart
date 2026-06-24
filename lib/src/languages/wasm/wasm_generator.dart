@@ -3,6 +3,7 @@
 // Please refer to the LICENSE and AUTHORS files for details.
 
 import 'dart:collection';
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:collection/collection.dart';
@@ -26,6 +27,8 @@ final _astTypeInt64 = ASTTypeInt.instance64;
 final _astTypeDouble = ASTTypeDouble.instance;
 //final _astTypeDouble32 = ASTTypeDouble.instance32;
 final _astTypeDouble64 = ASTTypeDouble.instance64;
+
+final _astTypeString = ASTTypeString.instance;
 
 /// Wasm binary generator.
 ///
@@ -60,28 +63,51 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     out.write(Wasm.magicModuleHeader, description: "Wasm Magic");
     out.write(Wasm.moduleVersion, description: "Version 1");
 
-    var sectionType = generateSectionType(root);
-    var sectionFunction = generateSectionFunction(root, sectionType.functions);
-    var sectionExports = generateSectionExport(root, sectionType.functions);
-    var sectionCode = generateSectionCode(root, sectionType.functions);
+    var functions = root.functions.expand((fs) => fs.functions).toList();
+    var module = WasmModuleContext(functions);
 
-    out.writeBytes(sectionType.bytes, description: "Section: Type");
+    // Body-first: generate the Code section first so that body codegen can
+    // register host imports and string literals on [module]; the Type/Import/
+    // Memory/Data sections below then reflect what was discovered.
+    var sectionCode = generateSectionCode(module);
+
+    var sectionType = generateSectionType(module);
+    var sectionFunction = generateSectionFunction(module);
+    var sectionExports = generateSectionExport(module);
+
+    // Sections must be emitted in ascending ID order.
+    out.writeBytes(sectionType, description: "Section: Type");
+    if (module.importCount > 0) {
+      out.writeBytes(
+        generateSectionImport(module),
+        description: "Section: Import",
+      );
+    }
     out.writeBytes(sectionFunction, description: "Section: Function");
+    if (module.requiresMemory) {
+      out.writeBytes(
+        generateSectionMemory(module),
+        description: "Section: Memory",
+      );
+    }
     out.writeBytes(sectionExports, description: "Section: Export");
     out.writeBytes(sectionCode, description: "Section: Code");
+    if (module.hasData) {
+      out.writeBytes(generateSectionData(module), description: "Section: Data");
+    }
 
     return out;
   }
 
   BytesOutput generateSectionExport(
-    ASTBlock block,
-    List<ASTFunctionDeclaration> functions, {
+    WasmModuleContext module, {
     BytesOutput? out,
   }) {
     out ??= newOutput();
 
-    var functionsIndexed = functions
-        .mapIndexed((i, f) => MapEntry(f, i))
+    var importCount = module.importCount;
+    var functionsIndexed = module.functions
+        .mapIndexed((i, f) => MapEntry(f, importCount + i))
         .toList();
 
     var publicFunctions = functionsIndexed
@@ -108,6 +134,29 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       );
     }).toList();
 
+    // Export the linear memory (as `memory`) so the host can read/write it.
+    if (module.requiresMemory) {
+      entries.add(
+        BytesOutput(
+          data: [
+            BytesOutput(
+              data: Wasm.encodeString('memory'),
+              description: "Memory name(`memory`)",
+            ),
+            BytesOutput(
+              data: Wasm.externalKindMemory,
+              description: "Export type(memory)",
+            ),
+            BytesOutput(
+              data: Leb128.encodeUnsigned(0),
+              description: "Memory index(0)",
+            ),
+          ],
+          description: "Export memory",
+        ),
+      );
+    }
+
     entries.insert(
       0,
       BytesOutput(
@@ -116,19 +165,27 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       ),
     );
 
-    out.writeByte(0x07, description: "Section Export ID");
+    out.writeByte(Wasm.sectionExport, description: "Section Export ID");
     out.writeBytesLeb128Block(entries, description: "Exported types");
 
     return out;
   }
 
-  ({BytesOutput bytes, List<ASTFunctionDeclaration> functions})
-  generateSectionType(ASTBlock block, {BytesOutput? out}) {
+  BytesOutput generateSectionType(
+    WasmModuleContext module, {
+    BytesOutput? out,
+  }) {
     out ??= newOutput();
 
-    var functions = block.functions.expand((fs) => fs.functions).toList();
+    // Imported-function signatures come first (their type indices 0..K-1),
+    // then the module-defined functions.
+    var entries = <BytesOutput>[
+      ...module.importedFunctions.map(
+        (imp) => _wasmFuncTypeBytes(imp.params, imp.results),
+      ),
+      ...module.functions.map((f) => f.wasmSignature()),
+    ];
 
-    var entries = functions.map((f) => f.wasmSignature()).toList();
     entries.insert(
       0,
       BytesOutput(
@@ -137,40 +194,153 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       ),
     );
 
-    out.writeByte(0x01, description: "Section Type ID");
+    out.writeByte(Wasm.sectionType, description: "Section Type ID");
     out.writeBytesLeb128Block(entries, description: "Functions signatures");
 
-    return (bytes: out, functions: functions);
+    return out;
   }
 
-  BytesOutput generateSectionFunction(
-    ASTBlock block,
-    List<ASTFunctionDeclaration> functions, {
+  BytesOutput generateSectionImport(
+    WasmModuleContext module, {
     BytesOutput? out,
   }) {
     out ??= newOutput();
 
-    var indexes = functions
-        .mapIndexed((i, e) => Leb128.encodeUnsigned(i))
+    var entries = module.importedFunctions.mapIndexed((typeIndex, imp) {
+      return BytesOutput(
+        data: [
+          BytesOutput(
+            data: Wasm.encodeString(imp.module),
+            description: "Import module(`${imp.module}`)",
+          ),
+          BytesOutput(
+            data: Wasm.encodeString(imp.name),
+            description: "Import name(`${imp.name}`)",
+          ),
+          BytesOutput(
+            data: Wasm.externalKindFunction,
+            description: "Import kind(function)",
+          ),
+          BytesOutput(
+            data: Leb128.encodeUnsigned(typeIndex),
+            description: "Import type index($typeIndex)",
+          ),
+        ],
+        description: "Import `${imp.module}.${imp.name}`",
+      );
+    }).toList();
+
+    entries.insert(
+      0,
+      BytesOutput(
+        data: Leb128.encodeUnsigned(entries.length),
+        description: "Imports count",
+      ),
+    );
+
+    out.writeByte(Wasm.sectionImport, description: "Section Import ID");
+    out.writeBytesLeb128Block(entries, description: "Imports");
+
+    return out;
+  }
+
+  BytesOutput generateSectionFunction(
+    WasmModuleContext module, {
+    BytesOutput? out,
+  }) {
+    out ??= newOutput();
+
+    // Each defined function references its type index, offset past the imports.
+    var importCount = module.importCount;
+    var indexes = module.functions
+        .mapIndexed((i, e) => Leb128.encodeUnsigned(importCount + i))
         .toList();
 
     indexes.insert(0, Leb128.encodeUnsigned(indexes.length));
 
-    out.writeByte(0x03, description: "Section Function ID");
+    out.writeByte(Wasm.sectionFunction, description: "Section Function ID");
     out.writeLeb128Block(indexes, description: "Functions type indexes");
 
     return out;
   }
 
-  BytesOutput generateSectionCode(
-    ASTBlock block,
-    List<ASTFunctionDeclaration<dynamic>> functions, {
+  BytesOutput generateSectionMemory(
+    WasmModuleContext module, {
     BytesOutput? out,
   }) {
     out ??= newOutput();
 
-    var entries = functions
-        .map((f) => generateASTFunctionDeclaration(f, functions: functions))
+    // One memory, limits = { min: memoryMinPages } (flags 0x00, no max).
+    var entry = BytesOutput(
+      data: [
+        BytesOutput(data: 0x00, description: "Limits flags(min only)"),
+        BytesOutput(
+          data: Leb128.encodeUnsigned(module.memoryMinPages),
+          description: "Min pages(${module.memoryMinPages})",
+        ),
+      ],
+      description: "Memory 0",
+    );
+
+    out.writeByte(Wasm.sectionMemory, description: "Section Memory ID");
+    out.writeBytesLeb128Block([
+      BytesOutput(
+        data: Leb128.encodeUnsigned(1),
+        description: "Memories count",
+      ),
+      entry,
+    ], description: "Memories");
+
+    return out;
+  }
+
+  BytesOutput generateSectionData(
+    WasmModuleContext module, {
+    BytesOutput? out,
+  }) {
+    out ??= newOutput();
+
+    // One active data segment at memory 0, offset = dataBaseOffset.
+    var bytes = module.dataBytes;
+    var segment = BytesOutput(
+      data: [
+        BytesOutput(data: 0x00, description: "Data kind(active, mem 0)"),
+        BytesOutput(
+          data: [
+            ...Wasm32.i32Const(WasmModuleContext.dataBaseOffset),
+            Wasm.end,
+          ],
+          description:
+              "Offset expr (i32.const ${WasmModuleContext.dataBaseOffset})",
+        ),
+        BytesOutput(
+          data: [...Leb128.encodeUnsigned(bytes.length), ...bytes],
+          description: "Data bytes(${bytes.length})",
+        ),
+      ],
+      description: "Data segment 0",
+    );
+
+    out.writeByte(Wasm.sectionData, description: "Section Data ID");
+    out.writeBytesLeb128Block([
+      BytesOutput(
+        data: Leb128.encodeUnsigned(1),
+        description: "Data segments count",
+      ),
+      segment,
+    ], description: "Data segments");
+
+    return out;
+  }
+
+  BytesOutput generateSectionCode(
+    WasmModuleContext module, {
+    BytesOutput? out,
+  }) {
+    out ??= newOutput();
+
+    var entries = module.functions
+        .map((f) => generateASTFunctionDeclaration(f, module: module))
         .toList();
 
     entries.insert(
@@ -181,10 +351,37 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       ),
     );
 
-    out.writeByte(0x0A, description: "Section Code ID");
+    out.writeByte(Wasm.sectionCode, description: "Section Code ID");
     out.writeBytesLeb128Block(entries, description: "Functions bodies");
 
     return out;
+  }
+
+  /// Builds a Wasm function-type entry `0x60 vec(params) vec(results)`.
+  BytesOutput _wasmFuncTypeBytes(
+    List<WasmType> params,
+    List<WasmType> results,
+  ) {
+    return BytesOutput(
+      data: [
+        BytesOutput(data: Wasm.functionType, description: "Type: function"),
+        BytesOutput(
+          data: [
+            ...Leb128.encodeUnsigned(params.length),
+            ...params.map((t) => t.value),
+          ],
+          description: "Params",
+        ),
+        BytesOutput(
+          data: [
+            ...Leb128.encodeUnsigned(results.length),
+            ...results.map((t) => t.value),
+          ],
+          description: "Results",
+        ),
+      ],
+      description: "Imported function type",
+    );
   }
 
   ({ASTType type, int index}) _getLocalVariable(
@@ -507,6 +704,11 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     var arguments = expression.arguments;
     var argsCount = arguments.length;
 
+    // Built-in external `print(Object)` lowers to a host import call.
+    if (name == 'print' && argsCount == 1) {
+      return _generatePrintInvocation(expression, out: out, context: context);
+    }
+
     var calleeIndex = context.functionIndex(name, argsCount);
     if (calleeIndex == null) {
       throw StateError(
@@ -577,6 +779,50 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       stackLng0 + (returnType.isVoid ? 0 : 1),
       "After call `$name` result",
     );
+
+    return out;
+  }
+
+  /// Lowers `print(arg)` to a host import call `env.print(i32 ptr)`. The
+  /// argument is lowered to a string handle (i32 pointer to `[len][utf8]`).
+  BytesOutput _generatePrintInvocation(
+    ASTExpressionLocalFunctionInvocation expression, {
+    BytesOutput? out,
+    WasmContext? context,
+  }) {
+    out ??= newOutput();
+    context ??= WasmContext();
+
+    var module = context.module;
+    if (module == null) {
+      throw StateError("Can't lower `print` without a module.");
+    }
+
+    final stackLng0 = context.stackLength;
+
+    // Evaluate the argument; it must resolve to a string handle (i32).
+    generateASTExpression(expression.arguments[0], out: out, context: context);
+    context.assertStackLength(stackLng0 + 1, "After print argument");
+
+    var argType = context.stackGet(0)!.type;
+    if (argType != _astTypeInt32 && argType is! ASTTypeString) {
+      throw UnimplementedError(
+        "Wasm `print` currently supports String arguments only "
+        "(got $argType); number/other interpolation lands in a later slice.",
+      );
+    }
+
+    var importIndex = module.registerImportedFunction('env', 'print', [
+      WasmType.i32Type,
+    ], const []);
+
+    out.write(
+      Wasm.call(importIndex),
+      description: "[OP] call host import `env.print` (index $importIndex)",
+    );
+    context.stackDrop();
+
+    context.assertStackLength(stackLng0, "After print (void)");
 
     return out;
   }
@@ -1483,13 +1729,13 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     ASTFunctionDeclaration f, {
     BytesOutput? out,
     WasmContext? context,
-    List<ASTFunctionDeclaration>? functions,
+    WasmModuleContext? module,
   }) {
     out ??= newOutput();
     context ??= WasmContext();
 
-    if (functions != null) {
-      context.functions = functions;
+    if (module != null) {
+      context.module = module;
     }
 
     var outBody = newOutput();
@@ -2223,7 +2469,7 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     WasmContext? context,
   }) {
     if (value is ASTValueString) {
-      return generateASTValueString(value, out: out);
+      return generateASTValueString(value, out: out, context: context);
     } else if (value is ASTValueInt) {
       return generateASTValueInt(value, out: out, context: context);
     } else if (value is ASTValueDouble) {
@@ -2354,9 +2600,30 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
   }
 
   @override
-  BytesOutput generateASTValueString(ASTValueString value, {BytesOutput? out}) {
-    // TODO: implement generateASTValueString
-    throw UnimplementedError('generateASTValueString');
+  BytesOutput generateASTValueString(
+    ASTValueString value, {
+    BytesOutput? out,
+    WasmContext? context,
+  }) {
+    out ??= newOutput();
+    context ??= WasmContext();
+
+    var module = context.module;
+    if (module == null) {
+      throw StateError("Can't generate a string literal without a module.");
+    }
+
+    // Intern the literal into the static data region; its value is the i32
+    // pointer to `[len:i32][utf8]`.
+    var ptr = module.internStringLiteral(value.value);
+
+    out.write(
+      Wasm32.i32Const(ptr),
+      description: "[OP] push string literal ptr($ptr): ${value.value}",
+    );
+    context.stackPush(_astTypeString, "string literal: ${value.value}");
+
+    return out;
   }
 
   @override
@@ -2446,32 +2713,132 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
   }
 }
 
-/// The Wasm code context.
-class WasmContext {
-  /// The ordered list of functions in the module (defines the Wasm function
-  /// index space). Used to resolve local function invocations to their `call`
-  /// index. See [functionIndex] and [functionByIndex].
-  List<ASTFunctionDeclaration> functions;
+/// An imported (host-provided) Wasm function. Occupies a function index in
+/// `0..importCount-1`, before any module-defined function.
+class WasmImportedFunction {
+  final String module;
+  final String name;
+  final List<WasmType> params;
+  final List<WasmType> results;
 
-  WasmContext({this.functions = const []});
+  WasmImportedFunction(this.module, this.name, this.params, this.results);
+}
 
-  /// Resolves the Wasm function index for a function with [name] and [arity]
-  /// (number of arguments). Returns `null` if not found.
+/// Module-level Wasm codegen state shared across all functions: the function
+/// index space (imports + defined functions) and the static data region
+/// (interned string literals).
+class WasmModuleContext {
+  /// Module-defined functions, in index order (placed after any imports).
+  final List<ASTFunctionDeclaration> functions;
+
+  WasmModuleContext(this.functions);
+
+  // --- Imported functions (function indices 0..importCount-1) ---
+
+  final List<WasmImportedFunction> importedFunctions = [];
+  final Map<String, int> _importIndexByKey = {};
+
+  int get importCount => importedFunctions.length;
+
+  /// Registers (or reuses) an imported host function, returning its function
+  /// index.
+  int registerImportedFunction(
+    String module,
+    String name,
+    List<WasmType> params,
+    List<WasmType> results,
+  ) {
+    var key = '$module $name ${params.length}';
+    var existing = _importIndexByKey[key];
+    if (existing != null) return existing;
+
+    var index = importedFunctions.length;
+    importedFunctions.add(WasmImportedFunction(module, name, params, results));
+    _importIndexByKey[key] = index;
+    requiresMemory = true;
+    return index;
+  }
+
+  /// Resolves the Wasm function index for a module-defined function with [name]
+  /// and [arity], offset by [importCount]. Returns `null` if not found.
   int? functionIndex(String name, int arity) {
     for (var i = 0; i < functions.length; ++i) {
       var f = functions[i];
       if (f.name == name && f.parameters.size == arity) {
-        return i;
+        return importCount + i;
       }
     }
     return null;
   }
 
-  /// Returns the function at the module's function index [index].
+  /// Returns the module-defined function at function [index] (accounting for
+  /// the imported-function offset); `null` for imported indices.
   ASTFunctionDeclaration? functionByIndex(int index) {
-    if (index < 0 || index >= functions.length) return null;
-    return functions[index];
+    var i = index - importCount;
+    if (i < 0 || i >= functions.length) return null;
+    return functions[i];
   }
+
+  // --- Static data region (interned string literals) ---
+
+  /// Base offset of the static data region in linear memory. Offset `0` is
+  /// reserved as a null pointer.
+  static const int dataBaseOffset = 8;
+
+  final BytesBuilder _data = BytesBuilder();
+  final Map<String, int> _literalPointers = {};
+
+  /// Whether the module must declare (and export) a linear memory.
+  bool requiresMemory = false;
+
+  /// Interns a string literal as `[len:i32 little-endian][utf8 bytes]` in the
+  /// static data region and returns its memory pointer.
+  int internStringLiteral(String s) {
+    var existing = _literalPointers[s];
+    if (existing != null) return existing;
+
+    var ptr = dataBaseOffset + _data.length;
+    var bytes = utf8.encode(s);
+    _data.add([
+      bytes.length & 0xff,
+      (bytes.length >> 8) & 0xff,
+      (bytes.length >> 16) & 0xff,
+      (bytes.length >> 24) & 0xff,
+    ]);
+    _data.add(bytes);
+    _literalPointers[s] = ptr;
+    requiresMemory = true;
+    return ptr;
+  }
+
+  bool get hasData => _data.isNotEmpty;
+
+  /// The static data bytes (placed at [dataBaseOffset]).
+  Uint8List get dataBytes => _data.toBytes();
+
+  /// Minimum memory pages (64 KiB each) needed to hold the static data.
+  int get memoryMinPages {
+    var end = dataBaseOffset + _data.length;
+    var pages = (end + 65535) ~/ 65536;
+    return pages < 1 ? 1 : pages;
+  }
+}
+
+/// The Wasm code context (per function body).
+class WasmContext {
+  /// Module-level state (function index space, imports, data). May be null for
+  /// throwaway sub-generation contexts that never resolve calls.
+  WasmModuleContext? module;
+
+  WasmContext({this.module});
+
+  /// Resolves the Wasm function index for a function with [name] and [arity].
+  int? functionIndex(String name, int arity) =>
+      module?.functionIndex(name, arity);
+
+  /// Returns the function at the module's function index [index].
+  ASTFunctionDeclaration? functionByIndex(int index) =>
+      module?.functionByIndex(index);
 
   final Map<String, ({ASTType type, int index})> _localVariables = {};
 
@@ -2738,6 +3105,9 @@ extension _ASTTypeExtension on ASTType {
     } else if (this is ASTTypeDouble) {
       return WasmType.f64Type;
     } else if (this is ASTTypeBool) {
+      return WasmType.i32Type;
+    } else if (this is ASTTypeString) {
+      // A string is an i32 pointer into linear memory.
       return WasmType.i32Type;
     } else if (this is ASTTypeVoid) {
       return WasmType.voidType;

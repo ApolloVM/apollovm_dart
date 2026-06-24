@@ -2,6 +2,7 @@
 // This code is governed by the Apache License, Version 2.0.
 // Please refer to the LICENSE and AUTHORS files for details.
 
+import 'dart:convert';
 import 'dart:math' as math;
 import 'dart:typed_data';
 
@@ -56,7 +57,42 @@ class ApolloRunnerWasm extends ApolloRunner {
       );
     }
 
-    var module = await _wasmRuntime.loadModule(codeUnit.id, codeUnit.code);
+    // Host imports the module may declare (only the declared ones are wired).
+    WasmModule? loadedModule;
+    String decodeString(int ptr) {
+      var mem = loadedModule!.readMemory();
+      if (mem == null) {
+        throw StateError(
+          "Wasm module has no exported memory to read a string.",
+        );
+      }
+      var len =
+          mem[ptr] |
+          (mem[ptr + 1] << 8) |
+          (mem[ptr + 2] << 16) |
+          (mem[ptr + 3] << 24);
+      return utf8.decode(mem.sublist(ptr + 4, ptr + 4 + len));
+    }
+
+    var hostImports = <String, Map<String, WasmHostFunction>>{
+      'env': {
+        'print': WasmHostFunction(
+          params: const [WasmValueType.i32],
+          results: const [],
+          callback: (args) {
+            externalPrintFunction(decodeString(args[0] as int));
+            return null;
+          },
+        ),
+      },
+    };
+
+    var module = await _wasmRuntime.loadModule(
+      codeUnit.id,
+      codeUnit.code,
+      hostImports: hostImports,
+    );
+    loadedModule = module;
 
     var f = module.getFunction(functionName);
     if (f == null) {

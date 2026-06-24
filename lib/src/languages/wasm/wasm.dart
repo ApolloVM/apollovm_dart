@@ -32,6 +32,32 @@ class Wasm {
   static const globalType = 0x03;
   static const functionType = 0x60;
 
+  /// Section IDs (modules must emit sections in ascending ID order).
+  static const sectionType = 0x01;
+  static const sectionImport = 0x02;
+  static const sectionFunction = 0x03;
+  static const sectionMemory = 0x05;
+  static const sectionGlobal = 0x06;
+  static const sectionExport = 0x07;
+  static const sectionCode = 0x0a;
+  static const sectionData = 0x0b;
+
+  /// Export/import external kinds.
+  static const externalKindFunction = 0x00;
+  static const externalKindMemory = 0x02;
+
+  /// Value-type byte for a mutable global.
+  static const globalMutable = 0x01;
+  static const globalImmutable = 0x00;
+
+  /// `memory.size` / `memory.grow` (operate on memory index 0).
+  static const memorySize = <int>[0x3f, 0x00];
+  static const memoryGrow = <int>[0x40, 0x00];
+
+  /// `memory.copy` (dst mem 0, src mem 0) / `memory.fill` (mem 0).
+  static const memoryCopy = <int>[0xfc, 0x0a, 0x00, 0x00];
+  static const memoryFill = <int>[0xfc, 0x0b, 0x00];
+
   static List<int> block(WasmType blockType) => <int>[0x02, blockType.value];
 
   static List<int> loop(WasmType blockType) => <int>[0x03, blockType.value];
@@ -81,6 +107,32 @@ class Wasm32 {
   static List<int> i32Const(int i) => <int>[0x41, ...Leb128.encodeSigned(i)];
 
   static List<int> f32Const(double i) => <int>[0x43, ...encodeF32(i)];
+
+  /// Memory access. [align] is the alignment exponent (log2 of byte
+  /// alignment): i32 = 2, byte = 0.
+  static List<int> i32Load([int align = 2, int offset = 0]) => <int>[
+    0x28,
+    ...Leb128.encodeUnsigned(align),
+    ...Leb128.encodeUnsigned(offset),
+  ];
+
+  static List<int> i32Load8U([int align = 0, int offset = 0]) => <int>[
+    0x2d,
+    ...Leb128.encodeUnsigned(align),
+    ...Leb128.encodeUnsigned(offset),
+  ];
+
+  static List<int> i32Store([int align = 2, int offset = 0]) => <int>[
+    0x36,
+    ...Leb128.encodeUnsigned(align),
+    ...Leb128.encodeUnsigned(offset),
+  ];
+
+  static List<int> i32Store8([int align = 0, int offset = 0]) => <int>[
+    0x3a,
+    ...Leb128.encodeUnsigned(align),
+    ...Leb128.encodeUnsigned(offset),
+  ];
 
   static const int i32ExtendToI64Signed = 0xAC;
   static const int i32ExtendToI64Unsigned = 0xAD;
@@ -170,6 +222,19 @@ class Wasm64 {
   static List<int> i64Const(int i) => <int>[0x42, ...Leb128.encodeSigned(i)];
 
   static List<int> f64Const(double i) => <int>[0x44, ...encodeF64(i)];
+
+  /// Memory access. [align] is the alignment exponent (i64 = 3).
+  static List<int> i64Load([int align = 3, int offset = 0]) => <int>[
+    0x29,
+    ...Leb128.encodeUnsigned(align),
+    ...Leb128.encodeUnsigned(offset),
+  ];
+
+  static List<int> i64Store([int align = 3, int offset = 0]) => <int>[
+    0x37,
+    ...Leb128.encodeUnsigned(align),
+    ...Leb128.encodeUnsigned(offset),
+  ];
 
   static const int i64ConvertToF32Signed = 0xB4;
   static const int i64ConvertToF32Unsigned = 0xB5;

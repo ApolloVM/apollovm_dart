@@ -10,6 +10,11 @@
   - **Full Dart `%` semantics**: integer and double modulo now return the Dart-correct non-negative result in `[0, |b|)` for negative operands (sign-corrected via scratch locals); double `%` is computed as `a - trunc(a / b) * b`.
   - **Fix**: compound assignment (`+=`, `-=`, `*=`, …) emitted its operation to a discarded buffer (missing `out`/`context`), producing broken code; now applied to the real output.
 - Tests: added Wasm coverage for every feature above plus a combined integration test (prime counting / sum-of-squares using loops + calls + logic + modulo), all executed against the real compiled-and-run Wasm module.
+- Wasm linear-memory foundation + strings (P2, part 1 — `print` of string literals):
+  - The generator now emits **Import / Memory / Global / Data** sections and offsets the function-index space past imported functions (a body-first two-pass build). Modules with no strings/imports remain byte-identical.
+  - String literals are interned into a static data segment as `[len:i32][utf8]`; a `String` value is an `i32` pointer into the exported linear memory.
+  - `print(stringLiteral)` lowers to a host import `env.print(i32)`. The runtime layer (`WasmRuntime`/`WasmModule`) now wires **host imports** at instantiation and exposes **exported memory** reads, on both the native (`wasm_run`) and browser runtimes; the runner decodes the pointer and routes to `externalPrintFunction`.
+  - New `wasm.dart` memory opcodes (i32/i64 load/store, load8_u/store8, memory.size/grow/copy/fill) and section-id helpers.
 - Test infrastructure — WebAssembly GC validation path:
   - Established a browser (`dart test -p chrome`) parity harness that runs generated Wasm on Chrome's own engine. The native `wasm_run` backend (wasmtime 14 / wasmi 0.31) does not support the WebAssembly GC proposal; Chrome (v119+) does.
   - Added a `wasm-gc` test tag (`dart_test.yaml`) and a WasmGC capability spike; CI's `wasm_run`-based jobs exclude the tag (`--exclude-tags wasm-gc`) while the Chrome job runs it. This gates the planned dual-target (linear-memory + WasmGC) backend work.
