@@ -108,10 +108,10 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       out.writeBytes(generateSectionData(module), description: "Section: Data");
     }
     // Self-describing high-level signatures (custom section) so the runner can
-    // marshal String returns/params for modules loaded from raw bytes. Only
-    // emitted when a public function involves a String, keeping pure-numeric
-    // modules byte-identical.
-    if (_hasStringSignature(module)) {
+    // marshal String/bool returns/params for modules loaded from raw bytes. Only
+    // emitted when a public function involves a String or returns a bool,
+    // keeping pure-numeric (int/double) modules byte-identical.
+    if (_requiresSignatureSection(module)) {
       out.writeBytes(
         generateSectionCustomSignatures(module),
         description: "Section: Custom (apollovm_sig)",
@@ -132,10 +132,15 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     return 5;
   }
 
-  bool _hasStringSignature(WasmModuleContext module) {
+  /// Whether the module needs the `apollovm_sig` custom section: any public
+  /// function that involves a String (param or return) or returns a `bool` —
+  /// i.e. a return/param the runner must decode from its raw Wasm value.
+  bool _requiresSignatureSection(WasmModuleContext module) {
     for (var f in module.functions) {
       if (f.modifiers.isPrivate) continue;
-      if (f.returnType is ASTTypeString) return true;
+      if (f.returnType is ASTTypeString || f.returnType is ASTTypeBool) {
+        return true;
+      }
       for (var p in f.parameters.allParameters) {
         if (p.type is ASTTypeString) return true;
       }
@@ -814,9 +819,126 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
   BytesOutput generateASTExpressionFunctionInvocation(
     ASTExpressionObjectFunctionInvocation expression, {
     BytesOutput? out,
+    WasmContext? context,
   }) {
-    // TODO: implement generateASTExpressionFunctionInvocation
-    throw UnimplementedError('generateASTExpressionFunctionInvocation');
+    out ??= newOutput();
+    context ??= WasmContext();
+
+    var varName = expression.variable.name;
+    var localVar = _getLocalVariable(context, varName);
+
+    // List.add(x)
+    if (localVar.type is ASTTypeArray &&
+        expression.name == 'add' &&
+        expression.arguments.length == 1) {
+      return _generateListAdd(
+        localVar,
+        expression.arguments[0],
+        out: out,
+        context: context,
+      );
+    }
+
+    throw UnimplementedError(
+      "Wasm method `.${expression.name}` on ${localVar.type} "
+      "is not supported yet.",
+    );
+  }
+
+  /// `list.add(x)`: appends to the growable list, reallocating the data buffer
+  /// (and updating the header's capacity/dataPtr in place) when full. Emits no
+  /// result (treated as void).
+  BytesOutput _generateListAdd(
+    ({ASTType type, int index}) listVar,
+    ASTExpression argExpr, {
+    required BytesOutput out,
+    required WasmContext context,
+  }) {
+    var module = context.module!;
+    module.requiresMemory = true;
+    module.requiresHeapGlobal = true;
+
+    var elemType = (listVar.type as ASTTypeArray).componentType;
+    var size = _elemSize(elemType);
+
+    var hdr = context.scratchLocal(_astTypeString, 11);
+    var len = context.scratchLocal(_astTypeString, 12);
+    var newCap = context.scratchLocal(_astTypeString, 13);
+    var newData = context.scratchLocal(_astTypeString, 14);
+
+    // $hdr = list header pointer
+    _localVariableGet(out, context, listVar.index, 'list');
+    out.write(Wasm.localSet(hdr));
+    // $len = length
+    out.write(Wasm.localGet(hdr));
+    out.write(Wasm32.i32Load(2, 0));
+    out.write(Wasm.localSet(len));
+
+    // if (len == capacity) grow the data buffer
+    out.write(Wasm.localGet(len));
+    out.write(Wasm.localGet(hdr));
+    out.write(Wasm32.i32Load(2, 4)); // capacity
+    out.writeByte(Wasm32.i32Equals);
+    out.write(Wasm.ifInstruction(WasmType.voidType));
+    {
+      // newCap = capacity * 2; if 0 -> 4
+      out.write(Wasm.localGet(hdr));
+      out.write(Wasm32.i32Load(2, 4));
+      out.write(Wasm32.i32Const(2));
+      out.writeByte(Wasm32.i32Multiply);
+      out.write(Wasm.localSet(newCap));
+      out.write(Wasm.localGet(newCap));
+      out.writeByte(Wasm32.i32EqualsToZero);
+      out.write(Wasm.ifInstruction(WasmType.voidType));
+      out.write(Wasm32.i32Const(4));
+      out.write(Wasm.localSet(newCap));
+      out.writeByte(Wasm.end);
+
+      // newData = __alloc(newCap * size)
+      out.write(Wasm.localGet(newCap));
+      out.write(Wasm32.i32Const(size));
+      out.writeByte(Wasm32.i32Multiply);
+      _emitInlineAlloc(out, context);
+      out.write(Wasm.localSet(newData));
+
+      // memory.copy(newData, oldData, len*size)
+      out.write(Wasm.localGet(newData));
+      out.write(Wasm.localGet(hdr));
+      out.write(Wasm32.i32Load(2, 8)); // old dataPtr
+      out.write(Wasm.localGet(len));
+      out.write(Wasm32.i32Const(size));
+      out.writeByte(Wasm32.i32Multiply);
+      out.write(Wasm.memoryCopy);
+
+      // header.capacity = newCap; header.dataPtr = newData
+      out.write(Wasm.localGet(hdr));
+      out.write(Wasm.localGet(newCap));
+      out.write(Wasm32.i32Store(2, 4));
+      out.write(Wasm.localGet(hdr));
+      out.write(Wasm.localGet(newData));
+      out.write(Wasm32.i32Store(2, 8));
+    }
+    out.writeByte(Wasm.end);
+
+    // store x at dataPtr + len*size
+    out.write(Wasm.localGet(hdr));
+    out.write(Wasm32.i32Load(2, 8)); // dataPtr
+    out.write(Wasm.localGet(len));
+    out.write(Wasm32.i32Const(size));
+    out.writeByte(Wasm32.i32Multiply);
+    out.writeByte(Wasm32.i32Add); // store address
+    generateASTExpression(argExpr, out: out, context: context); // value
+    context.stackDrop();
+    _emitElemStore(out, elemType, 0);
+
+    // header.length = len + 1
+    out.write(Wasm.localGet(hdr));
+    out.write(Wasm.localGet(len));
+    out.write(Wasm32.i32Const(1));
+    out.writeByte(Wasm32.i32Add);
+    out.write(Wasm32.i32Store(2, 0));
+
+    return out;
   }
 
   @override
@@ -835,6 +957,9 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
   // A list value is an i32 pointer to `[length:i32][capacity:i32][elements…]`
   // in linear memory. Element storage: int -> i64 (8B), double -> f64 (8B),
   // String/bool -> i32 (4B). Slice 1 supports int/double element lists.
+
+  /// List header: `[length:i32][capacity:i32][dataPtr:i32]`.
+  static const int _listHeaderSize = 12;
 
   int _elemSize(ASTType elemType) =>
       (elemType is ASTTypeInt || elemType is ASTTypeDouble) ? 8 : 4;
@@ -901,33 +1026,43 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     var size = _elemSize(elemType);
     var values = expression.valuesExpressions;
     var n = values.length;
-    var listLocal = context.scratchLocal(_astTypeString, 6);
+    // Indirect layout: header [length@0][capacity@4][dataPtr@8]; elements live
+    // in a separate buffer so `.add` can realloc without moving the handle.
+    var hdrLocal = context.scratchLocal(_astTypeString, 6);
+    var dataLocal = context.scratchLocal(_astTypeString, 9);
 
     final s0 = context.stackLength;
 
-    // alloc(8 + n*size) -> $listLocal
-    out.write(Wasm32.i32Const(8 + n * size));
+    // header = alloc(12)
+    out.write(Wasm32.i32Const(_listHeaderSize));
     _emitInlineAlloc(out, context);
-    out.write(Wasm.localSet(listLocal));
+    out.write(Wasm.localSet(hdrLocal));
+    // data = alloc(n*size)
+    out.write(Wasm32.i32Const(n * size));
+    _emitInlineAlloc(out, context);
+    out.write(Wasm.localSet(dataLocal));
 
-    // length and capacity headers
-    out.write(Wasm.localGet(listLocal));
+    // header fields: length=n, capacity=n, dataPtr=data
+    out.write(Wasm.localGet(hdrLocal));
     out.write(Wasm32.i32Const(n));
     out.write(Wasm32.i32Store(2, 0));
-    out.write(Wasm.localGet(listLocal));
+    out.write(Wasm.localGet(hdrLocal));
     out.write(Wasm32.i32Const(n));
     out.write(Wasm32.i32Store(2, 4));
+    out.write(Wasm.localGet(hdrLocal));
+    out.write(Wasm.localGet(dataLocal));
+    out.write(Wasm32.i32Store(2, 8));
 
-    // elements at offset 8 + i*size
+    // elements at data + i*size
     for (var i = 0; i < n; ++i) {
-      out.write(Wasm.localGet(listLocal)); // store base address
+      out.write(Wasm.localGet(dataLocal)); // store base address
       generateASTExpression(values[i], out: out, context: context);
       context.stackDrop(); // value consumed by the store
-      _emitElemStore(out, elemType, 8 + i * size);
+      _emitElemStore(out, elemType, i * size);
     }
 
-    // list handle
-    out.write(Wasm.localGet(listLocal));
+    // list handle (the header pointer)
+    out.write(Wasm.localGet(hdrLocal));
     context.stackPush(ASTTypeArray(elemType), "list literal");
 
     context.assertStackLength(s0 + 1, "After list literal");
@@ -2020,8 +2155,9 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
 
     final s0 = context.stackLength;
 
-    // addr = listPtr + 8 + index * size; then load the element.
-    _localVariableGet(out, context, localVar.index, name); // listPtr (raw)
+    // addr = dataPtr + index*size; then load the element.
+    _localVariableGet(out, context, localVar.index, name); // header ptr (raw)
+    out.write(Wasm32.i32Load(2, 8)); // dataPtr = load(header, 8)
     generateASTExpression(
       expression.expression,
       out: out,
@@ -2030,9 +2166,7 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     out.writeByte(Wasm64.i64WrapToi32); // index -> i32
     out.write(Wasm32.i32Const(size));
     out.writeByte(Wasm32.i32Multiply);
-    out.write(Wasm32.i32Const(8));
-    out.writeByte(Wasm32.i32Add);
-    out.writeByte(Wasm32.i32Add); // listPtr + (8 + index*size)
+    out.writeByte(Wasm32.i32Add); // dataPtr + index*size
     _emitElemLoad(out, elemType, 0);
 
     context.stackDrop(); // the index
@@ -2054,14 +2188,53 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     var varName = expression.variable.name;
     var localVar = _getLocalVariable(context, varName);
 
-    if (localVar.type is ASTTypeArray && name == 'length') {
+    var listType = localVar.type;
+    if (listType is ASTTypeArray) {
       final s0 = context.stackLength;
-      _localVariableGet(out, context, localVar.index, varName);
-      out.write(Wasm32.i32Load(2, 0)); // length (i32)
-      out.writeByte(Wasm32.i32ExtendToI64Signed); // -> i64 (int)
-      context.stackPush(_astTypeInt64, "$varName.length");
-      context.assertStackLength(s0 + 1, "After .length");
-      return out;
+
+      if (name == 'length') {
+        _localVariableGet(out, context, localVar.index, varName);
+        out.write(Wasm32.i32Load(2, 0)); // length (i32)
+        out.writeByte(Wasm32.i32ExtendToI64Signed); // -> i64 (int)
+        context.stackPush(_astTypeInt64, "$varName.length");
+        context.assertStackLength(s0 + 1, "After .length");
+        return out;
+      }
+
+      if (name == 'isEmpty' || name == 'isNotEmpty') {
+        _localVariableGet(out, context, localVar.index, varName);
+        out.write(Wasm32.i32Load(2, 0)); // length (i32)
+        if (name == 'isEmpty') {
+          out.writeByte(Wasm32.i32EqualsToZero); // length == 0
+        } else {
+          out.write(Wasm32.i32Const(0));
+          out.writeByte(Wasm32.i32NotEquals); // length != 0 (normalized 0/1)
+        }
+        context.stackPush(_astTypeInt32, "$varName.$name"); // bool as i32
+        context.assertStackLength(s0 + 1, "After .$name");
+        return out;
+      }
+
+      if (name == 'first' || name == 'last') {
+        var elemType = listType.componentType;
+        var size = _elemSize(elemType);
+        // addr = dataPtr + index*size ; first -> index 0 ; last -> length-1.
+        _localVariableGet(out, context, localVar.index, varName);
+        out.write(Wasm32.i32Load(2, 8)); // dataPtr
+        if (name == 'last') {
+          _localVariableGet(out, context, localVar.index, varName);
+          out.write(Wasm32.i32Load(2, 0)); // length
+          out.write(Wasm32.i32Const(1));
+          out.writeByte(Wasm32.i32Subtract); // length - 1
+          out.write(Wasm32.i32Const(size));
+          out.writeByte(Wasm32.i32Multiply);
+          out.writeByte(Wasm32.i32Add); // dataPtr + (length-1)*size
+        }
+        _emitElemLoad(out, elemType, 0);
+        context.stackPush(_elemStackType(elemType), "$varName.$name");
+        context.assertStackLength(s0 + 1, "After .$name");
+        return out;
+      }
     }
 
     throw UnimplementedError(
@@ -2345,8 +2518,15 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
 
     var listScratch = context.scratchLocal(_astTypeString, 7);
     var iScratch = context.scratchLocal(_astTypeString, 8);
+    var dataScratch = context.scratchLocal(_astTypeString, 10);
     out.write(Wasm.localSet(listScratch));
     context.stackDrop(); // iterable consumed
+
+    // dataPtr = load(header, 8) — cached once (length is read each iteration so
+    // the loop reflects a `return`-truncated view, like the interpreter).
+    out.write(Wasm.localGet(listScratch));
+    out.write(Wasm32.i32Load(2, 8));
+    out.write(Wasm.localSet(dataScratch));
 
     var eLocal = _getLocalVariable(context, forEach.variableName);
 
@@ -2354,7 +2534,7 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     out.write(Wasm32.i32Const(0));
     out.write(Wasm.localSet(iScratch));
 
-    // block { loop { if (i >= len) break; e = list[i]; <body>; i++; continue } }
+    // block { loop { if (i >= len) break; e = data[i]; <body>; i++; continue } }
     out.write(Wasm.block(WasmType.voidType));
     out.write(Wasm.loop(WasmType.voidType));
 
@@ -2365,13 +2545,11 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     out.writeByte(Wasm32.i32GreaterThanOrEqualsUnsigned);
     out.write(Wasm.brIf(1));
 
-    // e = list[8 + i*size]
-    out.write(Wasm.localGet(listScratch));
+    // e = data[i*size]
+    out.write(Wasm.localGet(dataScratch));
     out.write(Wasm.localGet(iScratch));
     out.write(Wasm32.i32Const(size));
     out.writeByte(Wasm32.i32Multiply);
-    out.write(Wasm32.i32Const(8));
-    out.writeByte(Wasm32.i32Add);
     out.writeByte(Wasm32.i32Add);
     _emitElemLoad(out, elemType, 0);
     out.write(Wasm.localSet(eLocal.index));
@@ -2837,7 +3015,11 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
         context: context,
       );
     } else if (expression is ASTExpressionObjectFunctionInvocation) {
-      return generateASTExpressionFunctionInvocation(expression, out: out);
+      return generateASTExpressionFunctionInvocation(
+        expression,
+        out: out,
+        context: context,
+      );
     } else if (expression is ASTExpressionGroupFunctionInvocation) {
       return generateASTExpressionGroupFunctionInvocation(expression, out: out);
     } else if (expression is ASTExpressionOperation) {
