@@ -6,7 +6,9 @@
   - **Operators**: integer modulo `%` (`i64.rem_s`), logical `&&`/`||` (`i32.and`/`i32.or`), logical negation `!` (`i32.eqz`), and unary minus `-` (`f64.neg` / `i64` multiply-by-`-1`).
   - **Booleans**: `bool` literals and `bool`-typed locals (represented as Wasm `i32`).
   - **Bug fix**: the `== 0` fast-path (`i64.eqz`) was incorrectly applied to *any* operator with a literal-`0` right operand (e.g. `x > 0` compiled as `x == 0`). It is now restricted to the `equals` operator.
-  - Notes/limitations: `&&`/`||` are non-short-circuit; double `%` and negative-operand integer `%` (Euclidean) are not yet supported.
+  - **Short-circuit `&&` / `||`**: now compile to an `if/else` so the right operand is only evaluated when needed. The AST interpreter was also made short-circuiting, so interpreted and compiled execution stay consistent (and match Dart).
+  - **Full Dart `%` semantics**: integer and double modulo now return the Dart-correct non-negative result in `[0, |b|)` for negative operands (sign-corrected via scratch locals); double `%` is computed as `a - trunc(a / b) * b`.
+  - **Fix**: compound assignment (`+=`, `-=`, `*=`, …) emitted its operation to a discarded buffer (missing `out`/`context`), producing broken code; now applied to the real output.
 - Tests: added Wasm coverage for every feature above plus a combined integration test (prime counting / sum-of-squares using loops + calls + logic + modulo), all executed against the real compiled-and-run Wasm module.
 
 - Bug fixes:

@@ -974,6 +974,30 @@ class ASTExpressionOperation extends ASTExpression {
   FutureOr<ASTValue> run(VMContext parentContext, ASTRunStatus runStatus) {
     var context = defineRunContext(parentContext);
 
+    final operator = this.operator;
+
+    // Short-circuit logical operators: only evaluate the right operand when the
+    // left does not already determine the result. This matches Dart semantics
+    // and keeps the interpreter consistent with the Wasm compiler.
+    if (operator == ASTExpressionOperator.and ||
+        operator == ASTExpressionOperator.or) {
+      return expression1.run(context, runStatus).resolveMapped((val1) {
+        return _toBoolean(val1, context).resolveMapped((b1) {
+          if (operator == ASTExpressionOperator.and) {
+            if (!b1) return ASTValueBool.FALSE;
+          } else {
+            if (b1) return ASTValueBool.TRUE;
+          }
+          return expression2.run(context, runStatus).resolveMapped((val2) {
+            return _toBoolean(
+              val2,
+              context,
+            ).resolveMapped((b2) => ASTValueBool(b2));
+          });
+        });
+      });
+    }
+
     var retVal2 = expression2.run(context, runStatus);
     var retVal1 = expression1.run(context, runStatus);
 
