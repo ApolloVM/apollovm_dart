@@ -90,6 +90,12 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
         description: "Section: Memory",
       );
     }
+    if (module.requiresHeapGlobal) {
+      out.writeBytes(
+        generateSectionGlobal(module),
+        description: "Section: Global",
+      );
+    }
     out.writeBytes(sectionExports, description: "Section: Export");
     out.writeBytes(sectionCode, description: "Section: Code");
     if (module.hasData) {
@@ -290,6 +296,37 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       ),
       entry,
     ], description: "Memories");
+
+    return out;
+  }
+
+  BytesOutput generateSectionGlobal(
+    WasmModuleContext module, {
+    BytesOutput? out,
+  }) {
+    out ??= newOutput();
+
+    // One mutable i32 global: the heap pointer `$hp`, initialized to heapStart.
+    var entry = BytesOutput(
+      data: [
+        BytesOutput(
+          data: WasmType.i32Type.value,
+          description: "Global type(i32)",
+        ),
+        BytesOutput(data: Wasm.globalMutable, description: "Mutable"),
+        BytesOutput(
+          data: [...Wasm32.i32Const(module.heapStart), Wasm.end],
+          description: "Init (i32.const ${module.heapStart})",
+        ),
+      ],
+      description: "Global \$hp",
+    );
+
+    out.writeByte(Wasm.sectionGlobal, description: "Section Global ID");
+    out.writeBytesLeb128Block([
+      BytesOutput(data: Leb128.encodeUnsigned(1), description: "Globals count"),
+      entry,
+    ], description: "Globals");
 
     return out;
   }
@@ -1179,6 +1216,23 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
 
     var stackType1 = stack1.type;
     var stackType2 = stack2.type;
+
+    // String `+` -> concatenation (both operands must already be String).
+    if (expression.operator == ASTExpressionOperator.add &&
+        (stackType1 is ASTTypeString || stackType2 is ASTTypeString)) {
+      if (stackType1 is! ASTTypeString || stackType2 is! ASTTypeString) {
+        throw UnimplementedError(
+          "Wasm string `+` with a non-String operand (number-to-string) is "
+          "not supported yet ($stackType1 + $stackType2).",
+        );
+      }
+      out.writeBytes(exp1Out);
+      out.writeBytes(exp2Out);
+      context.assertStackLength(stackLng2, "After push string operands");
+      _emitStringConcat2(out, context);
+      context.assertStackLength(stackLng0 + 1, "After string concat");
+      return out;
+    }
 
     var operationType = _getOperationType(expression, stackType1, stackType2);
 
@@ -2485,9 +2539,13 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     } else if (value is ASTValueStatic) {
       return generateASTValueStatic(value, out: out);
     } else if (value is ASTValueStringVariable) {
-      return generateASTValueStringVariable(value, out: out);
+      return generateASTValueStringVariable(value, out: out, context: context);
     } else if (value is ASTValueStringConcatenation) {
-      return generateASTValueStringConcatenation(value, out: out);
+      return generateASTValueStringConcatenation(
+        value,
+        out: out,
+        context: context,
+      );
     } else if (value is ASTValueStringExpression) {
       return generateASTValueStringExpression(value, out: out);
     } else if (value is ASTValueArray) {
@@ -2630,9 +2688,28 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
   BytesOutput generateASTValueStringConcatenation(
     ASTValueStringConcatenation value, {
     BytesOutput? out,
+    WasmContext? context,
   }) {
-    // TODO: implement generateASTValueStringConcatenation
-    throw UnimplementedError('generateASTValueStringConcatenation');
+    out ??= newOutput();
+    context ??= WasmContext();
+
+    var values = value.values;
+    if (values.isEmpty) {
+      return generateASTValueString(
+        ASTValueString(''),
+        out: out,
+        context: context,
+      );
+    }
+
+    // Fold left: concat(concat(e0, e1), e2)...
+    generateASTValue(values.first, out: out, context: context);
+    for (var i = 1; i < values.length; ++i) {
+      generateASTValue(values[i], out: out, context: context);
+      _emitStringConcat2(out, context);
+    }
+
+    return out;
   }
 
   @override
@@ -2640,7 +2717,7 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     ASTValueStringExpression value, {
     BytesOutput? out,
   }) {
-    // TODO: implement generateASTValueStringExpression
+    // Number/expression-to-string interpolation lands in a later slice.
     throw UnimplementedError('generateASTValueStringExpression');
   }
 
@@ -2649,9 +2726,105 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     ASTValueStringVariable value, {
     BytesOutput? out,
     bool precededByString = false,
+    WasmContext? context,
   }) {
-    // TODO: implement generateASTValueStringVariable
-    throw UnimplementedError('generateASTValueStringVariable');
+    out ??= newOutput();
+    context ??= WasmContext();
+
+    var name = value.variable.name;
+    var localVar = _getLocalVariable(context, name);
+
+    // For now, only String variables (already an i32 handle) are supported;
+    // number-to-string interpolation lands in a later slice.
+    if (localVar.type is! ASTTypeString) {
+      throw UnimplementedError(
+        "Wasm interpolation of non-String variable `$name` "
+        "(${localVar.type}) is not supported yet.",
+      );
+    }
+
+    _localVariableGet(out, context, localVar.index, name);
+    context.stackPush(_astTypeString, "string var: \$$name");
+
+    return out;
+  }
+
+  /// Concatenates the top two string handles on the stack (`[a, b]`) into a
+  /// freshly allocated `[len:i32][utf8]` string, leaving its pointer on the
+  /// stack. Uses the bump allocator (`$hp`) + `memory.copy`.
+  void _emitStringConcat2(BytesOutput out, WasmContext context) {
+    var module = context.module;
+    if (module == null) {
+      throw StateError("Can't concatenate strings without a module.");
+    }
+    module.requiresMemory = true;
+    module.requiresHeapGlobal = true;
+
+    // i32 scratch locals (ASTTypeString maps to i32).
+    var a = context.scratchLocal(_astTypeString, 0);
+    var b = context.scratchLocal(_astTypeString, 1);
+    var dest = context.scratchLocal(_astTypeString, 2);
+    const hp = WasmModuleContext.heapGlobalIndex;
+
+    void getLen(int strLocal) {
+      out.write(Wasm.localGet(strLocal));
+      out.write(Wasm32.i32Load());
+    }
+
+    void dataPtr(int strLocal) {
+      out.write(Wasm.localGet(strLocal));
+      out.write(Wasm32.i32Const(4));
+      out.writeByte(Wasm32.i32Add);
+    }
+
+    // Consume operands [a, b].
+    out.write(Wasm.localSet(b));
+    out.write(Wasm.localSet(a));
+
+    // size = len(a) + len(b) + 4
+    getLen(a);
+    getLen(b);
+    out.writeByte(Wasm32.i32Add);
+    out.write(Wasm32.i32Const(4));
+    out.writeByte(Wasm32.i32Add);
+
+    // Bump-allocate: dest = $hp; $hp += size.
+    out.write(Wasm.globalGet(hp));
+    out.write(Wasm.localTee(dest));
+    out.writeByte(Wasm32.i32Add);
+    out.write(Wasm.globalSet(hp));
+
+    // Store total length at dest.
+    out.write(Wasm.localGet(dest));
+    getLen(a);
+    getLen(b);
+    out.writeByte(Wasm32.i32Add);
+    out.write(Wasm32.i32Store());
+
+    // memory.copy(dest+4, a+4, len(a))
+    out.write(Wasm.localGet(dest));
+    out.write(Wasm32.i32Const(4));
+    out.writeByte(Wasm32.i32Add);
+    dataPtr(a);
+    getLen(a);
+    out.write(Wasm.memoryCopy);
+
+    // memory.copy(dest+4+len(a), b+4, len(b))
+    out.write(Wasm.localGet(dest));
+    out.write(Wasm32.i32Const(4));
+    out.writeByte(Wasm32.i32Add);
+    getLen(a);
+    out.writeByte(Wasm32.i32Add);
+    dataPtr(b);
+    getLen(b);
+    out.write(Wasm.memoryCopy);
+
+    // Result pointer.
+    out.write(Wasm.localGet(dest));
+
+    context.stackDrop();
+    context.stackDrop();
+    context.stackPush(_astTypeString, "string concat");
   }
 
   @override
@@ -2816,9 +2989,30 @@ class WasmModuleContext {
   /// The static data bytes (placed at [dataBaseOffset]).
   Uint8List get dataBytes => _data.toBytes();
 
-  /// Minimum memory pages (64 KiB each) needed to hold the static data.
+  // --- Heap (bump allocator) ---
+
+  /// Whether the module needs a mutable heap-pointer global (runtime
+  /// allocations, e.g. string concatenation).
+  bool requiresHeapGlobal = false;
+
+  /// Wasm global index of the heap pointer (`$hp`).
+  static const int heapGlobalIndex = 0;
+
+  /// Reserved heap headroom (bytes) for runtime allocations, in addition to the
+  /// static data. (Fixed for now; `memory.grow` lands in a later slice.)
+  static const int heapReserveBytes = 1 << 16; // 64 KiB
+
+  /// Initial value of `$hp`: just past the static data, 4-byte aligned.
+  int get heapStart {
+    var end = dataBaseOffset + _data.length;
+    return (end + 3) & ~3;
+  }
+
+  /// Minimum memory pages (64 KiB each): enough for the static data plus the
+  /// heap reserve when a heap is used.
   int get memoryMinPages {
     var end = dataBaseOffset + _data.length;
+    if (requiresHeapGlobal) end = heapStart + heapReserveBytes;
     var pages = (end + 65535) ~/ 65536;
     return pages < 1 ? 1 : pages;
   }

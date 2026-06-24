@@ -114,4 +114,89 @@ void main() {
       );
     });
   });
+
+  group('Wasm P2: string concatenation', () {
+    test('binary +', () async {
+      await _testWasmPrint(
+        '''
+        void run() {
+          print("a" + "b");
+          print("hi " + "there");
+        }
+      ''',
+        'run',
+        [],
+        ['ab', 'hi there'],
+      );
+    });
+
+    test('adjacent string literals', () async {
+      await _testWasmPrint(
+        '''
+        void run() {
+          print("x" "y");
+        }
+      ''',
+        'run',
+        [],
+        ['xy'],
+      );
+    });
+
+    test('chained +', () async {
+      await _testWasmPrint(
+        '''
+        void run() {
+          print("a" + "b" + "c" + "d");
+        }
+      ''',
+        'run',
+        [],
+        ['abcd'],
+      );
+    });
+
+    test('concat with empty strings', () async {
+      await _testWasmPrint(
+        '''
+        void run() {
+          print("a" + "");
+          print("" + "b");
+          print("" + "");
+        }
+      ''',
+        'run',
+        [],
+        ['a', 'b', ''],
+      );
+    });
+
+    test('multi-byte concat', () async {
+      await _testWasmPrint(
+        '''
+        void run() {
+          print("☃" + "x" + "é");
+        }
+      ''',
+        'run',
+        [],
+        ['☃xé'],
+      );
+    });
+
+    test('String variable interpolation', () async {
+      await _testWasmPrint(
+        '''
+        void run() {
+          String s = "world";
+          print("hello " + s);
+          print(s + "!");
+        }
+      ''',
+        'run',
+        [],
+        ['hello world', 'world!'],
+      );
+    });
+  });
 }
