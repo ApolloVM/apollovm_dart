@@ -602,6 +602,7 @@ class DartGrammarDefinition extends DartGrammarLexer {
               expressionMapEmptyLiteral() |
               expressionMapLiteral() |
               expressionVariableDirectOperation() |
+              expressionVariableEntryAssignment() |
               expressionVariableAssigment() |
               expressionFunctionInvocation() |
               expressionObjectEntryFunctionInvocation() |
@@ -910,6 +911,18 @@ class DartGrammarDefinition extends DartGrammarLexer {
       (variable() & assigmentOperator() & ref0(expression)).map((v) {
         return ASTExpressionVariableAssignment(v[0], v[1], v[2]);
       });
+
+  Parser<ASTExpressionVariableEntryAssignment>
+  expressionVariableEntryAssignment() =>
+      (variable() &
+              char('[') &
+              ref0(expression) &
+              char(']').trimHidden() &
+              assigmentOperator() &
+              ref0(expression))
+          .map((v) {
+            return ASTExpressionVariableEntryAssignment(v[0], v[2], v[4], v[5]);
+          });
 
   Parser<ASTAssignmentOperator> assigmentOperator() =>
       (char('=') |

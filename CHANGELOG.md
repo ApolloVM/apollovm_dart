@@ -1,5 +1,9 @@
 ## 0.1.27
 
+- Dart subscript assignment — `m[k] = v` and `a[i] = v` (frontend + interpreter):
+  - The grammar now parses container-entry assignment targets (previously the assignment left-hand side was only a bare variable, so `m[k] = v` / `a[i] = v` failed with a `SyntaxError`). Compound operators (`+=`, `-=`, `*=`, `/=`, `~/=`) are supported, e.g. `m["x"] += 1` for building a frequency map.
+  - New AST node `ASTExpressionVariableEntryAssignment`; new `ASTValue.writeKey`/`writeIndex` write into the underlying `Map`/`List` in place. A `Map` is always written by key (even a numeric one); a `List` by index. Round-trips through the code generators (parse → regenerate → re-parse).
+  - **Empty collection inference fix**: an empty `{}` literal (typed `Map<dynamic,dynamic>`) is now assignable to a typed map such as `Map<String,int>` — `ASTTypeMap.acceptsType` treats a `dynamic` key/value component as a wildcard, matching how lists already ignore their element type for assignment (so `Map<String,int> m = {};` works, like `List<int> a = [];`).
 - Dart `Map` support — frontend + interpreter (read/query; prerequisite for Wasm maps):
   - **Grammar fix**: `Map<K,V>` type annotations now parse. `mapTyped()` was missing the value-type parser (it accepted only `Map<K,>` and read the `,` token as the value type), so every `Map<int,int>` declaration failed with a `SyntaxError`. Key/value types also accept `List<...>` (e.g. `Map<String,List<int>>`).
   - Map literals now infer their key/value types from entries (mirroring list literals) instead of being hardcoded to `Map<dynamic,dynamic>`, so `Map<int,int> m = {1:10}` assigns cleanly. `ASTExpressionMapLiteral.resolveType` returns the `Map` type (it previously returned just the *value* type).
