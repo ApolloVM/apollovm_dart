@@ -2776,6 +2776,82 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     out.write(Wasm32.i32Store(2, ptrOffset));
   }
 
+  /// `m.keys` / `m.values`: builds a fresh list (`[length][capacity][dataPtr]`)
+  /// by copying the map's key (or value) buffer, and pushes its handle typed as
+  /// `List<keyType>` / `List<valueType>`.
+  BytesOutput _generateMapKeysOrValues(
+    ASTExpressionObjectGetterAccess expression,
+    ({ASTType type, int index}) mapVar, {
+    required bool keys,
+    required BytesOutput out,
+    required WasmContext context,
+  }) {
+    var module = context.module!;
+    module.requiresMemory = true;
+    module.requiresHeapGlobal = true;
+
+    var mapType = _requireMapType(
+      mapVar.type,
+      expression.variable.name,
+      keys ? 'keys' : 'values',
+    );
+    var elemType = keys ? mapType.keyType : mapType.valueType;
+    var elemSize = _elemSize(elemType);
+    var srcOffset = keys ? 8 : 12; // keysPtr / valuesPtr in the map header
+
+    var mapHdr = context.scratchLocal(_astTypeString, 15);
+    var listHdr = context.scratchLocal(_astTypeString, 26);
+    var listData = context.scratchLocal(_astTypeString, 27);
+
+    final s0 = context.stackLength;
+
+    // mapHdr = map header
+    _localVariableGet(out, context, mapVar.index, expression.variable.name);
+    out.write(Wasm.localSet(mapHdr));
+
+    // listHdr = alloc(12) ; listData = alloc(length*elemSize)
+    out.write(Wasm32.i32Const(_listHeaderSize));
+    _emitInlineAlloc(out, context);
+    out.write(Wasm.localSet(listHdr));
+    out.write(Wasm.localGet(mapHdr));
+    out.write(Wasm32.i32Load(2, 0)); // length
+    out.write(Wasm32.i32Const(elemSize));
+    out.writeByte(Wasm32.i32Multiply);
+    _emitInlineAlloc(out, context);
+    out.write(Wasm.localSet(listData));
+
+    // memory.copy(listData, map[srcOffset], length*elemSize)
+    out.write(Wasm.localGet(listData));
+    out.write(Wasm.localGet(mapHdr));
+    out.write(Wasm32.i32Load(2, srcOffset));
+    out.write(Wasm.localGet(mapHdr));
+    out.write(Wasm32.i32Load(2, 0)); // length
+    out.write(Wasm32.i32Const(elemSize));
+    out.writeByte(Wasm32.i32Multiply);
+    out.write(Wasm.memoryCopy);
+
+    // listHdr: length=len@0, capacity=len@4, dataPtr=listData@8
+    out.write(Wasm.localGet(listHdr));
+    out.write(Wasm.localGet(mapHdr));
+    out.write(Wasm32.i32Load(2, 0));
+    out.write(Wasm32.i32Store(2, 0));
+    out.write(Wasm.localGet(listHdr));
+    out.write(Wasm.localGet(mapHdr));
+    out.write(Wasm32.i32Load(2, 0));
+    out.write(Wasm32.i32Store(2, 4));
+    out.write(Wasm.localGet(listHdr));
+    out.write(Wasm.localGet(listData));
+    out.write(Wasm32.i32Store(2, 8));
+
+    out.write(Wasm.localGet(listHdr));
+    context.stackPush(
+      ASTTypeArray(elemType),
+      "${expression.variable.name}.${keys ? 'keys' : 'values'}",
+    );
+    context.assertStackLength(s0 + 1, "After .${keys ? 'keys' : 'values'}");
+    return out;
+  }
+
   /// Lowers a getter access (`a.length`). Slice 1 supports `List.length`.
   BytesOutput _generateWasmGetterAccess(
     ASTExpressionObjectGetterAccess expression, {
@@ -2818,6 +2894,19 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
         context.assertStackLength(s0 + 1, "After .$name");
         return out;
       }
+    }
+
+    // `m.keys` / `m.values`: materialize a fresh list (the map's key/value
+    // buffer already has the list element layout), enabling `for (var k in
+    // m.keys)` via the regular list for-each.
+    if (listType is ASTTypeMap && (name == 'keys' || name == 'values')) {
+      return _generateMapKeysOrValues(
+        expression,
+        localVar,
+        keys: name == 'keys',
+        out: out,
+        context: context,
+      );
     }
 
     if (listType is ASTTypeArray) {
@@ -4857,10 +4946,21 @@ extension _ASTStatementExtension on ASTStatement {
     } else if (self is ASTStatementForEach) {
       // The loop variable's type is the iterable's element type (the declared
       // type is usually `var`).
-      var iterType = self.iterableExpression.resolveType(null);
-      var elemType = iterType is ASTTypeArray
-          ? iterType.componentType
-          : self.variableType;
+      var iterExpr = self.iterableExpression;
+      var iterType = iterExpr.resolveType(null);
+      ASTType elemType;
+      if (iterType is ASTTypeArray) {
+        elemType = iterType.componentType;
+      } else if (iterExpr is ASTExpressionObjectGetterAccess &&
+          (iterExpr.name == 'keys' || iterExpr.name == 'values')) {
+        // `for (var k in m.keys)` / `m.values`: element type from the map.
+        var mapType = iterExpr.variable.resolveType(null);
+        elemType = mapType is ASTTypeMap
+            ? (iterExpr.name == 'keys' ? mapType.keyType : mapType.valueType)
+            : self.variableType;
+      } else {
+        elemType = self.variableType;
+      }
       return [
         MapEntry(self.variableName, elemType),
         ...self.loopBlock.declaredVariables(),
