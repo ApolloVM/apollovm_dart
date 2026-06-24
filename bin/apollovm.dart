@@ -13,7 +13,7 @@ void main(List<String> args) async {
   var commandRunner =
       CommandRunner<bool>(
           'apollovm',
-          'ApolloVM/${ApolloVM.VERSION} - A compact VM for Dart and Java.',
+          'ApolloVM/${ApolloVM.VERSION} - A compact VM for Dart, Java and JavaScript.',
         )
         ..addCommand(CommandRun())
         ..addCommand(CommandTranslate());
@@ -237,7 +237,7 @@ class CommandTranslate extends CommandSourceFileBase {
 
     var codeStorage = vm.generateAllCodeIn(targetLanguage);
 
-    var allSources = codeStorage.writeAllSources().toString();
+    var allSources = (await codeStorage.writeAllSources()).toString();
 
     print(allSources);
 

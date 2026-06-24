@@ -41,7 +41,7 @@ Now you can use the `apollovm` Dart executable:
 ```shell
 $> apollovm help
 
-ApolloVM - A compact VM for Dart and Java.
+ApolloVM - A compact VM for Dart, Java and JavaScript.
 
 Usage: apollovm <command> [arguments]
 
@@ -85,6 +85,33 @@ class Hello {
 
 }
 <<<< CODE_UNIT_END="/test/hello-world.java" >>>>
+<<<< [SOURCES_END] >>>>
+```
+
+The same commands work for JavaScript (`.js`) files. To `run` a JavaScript file:
+```shell
+$> apollovm run -v test/hello_world.js foo
+## [RUN]        File: 'test/hello_world.js' ; language: javascript > main( [foo] )
+Hello World!
+- name: foo
+```
+
+To `translate` a JavaScript file to Dart:
+```shell
+$> apollovm translate -v --target dart test/hello_world.js
+## [TRANSLATE]  File: 'test/hello_world.js' ; language: javascript > targetLanguage: dart
+<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test/hello_world.js" >>>>
+class Hello {
+
+  static void main(dynamic name) {
+    print('Hello World!');
+    print('- name: ${name}');
+  }
+
+}
+<<<< CODE_UNIT_END="/test/hello_world.js" >>>>
 <<<< [SOURCES_END] >>>>
 ```
 

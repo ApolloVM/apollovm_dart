@@ -5,8 +5,10 @@
   - **Code generator** (`ApolloCodeGeneratorJavaScript`): emits idiomatic modern JS from any loaded AST (Dart, Java, or JS) — `let`/`const`, template literals for string interpolation, `for...of`, top-level functions, untyped params/fields, `===`/`!==`, and `Math.trunc(a / b)` for integer division.
   - **Runner** (`ApolloRunnerJavaScript`): executes JS-parsed ASTs in the VM (subject to the VM's existing limitation that arithmetic requires concrete/inferable types — dynamic-typed arithmetic is unsupported, as for Dart `dynamic`).
   - Registered `javascript`/`js` in `ApolloVM.getParser`, `createRunner`, and `createCodeGenerator`.
+  - **CLI**: `apollovm run`/`translate` now work on `.js` files (the `.js` extension already mapped to `javascript`); added a `test/hello_world.js` fixture and updated the CLI banner to "Dart, Java and JavaScript".
   - Tests: added `javascript_basic_*` definitions (parse + execute + round-trip + cross-translation to Dart/Java) and a JavaScript generation block to the Dart class-function test.
   - Follow-ups: arrow functions, destructuring, spread, async/await, true `constructor` semantics with `this.x` parameters, and full ESM are not yet supported.
+- CLI bug fix: `apollovm translate` printed `Instance of 'Future<StringBuffer>'` instead of the translated source — `writeAllSources()` was stringified without `await`. Fixed for all languages.
 
 ## 0.1.27
 
