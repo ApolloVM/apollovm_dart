@@ -1282,11 +1282,15 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     } else if (statement is ASTBranch) {
       return generateASTBranch(statement, out: out, context: context);
     } else if (statement is ASTStatementForLoop) {
-      return generateASTStatementForLoop(statement, out: out);
+      return generateASTStatementForLoop(statement, out: out, context: context);
     } else if (statement is ASTStatementForEach) {
       return generateASTStatementForEach(statement, out: out);
     } else if (statement is ASTStatementWhileLoop) {
-      return generateASTStatementWhileLoop(statement, out: out);
+      return generateASTStatementWhileLoop(
+        statement,
+        out: out,
+        context: context,
+      );
     } else if (statement is ASTStatementBlock) {
       return generateASTStatementBlock(statement, out: out);
     } else if (statement is ASTStatementFunctionDeclaration) {
@@ -1373,9 +1377,24 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
   BytesOutput generateASTStatementForLoop(
     ASTStatementForLoop forLoop, {
     BytesOutput? out,
+    WasmContext? context,
   }) {
-    // TODO: implement generateASTStatementForLoop
-    throw UnimplementedError('generateASTStatementForLoop');
+    out ??= newOutput();
+    context ??= WasmContext();
+
+    // Emit the init statement BEFORE the loop block:
+    generateASTStatement(forLoop.initStatement, out: out, context: context);
+
+    _generateLoop(
+      out: out,
+      context: context,
+      conditionExpression: forLoop.conditionExpression,
+      loopBlock: forLoop.loopBlock,
+      continueExpression: forLoop.continueExpression,
+      description: "for",
+    );
+
+    return out;
   }
 
   @override
@@ -1391,9 +1410,96 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
   BytesOutput generateASTStatementWhileLoop(
     ASTStatementWhileLoop whileLoop, {
     BytesOutput? out,
+    WasmContext? context,
   }) {
-    // TODO: implement generateASTStatementWhileLoop
-    throw UnimplementedError("generateASTStatementWhileLoop");
+    out ??= newOutput();
+    context ??= WasmContext();
+
+    _generateLoop(
+      out: out,
+      context: context,
+      conditionExpression: whileLoop.conditionExpression,
+      loopBlock: whileLoop.loopBlock,
+      continueExpression: null,
+      description: "while",
+    );
+
+    return out;
+  }
+
+  /// Generates the `block`/`loop` structure shared by `while` and `for` loops.
+  ///
+  /// Structure emitted (void block types):
+  /// ```
+  /// block (void)
+  ///   loop (void)
+  ///     <cond>       ; pushes i32
+  ///     i32.eqz      ; !cond
+  ///     br_if 1      ; break out to block
+  ///     <body>
+  ///     <continue>   ; (for-loops only)
+  ///     br 0         ; jump back to loop
+  ///   end
+  /// end
+  /// ```
+  void _generateLoop({
+    required BytesOutput out,
+    required WasmContext context,
+    required ASTExpression conditionExpression,
+    required ASTBlock loopBlock,
+    required ASTExpression? continueExpression,
+    required String description,
+  }) {
+    out.write(
+      Wasm.block(WasmType.voidType),
+      description: "[OP] block ($description loop)",
+    );
+    out.write(
+      Wasm.loop(WasmType.voidType),
+      description: "[OP] loop ($description loop)",
+    );
+
+    final stackLng0 = context.stackLength;
+
+    // Condition: pushes an i32 (boolean).
+    generateASTExpression(conditionExpression, out: out, context: context);
+
+    context.assertStackLength(
+      stackLng0 + 1,
+      "After $description loop condition",
+    );
+    var stackType = context.stackGet(0)!.type;
+    if (stackType != _astTypeInt32) {
+      throw StateError("Stack type error> not a boolean type: $stackType");
+    }
+
+    // Negate the condition: `i32.eqz` consumes 1 i32 and pushes 1 i32
+    // (net zero on the virtual stack).
+    out.writeByte(
+      Wasm32.i32EqualsToZero,
+      description: "[OP] i32.eqz ( !($conditionExpression) )",
+    );
+
+    // Break out of the `block` (label 1) when the condition is false:
+    out.write(Wasm.brIf(1), description: "[OP] br_if 1 ($description break)");
+    context.stackDrop(_astTypeInt32);
+
+    context.assertStackLength(stackLng0, "After $description loop condition br");
+
+    // Loop body:
+    generateASTBlock(loopBlock, out: out, context: context);
+
+    // Continue expression (for-loops only), e.g. `i++`:
+    if (continueExpression != null) {
+      generateASTExpression(continueExpression, out: out, context: context);
+    }
+
+    // Jump back to the top of the `loop` (label 0). Any leaked operand-stack
+    // values are unwound by this branch (loop is void).
+    out.write(Wasm.br(0), description: "[OP] br 0 ($description continue)");
+
+    out.writeByte(Wasm.end, description: "[OP] loop end ($description)");
+    out.writeByte(Wasm.end, description: "[OP] block end ($description)");
   }
 
   @override
@@ -2306,6 +2412,13 @@ extension _ASTStatementExtension on ASTStatement {
         ...self.blocksElseIf.declaredVariables(),
         ...?self.blockElse?.declaredVariables(),
       ];
+    } else if (self is ASTStatementForLoop) {
+      return [
+        ...self.initStatement.declaredVariablesTypes(),
+        ...self.loopBlock.declaredVariables(),
+      ];
+    } else if (self is ASTStatementWhileLoop) {
+      return self.loopBlock.declaredVariables();
     }
 
     return [];
