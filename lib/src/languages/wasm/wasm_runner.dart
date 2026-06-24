@@ -74,6 +74,21 @@ class ApolloRunnerWasm extends ApolloRunner {
       return utf8.decode(mem.sublist(ptr + 4, ptr + 4 + len));
     }
 
+    // Allocates `[len:i32][utf8]` for [s] in the module's memory (via the
+    // exported `__alloc`) and returns its pointer.
+    int allocAndWriteString(String s) {
+      var m = loadedModule!;
+      var bytes = utf8.encode(s);
+      var ptr = m.invokeExport('__alloc', [bytes.length + 4]) as int;
+      var mem = m.readMemory()!;
+      mem[ptr] = bytes.length & 0xff;
+      mem[ptr + 1] = (bytes.length >> 8) & 0xff;
+      mem[ptr + 2] = (bytes.length >> 16) & 0xff;
+      mem[ptr + 3] = (bytes.length >> 24) & 0xff;
+      mem.setRange(ptr + 4, ptr + 4 + bytes.length, bytes);
+      return ptr;
+    }
+
     var hostImports = <String, Map<String, WasmHostFunction>>{
       'env': {
         'print': WasmHostFunction(
@@ -83,6 +98,20 @@ class ApolloRunnerWasm extends ApolloRunner {
             externalPrintFunction(decodeString(args[0] as int));
             return null;
           },
+        ),
+        // Number-to-string, mirroring the interpreter's `'$v'` formatting.
+        'int_to_str': WasmHostFunction(
+          params: const [WasmValueType.i64],
+          results: const [WasmValueType.i32],
+          callback: (args) => allocAndWriteString('${args[0]}'),
+        ),
+        'double_to_str': WasmHostFunction(
+          params: const [WasmValueType.f64],
+          results: const [WasmValueType.i32],
+          // `doubleToString` renders whole doubles as "5.0" deterministically
+          // (plain `toString` yields "5" under dart2js).
+          callback: (args) =>
+              allocAndWriteString(ASTTypeDouble.doubleToString(args[0] as num)),
         ),
       },
     };

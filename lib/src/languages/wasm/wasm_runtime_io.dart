@@ -191,6 +191,15 @@ class WasmModuleIO extends WasmModule {
   Uint8List? readMemory() => instance.getMemory('memory')?.view;
 
   @override
+  Object? invokeExport(String name, List<Object?> args) {
+    var f = instance.getFunction(name);
+    if (f == null) {
+      throw StateError("No exported Wasm function `$name`");
+    }
+    return Function.apply(f.inner, args);
+  }
+
+  @override
   void dispose() {
     instance.dispose();
   }

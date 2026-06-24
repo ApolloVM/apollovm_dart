@@ -336,4 +336,87 @@ void main() {
       );
     });
   });
+
+  group('Wasm P2: number-to-string interpolation', () {
+    test('int variable interpolation', () async {
+      await _testWasmPrint(
+        '''
+        void run() {
+          int n = 5;
+          int neg = -7;
+          print("n=\$n");
+          print("neg=\$neg");
+        }
+      ''',
+        'run',
+        [],
+        ['n=5', 'neg=-7'],
+      );
+    });
+
+    test('double variable interpolation (incl. whole value)', () async {
+      // `doubleToString` renders whole doubles as "5.0" on both the VM and
+      // dart2js, matching the interpreter's variable-interpolation formatting.
+      await _testWasmPrint(
+        '''
+        void run() {
+          double d = 1.5;
+          double q = 0.25;
+          double w = 5.0;
+          print("d=\$d");
+          print("q=\$q");
+          print("w=\$w");
+        }
+      ''',
+        'run',
+        [],
+        ['d=1.5', 'q=0.25', 'w=5.0'],
+      );
+    });
+
+    test('expression interpolation', () async {
+      await _testWasmPrint(
+        '''
+        void run() {
+          int n = 4;
+          double d = 2.5;
+          print("sum=\${n + n}");
+          print("prod=\${d * 2.5}");
+        }
+      ''',
+        'run',
+        [],
+        ['sum=8', 'prod=6.25'],
+      );
+    });
+
+    test('mixed interpolation', () async {
+      await _testWasmPrint(
+        '''
+        void run() {
+          int n = 3;
+          double d = 2.5;
+          String s = "ok";
+          print("n=\$n d=\$d s=\$s end");
+        }
+      ''',
+        'run',
+        [],
+        ['n=3 d=2.5 s=ok end'],
+      );
+    });
+
+    test('String return with interpolation', () async {
+      await _testWasmReturn(
+        '''
+        String label(int n) {
+          return "n=\$n";
+        }
+      ''',
+        'label',
+        [42],
+        'n=42',
+      );
+    });
+  });
 }

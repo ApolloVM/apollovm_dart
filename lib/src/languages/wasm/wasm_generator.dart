@@ -215,6 +215,29 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       );
     }).toList();
 
+    // Export synthesized functions (e.g. `__alloc`) for host use.
+    var synthBase = importCount + module.functions.length;
+    for (var j = 0; j < module.synthFunctions.length; ++j) {
+      var s = module.synthFunctions[j];
+      if (!s.exported) continue;
+      entries.add(
+        BytesOutput(
+          data: [
+            BytesOutput(
+              data: Wasm.encodeString(s.name),
+              description: "Function name(`${s.name}`)",
+            ),
+            BytesOutput(data: 0x00, description: "Export type(function)"),
+            BytesOutput(
+              data: Leb128.encodeUnsigned(synthBase + j),
+              description: "Function index(${synthBase + j})",
+            ),
+          ],
+          description: "Export synth `${s.name}`",
+        ),
+      );
+    }
+
     // Export the linear memory (as `memory`) so the host can read/write it.
     if (module.requiresMemory) {
       entries.add(
@@ -259,12 +282,15 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     out ??= newOutput();
 
     // Imported-function signatures come first (their type indices 0..K-1),
-    // then the module-defined functions.
+    // then the module-defined functions, then synthesized functions.
     var entries = <BytesOutput>[
       ...module.importedFunctions.map(
         (imp) => _wasmFuncTypeBytes(imp.params, imp.results),
       ),
       ...module.functions.map((f) => f.wasmSignature()),
+      ...module.synthFunctions.map(
+        (s) => _wasmFuncTypeBytes(s.params, s.results),
+      ),
     ];
 
     entries.insert(
@@ -331,11 +357,18 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
   }) {
     out ??= newOutput();
 
-    // Each defined function references its type index, offset past the imports.
+    // Each defined function references its type index, offset past the imports;
+    // synthesized functions follow the user functions.
     var importCount = module.importCount;
-    var indexes = module.functions
-        .mapIndexed((i, e) => Leb128.encodeUnsigned(importCount + i))
-        .toList();
+    var n = module.functions.length;
+    var indexes = <List<int>>[
+      ...module.functions.mapIndexed(
+        (i, e) => Leb128.encodeUnsigned(importCount + i),
+      ),
+      ...module.synthFunctions.mapIndexed(
+        (j, s) => Leb128.encodeUnsigned(importCount + n + j),
+      ),
+    ];
 
     indexes.insert(0, Leb128.encodeUnsigned(indexes.length));
 
@@ -454,6 +487,16 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     var entries = module.functions
         .map((f) => generateASTFunctionDeclaration(f, module: module))
         .toList();
+
+    // Synth functions (e.g. `__alloc`) registered during user-body codegen.
+    // Each body is length-prefixed (like user-function bodies).
+    for (var s in module.synthFunctions) {
+      var bodyEntry = newOutput();
+      bodyEntry.writeBytesLeb128Block([
+        s.body,
+      ], description: "Synth body `${s.name}`");
+      entries.add(bodyEntry);
+    }
 
     entries.insert(
       0,
@@ -2622,7 +2665,11 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
         context: context,
       );
     } else if (value is ASTValueStringExpression) {
-      return generateASTValueStringExpression(value, out: out);
+      return generateASTValueStringExpression(
+        value,
+        out: out,
+        context: context,
+      );
     } else if (value is ASTValueArray) {
       return generateASTValueArray(value, out: out);
     } else if (value is ASTValueArray2D) {
@@ -2791,9 +2838,25 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
   BytesOutput generateASTValueStringExpression(
     ASTValueStringExpression value, {
     BytesOutput? out,
+    WasmContext? context,
   }) {
-    // Number/expression-to-string interpolation lands in a later slice.
-    throw UnimplementedError('generateASTValueStringExpression');
+    out ??= newOutput();
+    context ??= WasmContext();
+
+    generateASTExpression(value.expression, out: out, context: context);
+
+    var t = context.stackGet(0)!.type;
+    if (t is ASTTypeString) {
+      // Already a string handle.
+    } else if (t is ASTTypeInt || t is ASTTypeDouble) {
+      _emitNumberToString(out, context, t);
+    } else {
+      throw UnimplementedError(
+        "Wasm string interpolation of expression type $t is not supported yet.",
+      );
+    }
+
+    return out;
   }
 
   @override
@@ -2808,20 +2871,65 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
 
     var name = value.variable.name;
     var localVar = _getLocalVariable(context, name);
+    var t = localVar.type;
 
-    // For now, only String variables (already an i32 handle) are supported;
-    // number-to-string interpolation lands in a later slice.
-    if (localVar.type is! ASTTypeString) {
+    _localVariableGet(out, context, localVar.index, name);
+
+    if (t is ASTTypeString) {
+      context.stackPush(_astTypeString, "string var: \$$name");
+    } else if (t is ASTTypeInt || t is ASTTypeDouble) {
+      context.stackPush(t, "number var: \$$name");
+      _emitNumberToString(out, context, t);
+    } else {
       throw UnimplementedError(
-        "Wasm interpolation of non-String variable `$name` "
-        "(${localVar.type}) is not supported yet.",
+        "Wasm interpolation of variable `$name` ($t) is not supported yet.",
       );
     }
 
-    _localVariableGet(out, context, localVar.index, name);
-    context.stackPush(_astTypeString, "string var: \$$name");
-
     return out;
+  }
+
+  /// Converts the number on the top of the stack (i64 for int, f64 for double)
+  /// to a string handle via a host import (`env.int_to_str` / `double_to_str`).
+  void _emitNumberToString(
+    BytesOutput out,
+    WasmContext context,
+    ASTType numType,
+  ) {
+    var module = context.module;
+    if (module == null) {
+      throw StateError("Can't convert a number to String without a module.");
+    }
+    module.requiresMemory = true;
+    module.ensureAllocFunction();
+
+    int importIndex;
+    if (numType is ASTTypeInt) {
+      importIndex = module.registerImportedFunction(
+        'env',
+        'int_to_str',
+        const [WasmType.i64Type],
+        const [WasmType.i32Type],
+      );
+    } else if (numType is ASTTypeDouble) {
+      importIndex = module.registerImportedFunction(
+        'env',
+        'double_to_str',
+        const [WasmType.f64Type],
+        const [WasmType.i32Type],
+      );
+    } else {
+      throw UnimplementedError(
+        "Wasm number-to-string for $numType is not supported yet.",
+      );
+    }
+
+    out.write(
+      Wasm.call(importIndex),
+      description: "[OP] call host number-to-string (index $importIndex)",
+    );
+    context.stackDrop();
+    context.stackPush(_astTypeString, "number to string");
   }
 
   /// Concatenates the top two string handles on the stack (`[a, b]`) into a
@@ -2972,6 +3080,26 @@ class WasmImportedFunction {
   WasmImportedFunction(this.module, this.name, this.params, this.results);
 }
 
+/// A generator-synthesized module function (e.g. the `__alloc` bump allocator),
+/// placed in the function index space after the user-defined functions.
+class WasmSynthFunction {
+  final String name;
+  final List<WasmType> params;
+  final List<WasmType> results;
+
+  /// The complete code body: locals vector + instructions + `end`.
+  final BytesOutput body;
+  final bool exported;
+
+  WasmSynthFunction(
+    this.name,
+    this.params,
+    this.results,
+    this.body, {
+    this.exported = false,
+  });
+}
+
 /// Module-level Wasm codegen state shared across all functions: the function
 /// index space (imports + defined functions) and the static data region
 /// (interned string literals).
@@ -3005,6 +3133,40 @@ class WasmModuleContext {
     _importIndexByKey[key] = index;
     requiresMemory = true;
     return index;
+  }
+
+  // --- Synthesized functions (indices importCount + functions.length + j) ---
+
+  final List<WasmSynthFunction> synthFunctions = [];
+  final Set<String> _synthNames = {};
+
+  /// Ensures the exported `__alloc(i32 size) -> i32 ptr` bump-allocator function
+  /// exists. Exported so the host can allocate strings in module memory.
+  void ensureAllocFunction() {
+    if (_synthNames.contains('__alloc')) return;
+    requiresMemory = true;
+    requiresHeapGlobal = true;
+
+    // result = $hp; $hp = $hp + size; return result
+    var body = BytesOutput();
+    body.write(Leb128.encodeUnsigned(0), description: "Locals count");
+    body.write(Wasm.globalGet(heapGlobalIndex));
+    body.write(Wasm.globalGet(heapGlobalIndex));
+    body.write(Wasm.localGet(0));
+    body.writeByte(Wasm32.i32Add);
+    body.write(Wasm.globalSet(heapGlobalIndex));
+    body.writeByte(Wasm.end);
+
+    synthFunctions.add(
+      WasmSynthFunction(
+        '__alloc',
+        const [WasmType.i32Type],
+        const [WasmType.i32Type],
+        body,
+        exported: true,
+      ),
+    );
+    _synthNames.add('__alloc');
   }
 
   /// Resolves the Wasm function index for a module-defined function with [name]
