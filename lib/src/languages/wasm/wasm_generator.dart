@@ -170,7 +170,7 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     out ??= newOutput();
 
     var entries = functions
-        .map((f) => generateASTFunctionDeclaration(f))
+        .map((f) => generateASTFunctionDeclaration(f, functions: functions))
         .toList();
 
     entries.insert(
@@ -498,9 +498,82 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
   BytesOutput generateASTExpressionLocalFunctionInvocation(
     ASTExpressionLocalFunctionInvocation expression, {
     BytesOutput? out,
+    WasmContext? context,
   }) {
-    // TODO: implement generateASTExpressionLocalFunctionInvocation
-    throw UnimplementedError('generateASTExpressionLocalFunctionInvocation');
+    out ??= newOutput();
+    context ??= WasmContext();
+
+    var name = expression.name;
+    var arguments = expression.arguments;
+    var argsCount = arguments.length;
+
+    var calleeIndex = context.functionIndex(name, argsCount);
+    if (calleeIndex == null) {
+      throw StateError(
+        "Can't resolve local function `$name` with $argsCount argument(s) "
+        "in the Wasm function index table.",
+      );
+    }
+
+    var callee = context.functionByIndex(calleeIndex)!;
+
+    final stackLng0 = context.stackLength;
+
+    // Evaluate each argument (left-to-right), pushing onto the Wasm stack,
+    // converting each to the callee's declared parameter type.
+    for (var i = 0; i < argsCount; ++i) {
+      var arg = arguments[i];
+
+      var stackLngArg = context.stackLength;
+      generateASTExpression(arg, out: out, context: context);
+      context.assertStackLength(
+        stackLngArg + 1,
+        "After argument[$i] push (call `$name`)",
+      );
+
+      var stackEntry = context.stackGet(0)!;
+      var stackType = stackEntry.type;
+
+      var paramType = callee.parameters.getParameterByIndex(i)?.type;
+      if (paramType != null) {
+        _autoConvertStackTypes(stackType, paramType, out: out, context: context);
+      }
+    }
+
+    context.assertStackLength(
+      stackLng0 + argsCount,
+      "Before call `$name` (all arguments pushed)",
+    );
+
+    out.write(
+      Wasm.call(calleeIndex),
+      description: "[OP] call `$name` (function index: $calleeIndex)",
+    );
+
+    // Update the virtual stack: drop the N arguments and push the return type.
+    for (var i = 0; i < argsCount; ++i) {
+      context.stackDrop();
+    }
+
+    var returnType = callee.returnType;
+    if (!returnType.isVoid) {
+      ASTType resultType;
+      if (returnType is ASTTypeInt) {
+        resultType = _astTypeInt64;
+      } else if (returnType is ASTTypeDouble) {
+        resultType = _astTypeDouble64;
+      } else {
+        resultType = returnType;
+      }
+      context.stackPush(resultType, "call `$name` result: $returnType");
+    }
+
+    context.assertStackLength(
+      stackLng0 + (returnType.isVoid ? 0 : 1),
+      "After call `$name` result",
+    );
+
+    return out;
   }
 
   @override
@@ -1182,9 +1255,14 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     ASTFunctionDeclaration f, {
     BytesOutput? out,
     WasmContext? context,
+    List<ASTFunctionDeclaration>? functions,
   }) {
     out ??= newOutput();
     context ??= WasmContext();
+
+    if (functions != null) {
+      context.functions = functions;
+    }
 
     var outBody = newOutput();
 
@@ -1715,7 +1793,11 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     } else if (expression is ASTExpressionNegative) {
       return generateASTExpressionNegative(expression, out: out);
     } else if (expression is ASTExpressionLocalFunctionInvocation) {
-      return generateASTExpressionLocalFunctionInvocation(expression, out: out);
+      return generateASTExpressionLocalFunctionInvocation(
+        expression,
+        out: out,
+        context: context,
+      );
     } else if (expression is ASTExpressionObjectFunctionInvocation) {
       return generateASTExpressionFunctionInvocation(expression, out: out);
     } else if (expression is ASTExpressionGroupFunctionInvocation) {
@@ -1975,6 +2057,31 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
 
 /// The Wasm code context.
 class WasmContext {
+  /// The ordered list of functions in the module (defines the Wasm function
+  /// index space). Used to resolve local function invocations to their `call`
+  /// index. See [functionIndex] and [functionByIndex].
+  List<ASTFunctionDeclaration> functions;
+
+  WasmContext({this.functions = const []});
+
+  /// Resolves the Wasm function index for a function with [name] and [arity]
+  /// (number of arguments). Returns `null` if not found.
+  int? functionIndex(String name, int arity) {
+    for (var i = 0; i < functions.length; ++i) {
+      var f = functions[i];
+      if (f.name == name && f.parameters.size == arity) {
+        return i;
+      }
+    }
+    return null;
+  }
+
+  /// Returns the function at the module's function index [index].
+  ASTFunctionDeclaration? functionByIndex(int index) {
+    if (index < 0 || index >= functions.length) return null;
+    return functions[index];
+  }
+
   final Map<String, ({ASTType type, int index})> _localVariables = {};
 
   ({ASTType type, int index})? getLocalVariable(String name) {
