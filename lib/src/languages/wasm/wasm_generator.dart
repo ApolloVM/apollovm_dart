@@ -830,13 +830,108 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     );
   }
 
+  // === Lists =========================================================
+  //
+  // A list value is an i32 pointer to `[length:i32][capacity:i32][elements…]`
+  // in linear memory. Element storage: int -> i64 (8B), double -> f64 (8B),
+  // String/bool -> i32 (4B). Slice 1 supports int/double element lists.
+
+  int _elemSize(ASTType elemType) =>
+      (elemType is ASTTypeInt || elemType is ASTTypeDouble) ? 8 : 4;
+
+  void _emitElemStore(BytesOutput out, ASTType elemType, int offset) {
+    if (elemType is ASTTypeInt) {
+      out.write(Wasm64.i64Store(3, offset));
+    } else if (elemType is ASTTypeDouble) {
+      out.write(Wasm64.f64Store(FloatAlign.align3, offset));
+    } else if (elemType is ASTTypeString || elemType is ASTTypeBool) {
+      out.write(Wasm32.i32Store(2, offset));
+    } else {
+      throw UnimplementedError("Wasm list element store for $elemType");
+    }
+  }
+
+  void _emitElemLoad(BytesOutput out, ASTType elemType, int offset) {
+    if (elemType is ASTTypeInt) {
+      out.write(Wasm64.i64Load(3, offset));
+    } else if (elemType is ASTTypeDouble) {
+      out.write(Wasm64.f64Load(FloatAlign.align3, offset));
+    } else if (elemType is ASTTypeString || elemType is ASTTypeBool) {
+      out.write(Wasm32.i32Load(2, offset));
+    } else {
+      throw UnimplementedError("Wasm list element load for $elemType");
+    }
+  }
+
+  ASTType _elemStackType(ASTType elemType) {
+    if (elemType is ASTTypeInt) return _astTypeInt64;
+    if (elemType is ASTTypeDouble) return _astTypeDouble64;
+    if (elemType is ASTTypeString) return _astTypeString;
+    return elemType;
+  }
+
   @override
   BytesOutput generateASTExpressionListLiteral(
     ASTExpressionListLiteral expression, {
     BytesOutput? out,
+    WasmContext? context,
   }) {
-    // TODO: implement generateASTExpressionListLiteral
-    throw UnimplementedError('generateASTExpressionListLiteral');
+    out ??= newOutput();
+    context ??= WasmContext();
+    var module = context.module;
+    if (module == null) {
+      throw StateError("Can't build a list without a module.");
+    }
+    module.requiresMemory = true;
+    module.requiresHeapGlobal = true;
+
+    var elemType = expression.type;
+    if (elemType == null) {
+      var rt = expression.resolveType(null);
+      elemType = rt is ASTTypeArray
+          ? rt.componentType
+          : ASTTypeDynamic.instance;
+    }
+    if (elemType is! ASTTypeInt && elemType is! ASTTypeDouble) {
+      throw UnimplementedError(
+        "Wasm list literal of element type $elemType is not supported yet.",
+      );
+    }
+
+    var size = _elemSize(elemType);
+    var values = expression.valuesExpressions;
+    var n = values.length;
+    var listLocal = context.scratchLocal(_astTypeString, 6);
+
+    final s0 = context.stackLength;
+
+    // alloc(8 + n*size) -> $listLocal
+    out.write(Wasm32.i32Const(8 + n * size));
+    _emitInlineAlloc(out, context);
+    out.write(Wasm.localSet(listLocal));
+
+    // length and capacity headers
+    out.write(Wasm.localGet(listLocal));
+    out.write(Wasm32.i32Const(n));
+    out.write(Wasm32.i32Store(2, 0));
+    out.write(Wasm.localGet(listLocal));
+    out.write(Wasm32.i32Const(n));
+    out.write(Wasm32.i32Store(2, 4));
+
+    // elements at offset 8 + i*size
+    for (var i = 0; i < n; ++i) {
+      out.write(Wasm.localGet(listLocal)); // store base address
+      generateASTExpression(values[i], out: out, context: context);
+      context.stackDrop(); // value consumed by the store
+      _emitElemStore(out, elemType, 8 + i * size);
+    }
+
+    // list handle
+    out.write(Wasm.localGet(listLocal));
+    context.stackPush(ASTTypeArray(elemType), "list literal");
+
+    context.assertStackLength(s0 + 1, "After list literal");
+    return out;
   }
 
   @override
@@ -1907,9 +2002,71 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
   BytesOutput generateASTExpressionVariableEntryAccess(
     ASTExpressionVariableEntryAccess expression, {
     BytesOutput? out,
+    WasmContext? context,
   }) {
-    // TODO: implement generateASTExpressionVariableEntryAccess
-    throw UnimplementedError('generateASTExpressionVariableEntryAccess');
+    out ??= newOutput();
+    context ??= WasmContext();
+
+    var name = expression.variable.name;
+    var localVar = _getLocalVariable(context, name);
+    var listType = localVar.type;
+    if (listType is! ASTTypeArray) {
+      throw UnimplementedError(
+        "Wasm index access on `$name` ($listType) is not supported yet.",
+      );
+    }
+    var elemType = listType.componentType;
+    var size = _elemSize(elemType);
+
+    final s0 = context.stackLength;
+
+    // addr = listPtr + 8 + index * size; then load the element.
+    _localVariableGet(out, context, localVar.index, name); // listPtr (raw)
+    generateASTExpression(
+      expression.expression,
+      out: out,
+      context: context,
+    ); // index (i64, tracked)
+    out.writeByte(Wasm64.i64WrapToi32); // index -> i32
+    out.write(Wasm32.i32Const(size));
+    out.writeByte(Wasm32.i32Multiply);
+    out.write(Wasm32.i32Const(8));
+    out.writeByte(Wasm32.i32Add);
+    out.writeByte(Wasm32.i32Add); // listPtr + (8 + index*size)
+    _emitElemLoad(out, elemType, 0);
+
+    context.stackDrop(); // the index
+    context.stackPush(_elemStackType(elemType), "list[index]");
+    context.assertStackLength(s0 + 1, "After list index");
+    return out;
+  }
+
+  /// Lowers a getter access (`a.length`). Slice 1 supports `List.length`.
+  BytesOutput _generateWasmGetterAccess(
+    ASTExpressionObjectGetterAccess expression, {
+    BytesOutput? out,
+    WasmContext? context,
+  }) {
+    out ??= newOutput();
+    context ??= WasmContext();
+
+    var name = expression.name;
+    var varName = expression.variable.name;
+    var localVar = _getLocalVariable(context, varName);
+
+    if (localVar.type is ASTTypeArray && name == 'length') {
+      final s0 = context.stackLength;
+      _localVariableGet(out, context, localVar.index, varName);
+      out.write(Wasm32.i32Load(2, 0)); // length (i32)
+      out.writeByte(Wasm32.i32ExtendToI64Signed); // -> i64 (int)
+      context.stackPush(_astTypeInt64, "$varName.length");
+      context.assertStackLength(s0 + 1, "After .length");
+      return out;
+    }
+
+    throw UnimplementedError(
+      "Wasm getter `.$name` on ${localVar.type} is not supported yet.",
+    );
   }
 
   @override
@@ -2049,7 +2206,7 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     } else if (statement is ASTStatementForLoop) {
       return generateASTStatementForLoop(statement, out: out, context: context);
     } else if (statement is ASTStatementForEach) {
-      return generateASTStatementForEach(statement, out: out);
+      return generateASTStatementForEach(statement, out: out, context: context);
     } else if (statement is ASTStatementWhileLoop) {
       return generateASTStatementWhileLoop(
         statement,
@@ -2166,9 +2323,76 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
   BytesOutput generateASTStatementForEach(
     ASTStatementForEach forEach, {
     BytesOutput? out,
+    WasmContext? context,
   }) {
-    // TODO: implement generateASTStatementForEach
-    throw UnimplementedError('generateASTStatementForEach');
+    out ??= newOutput();
+    context ??= WasmContext();
+
+    // Evaluate the iterable (a list pointer) into a scratch local.
+    generateASTExpression(
+      forEach.iterableExpression,
+      out: out,
+      context: context,
+    );
+    var iterType = context.stackGet(0)!.type;
+    if (iterType is! ASTTypeArray) {
+      throw UnimplementedError(
+        "Wasm for-each over $iterType is not supported yet.",
+      );
+    }
+    var elemType = iterType.componentType;
+    var size = _elemSize(elemType);
+
+    var listScratch = context.scratchLocal(_astTypeString, 7);
+    var iScratch = context.scratchLocal(_astTypeString, 8);
+    out.write(Wasm.localSet(listScratch));
+    context.stackDrop(); // iterable consumed
+
+    var eLocal = _getLocalVariable(context, forEach.variableName);
+
+    // i = 0
+    out.write(Wasm32.i32Const(0));
+    out.write(Wasm.localSet(iScratch));
+
+    // block { loop { if (i >= len) break; e = list[i]; <body>; i++; continue } }
+    out.write(Wasm.block(WasmType.voidType));
+    out.write(Wasm.loop(WasmType.voidType));
+
+    // if (i >= len) br 1
+    out.write(Wasm.localGet(iScratch));
+    out.write(Wasm.localGet(listScratch));
+    out.write(Wasm32.i32Load(2, 0)); // length
+    out.writeByte(Wasm32.i32GreaterThanOrEqualsUnsigned);
+    out.write(Wasm.brIf(1));
+
+    // e = list[8 + i*size]
+    out.write(Wasm.localGet(listScratch));
+    out.write(Wasm.localGet(iScratch));
+    out.write(Wasm32.i32Const(size));
+    out.writeByte(Wasm32.i32Multiply);
+    out.write(Wasm32.i32Const(8));
+    out.writeByte(Wasm32.i32Add);
+    out.writeByte(Wasm32.i32Add);
+    _emitElemLoad(out, elemType, 0);
+    out.write(Wasm.localSet(eLocal.index));
+
+    // body (a `return` inside emits `return` directly; no extra check needed)
+    generateASTBlock(forEach.loopBlock, out: out, context: context);
+
+    // i++
+    out.write(Wasm.localGet(iScratch));
+    out.write(Wasm32.i32Const(1));
+    out.writeByte(Wasm32.i32Add);
+    out.write(Wasm.localSet(iScratch));
+
+    out.write(Wasm.br(0)); // continue
+    out.writeByte(Wasm.end); // loop
+    out.writeByte(Wasm.end); // block
+
+    // The body may leave phantom virtual-stack entries (assignments use
+    // `local.set` without a matching virtual drop), like the for/while loops;
+    // the real Wasm stack stays balanced, so no post-body assertion here.
+    return out;
   }
 
   @override
@@ -2573,7 +2797,13 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
         context: context,
       );
     } else if (expression is ASTExpressionVariableEntryAccess) {
-      return generateASTExpressionVariableEntryAccess(expression, out: out);
+      return generateASTExpressionVariableEntryAccess(
+        expression,
+        out: out,
+        context: context,
+      );
+    } else if (expression is ASTExpressionObjectGetterAccess) {
+      return _generateWasmGetterAccess(expression, out: out, context: context);
     } else if (expression is ASTExpressionLiteral) {
       return generateASTExpressionLiteral(
         expression,
@@ -2581,7 +2811,11 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
         context: context,
       );
     } else if (expression is ASTExpressionListLiteral) {
-      return generateASTExpressionListLiteral(expression, out: out);
+      return generateASTExpressionListLiteral(
+        expression,
+        out: out,
+        context: context,
+      );
     } else if (expression is ASTExpressionMapLiteral) {
       return generateASTExpressionMapLiteral(expression, out: out);
     } else if (expression is ASTExpressionNegation) {
@@ -3629,6 +3863,9 @@ extension _ASTTypeExtension on ASTType {
     } else if (this is ASTTypeString) {
       // A string is an i32 pointer into linear memory.
       return WasmType.i32Type;
+    } else if (this is ASTTypeArray) {
+      // A list is an i32 pointer into linear memory.
+      return WasmType.i32Type;
     } else if (this is ASTTypeVoid) {
       return WasmType.voidType;
     } else if (name == 'void') {
@@ -3724,6 +3961,17 @@ extension _ASTStatementExtension on ASTStatement {
       ];
     } else if (self is ASTStatementWhileLoop) {
       return self.loopBlock.declaredVariables();
+    } else if (self is ASTStatementForEach) {
+      // The loop variable's type is the iterable's element type (the declared
+      // type is usually `var`).
+      var iterType = self.iterableExpression.resolveType(null);
+      var elemType = iterType is ASTTypeArray
+          ? iterType.componentType
+          : self.variableType;
+      return [
+        MapEntry(self.variableName, elemType),
+        ...self.loopBlock.declaredVariables(),
+      ];
     }
 
     return [];
