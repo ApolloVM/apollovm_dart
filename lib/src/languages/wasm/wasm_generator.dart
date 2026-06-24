@@ -814,6 +814,65 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     return out;
   }
 
+  /// Generates a short-circuiting logical `&&` / `||` as an `if/else` that
+  /// yields an i32 boolean, so the right operand is only evaluated when needed:
+  /// - `a && b`  ->  `a ? b : false`
+  /// - `a || b`  ->  `a ? true : b`
+  BytesOutput generateASTExpressionLogicalShortCircuit(
+    ASTExpressionOperation expression, {
+    BytesOutput? out,
+    WasmContext? context,
+  }) {
+    out ??= newOutput();
+    context ??= WasmContext();
+
+    final isAnd = expression.operator == ASTExpressionOperator.and;
+    final stackLng0 = context.stackLength;
+
+    // Left operand (i32 boolean).
+    generateASTExpression(expression.expression1, out: out, context: context);
+    context.assertStackLength(stackLng0 + 1, "After logical left operand");
+
+    var leftType = context.stackGet(0)!.type;
+    if (leftType != _astTypeInt32) {
+      throw StateError("Logical operand is not a boolean (i32): $leftType");
+    }
+
+    // `if` consumes the left boolean and yields an i32 result.
+    out.write(
+      Wasm.ifInstruction(WasmType.i32Type),
+      description: "[OP] logical ${isAnd ? '&&' : '||'} (short-circuit)",
+    );
+    context.stackDrop(_astTypeInt32);
+
+    // `then` branch value.
+    if (isAnd) {
+      generateASTExpression(expression.expression2, out: out, context: context);
+    } else {
+      out.write(Wasm32.i32Const(1), description: "[OP] push true");
+      context.stackPush(_astTypeInt32, "logical true");
+    }
+    // The two branches are mutually exclusive: drop the `then` result from the
+    // virtual stack before generating the `else` branch.
+    context.stackDrop();
+
+    out.writeByte(Wasm.elseInstruction, description: "[OP] logical else");
+
+    // `else` branch value.
+    if (isAnd) {
+      out.write(Wasm32.i32Const(0), description: "[OP] push false");
+      context.stackPush(_astTypeInt32, "logical false");
+    } else {
+      generateASTExpression(expression.expression2, out: out, context: context);
+    }
+
+    out.writeByte(Wasm.end, description: "[OP] logical end");
+
+    context.assertStackLength(stackLng0 + 1, "After logical short-circuit");
+
+    return out;
+  }
+
   @override
   BytesOutput generateASTExpressionOperation(
     ASTExpressionOperation expression, {
@@ -839,6 +898,17 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
           context: context,
         );
       }
+    }
+
+    // Short-circuit logical operators must NOT eagerly evaluate the right
+    // operand, so they are handled before the generic operand evaluation below.
+    if (expression.operator == ASTExpressionOperator.and ||
+        expression.operator == ASTExpressionOperator.or) {
+      return generateASTExpressionLogicalShortCircuit(
+        expression,
+        out: out,
+        context: context,
+      );
     }
 
     final stackLng0 = context.stackLength;
@@ -1091,41 +1161,20 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
         }
       case ASTExpressionOperator.remainder:
         {
-          // Dart `%` on doubles has no direct Wasm f64 opcode (and i64.rem_s
-          // gives a truncated remainder, matching Dart only for non-negative
-          // operands). Support the common integer, non-negative case.
-          if (stackType2 == _astTypeDouble64 || stackType2 == _astTypeDouble) {
-            throw UnsupportedError(
-              "Wasm Operator not supported for double: remainder (%)",
-            );
+          // Dart `%` always yields a non-negative result in `[0, |b|)`, which
+          // differs from Wasm's truncated `i64.rem_s` / the f64 formula for
+          // negative operands; the helpers apply the sign correction.
+          if (stackType2 == _astTypeDouble) {
+            _writeDoubleModulo(out, context);
+          } else {
+            _writeIntModulo(out, context);
           }
-          writeOperation(
-            _astTypeInt64,
-            Wasm64.i64RemainderSigned,
-            "remainder(i64)",
-            "i64.rem_s",
-          );
         }
-      case ASTExpressionOperator.and:
-        {
-          // Non-short-circuit logical AND on i32 booleans (0/1).
-          writeOperation(
-            _astTypeInt32,
-            Wasm32.i32BitwiseAnd,
-            "and(i32)",
-            "i32.and",
-          );
-        }
-      case ASTExpressionOperator.or:
-        {
-          // Non-short-circuit logical OR on i32 booleans (0/1).
-          writeOperation(
-            _astTypeInt32,
-            Wasm32.i32BitwiseOr,
-            "or(i32)",
-            "i32.or",
-          );
-        }
+      default:
+        // `and`/`or` are handled before operand evaluation (short-circuit).
+        throw UnsupportedError(
+          "Wasm Operator not supported: ${expression.operator.name}",
+        );
     }
 
     context.assertStackLength(stackLng2 - 1, "After operation result");
@@ -1140,6 +1189,81 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
         "Stack status error> `f64.divide` needs 2 f64 values in the top of the stack",
       );
     }
+  }
+
+  /// Emits Dart integer `%` for `[a, b]` on the stack (both i64).
+  ///
+  /// `i64.rem_s` yields a truncated remainder (sign of the dividend), but Dart
+  /// `%` is always in `[0, |b|)`. So: `r = a rem b; if (r < 0) r += |b|`,
+  /// computed branchlessly with `select` and two scratch locals.
+  void _writeIntModulo(BytesOutput out, WasmContext context) {
+    var bs = context.scratchLocal(_astTypeInt64, 0);
+    var rs = context.scratchLocal(_astTypeInt64, 1);
+
+    out.write(Wasm.localTee(bs), description: "[OP] % keep b");
+    out.writeByte(Wasm64.i64RemainderSigned, description: "[OP] i64.rem_s");
+    out.write(Wasm.localTee(rs), description: "[OP] % keep r");
+
+    // |b| = (b < 0) ? -b : b
+    out.write(Wasm64.i64Const(0));
+    out.write(Wasm.localGet(bs));
+    out.writeByte(Wasm64.i64Subtract, description: "[OP] -b");
+    out.write(Wasm.localGet(bs));
+    out.write(Wasm.localGet(bs));
+    out.write(Wasm64.i64Const(0));
+    out.writeByte(Wasm64.i64LessThanSigned, description: "[OP] b < 0");
+    out.writeByte(Wasm.select, description: "[OP] |b|");
+
+    // addend = (r < 0) ? |b| : 0
+    out.write(Wasm64.i64Const(0));
+    out.write(Wasm.localGet(rs));
+    out.write(Wasm64.i64Const(0));
+    out.writeByte(Wasm64.i64LessThanSigned, description: "[OP] r < 0");
+    out.writeByte(Wasm.select, description: "[OP] addend");
+
+    out.writeByte(Wasm64.i64Add, description: "[OP] r + addend (Dart %)");
+
+    context.stackOperationBinary(_astTypeInt64, "i64 Dart modulo");
+  }
+
+  /// Emits Dart double `%` for `[a, b]` on the stack (both f64).
+  ///
+  /// f64 has no remainder opcode: `r = a - trunc(a / b) * b`, then the same
+  /// non-negative correction `if (r < 0) r += |b|`. Uses three scratch locals.
+  void _writeDoubleModulo(BytesOutput out, WasmContext context) {
+    var af = context.scratchLocal(_astTypeDouble64, 0);
+    var bf = context.scratchLocal(_astTypeDouble64, 1);
+    var rf = context.scratchLocal(_astTypeDouble64, 2);
+
+    out.write(Wasm.localSet(bf), description: "[OP] % save b");
+    out.write(Wasm.localSet(af), description: "[OP] % save a");
+
+    // r = a - trunc(a / b) * b
+    out.write(Wasm.localGet(af));
+    out.write(Wasm.localGet(af));
+    out.write(Wasm.localGet(bf));
+    out.writeByte(Wasm64.f64Divide, description: "[OP] a / b");
+    out.writeByte(
+      Wasm64.f64TruncateToF64Signed,
+      description: "[OP] trunc(a / b)",
+    );
+    out.write(Wasm.localGet(bf));
+    out.writeByte(Wasm64.f64Multiply, description: "[OP] trunc(a / b) * b");
+    out.writeByte(Wasm64.f64Subtract, description: "[OP] a - ...");
+    out.write(Wasm.localTee(rf), description: "[OP] % keep r");
+
+    // addend = (r < 0) ? |b| : 0
+    out.write(Wasm.localGet(bf));
+    out.writeByte(Wasm64.f64Absolute, description: "[OP] |b|");
+    out.write(Wasm64.f64Const(0.0));
+    out.write(Wasm.localGet(rf));
+    out.write(Wasm64.f64Const(0.0));
+    out.writeByte(Wasm64.f64LessThan, description: "[OP] r < 0");
+    out.writeByte(Wasm.select, description: "[OP] addend");
+
+    out.writeByte(Wasm64.f64Add, description: "[OP] r + addend (Dart %)");
+
+    context.stackOperationBinary(_astTypeDouble64, "f64 Dart modulo");
   }
 
   @override
@@ -1219,6 +1343,8 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
               expOp,
               expression.expression,
             ),
+            out: out,
+            context: context,
           );
         }
     }
@@ -1383,16 +1509,54 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
 
     var localVariables = f.statements.declaredVariables();
 
+    // Register declared locals before generating the body (which references
+    // them, and may also allocate scratch locals).
+    for (var v in localVariables) {
+      context.addLocalVariable(v.key, v.value);
+    }
+
+    // Generate the body first, into its own buffer: body generation may
+    // allocate scratch locals (e.g. for `%`), which must be declared in the
+    // preamble below.
+    var bodyCode = newOutput();
+
+    for (var stm in f.statements) {
+      generateASTStatement(stm, out: bodyCode, context: context);
+    }
+
+    var returnType = f.returnType;
+
+    if (!returnType.isVoid && context.stackLength == 0) {
+      // Notify that the function can't reach the end.
+      bodyCode.writeByte(
+        Wasm.unreachable,
+        description: "[OP] Unreachable function end",
+      );
+
+      if (returnType is ASTTypeInt) {
+        bodyCode.write(
+          Wasm64.i64Const(0),
+          description: "Unreachable default return",
+        );
+      } else if (returnType is ASTTypeDouble) {
+        bodyCode.write(
+          Wasm64.f64Const(0),
+          description: "Unreachable default return",
+        );
+      }
+    }
+
+    // Preamble: declared locals followed by any scratch locals (in index
+    // order), then the generated body.
+    var scratchTypes = context.scratchLocalTypes;
+
     outBody.write(
-      Leb128.encodeUnsigned(localVariables.length),
+      Leb128.encodeUnsigned(localVariables.length + scratchTypes.length),
       description: "Local variables count",
     );
 
     for (var v in localVariables) {
       var astType = v.value;
-
-      context.addLocalVariable(v.key, astType);
-
       outBody.write(
         Leb128.encodeUnsigned(1),
         description: "Declared variable count",
@@ -1404,31 +1568,18 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       );
     }
 
-    for (var stm in f.statements) {
-      generateASTStatement(stm, out: outBody, context: context);
-    }
-
-    var returnType = f.returnType;
-
-    if (!returnType.isVoid && context.stackLength == 0) {
-      // Notify that the function can't reach the end.
-      outBody.writeByte(
-        Wasm.unreachable,
-        description: "[OP] Unreachable function end",
+    for (var astType in scratchTypes) {
+      outBody.write(
+        Leb128.encodeUnsigned(1),
+        description: "Scratch variable count",
       );
-
-      if (returnType is ASTTypeInt) {
-        outBody.write(
-          Wasm64.i64Const(0),
-          description: "Unreachable default return",
-        );
-      } else if (returnType is ASTTypeDouble) {
-        outBody.write(
-          Wasm64.f64Const(0),
-          description: "Unreachable default return",
-        );
-      }
+      outBody.writeByte(
+        astType.wasmCode,
+        description: "Scratch variable type(${astType.wasmType.name})",
+      );
     }
+
+    outBody.writeBytes(bodyCode);
 
     context.assertReturnsLength(return0 + 1);
     context.returnsDrop(f.returnType);
@@ -2367,6 +2518,27 @@ class WasmContext {
     var entry = (type: type, index: _localVariables.length);
     _localVariables[name] = entry;
     return entry.index;
+  }
+
+  /// Scratch (temporary) local types, in the order they were allocated. These
+  /// are declared in the function preamble after the regular locals.
+  final List<ASTType> scratchLocalTypes = [];
+
+  final Map<String, int> _scratchCache = {};
+
+  /// Allocates (or reuses) a scratch local of [type] identified by [slot].
+  /// Reused across the function so repeated operations don't keep allocating.
+  /// Must be called while generating the function body (before the preamble is
+  /// emitted), so [generateASTFunctionDeclaration] can declare them.
+  int scratchLocal(ASTType type, int slot) {
+    var key = '${type.wasmType.value}#$slot';
+    var cached = _scratchCache[key];
+    if (cached != null) return cached;
+
+    var index = addLocalVariable('\$scratch_$key', type);
+    scratchLocalTypes.add(type);
+    _scratchCache[key] = index;
+    return index;
   }
 
   final ListQueue<({ASTType type, String description})> _stack = ListQueue();
