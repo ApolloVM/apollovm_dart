@@ -303,4 +303,158 @@ void main() {
       );
     });
   });
+
+  group('Wasm maps: String keys', () {
+    test('get by constant String key', () async {
+      await _testWasmReturn(
+        '''
+        int f() {
+          Map<String,int> m = {"a": 1, "b": 2, "c": 3};
+          return m["b"];
+        }
+      ''',
+        'f',
+        [],
+        2,
+      );
+    });
+
+    test('get by String parameter key', () async {
+      await _testWasmReturn(
+        '''
+        int f(String k) {
+          Map<String,int> m = {"x": 10, "y": 20};
+          return m[k];
+        }
+      ''',
+        'f',
+        ['y'],
+        20,
+      );
+    });
+
+    test('String key -> String value', () async {
+      await _testWasmReturn(
+        '''
+        String f() {
+          Map<String,String> m = {"hi": "world", "yo": "there"};
+          return m["hi"];
+        }
+      ''',
+        'f',
+        [],
+        'world',
+      );
+    });
+
+    test('containsKey present / absent', () async {
+      await _testWasmReturn(
+        '''
+        bool f() {
+          Map<String,int> m = {"alpha": 1, "beta": 2};
+          return m.containsKey("beta");
+        }
+      ''',
+        'f',
+        [],
+        true,
+      );
+
+      await _testWasmReturn(
+        '''
+        bool f() {
+          Map<String,int> m = {"alpha": 1};
+          return m.containsKey("gamma");
+        }
+      ''',
+        'f',
+        [],
+        false,
+      );
+    });
+
+    test('containsKey rejects a prefix (length-checked)', () async {
+      await _testWasmReturn(
+        '''
+        bool f() {
+          Map<String,int> m = {"apple": 1};
+          return m.containsKey("app");
+        }
+      ''',
+        'f',
+        [],
+        false,
+      );
+    });
+
+    test('set update + append (grows)', () async {
+      await _testWasmReturn(
+        '''
+        int f() {
+          Map<String,int> m = {"a": 1};
+          m["a"] = 99;
+          m["bb"] = 2;
+          m["ccc"] = 3;
+          m["d"] = 4;
+          return m["a"] + m["d"];
+        }
+      ''',
+        'f',
+        [],
+        103,
+      );
+    });
+
+    test('set from empty literal', () async {
+      await _testWasmReturn(
+        '''
+        int f() {
+          Map<String,int> m = {};
+          m["one"] = 1;
+          m["two"] = 2;
+          return m["two"];
+        }
+      ''',
+        'f',
+        [],
+        2,
+      );
+    });
+
+    test('multi-byte UTF-8 keys', () async {
+      await _testWasmReturn(
+        '''
+        int f() {
+          Map<String,int> m = {"☃": 1, "héllo": 2, "x": 3};
+          return m["héllo"];
+        }
+      ''',
+        'f',
+        [],
+        2,
+      );
+    });
+
+    test('word frequency counter', () async {
+      await _testWasmReturn(
+        '''
+        int f() {
+          List<String> words = ["a", "b", "a", "c", "a", "b"];
+          Map<String,int> freq = {};
+          for (var w in words) {
+            if (freq.containsKey(w)) {
+              freq[w] = freq[w] + 1;
+            } else {
+              freq[w] = 1;
+            }
+          }
+          return freq["a"];
+        }
+      ''',
+        'f',
+        [],
+        3,
+      );
+    });
+  });
 }

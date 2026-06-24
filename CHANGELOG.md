@@ -1,5 +1,8 @@
 ## 0.1.27
 
+- Wasm collections — maps with `String` keys (P3, part 6):
+  - `Map<String, V>` now compiles to Wasm (`V` = `int`/`double`/`String`/`bool`): literals, `m[k]` get, `m[k] = v` set, `.length`/`.isEmpty`/`.isNotEmpty`, and `.containsKey(k)`. Matches the interpreter on both `wasm_run` and Chrome.
+  - String keys are stored as i32 pointers and compared by content via a synthesized `__streq(a, b)` helper (length check + byte loop), so e.g. `containsKey("app")` correctly returns `false` for a map keyed by `"apple"`, and multi-byte UTF-8 keys work.
 - Wasm collections — maps with `int` keys (P3, part 5):
   - `Map<int, V>` now compiles to Wasm (`V` = `int`/`double`/`String`/`bool`). A map value is an i32 pointer to a 16-byte header `[length][capacity][keysPtr][valuesPtr]` with parallel key/value buffers; lookup/set is a linear scan with `i64` key equality. Matches the interpreter on both `wasm_run` and Chrome.
   - Supported: map literals (incl. empty `{}`), `m[k]` get, `m[k] = v` set (in-place update or append, growing both buffers when full), `.length`, `.isEmpty`/`.isNotEmpty`, and `.containsKey(k)`.
