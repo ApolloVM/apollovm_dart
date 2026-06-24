@@ -204,6 +204,15 @@ class ApolloRunnerWasm extends ApolloRunner {
       res = decodeString(res as int);
     }
 
+    // A `bool` return is an i32 (0/1); decode it back to a Dart `bool`. From the
+    // AST when available, else from the `apollovm_sig` custom section.
+    var returnsBool =
+        astFunction?.returnType is ASTTypeBool ||
+        _signatures(codeUnit.code)[functionName]?.returnTag == _tagBool;
+    if (res != null && returnsBool && res is! bool) {
+      res = (res as num) != 0;
+    }
+
     var astValue = res == null
         ? ASTValueNull.instance
         : ASTValue.fromValue(res);
@@ -212,6 +221,7 @@ class ApolloRunnerWasm extends ApolloRunner {
   }
 
   // High-level type tags from the `apollovm_sig` custom section.
+  static const int _tagBool = 3;
   static const int _tagString = 4;
 
   /// Per-module signature cache, keyed by the wasm binary's identity.
