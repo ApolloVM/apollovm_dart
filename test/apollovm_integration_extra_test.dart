@@ -383,6 +383,60 @@ void main() {
     });
   });
 
+  group('Dynamic-typed arithmetic', () {
+    // Regression: operators dispatch on the operand's static `ASTValue.type`,
+    // so two `dynamic` operands (e.g. untyped parameters) reached the operator
+    // methods as `dynamic <op> dynamic` and threw, even though the runtime
+    // values were concrete numbers/strings.
+
+    Future<ASTValue> callDynamic(String method, List params) async {
+      var vm = ApolloVM();
+      await vm.loadCodeUnit(
+        SourceCodeUnit('dart', r'''
+        class M {
+          dynamic add(dynamic a, dynamic b) { return a + b; }
+          dynamic sub(dynamic a, dynamic b) { return a - b; }
+          dynamic mul(dynamic a, dynamic b) { return a * b; }
+          dynamic div(dynamic a, dynamic b) { return a / b; }
+          dynamic gt(dynamic a, dynamic b) { return a > b; }
+          dynamic eq(dynamic a, dynamic b) { return a == b; }
+        }
+      ''', id: 'test'),
+      );
+      var runner = vm.createRunner('dart')!;
+      return runner.executeClassMethod(
+        '',
+        'M',
+        method,
+        positionalParameters: params,
+      );
+    }
+
+    test('+ - * on two dynamic int parameters', () async {
+      expect((await callDynamic('add', [10, 32])).getValueNoContext(), 42);
+      expect((await callDynamic('sub', [10, 3])).getValueNoContext(), 7);
+      expect((await callDynamic('mul', [6, 7])).getValueNoContext(), 42);
+    });
+
+    test('mixed int/double dynamic operands', () async {
+      expect((await callDynamic('add', [10, 2.5])).getValueNoContext(), 12.5);
+      expect((await callDynamic('div', [7, 2])).getValueNoContext(), 3.5);
+    });
+
+    test('comparison on dynamic operands', () async {
+      expect((await callDynamic('gt', [10, 3])).getValueNoContext(), isTrue);
+      expect((await callDynamic('eq', [5, 5])).getValueNoContext(), isTrue);
+      expect((await callDynamic('eq', [5, 6])).getValueNoContext(), isFalse);
+    });
+
+    test('string concatenation on dynamic operands', () async {
+      expect(
+        (await callDynamic('add', ['foo', 'bar'])).getValueNoContext(),
+        equals('foobar'),
+      );
+    });
+  });
+
   group('Arithmetic and precedence', () {
     test('mixed int/double with parentheses', () async {
       var r = await runDart(

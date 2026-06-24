@@ -436,6 +436,9 @@ class JavaScriptGrammarDefinition extends JavaScriptGrammarLexer {
                 return ASTExpressionOperator.equals;
               case '!==':
                 return ASTExpressionOperator.notEquals;
+              case '/':
+                // JavaScript `/` is always floating-point division.
+                return ASTExpressionOperator.divideAsDouble;
               default:
                 return getASTExpressionOperator(v);
             }

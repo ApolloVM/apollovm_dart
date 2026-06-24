@@ -10,6 +10,8 @@
   - Follow-ups: arrow functions, destructuring, spread, async/await, true `constructor` semantics with `this.x` parameters, and full ESM are not yet supported.
 - CLI bug fix: `apollovm translate` printed `Instance of 'Future<StringBuffer>'` instead of the translated source — `writeAllSources()` was stringified without `await`. Fixed for all languages.
 - Runtime fix — `for-each` / `for...of` over any iterable: `ASTStatementForEach` only accepted an `ASTValueArray`, so iterating a list bound to a `dynamic`/`Object` variable (which resolves to a plain `ASTValueStatic`) threw at runtime. It now iterates any resolved `Iterable` (and `Map` values), and wraps each element into a concretely-typed `ASTValue` (via `ASTValue.fromValue`) so per-element operations (e.g. arithmetic, string concatenation) work. Affects all languages; enables JavaScript `for...of` over arrays.
+- Runtime fix — arithmetic/comparison on dynamically-typed operands: binary operators (`+ - * / % == != > < …`) dispatched on the operand's static `ASTValue.type` and only handled concrete primitives, so two `dynamic`/`var`/`Object` operands (e.g. untyped JavaScript parameters) threw `Can't perform '+' operation with types: dynamic + dynamic` even when the runtime values were real numbers/strings. `ASTExpressionOperation.run` now resolves each "boxed"/untyped operand to its concrete `ASTValue` (via `ASTValue.fromValue`) before dispatching. Affects all languages; enables executing parsed JavaScript arithmetic.
+- JavaScript `/` is now floating-point division (`ASTExpressionOperator.divideAsDouble`), matching JS semantics (`7 / 2 === 3.5`) instead of integer division.
 
 ## 0.1.27
 
