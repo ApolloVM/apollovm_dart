@@ -698,7 +698,19 @@ class KotlinGrammarDefinition extends KotlinGrammarLexer {
               char(')').trimHidden())
           .map((v) {
             var values = (v[2] as List<ASTExpression>?) ?? <ASTExpression>[];
-            return ASTExpressionListLiteral(ASTTypeDynamic.instance, values);
+
+            // Infer the element type from the values, so iteration/arithmetic
+            // over the list elements uses a concrete type instead of `dynamic`:
+            ASTType type = ASTTypeDynamic.instance;
+            var resolved = values.map((e) => e.resolveType(null)).toList();
+            var types = resolved.whereType<ASTType>().toList();
+            if (types.isNotEmpty && types.length == resolved.length) {
+              type = types.reduce(
+                (a, b) => a.commonType(b) ?? ASTTypeDynamic.instance,
+              );
+            }
+
+            return ASTExpressionListLiteral(type, values);
           });
 
   Parser<ASTExpressionMapLiteral> expressionMapLiteral() =>
