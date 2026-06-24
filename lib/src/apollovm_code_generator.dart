@@ -1279,12 +1279,14 @@ abstract class ApolloCodeGenerator
 
     out.write('!');
 
-    generateASTExpression(
-      expression.expression,
-      out: out,
-      indent: indent,
-      headIndented: false,
-    );
+    // Parenthesize a complex operand so `!(a > b)` is not emitted as `!a > b`
+    // (which would re-parse as `(!a) > b`).
+    final inner = expression.expression;
+    final group = inner.isComplex;
+
+    if (group) out.write('(');
+    generateASTExpression(inner, out: out, indent: indent, headIndented: false);
+    if (group) out.write(')');
 
     return out;
   }

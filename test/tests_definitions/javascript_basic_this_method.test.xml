@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="Basic JavaScript this-method invocation">
+    <source language="javascript">
+        <![CDATA[
+class M {
+  triple(x) {
+    return x * 3;
+  }
+  run(a) {
+    let r = this.triple(a);
+    print(r);
+  }
+}
+        ]]>
+    </source>
+    <call class="M" function="run">
+        [7]
+    </call>
+    <output>
+        [21]
+    </output>
+    <source-generated language="javascript"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+class M {
+
+  triple(x) {
+    return x * 3;
+  }
+
+  run(a) {
+    let r = triple(a);
+    print(r);
+  }
+
+}
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+    <source-generated language="dart"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+class M {
+
+  dynamic triple(dynamic x) {
+    return x * 3;
+  }
+
+  void run(dynamic a) {
+    var r = triple(a);
+    print(r);
+  }
+
+}
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+    <source-generated language="java11"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+class M {
+
+  Object triple(Object x) {
+    return x * 3;
+  }
+
+  void run(Object a) {
+    var r = triple(a);
+    print(r);
+  }
+
+}
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+</test>

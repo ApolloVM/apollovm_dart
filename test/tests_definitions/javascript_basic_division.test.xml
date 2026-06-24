@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="Basic JavaScript float division and modulo">
+    <source language="javascript">
+        <![CDATA[
+class M {
+  run(a, b) {
+    print(a / b);
+    print(a % b);
+  }
+}
+        ]]>
+    </source>
+    <call class="M" function="run">
+        [17,5]
+    </call>
+    <output>
+        [3.4,2]
+    </output>
+    <source-generated language="javascript"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+class M {
+
+  run(a, b) {
+    print(a / b);
+    print(a % b);
+  }
+
+}
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+    <source-generated language="dart"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+class M {
+
+  void run(dynamic a, dynamic b) {
+    print(a / b);
+    print(a % b);
+  }
+
+}
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+</test>
