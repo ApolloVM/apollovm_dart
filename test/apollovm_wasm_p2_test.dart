@@ -57,6 +57,58 @@ Future<void> _testWasmPrint(
   expect(wasmOut, equals(expectedOutput), reason: 'Wasm print output');
 }
 
+/// Runs [functionName] via the AST interpreter AND the compiled+executed Wasm
+/// module and asserts both return [expectedReturn].
+Future<void> _testWasmReturn(
+  String code,
+  String functionName,
+  List args,
+  Object? expectedReturn,
+) async {
+  var vm = ApolloVM();
+  var ok = await vm.loadCodeUnit(SourceCodeUnit('dart', code, id: 'test'));
+  expect(ok, isTrue, reason: "Can't load Dart source");
+
+  var astRunner = vm.createRunner('dart')!;
+  var astRet = await astRunner.executeFunction(
+    '',
+    functionName,
+    positionalParameters: args,
+  );
+  expect(
+    astRet.getValueNoContext(),
+    expectedReturn,
+    reason: 'interpreter return',
+  );
+
+  var storageWasm = vm.generateAllIn<BytesOutput>('wasm');
+  var wasmModules = await storageWasm.allEntries();
+  BytesOutput? compiled;
+  for (var ns in wasmModules.entries) {
+    for (var m in ns.value.entries) {
+      compiled ??= m.value;
+    }
+  }
+  expect(compiled, isNotNull, reason: 'No compiled Wasm module');
+
+  var rt = WasmRuntime()..ensureBooted();
+  if (!rt.isSupported) {
+    fail('Wasm runtime not supported (run `dart run wasm_run:setup`).');
+  }
+
+  var vmWasm = ApolloVM();
+  await vmWasm.loadCodeUnit(
+    BinaryCodeUnit('wasm', compiled!.output(), id: 'test.wasm', namespace: ''),
+  );
+  var wasmRunner = vmWasm.createRunner('wasm')!;
+  var wasmRet = await wasmRunner.executeFunction(
+    '',
+    functionName,
+    positionalParameters: args,
+  );
+  expect(wasmRet.getValueNoContext(), expectedReturn, reason: 'Wasm return');
+}
+
 void main() {
   group('Wasm P2: print(string literal)', () {
     test('single print', () async {
@@ -196,6 +248,91 @@ void main() {
         'run',
         [],
         ['hello world', 'world!'],
+      );
+    });
+  });
+
+  group('Wasm P2: String-returning functions', () {
+    test('return literal', () async {
+      await _testWasmReturn(
+        '''
+        String f() {
+          return "hi";
+        }
+      ''',
+        'f',
+        [],
+        'hi',
+      );
+    });
+
+    test('return concatenation', () async {
+      await _testWasmReturn(
+        '''
+        String f() {
+          return "a" + "b" + "c";
+        }
+      ''',
+        'f',
+        [],
+        'abc',
+      );
+    });
+
+    test('return built from a local', () async {
+      await _testWasmReturn(
+        '''
+        String greet() {
+          String s = "world";
+          return "hello " + s;
+        }
+      ''',
+        'greet',
+        [],
+        'hello world',
+      );
+    });
+
+    test('conditional return (int param, String return)', () async {
+      await _testWasmReturn(
+        '''
+        String sign(int a) {
+          if (a > 0) {
+            return "pos";
+          }
+          return "non-pos";
+        }
+      ''',
+        'sign',
+        [5],
+        'pos',
+      );
+
+      await _testWasmReturn(
+        '''
+        String sign(int a) {
+          if (a > 0) {
+            return "pos";
+          }
+          return "non-pos";
+        }
+      ''',
+        'sign',
+        [-1],
+        'non-pos',
+      );
+    });
+
+    test('return multi-byte UTF-8', () async {
+      await _testWasmReturn(
+        '''
+        String f() {
+          return "héllo ☃";
+        }
+      ''',
+        'f',
+        [],
+        'héllo ☃',
       );
     });
   });
