@@ -66,9 +66,9 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     var functions = root.functions.expand((fs) => fs.functions).toList();
     var module = WasmModuleContext(functions);
 
-    // A public function with a String parameter requires the host to allocate
-    // the argument in module memory, so ensure `__alloc` is exported.
-    if (_hasStringParam(module)) {
+    // A public function with a String or List parameter requires the host to
+    // allocate the argument in module memory, so ensure `__alloc` is exported.
+    if (_hasMarshalledParam(module)) {
       module.ensureAllocFunction();
     }
 
@@ -122,37 +122,50 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
   }
 
   /// Type tag used by the `apollovm_sig` custom section.
-  /// 0=void, 1=int, 2=double, 3=bool, 4=String, 5=other.
+  /// 0=void, 1=int, 2=double, 3=bool, 4=String, 5=other, 6=list.
   static int _typeTag(ASTType t) {
     if (t is ASTTypeVoid) return 0;
     if (t is ASTTypeInt) return 1;
     if (t is ASTTypeDouble) return 2;
     if (t is ASTTypeBool) return 3;
     if (t is ASTTypeString) return 4;
+    if (t is ASTTypeArray) return 6;
     return 5;
   }
 
+  /// Encodes a type as a descriptor for the `apollovm_sig` section. Scalars are
+  /// a single tag byte; a list is `[6, <element tag>]` so the runner can marshal
+  /// the whole collection across the host boundary.
+  static List<int> _typeDescriptor(ASTType t) {
+    if (t is ASTTypeArray) {
+      return [6, _typeTag(t.componentType)];
+    }
+    return [_typeTag(t)];
+  }
+
   /// Whether the module needs the `apollovm_sig` custom section: any public
-  /// function that involves a String (param or return) or returns a `bool` —
-  /// i.e. a return/param the runner must decode from its raw Wasm value.
+  /// function with a return/param the runner must marshal from/to its raw Wasm
+  /// value — a String, a `bool` return, or a list (param or return).
   bool _requiresSignatureSection(WasmModuleContext module) {
+    bool needs(ASTType t) =>
+        t is ASTTypeString || t is ASTTypeBool || t is ASTTypeArray;
     for (var f in module.functions) {
       if (f.modifiers.isPrivate) continue;
-      if (f.returnType is ASTTypeString || f.returnType is ASTTypeBool) {
-        return true;
-      }
+      if (needs(f.returnType)) return true;
       for (var p in f.parameters.allParameters) {
-        if (p.type is ASTTypeString) return true;
+        if (p.type is ASTTypeString || p.type is ASTTypeArray) return true;
       }
     }
     return false;
   }
 
-  bool _hasStringParam(WasmModuleContext module) {
+  /// Whether any public function has a parameter the host must allocate into
+  /// module memory (a String or a List), requiring an exported `__alloc`.
+  bool _hasMarshalledParam(WasmModuleContext module) {
     for (var f in module.functions) {
       if (f.modifiers.isPrivate) continue;
       for (var p in f.parameters.allParameters) {
-        if (p.type is ASTTypeString) return true;
+        if (p.type is ASTTypeString || p.type is ASTTypeArray) return true;
       }
     }
     return false;
@@ -180,15 +193,15 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
         description: "Function count",
       ),
       ...publics.map((f) {
-        var paramTags = f.parameters.allParameters
-            .map((p) => _typeTag(p.type))
+        var paramDescriptors = f.parameters.allParameters
+            .map((p) => _typeDescriptor(p.type))
             .toList();
         return BytesOutput(
           data: [
             ...Wasm.encodeString(f.name),
-            _typeTag(f.returnType),
-            ...Leb128.encodeUnsigned(paramTags.length),
-            ...paramTags,
+            ..._typeDescriptor(f.returnType),
+            ...Leb128.encodeUnsigned(paramDescriptors.length),
+            ...paramDescriptors.expand((d) => d),
           ],
           description: "Signature `${f.name}`",
         );

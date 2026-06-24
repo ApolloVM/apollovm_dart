@@ -538,4 +538,183 @@ void main() {
       );
     });
   });
+
+  group('Wasm P3: list parameters', () {
+    test('sum int list parameter', () async {
+      await _testWasmReturn(
+        '''
+        int sum(List<int> a) {
+          int s = 0;
+          for (var e in a) {
+            s = s + e;
+          }
+          return s;
+        }
+      ''',
+        'sum',
+        [
+          [1, 2, 3, 4],
+        ],
+        10,
+      );
+    });
+
+    test('index into int list parameter', () async {
+      await _testWasmReturn(
+        '''
+        int at(List<int> a, int i) {
+          return a[i];
+        }
+      ''',
+        'at',
+        [
+          [10, 20, 30],
+          2,
+        ],
+        30,
+      );
+    });
+
+    test('double list parameter average', () async {
+      await _testWasmReturn(
+        '''
+        double total(List<double> a) {
+          double s = 0.0;
+          for (var e in a) {
+            s = s + e;
+          }
+          return s;
+        }
+      ''',
+        'total',
+        [
+          [1.5, 2.5, 3.0],
+        ],
+        7.0,
+      );
+    });
+
+    test('String list parameter join', () async {
+      await _testWasmReturn(
+        '''
+        String join(List<String> a) {
+          String s = "";
+          for (var e in a) {
+            s = s + e;
+          }
+          return s;
+        }
+      ''',
+        'join',
+        [
+          ["x", "y", "z"],
+        ],
+        'xyz',
+      );
+    });
+
+    test('mutate list parameter via add', () async {
+      await _testWasmReturn(
+        '''
+        int addAndLen(List<int> a) {
+          a.add(99);
+          return a.length;
+        }
+      ''',
+        'addAndLen',
+        [
+          [1, 2],
+        ],
+        3,
+      );
+    });
+  });
+
+  group('Wasm P3: list returns', () {
+    test('return int list literal', () async {
+      await _testWasmReturn(
+        '''
+        List<int> make() {
+          return [10, 20, 30];
+        }
+      ''',
+        'make',
+        [],
+        [10, 20, 30],
+      );
+    });
+
+    test('return double list literal', () async {
+      await _testWasmReturn(
+        '''
+        List<double> make() {
+          return [1.5, 2.5];
+        }
+      ''',
+        'make',
+        [],
+        [1.5, 2.5],
+      );
+    });
+
+    test('return String list literal', () async {
+      await _testWasmReturn(
+        '''
+        List<String> make() {
+          return ["a", "bb", "ccc"];
+        }
+      ''',
+        'make',
+        [],
+        ['a', 'bb', 'ccc'],
+      );
+    });
+
+    test('return bool list literal', () async {
+      await _testWasmReturn(
+        '''
+        List<bool> make() {
+          return [true, false, true];
+        }
+      ''',
+        'make',
+        [],
+        [true, false, true],
+      );
+    });
+
+    test('return list built with add (incl. realloc)', () async {
+      await _testWasmReturn(
+        '''
+        List<int> doubled(List<int> a) {
+          List<int> r = [];
+          for (var e in a) {
+            r.add(e * 2);
+          }
+          return r;
+        }
+      ''',
+        'doubled',
+        [
+          [1, 2, 3, 4],
+        ],
+        [2, 4, 6, 8],
+      );
+    });
+
+    test('round-trip int list (param in, list out)', () async {
+      await _testWasmReturn(
+        '''
+        List<int> echo(List<int> a) {
+          return a;
+        }
+      ''',
+        'echo',
+        [
+          [7, 8, 9],
+        ],
+        [7, 8, 9],
+      );
+    });
+  });
 }

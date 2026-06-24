@@ -1,8 +1,12 @@
 ## 0.1.27
 
+- Wasm collections — list parameters & returns (P3, part 4):
+  - Functions can now accept and return whole lists across the host boundary. The runner marshals a Dart `List` into module memory (header + elements buffer, via the exported `__alloc`) for `List` parameters, and decodes a returned list-header pointer back into a Dart `List`. Covers `int`/`double`/`String`/`bool` element lists, including round-tripping (`List<int> echo(List<int> a)`) and building a result with `.add` before returning it.
+  - The `apollovm_sig` custom section now carries list types as `[6, <element tag>]` (was a single opaque tag), so modules loaded from raw bytes self-describe their list element types; the runner uses 64-bit element reads/writes via `BigInt` so it works on both the Dart VM and dart2js (Chrome).
+  - A `String`/`List` parameter now also forces an exported `__alloc` (previously only String params did), so list-only functions can be fed their arguments.
 - Wasm collections — `String` & `bool` element lists (P3, part 3):
   - `List<String>` and `List<bool>` now compile to Wasm: literals, index reads `a[i]`, `for (var e in a)`, `.add`, and the `.first`/`.last`/`.isEmpty`/`.isNotEmpty`/`.length` getters all work (elements stored as i32 — a string pointer or a `0`/`1` boolean). Matches the interpreter on both `wasm_run` and Chrome.
-  - List parameters/returns and maps remain later slices (lists still stay internal, returning scalars/elements).
+  - Maps remain a later slice.
 - Wasm collections — growable lists `.add` + getters (P3, part 2):
   - List values are now an indirect handle: a 12-byte header `[length:i32][capacity:i32][dataPtr:i32]` pointing at a separately-allocated elements buffer. This makes `.add` aliasing-safe — growing reallocates the data buffer (doubling capacity, `memory.copy`ing existing elements) and updates the header in place, so existing references observe the new length/contents.
   - `list.add(x)` now compiles to Wasm for `int`/`double` lists (including starting from an empty `[]` literal), growing linear memory on demand.
