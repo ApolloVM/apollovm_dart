@@ -41,7 +41,7 @@ Now you can use the `apollovm` Dart executable:
 ```shell
 $> apollovm help
 
-ApolloVM - A compact VM for Dart and Java.
+ApolloVM - A compact VM for Dart, Java and JavaScript.
 
 Usage: apollovm <command> [arguments]
 
@@ -85,6 +85,33 @@ class Hello {
 
 }
 <<<< CODE_UNIT_END="/test/hello-world.java" >>>>
+<<<< [SOURCES_END] >>>>
+```
+
+The same commands work for JavaScript (`.js`) files. To `run` a JavaScript file:
+```shell
+$> apollovm run -v test/hello_world.js foo
+## [RUN]        File: 'test/hello_world.js' ; language: javascript > main( [foo] )
+Hello World!
+- name: foo
+```
+
+To `translate` a JavaScript file to Dart:
+```shell
+$> apollovm translate -v --target dart test/hello_world.js
+## [TRANSLATE]  File: 'test/hello_world.js' ; language: javascript > targetLanguage: dart
+<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test/hello_world.js" >>>>
+class Hello {
+
+  static void main(dynamic name) {
+    print('Hello World!');
+    print('- name: ${name}');
+  }
+
+}
+<<<< CODE_UNIT_END="/test/hello_world.js" >>>>
 <<<< [SOURCES_END] >>>>
 ```
 
@@ -358,6 +385,77 @@ class Foo {
 <<<< [SOURCES_END] >>>>
 ```
 
+### Language: `JavaScript`
+
+Loading JavaScript (modern ES) source code, executing it, and then converting it to Dart:
+
+```dart
+import 'package:apollovm/apollovm.dart';
+
+void main() async {
+  var vm = ApolloVM();
+
+  var codeUnit = SourceCodeUnit(
+          'javascript',
+          r'''
+            class Foo {
+              greet(name, count) {
+                let msg = `Hello ${name}, you have ${count} messages.`;
+                print(msg);
+              }
+            }
+          ''',
+          id: 'test');
+
+  var loadOK = await vm.loadCodeUnit(codeUnit);
+
+  if (!loadOK) {
+    throw StateError('Error parsing JavaScript code!');
+  }
+
+  var jsRunner = vm.createRunner('javascript')!;
+
+  // Map the `print` function in the VM:
+  jsRunner.externalPrintFunction = (o) => print("» $o");
+
+  await jsRunner.executeClassMethod('', 'Foo', 'greet',
+      positionalParameters: ['World', 3]);
+
+  print('---------------------------------------');
+
+  // Regenerate code in Dart:
+  var codeStorageDart = vm.generateAllCodeIn('dart');
+  var allSourcesDart = await codeStorageDart.writeAllSources();
+  print(allSourcesDart.toString());
+}
+```
+
+*Note: the parsed function `print` was mapped as an external function.*
+
+Output:
+```text
+» Hello World, you have 3 messages.
+---------------------------------------
+<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+class Foo {
+
+  void greet(dynamic name, dynamic count) {
+    var msg = 'Hello ${name}, you have ${count} messages.';
+    print(msg);
+  }
+
+}
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+```
+
+JavaScript is fully bidirectional: ApolloVM can parse `.js`/`javascript` source into
+the AST, execute it, and generate idiomatic modern ES (`let`/`const`, template
+literals, `for...of`, top-level functions, `===`/`!==`) from any loaded AST (Dart,
+Java, or JavaScript).
+
 ## Wasm Support
 
 ApolloVM can compile its AST tree to WebAssembly (Wasm). This means that parsed code loaded into the VM can be compiled
@@ -572,8 +670,8 @@ Any help from the open-source community is always welcome and needed:
 
 ## TODO
 
-- JavaScript support:
-  - *Use the [Java implementation (at "lib/src/languages/java/java11")](https://github.com/ApolloVM/apollovm_dart/tree/master/lib/src/languages/java/java11) as starting point.*
+- JavaScript: extended support (anonymous arrow callbacks/closures, destructuring, spread, async/await, `this.x` constructor parameters, full ESM modules). *Named arrow functions (`const f = (a, b) => a + b;`) are already supported.*
+  - *See the [JavaScript implementation (at "lib/src/languages/javascript/es")](https://github.com/ApolloVM/apollovm_dart/tree/master/lib/src/languages/javascript/es).*
 
 
 - Python support.

@@ -1234,19 +1234,32 @@ class ASTStatementForEach extends ASTStatement {
     try {
       var iterableValue = await iterableExpression.run(context, runStatus);
 
-      if (iterableValue is! ASTValueArray) {
+      // Resolve the underlying value so that `for-each` works over any
+      // iterable, not only an `ASTValueArray` (e.g. a `List` bound to a
+      // `dynamic`/`Object` variable, which resolves to a plain `ASTValueStatic`).
+      var rawIterable = await iterableValue.getValue(context);
+
+      Iterable iterable;
+      if (rawIterable is Iterable) {
+        iterable = rawIterable;
+      } else if (rawIterable is Map) {
+        iterable = rawIterable.values;
+      } else {
         throw ApolloVMRuntimeError(
-          '`iterableValue` is a `ASTValueArray`: ${iterableValue.runtimeType}',
+          "for-each target is not iterable: "
+          "${iterableValue.runtimeType} (value: $rawIterable)",
         );
       }
 
-      var elementType =
-          iterableValue.type.generics?.first ?? ASTTypeObject.instance;
-
-      var iterable = iterableValue.getValue(context);
-
       for (var element in iterable) {
-        var astElement = await elementType.toValue(parentContext, element);
+        // Wrap each raw element into a concretely-typed `ASTValue` (passes
+        // through if it is already an `ASTValue`), so the loop body sees the
+        // element's real type.
+        var astElement = element is ASTValue
+            ? element
+            : ASTValue.fromValue(element);
+
+        var elementType = astElement.type;
 
         var loopContext = VMScopeContext(parentContext.block, parent: context);
 

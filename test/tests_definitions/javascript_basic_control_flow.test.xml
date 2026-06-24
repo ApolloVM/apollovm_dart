@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="Basic JavaScript control flow (for, for-of, branch, list)">
+    <source language="javascript">
+        <![CDATA[
+
+            class Bar {
+              run() {
+                let total = 0;
+                for (let i = 0; i < 3; ++i) {
+                  total += i;
+                }
+                if (total === 3) {
+                  print('ok');
+                } else {
+                  print('no');
+                }
+                let xs = [1, 2, 3];
+                for (const x of xs) {
+                  print(x);
+                }
+              }
+            }
+
+        ]]>
+    </source>
+    <source-generated language="javascript"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+class Bar {
+
+  run() {
+    let total = 0;
+    for (let i = 0; i < 3 ; ++i) {
+      total += i;
+    }
+    if (total === 3) {
+        print('ok');
+    } else {
+        print('no');
+    }
+
+    let xs = [1, 2, 3];
+    for (const x of xs) {
+      print(x);
+    }
+  }
+
+}
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+</test>

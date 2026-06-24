@@ -1012,39 +1012,60 @@ class ASTExpressionOperation extends ASTExpression {
     var retVal1 = expression1.run(context, runStatus);
 
     return retVal2.resolveBoth(retVal1, (val2, val1) {
-      switch (operator) {
-        case ASTExpressionOperator.add:
-          return operatorAdd(parentContext, val1, val2);
-        case ASTExpressionOperator.subtract:
-          return operatorSubtract(parentContext, val1, val2);
-        case ASTExpressionOperator.multiply:
-          return operatorMultiply(parentContext, val1, val2);
-        case ASTExpressionOperator.divide:
-          return operatorDivide(parentContext, val1, val2);
-        case ASTExpressionOperator.divideAsInt:
-          return operatorDivideAsInt(parentContext, val1, val2);
-        case ASTExpressionOperator.divideAsDouble:
-          return operatorDivideAsDouble(parentContext, val1, val2);
-        case ASTExpressionOperator.equals:
-          return operatorEquals(parentContext, val1, val2);
-        case ASTExpressionOperator.notEquals:
-          return operatorNotEquals(parentContext, val1, val2);
-        case ASTExpressionOperator.greater:
-          return operatorGreater(parentContext, val1, val2);
-        case ASTExpressionOperator.greaterOrEq:
-          return operatorGreaterOrEq(parentContext, val1, val2);
-        case ASTExpressionOperator.lower:
-          return operatorLower(parentContext, val1, val2);
-        case ASTExpressionOperator.lowerOrEq:
-          return operatorLowerOrEq(parentContext, val1, val2);
-        case ASTExpressionOperator.remainder:
-          return operatorRemainder(parentContext, val1, val2);
-        case ASTExpressionOperator.and:
-          return operatorAnd(parentContext, val1, val2);
-        case ASTExpressionOperator.or:
-          return operatorOr(parentContext, val1, val2);
-      }
+      // Resolve dynamically-typed operands to their concrete runtime type so
+      // the operator methods (which dispatch on `ASTValue.type`) work for
+      // untyped languages, e.g. JavaScript `a + b` where `a`/`b` are `dynamic`.
+      return _concretizeOperand(parentContext, val1).resolveMapped((c1) {
+        return _concretizeOperand(parentContext, val2).resolveMapped((c2) {
+          switch (operator) {
+            case ASTExpressionOperator.add:
+              return operatorAdd(parentContext, c1, c2);
+            case ASTExpressionOperator.subtract:
+              return operatorSubtract(parentContext, c1, c2);
+            case ASTExpressionOperator.multiply:
+              return operatorMultiply(parentContext, c1, c2);
+            case ASTExpressionOperator.divide:
+              return operatorDivide(parentContext, c1, c2);
+            case ASTExpressionOperator.divideAsInt:
+              return operatorDivideAsInt(parentContext, c1, c2);
+            case ASTExpressionOperator.divideAsDouble:
+              return operatorDivideAsDouble(parentContext, c1, c2);
+            case ASTExpressionOperator.equals:
+              return operatorEquals(parentContext, c1, c2);
+            case ASTExpressionOperator.notEquals:
+              return operatorNotEquals(parentContext, c1, c2);
+            case ASTExpressionOperator.greater:
+              return operatorGreater(parentContext, c1, c2);
+            case ASTExpressionOperator.greaterOrEq:
+              return operatorGreaterOrEq(parentContext, c1, c2);
+            case ASTExpressionOperator.lower:
+              return operatorLower(parentContext, c1, c2);
+            case ASTExpressionOperator.lowerOrEq:
+              return operatorLowerOrEq(parentContext, c1, c2);
+            case ASTExpressionOperator.remainder:
+              return operatorRemainder(parentContext, c1, c2);
+            case ASTExpressionOperator.and:
+              return operatorAnd(parentContext, c1, c2);
+            case ASTExpressionOperator.or:
+              return operatorOr(parentContext, c1, c2);
+          }
+        });
+      });
     });
+  }
+
+  /// Resolves a "boxed"/untyped operand (`dynamic`, `var`, `Object`) to a
+  /// concretely-typed [ASTValue] using its runtime value, so the operator
+  /// methods can dispatch on the real type. Concrete operands are returned
+  /// unchanged (no overhead).
+  FutureOr<ASTValue> _concretizeOperand(VMContext context, ASTValue val) {
+    final t = val.type;
+    if (t is ASTTypeDynamic || t is ASTTypeVar || t is ASTTypeObject) {
+      return val.getValue(context).resolveMapped((raw) {
+        return raw is ASTValue ? raw : ASTValue.fromValue(raw);
+      });
+    }
+    return val;
   }
 
   Never throwOperationError(String op, ASTType t1, ASTType t2) {
