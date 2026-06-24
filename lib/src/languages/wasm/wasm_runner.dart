@@ -130,6 +130,19 @@ class ApolloRunnerWasm extends ApolloRunner {
 
     var allParams = [...?positionalParameters, ...?namedParameters?.values];
 
+    // Encode String arguments into module memory (via `__alloc`) BEFORE numeric
+    // parameter resolution, which would otherwise mangle the String values. The
+    // function receives the i32 pointer; String params are identified by the
+    // `apollovm_sig` param tags.
+    var paramTags = _signatures(codeUnit.code)[functionName]?.paramTags;
+    if (paramTags != null) {
+      for (var i = 0; i < allParams.length && i < paramTags.length; ++i) {
+        if (paramTags[i] == _tagString && allParams[i] is String) {
+          allParams[i] = allocAndWriteString(allParams[i] as String);
+        }
+      }
+    }
+
     {
       var astFunction = _getASTFunction(codeUnit, functionName, allParams);
       if (astFunction != null) {

@@ -419,4 +419,102 @@ void main() {
       );
     });
   });
+
+  group('Wasm P2: String parameters', () {
+    test('echo (param in, param out)', () async {
+      await _testWasmReturn(
+        '''
+        String echo(String s) {
+          return s;
+        }
+      ''',
+        'echo',
+        ['hello'],
+        'hello',
+      );
+
+      await _testWasmReturn(
+        '''
+        String echo(String s) {
+          return s;
+        }
+      ''',
+        'echo',
+        ['héllo ☃'],
+        'héllo ☃',
+      );
+
+      await _testWasmReturn(
+        '''
+        String echo(String s) {
+          return s;
+        }
+      ''',
+        'echo',
+        [''],
+        '',
+      );
+    });
+
+    test('param + concatenation', () async {
+      await _testWasmReturn(
+        '''
+        String greet(String name) {
+          return "hi " + name + "!";
+        }
+      ''',
+        'greet',
+        ['Bob'],
+        'hi Bob!',
+      );
+    });
+
+    test('param + interpolation', () async {
+      await _testWasmReturn(
+        '''
+        String tag(String s, int n) {
+          return "[\$s:\$n]";
+        }
+      ''',
+        'tag',
+        ['x', 7],
+        '[x:7]',
+      );
+    });
+
+    test('print a String parameter', () async {
+      await _testWasmPrint(
+        '''
+        void show(String s) {
+          print(s);
+          print("got: " + s);
+        }
+      ''',
+        'show',
+        ['yo'],
+        ['yo', 'got: yo'],
+      );
+    });
+  });
+
+  group('Wasm P2: memory.grow', () {
+    test('large allocation grows memory', () async {
+      // Bump-and-leak concat in a loop allocates well past the initial reserve
+      // (64 KiB), forcing `memory.grow`.
+      await _testWasmReturn(
+        '''
+        String repeat(int n) {
+          String s = "";
+          for (int i = 0; i < n; i = i + 1) {
+            s = s + "0123456789";
+          }
+          return s;
+        }
+      ''',
+        'repeat',
+        [200],
+        '0123456789' * 200,
+      );
+    });
+  });
 }
