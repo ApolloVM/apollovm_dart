@@ -536,7 +536,12 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
 
       var paramType = callee.parameters.getParameterByIndex(i)?.type;
       if (paramType != null) {
-        _autoConvertStackTypes(stackType, paramType, out: out, context: context);
+        _autoConvertStackTypes(
+          stackType,
+          paramType,
+          out: out,
+          context: context,
+        );
       }
     }
 
@@ -821,7 +826,11 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     final expression1 = expression.expression1;
     final expression2 = expression.expression2;
 
-    if (expression2 is ASTExpressionLiteral) {
+    // `x == 0` fast-path (`i64.eqz`). Only valid for the `equals` operator:
+    // applying it to `>`, `<`, `!=`, etc. with a literal `0` would silently
+    // compute an equals-to-zero instead of the requested comparison.
+    if (expression.operator == ASTExpressionOperator.equals &&
+        expression2 is ASTExpressionLiteral) {
       var expression2Value = expression2.value;
       if (expression2Value is ASTValueInt && expression2Value.isZero) {
         return generateASTExpressionOperationEqualsToZero(
@@ -1117,10 +1126,6 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
             "i32.or",
           );
         }
-      default:
-        throw UnsupportedError(
-          "Wasm Operator not supported: ${expression.operator.name}",
-        );
     }
 
     context.assertStackLength(stackLng2 - 1, "After operation result");
@@ -1164,7 +1169,10 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
 
     _localVariableGet(out, context, localVar.index, name);
 
-    context.stackPush(localVar.type, 'Local get: ${localVar.index} \$$name');
+    // Booleans are represented as i32 on the Wasm stack, so a `bool` local is
+    // pushed with the i32 type to stay consistent with comparisons/logic.
+    var pushType = localVar.type is ASTTypeBool ? _astTypeInt32 : localVar.type;
+    context.stackPush(pushType, 'Local get: ${localVar.index} \$$name');
 
     context.assertStackLength(
       stackLng0 + 1,
@@ -1656,7 +1664,10 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     out.write(Wasm.brIf(1), description: "[OP] br_if 1 ($description break)");
     context.stackDrop(_astTypeInt32);
 
-    context.assertStackLength(stackLng0, "After $description loop condition br");
+    context.assertStackLength(
+      stackLng0,
+      "After $description loop condition br",
+    );
 
     // Loop body:
     generateASTBlock(loopBlock, out: out, context: context);
