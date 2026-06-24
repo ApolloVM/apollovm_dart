@@ -1,5 +1,8 @@
 ## 0.1.27
 
+- Wasm collections — lists, read + iterate (P3, part 1):
+  - `int`/`double` list literals compile to a `[length:i32][capacity:i32][elements…]` block in linear memory; index reads `a[i]`, the `.length` getter, and `for (var e in a)` now compile to Wasm (matching the interpreter, on both `wasm_run` and Chrome).
+  - Lists currently stay internal (return scalars); list parameters/returns, growable `.add`, `String`/`bool` element lists, and maps are later slices.
 - Wasm generator — major feature expansion (`ApolloGeneratorWasm`), moving toward full Dart parity:
   - **Loops**: `while` and `for` loops now compile to Wasm (`block`/`loop`/`br_if`/`br`), including `return` from inside a loop. Added the `br` opcode helper and recursion into loop bodies when collecting function locals.
   - **Function calls**: local function invocation (calling other top-level functions, including recursion) via a function-index table threaded through the generator and a `Wasm.call`.
