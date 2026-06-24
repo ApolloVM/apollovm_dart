@@ -1,3 +1,13 @@
+## 0.1.28
+
+- JavaScript (modern ES) language support — fully bidirectional:
+  - **Parser** (`ApolloParserJavaScript`, `JavaScriptGrammarDefinition`, `JavaScriptGrammarLexer`): parses `.js`/`javascript` source into the shared ApolloVM AST. Covers classes (fields + methods, `static`, `constructor`), top-level `function` declarations, `let`/`const`/`var`, `for`/`for...of`/`while`, `if`/`else if`/`else`, list literals, `++`/`--`, compound assignment, strict equality (`===`/`!==`), and single/double-quoted strings plus back-tick **template literals** with `${ … }` interpolation. Untyped sites map to `dynamic`; method/function return types are inferred as `void` (no value-return) or `dynamic`.
+  - **Code generator** (`ApolloCodeGeneratorJavaScript`): emits idiomatic modern JS from any loaded AST (Dart, Java, or JS) — `let`/`const`, template literals for string interpolation, `for...of`, top-level functions, untyped params/fields, `===`/`!==`, and `Math.trunc(a / b)` for integer division.
+  - **Runner** (`ApolloRunnerJavaScript`): executes JS-parsed ASTs in the VM (subject to the VM's existing limitation that arithmetic requires concrete/inferable types — dynamic-typed arithmetic is unsupported, as for Dart `dynamic`).
+  - Registered `javascript`/`js` in `ApolloVM.getParser`, `createRunner`, and `createCodeGenerator`.
+  - Tests: added `javascript_basic_*` definitions (parse + execute + round-trip + cross-translation to Dart/Java) and a JavaScript generation block to the Dart class-function test.
+  - Follow-ups: arrow functions, destructuring, spread, async/await, true `constructor` semantics with `this.x` parameters, and full ESM are not yet supported.
+
 ## 0.1.27
 
 - Wasm generator — major feature expansion (`ApolloGeneratorWasm`), moving toward full Dart parity:
