@@ -162,8 +162,12 @@ class WasmRuntimeWeb extends WasmRuntime {
       case WasmValueType.i32:
         return (a as JSNumber).toDartInt;
       case WasmValueType.i64:
-        // i64 arrives as a JS BigInt; passed through (handled by callers).
-        return a;
+        // i64 arrives as a JS BigInt; convert to a Dart int (or BigInt).
+        if (a.isA<JSBigInt>()) {
+          var s = (a as JSBigInt).toString();
+          return int.tryParse(s) ?? BigInt.parse(s);
+        }
+        return (a as JSNumber).toDartInt;
       case WasmValueType.f32:
       case WasmValueType.f64:
         return (a as JSNumber).toDartDouble;
@@ -266,6 +270,24 @@ class WasmModuleBrowser extends WasmModule {
     if (mem == null) return null;
     final buffer = mem.getProperty('buffer'.toJS) as JSArrayBuffer;
     return buffer.toDart.asUint8List();
+  }
+
+  @override
+  Object? invokeExport(String name, List<Object?> args) {
+    final fn = _instance.exports.function(name);
+    if (fn == null) {
+      throw StateError("No exported Wasm function `$name`");
+    }
+    final jsArgs = args.map((Object? e) => e?.jsify()).toList();
+    final JSAny? res;
+    if (jsArgs.isEmpty) {
+      res = fn.callAsFunction(null);
+    } else if (jsArgs.length == 1) {
+      res = fn.callAsFunction(null, jsArgs[0]);
+    } else {
+      res = fn.applyAsFunction(null, jsArgs.toJS);
+    }
+    return res.dartify();
   }
 
   @override
