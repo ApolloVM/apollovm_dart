@@ -852,10 +852,66 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       );
     }
 
+    // Map.containsKey(k)
+    if (localVar.type is ASTTypeMap &&
+        expression.name == 'containsKey' &&
+        expression.arguments.length == 1) {
+      return _generateMapContainsKey(
+        expression,
+        localVar,
+        out: out,
+        context: context,
+      );
+    }
+
     throw UnimplementedError(
       "Wasm method `.${expression.name}` on ${localVar.type} "
       "is not supported yet.",
     );
+  }
+
+  /// `m.containsKey(k)`: linear scan, pushes an i32 bool (1 found / 0 absent).
+  BytesOutput _generateMapContainsKey(
+    ASTExpressionObjectFunctionInvocation expression,
+    ({ASTType type, int index}) mapVar, {
+    required BytesOutput out,
+    required WasmContext context,
+  }) {
+    _requireMapType(mapVar.type, expression.variable.name, 'containsKey');
+
+    var hdr = context.scratchLocal(_astTypeString, 15);
+    var keys = context.scratchLocal(_astTypeString, 16);
+    var iLoc = context.scratchLocal(_astTypeString, 18);
+    var keyLoc = context.scratchLocal(_astTypeInt, 19); // i64 key
+    var found = context.scratchLocal(_astTypeString, 21);
+
+    final s0 = context.stackLength;
+
+    _localVariableGet(out, context, mapVar.index, expression.variable.name);
+    out.write(Wasm.localSet(hdr));
+    generateASTExpression(expression.arguments[0], out: out, context: context);
+    context.stackDrop();
+    out.write(Wasm.localSet(keyLoc));
+    out.write(Wasm32.i32Const(0));
+    out.write(Wasm.localSet(found));
+
+    _emitMapScan(
+      out,
+      context,
+      hdrScratch: hdr,
+      keysScratch: keys,
+      iScratch: iLoc,
+      keyScratch: keyLoc,
+      onMatch: () {
+        out.write(Wasm32.i32Const(1));
+        out.write(Wasm.localSet(found));
+      },
+    );
+
+    out.write(Wasm.localGet(found));
+    context.stackPush(_astTypeInt32, "containsKey"); // bool as i32
+    context.assertStackLength(s0 + 1, "After containsKey");
+    return out;
   }
 
   /// `list.add(x)`: appends to the growable list, reallocating the data buffer
@@ -1259,13 +1315,184 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     throw UnimplementedError("generateASTExpressionGroupFunctionInvocation");
   }
 
+  // === Maps ==========================================================
+  //
+  // A map value is an i32 pointer to a 16-byte header
+  // `[length:i32][capacity:i32][keysPtr:i32][valuesPtr:i32]`. Keys and values
+  // each live in their own parallel buffer (element encodings as for lists:
+  // int->i64, double->f64, String/bool->i32). Lookup/set is a linear scan with
+  // key equality. Slice 1 supports `int` keys.
+  static const int _mapHeaderSize = 16;
+
+  /// Resolves a local variable's `ASTTypeMap`, or throws if not a supported map.
+  ASTTypeMap _requireMapType(ASTType t, String name, String op) {
+    if (t is! ASTTypeMap) {
+      throw UnimplementedError(
+        "Wasm $op on `$name` ($t) is not supported yet.",
+      );
+    }
+    if (t.keyType is! ASTTypeInt) {
+      throw UnimplementedError(
+        "Wasm maps with non-`int` keys (${t.keyType}) are not supported yet.",
+      );
+    }
+    if (!_isSupportedElemType(t.valueType)) {
+      throw UnimplementedError(
+        "Wasm maps with value type ${t.valueType} are not supported yet.",
+      );
+    }
+    return t;
+  }
+
+  /// Emits the key-comparison loop for `m[k]`. On entry the key is evaluated
+  /// into [keyScratch]; emits a `block { loop { … } }` that, for each entry,
+  /// runs [onMatch] (with the matching index `i` in [iScratch] and the key
+  /// buffer base in [keysScratch]) and breaks. Falls through (no match) past the
+  /// block. Used by get/set/containsKey.
+  void _emitMapScan(
+    BytesOutput out,
+    WasmContext context, {
+    required int hdrScratch,
+    required int keysScratch,
+    required int iScratch,
+    required int keyScratch,
+    required void Function() onMatch,
+  }) {
+    // keysPtr = load(hdr, 8) ; i = 0
+    out.write(Wasm.localGet(hdrScratch));
+    out.write(Wasm32.i32Load(2, 8));
+    out.write(Wasm.localSet(keysScratch));
+    out.write(Wasm32.i32Const(0));
+    out.write(Wasm.localSet(iScratch));
+
+    out.write(Wasm.block(WasmType.voidType));
+    out.write(Wasm.loop(WasmType.voidType));
+
+    // if (i >= length) break the block (no match)
+    out.write(Wasm.localGet(iScratch));
+    out.write(Wasm.localGet(hdrScratch));
+    out.write(Wasm32.i32Load(2, 0)); // length
+    out.writeByte(Wasm32.i32GreaterThanOrEqualsUnsigned);
+    out.write(Wasm.brIf(1));
+
+    // if (keys[i] == key) { onMatch(); break }
+    out.write(Wasm.localGet(keysScratch));
+    out.write(Wasm.localGet(iScratch));
+    out.write(Wasm32.i32Const(8)); // int key size
+    out.writeByte(Wasm32.i32Multiply);
+    out.writeByte(Wasm32.i32Add);
+    out.write(Wasm64.i64Load(3, 0)); // keys[i]
+    out.write(Wasm.localGet(keyScratch)); // query key
+    out.writeByte(Wasm64.i64Equals);
+    out.write(Wasm.ifInstruction(WasmType.voidType));
+    onMatch();
+    out.write(Wasm.br(2)); // break out of the scan block (if -> loop -> block)
+    out.writeByte(Wasm.end); // end if
+
+    // i++ ; continue
+    out.write(Wasm.localGet(iScratch));
+    out.write(Wasm32.i32Const(1));
+    out.writeByte(Wasm32.i32Add);
+    out.write(Wasm.localSet(iScratch));
+    out.write(Wasm.br(0));
+
+    out.writeByte(Wasm.end); // end loop
+    out.writeByte(Wasm.end); // end block
+  }
+
   @override
   BytesOutput generateASTExpressionMapLiteral(
     ASTExpressionMapLiteral expression, {
     BytesOutput? out,
+    WasmContext? context,
   }) {
-    // TODO: implement generateASTExpressionMapLiteral
-    throw UnimplementedError('generateASTExpressionMapLiteral');
+    out ??= newOutput();
+    context ??= WasmContext();
+    var module = context.module;
+    if (module == null) {
+      throw StateError("Can't build a map without a module.");
+    }
+    module.requiresMemory = true;
+    module.requiresHeapGlobal = true;
+
+    var entries = expression.entriesExpressions;
+    var n = entries.length;
+
+    // Element sizes only matter when there are entries to store. An empty `{}`
+    // (typed `Map<dynamic,dynamic>`) allocates zero-size buffers; its element
+    // types are taken later from the variable's declared type (on `m[k] = v`).
+    ASTType keyType = ASTTypeInt.instance;
+    ASTType valueType = ASTTypeInt.instance;
+    ASTTypeMap mapType = ASTTypeMap(keyType, valueType);
+    if (n > 0) {
+      var rt = expression.resolveType(null);
+      var resolvedKey =
+          expression.keyType ?? (rt is ASTTypeMap ? rt.keyType : null);
+      var resolvedVal =
+          expression.valueType ?? (rt is ASTTypeMap ? rt.valueType : null);
+      mapType = _requireMapType(
+        ASTTypeMap(
+          resolvedKey ?? ASTTypeDynamic.instance,
+          resolvedVal ?? ASTTypeDynamic.instance,
+        ),
+        'map literal',
+        'map literal',
+      );
+      keyType = mapType.keyType;
+      valueType = mapType.valueType;
+    }
+    var keySize = 8; // int key
+    var valSize = _elemSize(valueType);
+
+    var hdrLocal = context.scratchLocal(_astTypeString, 15);
+    var keysLocal = context.scratchLocal(_astTypeString, 16);
+    var valsLocal = context.scratchLocal(_astTypeString, 17);
+
+    final s0 = context.stackLength;
+
+    // header = alloc(16); keys = alloc(n*keySize); vals = alloc(n*valSize)
+    out.write(Wasm32.i32Const(_mapHeaderSize));
+    _emitInlineAlloc(out, context);
+    out.write(Wasm.localSet(hdrLocal));
+    out.write(Wasm32.i32Const(n * keySize));
+    _emitInlineAlloc(out, context);
+    out.write(Wasm.localSet(keysLocal));
+    out.write(Wasm32.i32Const(n * valSize));
+    _emitInlineAlloc(out, context);
+    out.write(Wasm.localSet(valsLocal));
+
+    // header: length=n@0, capacity=n@4, keysPtr@8, valuesPtr@12
+    out.write(Wasm.localGet(hdrLocal));
+    out.write(Wasm32.i32Const(n));
+    out.write(Wasm32.i32Store(2, 0));
+    out.write(Wasm.localGet(hdrLocal));
+    out.write(Wasm32.i32Const(n));
+    out.write(Wasm32.i32Store(2, 4));
+    out.write(Wasm.localGet(hdrLocal));
+    out.write(Wasm.localGet(keysLocal));
+    out.write(Wasm32.i32Store(2, 8));
+    out.write(Wasm.localGet(hdrLocal));
+    out.write(Wasm.localGet(valsLocal));
+    out.write(Wasm32.i32Store(2, 12));
+
+    // entries
+    for (var i = 0; i < n; ++i) {
+      // keys[i] = key
+      out.write(Wasm.localGet(keysLocal));
+      generateASTExpression(entries[i].key, out: out, context: context);
+      context.stackDrop();
+      _emitElemStore(out, keyType, i * keySize);
+      // vals[i] = value
+      out.write(Wasm.localGet(valsLocal));
+      generateASTExpression(entries[i].value, out: out, context: context);
+      context.stackDrop();
+      _emitElemStore(out, valueType, i * valSize);
+    }
+
+    out.write(Wasm.localGet(hdrLocal));
+    context.stackPush(mapType, "map literal");
+    context.assertStackLength(s0 + 1, "After map literal");
+    return out;
   }
 
   @override
@@ -2166,13 +2393,18 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
 
     var name = expression.variable.name;
     var localVar = _getLocalVariable(context, name);
-    var listType = localVar.type;
-    if (listType is! ASTTypeArray) {
+    var containerType = localVar.type;
+
+    if (containerType is ASTTypeMap) {
+      return _generateMapGet(expression, localVar, out: out, context: context);
+    }
+
+    if (containerType is! ASTTypeArray) {
       throw UnimplementedError(
-        "Wasm index access on `$name` ($listType) is not supported yet.",
+        "Wasm index access on `$name` ($containerType) is not supported yet.",
       );
     }
-    var elemType = listType.componentType;
+    var elemType = containerType.componentType;
     var size = _elemSize(elemType);
 
     final s0 = context.stackLength;
@@ -2197,6 +2429,325 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     return out;
   }
 
+  /// `m[k]` map lookup: linear scan by key; pushes the matching value, or a
+  /// zero/null default when the key is absent (Dart returns `null`; tests use
+  /// present keys).
+  BytesOutput _generateMapGet(
+    ASTExpressionVariableEntryAccess expression,
+    ({ASTType type, int index}) mapVar, {
+    required BytesOutput out,
+    required WasmContext context,
+  }) {
+    var mapType = _requireMapType(
+      mapVar.type,
+      expression.variable.name,
+      'm[k]',
+    );
+    var keyType = mapType.keyType;
+    var valueType = mapType.valueType;
+    var valSize = _elemSize(valueType);
+
+    var hdr = context.scratchLocal(_astTypeString, 15);
+    var keys = context.scratchLocal(_astTypeString, 16);
+    var iLoc = context.scratchLocal(_astTypeString, 18);
+    var keyLoc = context.scratchLocal(keyType, 19); // i64 key
+    var result = context.scratchLocal(valueType, 25);
+
+    final s0 = context.stackLength;
+
+    // hdr = map header
+    _localVariableGet(out, context, mapVar.index, expression.variable.name);
+    out.write(Wasm.localSet(hdr));
+    // key = eval(k)
+    generateASTExpression(expression.expression, out: out, context: context);
+    context.stackDrop();
+    out.write(Wasm.localSet(keyLoc));
+    // result = 0 (default)
+    _emitZeroDefault(out, valueType);
+    out.write(Wasm.localSet(result));
+
+    _emitMapScan(
+      out,
+      context,
+      hdrScratch: hdr,
+      keysScratch: keys,
+      iScratch: iLoc,
+      keyScratch: keyLoc,
+      onMatch: () {
+        // result = values[i]
+        out.write(Wasm.localGet(hdr));
+        out.write(Wasm32.i32Load(2, 12)); // valuesPtr
+        out.write(Wasm.localGet(iLoc));
+        out.write(Wasm32.i32Const(valSize));
+        out.writeByte(Wasm32.i32Multiply);
+        out.writeByte(Wasm32.i32Add);
+        _emitElemLoad(out, valueType, 0);
+        out.write(Wasm.localSet(result));
+      },
+    );
+
+    out.write(Wasm.localGet(result));
+    context.stackPush(_elemStackType(valueType), "map[key]");
+    context.assertStackLength(s0 + 1, "After map[key]");
+    return out;
+  }
+
+  /// Pushes a zero/null default value of [type] (i64 0 / f64 0 / i32 0).
+  void _emitZeroDefault(BytesOutput out, ASTType type) {
+    if (type is ASTTypeInt) {
+      out.write(Wasm64.i64Const(0));
+    } else if (type is ASTTypeDouble) {
+      out.write(Wasm64.f64Const(0));
+    } else {
+      out.write(Wasm32.i32Const(0)); // String/bool -> null ptr / false
+    }
+  }
+
+  /// Subscript assignment `m[k] = v` (map) or `a[i] = v` (list). Emitted as a
+  /// void statement (nothing left on the stack).
+  BytesOutput _generateWasmEntryAssignment(
+    ASTExpressionVariableEntryAssignment expression, {
+    BytesOutput? out,
+    WasmContext? context,
+  }) {
+    out ??= newOutput();
+    context ??= WasmContext();
+
+    if (expression.operator != ASTAssignmentOperator.set) {
+      throw UnimplementedError(
+        "Wasm compound entry assignment (`${expression.operator}`) is not "
+        "supported yet.",
+      );
+    }
+
+    var name = expression.variable.name;
+    var localVar = _getLocalVariable(context, name);
+    var containerType = localVar.type;
+
+    if (containerType is ASTTypeMap) {
+      return _generateMapSet(expression, localVar, out: out, context: context);
+    }
+    if (containerType is ASTTypeArray) {
+      return _generateListIndexSet(
+        expression,
+        localVar,
+        out: out,
+        context: context,
+      );
+    }
+
+    throw UnimplementedError(
+      "Wasm entry assignment on `$name` ($containerType) is not supported yet.",
+    );
+  }
+
+  /// `a[i] = v`: store `v` at `dataPtr + i*size`.
+  BytesOutput _generateListIndexSet(
+    ASTExpressionVariableEntryAssignment expression,
+    ({ASTType type, int index}) listVar, {
+    required BytesOutput out,
+    required WasmContext context,
+  }) {
+    var elemType = (listVar.type as ASTTypeArray).componentType;
+    var size = _elemSize(elemType);
+
+    final s0 = context.stackLength;
+
+    // addr = dataPtr + index*size
+    _localVariableGet(out, context, listVar.index, expression.variable.name);
+    out.write(Wasm32.i32Load(2, 8)); // dataPtr
+    generateASTExpression(
+      expression.keyExpression,
+      out: out,
+      context: context,
+    ); // index (i64)
+    context.stackDrop();
+    out.writeByte(Wasm64.i64WrapToi32);
+    out.write(Wasm32.i32Const(size));
+    out.writeByte(Wasm32.i32Multiply);
+    out.writeByte(Wasm32.i32Add); // addr
+    generateASTExpression(expression.expression, out: out, context: context);
+    context.stackDrop();
+    _emitElemStore(out, elemType, 0);
+
+    context.assertStackLength(s0, "After list[i] = v");
+    return out;
+  }
+
+  /// `m[k] = v`: scan for the key; update in place if present, else append
+  /// (growing the parallel key/value buffers when full).
+  BytesOutput _generateMapSet(
+    ASTExpressionVariableEntryAssignment expression,
+    ({ASTType type, int index}) mapVar, {
+    required BytesOutput out,
+    required WasmContext context,
+  }) {
+    var module = context.module!;
+    module.requiresMemory = true;
+    module.requiresHeapGlobal = true;
+
+    var mapType = _requireMapType(
+      mapVar.type,
+      expression.variable.name,
+      'm[k] = v',
+    );
+    var keyType = mapType.keyType;
+    var valueType = mapType.valueType;
+    var keySize = 8; // int key
+    var valSize = _elemSize(valueType);
+
+    var hdr = context.scratchLocal(_astTypeString, 15);
+    var keys = context.scratchLocal(_astTypeString, 16);
+    var iLoc = context.scratchLocal(_astTypeString, 18);
+    var keyLoc = context.scratchLocal(keyType, 19); // i64 key
+    var valLoc = context.scratchLocal(valueType, 20);
+    var found = context.scratchLocal(_astTypeString, 21);
+    var newCap = context.scratchLocal(_astTypeString, 22);
+    var newBuf = context.scratchLocal(_astTypeString, 23);
+
+    final s0 = context.stackLength;
+
+    // hdr = map header
+    _localVariableGet(out, context, mapVar.index, expression.variable.name);
+    out.write(Wasm.localSet(hdr));
+    // key = eval(k) ; val = eval(v)
+    generateASTExpression(expression.keyExpression, out: out, context: context);
+    context.stackDrop();
+    out.write(Wasm.localSet(keyLoc));
+    generateASTExpression(expression.expression, out: out, context: context);
+    context.stackDrop();
+    out.write(Wasm.localSet(valLoc));
+    // found = 0
+    out.write(Wasm32.i32Const(0));
+    out.write(Wasm.localSet(found));
+
+    _emitMapScan(
+      out,
+      context,
+      hdrScratch: hdr,
+      keysScratch: keys,
+      iScratch: iLoc,
+      keyScratch: keyLoc,
+      onMatch: () {
+        // values[i] = val ; found = 1
+        out.write(Wasm.localGet(hdr));
+        out.write(Wasm32.i32Load(2, 12)); // valuesPtr
+        out.write(Wasm.localGet(iLoc));
+        out.write(Wasm32.i32Const(valSize));
+        out.writeByte(Wasm32.i32Multiply);
+        out.writeByte(Wasm32.i32Add);
+        out.write(Wasm.localGet(valLoc));
+        _emitElemStore(out, valueType, 0);
+        out.write(Wasm32.i32Const(1));
+        out.write(Wasm.localSet(found));
+      },
+    );
+
+    // if (!found) append the new entry
+    out.write(Wasm.localGet(found));
+    out.writeByte(Wasm32.i32EqualsToZero);
+    out.write(Wasm.ifInstruction(WasmType.voidType));
+    {
+      // grow parallel buffers if length == capacity
+      out.write(Wasm.localGet(hdr));
+      out.write(Wasm32.i32Load(2, 0)); // length
+      out.write(Wasm.localGet(hdr));
+      out.write(Wasm32.i32Load(2, 4)); // capacity
+      out.writeByte(Wasm32.i32Equals);
+      out.write(Wasm.ifInstruction(WasmType.voidType));
+      {
+        // newCap = capacity*2; if 0 -> 4
+        out.write(Wasm.localGet(hdr));
+        out.write(Wasm32.i32Load(2, 4));
+        out.write(Wasm32.i32Const(2));
+        out.writeByte(Wasm32.i32Multiply);
+        out.write(Wasm.localSet(newCap));
+        out.write(Wasm.localGet(newCap));
+        out.writeByte(Wasm32.i32EqualsToZero);
+        out.write(Wasm.ifInstruction(WasmType.voidType));
+        out.write(Wasm32.i32Const(4));
+        out.write(Wasm.localSet(newCap));
+        out.writeByte(Wasm.end);
+
+        // keys: newBuf = alloc(newCap*keySize); copy; hdr.keysPtr = newBuf
+        _emitReallocBuffer(out, context, hdr, 8, keySize, newCap, newBuf);
+        // values: newBuf = alloc(newCap*valSize); copy; hdr.valuesPtr = newBuf
+        _emitReallocBuffer(out, context, hdr, 12, valSize, newCap, newBuf);
+
+        // hdr.capacity = newCap
+        out.write(Wasm.localGet(hdr));
+        out.write(Wasm.localGet(newCap));
+        out.write(Wasm32.i32Store(2, 4));
+      }
+      out.writeByte(Wasm.end);
+
+      // keys[length] = key
+      out.write(Wasm.localGet(hdr));
+      out.write(Wasm32.i32Load(2, 8)); // keysPtr
+      out.write(Wasm.localGet(hdr));
+      out.write(Wasm32.i32Load(2, 0)); // length
+      out.write(Wasm32.i32Const(keySize));
+      out.writeByte(Wasm32.i32Multiply);
+      out.writeByte(Wasm32.i32Add);
+      out.write(Wasm.localGet(keyLoc));
+      _emitElemStore(out, keyType, 0);
+      // values[length] = val
+      out.write(Wasm.localGet(hdr));
+      out.write(Wasm32.i32Load(2, 12)); // valuesPtr
+      out.write(Wasm.localGet(hdr));
+      out.write(Wasm32.i32Load(2, 0)); // length
+      out.write(Wasm32.i32Const(valSize));
+      out.writeByte(Wasm32.i32Multiply);
+      out.writeByte(Wasm32.i32Add);
+      out.write(Wasm.localGet(valLoc));
+      _emitElemStore(out, valueType, 0);
+      // length++
+      out.write(Wasm.localGet(hdr));
+      out.write(Wasm.localGet(hdr));
+      out.write(Wasm32.i32Load(2, 0));
+      out.write(Wasm32.i32Const(1));
+      out.writeByte(Wasm32.i32Add);
+      out.write(Wasm32.i32Store(2, 0));
+    }
+    out.writeByte(Wasm.end);
+
+    context.assertStackLength(s0, "After map[k] = v");
+    return out;
+  }
+
+  /// Reallocates a header buffer field (`keysPtr`@[ptrOffset] or `valuesPtr`):
+  /// `newBuf = __alloc(newCap*elemSize)`, copy `length*elemSize` old bytes, then
+  /// `hdr[ptrOffset] = newBuf`.
+  void _emitReallocBuffer(
+    BytesOutput out,
+    WasmContext context,
+    int hdr,
+    int ptrOffset,
+    int elemSize,
+    int newCap,
+    int newBuf,
+  ) {
+    // newBuf = __alloc(newCap * elemSize)
+    out.write(Wasm.localGet(newCap));
+    out.write(Wasm32.i32Const(elemSize));
+    out.writeByte(Wasm32.i32Multiply);
+    _emitInlineAlloc(out, context);
+    out.write(Wasm.localSet(newBuf));
+    // memory.copy(newBuf, oldPtr, length*elemSize)
+    out.write(Wasm.localGet(newBuf));
+    out.write(Wasm.localGet(hdr));
+    out.write(Wasm32.i32Load(2, ptrOffset)); // old buffer
+    out.write(Wasm.localGet(hdr));
+    out.write(Wasm32.i32Load(2, 0)); // length
+    out.write(Wasm32.i32Const(elemSize));
+    out.writeByte(Wasm32.i32Multiply);
+    out.write(Wasm.memoryCopy);
+    // hdr[ptrOffset] = newBuf
+    out.write(Wasm.localGet(hdr));
+    out.write(Wasm.localGet(newBuf));
+    out.write(Wasm32.i32Store(2, ptrOffset));
+  }
+
   /// Lowers a getter access (`a.length`). Slice 1 supports `List.length`.
   BytesOutput _generateWasmGetterAccess(
     ASTExpressionObjectGetterAccess expression, {
@@ -2211,7 +2762,10 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     var localVar = _getLocalVariable(context, varName);
 
     var listType = localVar.type;
-    if (listType is ASTTypeArray) {
+
+    // `.length`/`.isEmpty`/`.isNotEmpty` read header[0] (length), which is the
+    // same offset for both the list and map layouts.
+    if (listType is ASTTypeArray || listType is ASTTypeMap) {
       final s0 = context.stackLength;
 
       if (name == 'length') {
@@ -2236,6 +2790,10 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
         context.assertStackLength(s0 + 1, "After .$name");
         return out;
       }
+    }
+
+    if (listType is ASTTypeArray) {
+      final s0 = context.stackLength;
 
       if (name == 'first' || name == 'last') {
         var elemType = listType.componentType;
@@ -3017,7 +3575,17 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
         context: context,
       );
     } else if (expression is ASTExpressionMapLiteral) {
-      return generateASTExpressionMapLiteral(expression, out: out);
+      return generateASTExpressionMapLiteral(
+        expression,
+        out: out,
+        context: context,
+      );
+    } else if (expression is ASTExpressionVariableEntryAssignment) {
+      return _generateWasmEntryAssignment(
+        expression,
+        out: out,
+        context: context,
+      );
     } else if (expression is ASTExpressionNegation) {
       return generateASTExpressionNegation(
         expression,
@@ -4069,6 +4637,9 @@ extension _ASTTypeExtension on ASTType {
       return WasmType.i32Type;
     } else if (this is ASTTypeArray) {
       // A list is an i32 pointer into linear memory.
+      return WasmType.i32Type;
+    } else if (this is ASTTypeMap) {
+      // A map is an i32 pointer into linear memory.
       return WasmType.i32Type;
     } else if (this is ASTTypeVoid) {
       return WasmType.voidType;

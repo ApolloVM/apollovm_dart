@@ -1,5 +1,10 @@
 ## 0.1.27
 
+- Wasm collections — maps with `int` keys (P3, part 5):
+  - `Map<int, V>` now compiles to Wasm (`V` = `int`/`double`/`String`/`bool`). A map value is an i32 pointer to a 16-byte header `[length][capacity][keysPtr][valuesPtr]` with parallel key/value buffers; lookup/set is a linear scan with `i64` key equality. Matches the interpreter on both `wasm_run` and Chrome.
+  - Supported: map literals (incl. empty `{}`), `m[k]` get, `m[k] = v` set (in-place update or append, growing both buffers when full), `.length`, `.isEmpty`/`.isNotEmpty`, and `.containsKey(k)`.
+  - Also adds Wasm **list index assignment** `a[i] = v` (the subscript-assignment AST node now lowers to Wasm for both maps and lists).
+  - Out of scope for this slice: `String` keys (need a string-equality helper), `.keys`/`.values`/iteration, map parameters/returns, and compound subscript assignment (`m[k] += v`) — note `m[k] = m[k] + 1` already works.
 - Dart subscript assignment — `m[k] = v` and `a[i] = v` (frontend + interpreter):
   - The grammar now parses container-entry assignment targets (previously the assignment left-hand side was only a bare variable, so `m[k] = v` / `a[i] = v` failed with a `SyntaxError`). Compound operators (`+=`, `-=`, `*=`, `/=`, `~/=`) are supported, e.g. `m["x"] += 1` for building a frequency map.
   - New AST node `ASTExpressionVariableEntryAssignment`; new `ASTValue.writeKey`/`writeIndex` write into the underlying `Map`/`List` in place. A `Map` is always written by key (even a numeric one); a `List` by index. Round-trips through the code generators (parse → regenerate → re-parse).

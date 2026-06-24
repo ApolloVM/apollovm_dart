@@ -1,0 +1,306 @@
+library;
+
+import 'package:apollovm/apollovm.dart';
+import 'package:test/test.dart';
+
+/// Runs [functionName] via the AST interpreter AND the compiled+executed Wasm
+/// module and asserts both return [expectedReturn].
+Future<void> _testWasmReturn(
+  String code,
+  String functionName,
+  List args,
+  Object? expectedReturn,
+) async {
+  var vm = ApolloVM();
+  var ok = await vm.loadCodeUnit(SourceCodeUnit('dart', code, id: 'test'));
+  expect(ok, isTrue, reason: "Can't load Dart source");
+
+  var astRunner = vm.createRunner('dart')!;
+  var astRet = await astRunner.executeFunction(
+    '',
+    functionName,
+    positionalParameters: args,
+  );
+  expect(astRet.getValueNoContext(), expectedReturn, reason: 'interpreter');
+
+  var storageWasm = vm.generateAllIn<BytesOutput>('wasm');
+  var wasmModules = await storageWasm.allEntries();
+  BytesOutput? compiled;
+  for (var ns in wasmModules.entries) {
+    for (var m in ns.value.entries) {
+      compiled ??= m.value;
+    }
+  }
+  expect(compiled, isNotNull, reason: 'No compiled Wasm module');
+
+  var rt = WasmRuntime()..ensureBooted();
+  if (!rt.isSupported) {
+    fail('Wasm runtime not supported (run `dart run wasm_run:setup`).');
+  }
+
+  var vmWasm = ApolloVM();
+  await vmWasm.loadCodeUnit(
+    BinaryCodeUnit('wasm', compiled!.output(), id: 'test.wasm', namespace: ''),
+  );
+  var wasmRunner = vmWasm.createRunner('wasm')!;
+  var wasmRet = await wasmRunner.executeFunction(
+    '',
+    functionName,
+    positionalParameters: args,
+  );
+  expect(wasmRet.getValueNoContext(), expectedReturn, reason: 'Wasm');
+}
+
+void main() {
+  group('Wasm maps: int keys — literal + index get', () {
+    test('get by constant key', () async {
+      await _testWasmReturn(
+        '''
+        int f() {
+          Map<int,int> m = {1: 10, 2: 20, 3: 30};
+          return m[2];
+        }
+      ''',
+        'f',
+        [],
+        20,
+      );
+    });
+
+    test('get by variable key', () async {
+      await _testWasmReturn(
+        '''
+        int f(int k) {
+          Map<int,int> m = {1: 10, 2: 20, 3: 30};
+          return m[k];
+        }
+      ''',
+        'f',
+        [3],
+        30,
+      );
+    });
+
+    test('double value', () async {
+      await _testWasmReturn(
+        '''
+        double f() {
+          Map<int,double> m = {1: 1.5, 2: 2.5};
+          return m[2];
+        }
+      ''',
+        'f',
+        [],
+        2.5,
+      );
+    });
+
+    test('String value', () async {
+      await _testWasmReturn(
+        '''
+        String f() {
+          Map<int,String> m = {1: "one", 2: "two"};
+          return m[2];
+        }
+      ''',
+        'f',
+        [],
+        'two',
+      );
+    });
+  });
+
+  group('Wasm maps: .length / .isEmpty', () {
+    test('length', () async {
+      await _testWasmReturn(
+        '''
+        int f() {
+          Map<int,int> m = {1: 1, 2: 2, 3: 3, 4: 4};
+          return m.length;
+        }
+      ''',
+        'f',
+        [],
+        4,
+      );
+    });
+
+    test('isEmpty on empty map', () async {
+      await _testWasmReturn(
+        '''
+        bool f() {
+          Map<int,int> m = {};
+          return m.isEmpty;
+        }
+      ''',
+        'f',
+        [],
+        true,
+      );
+    });
+
+    test('isNotEmpty', () async {
+      await _testWasmReturn(
+        '''
+        bool f() {
+          Map<int,int> m = {1: 1};
+          return m.isNotEmpty;
+        }
+      ''',
+        'f',
+        [],
+        true,
+      );
+    });
+  });
+
+  group('Wasm maps: containsKey', () {
+    test('present key', () async {
+      await _testWasmReturn(
+        '''
+        bool f() {
+          Map<int,int> m = {1: 10, 2: 20};
+          return m.containsKey(2);
+        }
+      ''',
+        'f',
+        [],
+        true,
+      );
+    });
+
+    test('absent key', () async {
+      await _testWasmReturn(
+        '''
+        bool f() {
+          Map<int,int> m = {1: 10};
+          return m.containsKey(9);
+        }
+      ''',
+        'f',
+        [],
+        false,
+      );
+    });
+  });
+
+  group('Wasm maps: subscript assignment m[k] = v', () {
+    test('update existing key', () async {
+      await _testWasmReturn(
+        '''
+        int f() {
+          Map<int,int> m = {1: 10, 2: 20};
+          m[1] = 99;
+          return m[1];
+        }
+      ''',
+        'f',
+        [],
+        99,
+      );
+    });
+
+    test('add a new key', () async {
+      await _testWasmReturn(
+        '''
+        int f() {
+          Map<int,int> m = {1: 10};
+          m[2] = 20;
+          return m[2];
+        }
+      ''',
+        'f',
+        [],
+        20,
+      );
+    });
+
+    test('set grows the map (triggers realloc)', () async {
+      await _testWasmReturn(
+        '''
+        int f() {
+          Map<int,int> m = {1: 10};
+          m[2] = 20;
+          m[3] = 30;
+          m[4] = 40;
+          m[5] = 50;
+          return m.length;
+        }
+      ''',
+        'f',
+        [],
+        5,
+      );
+    });
+
+    test('set from empty literal', () async {
+      await _testWasmReturn(
+        '''
+        int f() {
+          Map<int,int> m = {};
+          m[5] = 50;
+          m[6] = 60;
+          return m[6];
+        }
+      ''',
+        'f',
+        [],
+        60,
+      );
+    });
+
+    test('set preserves earlier entries after realloc', () async {
+      await _testWasmReturn(
+        '''
+        int f() {
+          Map<int,int> m = {1: 11};
+          m[2] = 22;
+          m[3] = 33;
+          m[4] = 44;
+          return m[1];
+        }
+      ''',
+        'f',
+        [],
+        11,
+      );
+    });
+
+    test('set String value then read back', () async {
+      await _testWasmReturn(
+        '''
+        String f() {
+          Map<int,String> m = {1: "a"};
+          m[2] = "b";
+          return m[2];
+        }
+      ''',
+        'f',
+        [],
+        'b',
+      );
+    });
+
+    test('count occurrences with a map', () async {
+      await _testWasmReturn(
+        '''
+        int f() {
+          List<int> data = [1, 2, 2, 3, 2, 1];
+          Map<int,int> counts = {};
+          for (var x in data) {
+            if (counts.containsKey(x)) {
+              counts[x] = counts[x] + 1;
+            } else {
+              counts[x] = 1;
+            }
+          }
+          return counts[2];
+        }
+      ''',
+        'f',
+        [],
+        3,
+      );
+    });
+  });
+}
