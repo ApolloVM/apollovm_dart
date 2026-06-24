@@ -21,7 +21,7 @@ environment:
 dependencies:
   swiss_knife: ^3.3.14
   async_extension: ^1.2.22
-  data_serializer: ^1.2.1
+  data_serializer: ^1.2.2
   petitparser: ^7.0.2
   collection: ^1.19.1
   args: ^2.7.0
@@ -34,7 +34,7 @@ dependencies:
 dev_dependencies:
   lints: ^6.1.0
   dependency_validator: ^5.0.5
-  test: ^1.31.0
+  test: ^1.31.1
   pubspec: ^2.3.0
   xml: ^6.6.1
   build_web_compilers: ^4.8.0

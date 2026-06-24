@@ -142,6 +142,14 @@ abstract class ASTValue<T> with ASTNode implements ASTTypedNode {
     throw UnsupportedError("Can't read key for type: $type");
   }
 
+  FutureOr<void> writeIndex<V>(VMContext context, int index, V value) {
+    throw UnsupportedError("Can't write index for type: $type");
+  }
+
+  FutureOr<void> writeKey<V>(VMContext context, Object? key, V value) {
+    throw UnsupportedError("Can't write key for type: $type");
+  }
+
   FutureOr<int?> size(VMContext context) => null;
 
   FutureOr<ASTValue> operator +(ASTValue other) =>
@@ -347,6 +355,40 @@ class ASTValueStatic<T> extends ASTValue<T> {
 
     throw ApolloVMNullPointerException(
       "Can't read key '$key': type: $type ; value: $value",
+    );
+  }
+
+  @override
+  void writeIndex<V>(VMContext context, int index, V value) {
+    final container = this.value;
+
+    if (container is List) {
+      container[index] = value;
+      return;
+    }
+
+    throw ApolloVMNullPointerException(
+      "Can't write index '$index': type: $type ; value: $container",
+    );
+  }
+
+  @override
+  void writeKey<V>(VMContext context, Object? key, V value) {
+    final container = this.value;
+
+    if (container is Map) {
+      container[key] = value;
+      return;
+    } else if (container is List) {
+      var idx = key is int ? key : int.tryParse('$key');
+      if (idx != null) {
+        container[idx] = value;
+        return;
+      }
+    }
+
+    throw ApolloVMNullPointerException(
+      "Can't write key '$key': type: $type ; value: $container",
     );
   }
 

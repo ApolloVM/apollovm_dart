@@ -132,6 +132,11 @@ abstract class WasmModule {
   /// or `null` if the module has no exported memory.
   Uint8List? readMemory() => null;
 
+  /// Invokes an exported function [name] with [args], returning its result.
+  /// Used by host imports that call back into the module (e.g. `__alloc`).
+  Object? invokeExport(String name, List<Object?> args) =>
+      throw UnimplementedError('invokeExport not supported on this platform');
+
   /// Disposes this module instance.
   FutureOr<void> dispose() {}
 }
