@@ -1,0 +1,14 @@
+# Test platform / tag configuration.
+#
+# Tags:
+#   wasm-gc — tests that require the WebAssembly GC proposal. These only run on
+#            engines that support WasmGC (e.g. Chrome 119+). The native
+#            `wasm_run` runtime (wasmtime 14 / wasmi 0.31) does NOT support GC,
+#            so CI that relies on `wasm_run` must EXCLUDE this tag:
+#
+#              dart test -x wasm-gc            # native / wasm_run CI
+#              dart test -p chrome -t wasm-gc  # run only the GC tests in Chrome
+
+tags:
+  wasm-gc:
+    # Requires a WasmGC-capable engine (Chrome). Excluded from wasm_run CI.

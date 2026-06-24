@@ -47,7 +47,9 @@ jobs:
       - name: wasm_run:setup (install dynamic library)
         run: dart run wasm_run:setup
       - name: Run tests (VM)
-        run: dart test --platform vm --coverage=./coverage
+        # Exclude `wasm-gc` tests: this job uses `wasm_run` (wasmtime 14 /
+        # wasmi 0.31), which does not support the WebAssembly GC proposal.
+        run: dart test --platform vm --exclude-tags wasm-gc --coverage=./coverage
       - name: Generate coverage report
         run: |
           dart pub global activate coverage
@@ -80,7 +82,8 @@ jobs:
       - name: wasm_run:setup (install dynamic library)
         run: dart run wasm_run:setup
       - name: Run tests (exe)
-        run: dart test --compiler exe
+        # `wasm_run` backend has no WebAssembly GC support; skip `wasm-gc` tests.
+        run: dart test --compiler exe --exclude-tags wasm-gc
 
 
   test_chrome:
@@ -97,4 +100,7 @@ jobs:
       - name: Upgrade dependencies
         run: dart pub upgrade
       - name: Run tests (Chrome)
+        # Chrome's engine supports the WebAssembly GC proposal (v119+), so it
+        # runs ALL tests, including `wasm-gc` ones (unlike the wasm_run-based
+        # VM/exe jobs, which exclude that tag).
         run: dart test --platform chrome

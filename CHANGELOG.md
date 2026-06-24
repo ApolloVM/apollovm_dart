@@ -10,6 +10,9 @@
   - **Full Dart `%` semantics**: integer and double modulo now return the Dart-correct non-negative result in `[0, |b|)` for negative operands (sign-corrected via scratch locals); double `%` is computed as `a - trunc(a / b) * b`.
   - **Fix**: compound assignment (`+=`, `-=`, `*=`, …) emitted its operation to a discarded buffer (missing `out`/`context`), producing broken code; now applied to the real output.
 - Tests: added Wasm coverage for every feature above plus a combined integration test (prime counting / sum-of-squares using loops + calls + logic + modulo), all executed against the real compiled-and-run Wasm module.
+- Test infrastructure — WebAssembly GC validation path:
+  - Established a browser (`dart test -p chrome`) parity harness that runs generated Wasm on Chrome's own engine. The native `wasm_run` backend (wasmtime 14 / wasmi 0.31) does not support the WebAssembly GC proposal; Chrome (v119+) does.
+  - Added a `wasm-gc` test tag (`dart_test.yaml`) and a WasmGC capability spike; CI's `wasm_run`-based jobs exclude the tag (`--exclude-tags wasm-gc`) while the Chrome job runs it. This gates the planned dual-target (linear-memory + WasmGC) backend work.
 
 - Bug fixes:
   - Loop `return` propagation: a `return` inside a `for`, `while`, or `for-each` loop was ignored (the loop shadowed `runStatus` with a fresh instance and never broke on return). Returns now propagate and stop iteration correctly.
