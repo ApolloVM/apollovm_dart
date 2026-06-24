@@ -1,6 +1,12 @@
 ## 0.1.27
 
-- Wasm collections — list parameters & returns (P3, part 4):
+- Dart `Map` support — frontend + interpreter (read/query; prerequisite for Wasm maps):
+  - **Grammar fix**: `Map<K,V>` type annotations now parse. `mapTyped()` was missing the value-type parser (it accepted only `Map<K,>` and read the `,` token as the value type), so every `Map<int,int>` declaration failed with a `SyntaxError`. Key/value types also accept `List<...>` (e.g. `Map<String,List<int>>`).
+  - Map literals now infer their key/value types from entries (mirroring list literals) instead of being hardcoded to `Map<dynamic,dynamic>`, so `Map<int,int> m = {1:10}` assigns cleanly. `ASTExpressionMapLiteral.resolveType` returns the `Map` type (it previously returned just the *value* type).
+  - **Map index by key**: `m[k]` now does a key lookup for any `Map` (the access was incorrectly routed to positional/list indexing whenever the key was numeric, so int-keyed maps failed).
+  - New core `Map` class (`CoreClassMap`): getters `.length`/`.isEmpty`/`.isNotEmpty`/`.keys`/`.values` and methods `.containsKey`/`.containsValue`/`.remove`/`.clear`. `.keys`/`.values` resolve to `List<keyType>`/`List<valueType>` so iterating them yields properly-typed elements.
+  - Maps work as function parameters.
+  - Note: map subscript assignment (`m[k] = v`) is a follow-up (the grammar's assignment target is still a bare variable).
   - Functions can now accept and return whole lists across the host boundary. The runner marshals a Dart `List` into module memory (header + elements buffer, via the exported `__alloc`) for `List` parameters, and decodes a returned list-header pointer back into a Dart `List`. Covers `int`/`double`/`String`/`bool` element lists, including round-tripping (`List<int> echo(List<int> a)`) and building a result with `.add` before returning it.
   - The `apollovm_sig` custom section now carries list types as `[6, <element tag>]` (was a single opaque tag), so modules loaded from raw bytes self-describe their list element types; the runner uses 64-bit element reads/writes via `BigInt` so it works on both the Dart VM and dart2js (Chrome).
   - A `String`/`List` parameter now also forces an exported `__alloc` (previously only String params did), so list-only functions can be fed their arguments.

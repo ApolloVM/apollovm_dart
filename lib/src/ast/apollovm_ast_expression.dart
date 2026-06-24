@@ -389,8 +389,15 @@ class ASTExpressionMapLiteral extends ASTExpression {
       ASTExpression.typeFromExpressions(entriesExpressions.map((e) => e.value));
 
   @override
-  FutureOr<ASTType> resolveType(VMContext? context) =>
-      resolveValueType(context);
+  FutureOr<ASTType> resolveType(VMContext? context) {
+    var kt = keyType, vt = valueType;
+    if (kt != null && vt != null) {
+      return ASTTypeMap(kt, vt);
+    }
+    return resolveKeyType(
+      context,
+    ).resolveBoth(resolveValueType(context), (k, v) => ASTTypeMap(k, v));
+  }
 
   @override
   ASTNode? getNodeIdentifier(String name, {ASTNode? requester}) =>
@@ -495,7 +502,10 @@ class ASTExpressionVariableEntryAccess extends ASTExpression {
 
     return expression.run(context, runStatus).resolveMapped((key) {
       return variable.getValue(context).resolveMapped((value) {
-        if (key is ASTValueNum) {
+        // A Map is always accessed by key, even with a numeric key. Only a
+        // positional container (e.g. a List) uses a numeric index.
+        var isMap = value.type is ASTTypeMap;
+        if (!isMap && key is ASTValueNum) {
           var idx = key.getValue(context).toInt();
           return _run2(context, value, idx: idx, readIndex: true);
         } else {
