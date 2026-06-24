@@ -7,11 +7,12 @@
   - Registered `javascript`/`js` in `ApolloVM.getParser`, `createRunner`, and `createCodeGenerator`.
   - **CLI**: `apollovm run`/`translate` now work on `.js` files (the `.js` extension already mapped to `javascript`); added a `test/hello_world.js` fixture and updated the CLI banner to "Dart, Java and JavaScript".
   - Tests: added `javascript_basic_*` definitions (parse + execute + round-trip + cross-translation to Dart/Java) and a JavaScript generation block to the Dart class-function test.
-  - Follow-ups: arrow functions, destructuring, spread, async/await, true `constructor` semantics with `this.x` parameters, and full ESM are not yet supported.
+  - Follow-ups: destructuring, spread, async/await, true `constructor` semantics with `this.x` parameters, and full ESM are not yet supported.
 - CLI bug fix: `apollovm translate` printed `Instance of 'Future<StringBuffer>'` instead of the translated source — `writeAllSources()` was stringified without `await`. Fixed for all languages.
 - Runtime fix — `for-each` / `for...of` over any iterable: `ASTStatementForEach` only accepted an `ASTValueArray`, so iterating a list bound to a `dynamic`/`Object` variable (which resolves to a plain `ASTValueStatic`) threw at runtime. It now iterates any resolved `Iterable` (and `Map` values), and wraps each element into a concretely-typed `ASTValue` (via `ASTValue.fromValue`) so per-element operations (e.g. arithmetic, string concatenation) work. Affects all languages; enables JavaScript `for...of` over arrays.
 - Runtime fix — arithmetic/comparison on dynamically-typed operands: binary operators (`+ - * / % == != > < …`) dispatched on the operand's static `ASTValue.type` and only handled concrete primitives, so two `dynamic`/`var`/`Object` operands (e.g. untyped JavaScript parameters) threw `Can't perform '+' operation with types: dynamic + dynamic` even when the runtime values were real numbers/strings. `ASTExpressionOperation.run` now resolves each "boxed"/untyped operand to its concrete `ASTValue` (via `ASTValue.fromValue`) before dispatching. Affects all languages; enables executing parsed JavaScript arithmetic.
 - JavaScript `/` is now floating-point division (`ASTExpressionOperator.divideAsDouble`), matching JS semantics (`7 / 2 === 3.5`) instead of integer division.
+- JavaScript arrow functions: a named arrow assignment (`const add = (a, b) => a + b;`, `const square = n => n * n;`, `const greet = () => { … };`) is parsed and desugared to a named function declaration — callable by name (`add(1, 2)`), at top level or as a local statement, with expression or block bodies. Translates to a regular `function`/method on output. Anonymous arrows passed as callbacks (true closures) are a follow-up.
 
 ## 0.1.27
 

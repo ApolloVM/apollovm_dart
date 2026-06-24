@@ -670,7 +670,7 @@ Any help from the open-source community is always welcome and needed:
 
 ## TODO
 
-- JavaScript: extended support (arrow functions, destructuring, spread, async/await, `this.x` constructor parameters, full ESM modules).
+- JavaScript: extended support (anonymous arrow callbacks/closures, destructuring, spread, async/await, `this.x` constructor parameters, full ESM modules). *Named arrow functions (`const f = (a, b) => a + b;`) are already supported.*
   - *See the [JavaScript implementation (at "lib/src/languages/javascript/es")](https://github.com/ApolloVM/apollovm_dart/tree/master/lib/src/languages/javascript/es).*
 
 

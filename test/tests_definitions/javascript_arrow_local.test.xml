@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="JavaScript local arrow functions (named, called by name)">
+    <source language="javascript">
+        <![CDATA[
+
+            class M {
+              run(a, b) {
+                const add = (x, y) => x + y;
+                const square = n => n * n;
+                print(add(a, b));
+                print(square(a));
+              }
+            }
+
+        ]]>
+    </source>
+    <call class="M" function="run">
+        [ 3, 4 ]
+    </call>
+    <output>
+        [7, 9]
+    </output>
+</test>

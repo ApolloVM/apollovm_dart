@@ -53,7 +53,8 @@ class JavaScriptGrammarDefinition extends JavaScriptGrammarLexer {
       });
 
   Parser topLevelDefinition() =>
-      (functionDeclaration() |
+      (arrowNamedFunction() |
+              functionDeclaration() |
               classDeclaration() |
               statementVariableDeclaration())
           .plus();
@@ -201,6 +202,7 @@ class JavaScriptGrammarDefinition extends JavaScriptGrammarLexer {
               statementWhileLoop() |
               statementReturn() |
               statementFunctionDeclaration() |
+              statementArrowFunction() |
               statementVariableDeclaration() |
               statementBlock() |
               statementExpression())
@@ -307,6 +309,85 @@ class JavaScriptGrammarDefinition extends JavaScriptGrammarLexer {
               ),
             );
           });
+
+  // ---------------------------------------------------------------------------
+  // Arrow functions.
+  //
+  // Supported form: an arrow assigned to a name, desugared to a named function
+  // declaration (so it is callable as `name(...)`), e.g.
+  //   const add = (a, b) => a + b;
+  //   const square = x => x * x;
+  //   const greet = () => { print('hi'); };
+  // Anonymous arrows passed as callbacks (true closures) are not yet supported.
+  // ---------------------------------------------------------------------------
+
+  /// `(const|let|var) name = <arrow> ;` → a named [ASTFunctionDeclaration].
+  Parser<ASTFunctionDeclaration> arrowNamedFunction() =>
+      ((constToken() | letToken() | varToken()).trimHidden() &
+              identifier().trimHidden() &
+              char('=').trimHidden() &
+              arrowParameters() &
+              string('=>').trimHidden() &
+              arrowBody() &
+              char(';').trimHidden())
+          .map((v) {
+            var name = v[1] as String;
+            var parameters = v[3] as ASTFunctionParametersDeclaration;
+            var block = v[5] as ASTBlock;
+            return ASTFunctionDeclaration(
+              name,
+              parameters,
+              inferReturnType(block),
+              block: block,
+              modifiers: ASTModifiers.modifierStatic,
+            );
+          });
+
+  /// Statement form of [arrowNamedFunction] (registers the function in the
+  /// enclosing block when run, making it callable by name).
+  Parser<ASTStatementFunctionDeclaration> statementArrowFunction() =>
+      arrowNamedFunction().map((f) => ASTStatementFunctionDeclaration(f));
+
+  /// Arrow parameters: `(a, b)`, `()`, or a single bare identifier `a`.
+  Parser<ASTFunctionParametersDeclaration> arrowParameters() =>
+      (functionParametersDeclaration() | arrowSingleParameter())
+          .cast<ASTFunctionParametersDeclaration>();
+
+  Parser<ASTFunctionParametersDeclaration> arrowSingleParameter() =>
+      identifier().trimHidden().map((name) {
+        return ASTFunctionParametersDeclaration(
+          [
+            ASTFunctionParameterDeclaration(
+              ASTTypeDynamic.instance,
+              name,
+              -1,
+              false,
+            ),
+          ],
+          null,
+          null,
+        );
+      });
+
+  /// Arrow body: a `{ … }` block, or an expression (`=> expr`) wrapped as
+  /// `{ return expr; }`.
+  Parser<ASTBlock> arrowBody() =>
+      (codeBlock() | arrowExpressionBody()).cast<ASTBlock>();
+
+  Parser<ASTBlock> arrowExpressionBody() => ref0(expression).map((exp) {
+    return ASTBlock(null)..addStatement(_arrowReturnStatement(exp));
+  });
+
+  static ASTStatement _arrowReturnStatement(ASTExpression value) {
+    if (value is ASTExpressionVariableAccess) {
+      if (value.variable.name == 'null') return ASTStatementReturnNull();
+      return ASTStatementReturnVariable(value.variable);
+    } else if (value is ASTExpressionLiteral) {
+      return ASTStatementReturnValue(value.value);
+    } else {
+      return ASTStatementReturnWithExpression(value);
+    }
+  }
 
   Parser<ASTStatementVariableDeclaration> statementVariableDeclaration() =>
       ((constToken() | letToken() | varToken()).trimHidden() &
