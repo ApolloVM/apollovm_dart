@@ -1,5 +1,8 @@
 ## 0.1.27
 
+- Wasm collections — `String` & `bool` element lists (P3, part 3):
+  - `List<String>` and `List<bool>` now compile to Wasm: literals, index reads `a[i]`, `for (var e in a)`, `.add`, and the `.first`/`.last`/`.isEmpty`/`.isNotEmpty`/`.length` getters all work (elements stored as i32 — a string pointer or a `0`/`1` boolean). Matches the interpreter on both `wasm_run` and Chrome.
+  - List parameters/returns and maps remain later slices (lists still stay internal, returning scalars/elements).
 - Wasm collections — growable lists `.add` + getters (P3, part 2):
   - List values are now an indirect handle: a 12-byte header `[length:i32][capacity:i32][dataPtr:i32]` pointing at a separately-allocated elements buffer. This makes `.add` aliasing-safe — growing reallocates the data buffer (doubling capacity, `memory.copy`ing existing elements) and updates the header in place, so existing references observe the new length/contents.
   - `list.add(x)` now compiles to Wasm for `int`/`double` lists (including starting from an empty `[]` literal), growing linear memory on demand.
@@ -7,7 +10,7 @@
   - `bool`-returning functions loaded from raw Wasm bytes now decode correctly: the `apollovm_sig` custom section is emitted for `bool` returns (not just String signatures), and the runner maps the i32 `0`/`1` back to a Dart `bool`.
 - Wasm collections — lists, read + iterate (P3, part 1):
   - `int`/`double` list literals compile to linear-memory blocks; index reads `a[i]`, the `.length` getter, and `for (var e in a)` now compile to Wasm (matching the interpreter, on both `wasm_run` and Chrome).
-  - Lists currently stay internal (return scalars); list parameters/returns, `String`/`bool` element lists, and maps are later slices.
+  - Lists currently stay internal (return scalars); list parameters/returns and maps are later slices.
 - Wasm generator — major feature expansion (`ApolloGeneratorWasm`), moving toward full Dart parity:
   - **Loops**: `while` and `for` loops now compile to Wasm (`block`/`loop`/`br_if`/`br`), including `return` from inside a loop. Added the `br` opcode helper and recursion into loop bodies when collecting function locals.
   - **Function calls**: local function invocation (calling other top-level functions, including recursion) via a function-index table threaded through the generator and a `Wasm.call`.

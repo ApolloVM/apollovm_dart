@@ -378,4 +378,164 @@ void main() {
       );
     });
   });
+
+  group('Wasm P3: String element lists', () {
+    test('index returns String element', () async {
+      await _testWasmReturn(
+        '''
+        String at() {
+          List<String> a = ["x", "y", "z"];
+          return a[1];
+        }
+      ''',
+        'at',
+        [],
+        'y',
+      );
+    });
+
+    test('add then last', () async {
+      await _testWasmReturn(
+        '''
+        String build() {
+          List<String> a = ["a"];
+          a.add("b");
+          a.add("c");
+          return a.last;
+        }
+      ''',
+        'build',
+        [],
+        'c',
+      );
+    });
+
+    test('add from empty then index', () async {
+      await _testWasmReturn(
+        '''
+        String fromEmpty() {
+          List<String> a = [];
+          a.add("hello");
+          a.add("world");
+          return a[1];
+        }
+      ''',
+        'fromEmpty',
+        [],
+        'world',
+      );
+    });
+
+    test('for-each concatenation', () async {
+      await _testWasmReturn(
+        '''
+        String joined() {
+          List<String> a = ["a", "b", "c"];
+          String s = "";
+          for (var e in a) {
+            s = s + e;
+          }
+          return s;
+        }
+      ''',
+        'joined',
+        [],
+        'abc',
+      );
+    });
+
+    test('length after add', () async {
+      await _testWasmReturn(
+        '''
+        int count() {
+          List<String> a = ["a", "b"];
+          a.add("c");
+          return a.length;
+        }
+      ''',
+        'count',
+        [],
+        3,
+      );
+    });
+
+    test('first getter', () async {
+      await _testWasmReturn(
+        '''
+        String firstS() {
+          List<String> a = ["alpha", "beta"];
+          return a.first;
+        }
+      ''',
+        'firstS',
+        [],
+        'alpha',
+      );
+    });
+
+    test('multi-byte UTF-8 elements', () async {
+      await _testWasmReturn(
+        '''
+        String at() {
+          List<String> a = ["☃", "héllo", "x"];
+          return a[1];
+        }
+      ''',
+        'at',
+        [],
+        'héllo',
+      );
+    });
+  });
+
+  group('Wasm P3: bool element lists', () {
+    test('index returns bool element', () async {
+      await _testWasmReturn(
+        '''
+        bool at() {
+          List<bool> a = [true, false, true];
+          return a[1];
+        }
+      ''',
+        'at',
+        [],
+        false,
+      );
+    });
+
+    test('add then last', () async {
+      await _testWasmReturn(
+        '''
+        bool build() {
+          List<bool> a = [false];
+          a.add(true);
+          return a.last;
+        }
+      ''',
+        'build',
+        [],
+        true,
+      );
+    });
+
+    test('count true via for-each', () async {
+      await _testWasmReturn(
+        '''
+        int countTrue() {
+          List<bool> a = [true, false, true, true];
+          int c = 0;
+          for (var e in a) {
+            if (e) {
+              c = c + 1;
+            }
+          }
+          return c;
+        }
+      ''',
+        'countTrue',
+        [],
+        3,
+      );
+    });
+  });
 }

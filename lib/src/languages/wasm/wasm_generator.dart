@@ -992,8 +992,17 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     if (elemType is ASTTypeInt) return _astTypeInt64;
     if (elemType is ASTTypeDouble) return _astTypeDouble64;
     if (elemType is ASTTypeString) return _astTypeString;
+    if (elemType is ASTTypeBool) return _astTypeInt32; // bool as i32
     return elemType;
   }
+
+  /// Element types that compile to Wasm list storage: `int`/`double` (8B) and
+  /// `String`/`bool` (4B i32). Other element types are unsupported.
+  bool _isSupportedElemType(ASTType t) =>
+      t is ASTTypeInt ||
+      t is ASTTypeDouble ||
+      t is ASTTypeString ||
+      t is ASTTypeBool;
 
   @override
   BytesOutput generateASTExpressionListLiteral(
@@ -1017,7 +1026,7 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
           ? rt.componentType
           : ASTTypeDynamic.instance;
     }
-    if (elemType is! ASTTypeInt && elemType is! ASTTypeDouble) {
+    if (!_isSupportedElemType(elemType)) {
       throw UnimplementedError(
         "Wasm list literal of element type $elemType is not supported yet.",
       );
