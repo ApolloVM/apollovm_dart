@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="Basic JavaScript for-of over an array">
+    <source language="javascript">
+        <![CDATA[
+
+            class Bar {
+              sum(items) {
+                let total = 0;
+                for (const x of items) {
+                  total += x;
+                }
+                print(total);
+              }
+            }
+
+        ]]>
+    </source>
+    <call class="Bar" function="sum">
+        [ [10, 20, 30] ]
+    </call>
+    <output>
+        [60]
+    </output>
+    <source-generated language="javascript"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+class Bar {
+
+  sum(items) {
+    let total = 0;
+    for (const x of items) {
+      total += x;
+    }
+    print(total);
+  }
+
+}
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+</test>

@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<test title="Basic Class function">
-    <source language="dart">
+<test title="Basic JavaScript Class function">
+    <source language="javascript">
         <![CDATA[
 
             class Foo {
-              void test(int a) {
-                var s = '$this > a: $a' ;
+              test(a) {
+                let s = `${this} > a: ${a}`;
                 print(s);
               }
             }
@@ -18,36 +18,6 @@
     <output>
         ["Foo{} > a: 123"]
     </output>
-    <source-generated language="dart"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
-<<<< NAMESPACE="" >>>>
-<<<< CODE_UNIT_START="/test" >>>>
-class Foo {
-
-  void test(int a) {
-    var s = '$this > a: $a';
-    print(s);
-  }
-
-}
-<<<< CODE_UNIT_END="/test" >>>>
-<<<< [SOURCES_END] >>>>
-]]></source-generated>
-
-    <source-generated language="java11"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
-<<<< NAMESPACE="" >>>>
-<<<< CODE_UNIT_START="/test" >>>>
-class Foo {
-
-  void test(int a) {
-    var s = String.valueOf( this ) + " > a: " + a;
-    print(s);
-  }
-
-}
-<<<< CODE_UNIT_END="/test" >>>>
-<<<< [SOURCES_END] >>>>
-]]></source-generated>
-
     <source-generated language="javascript"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
 <<<< NAMESPACE="" >>>>
 <<<< CODE_UNIT_START="/test" >>>>
@@ -55,6 +25,34 @@ class Foo {
 
   test(a) {
     let s = `${this} > a: ${a}`;
+    print(s);
+  }
+
+}
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+    <source-generated language="dart"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+class Foo {
+
+  void test(dynamic a) {
+    var s = '${this} > a: ${a}';
+    print(s);
+  }
+
+}
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+    <source-generated language="java11"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+class Foo {
+
+  void test(Object a) {
+    var s = String.valueOf( this ) + " > a: " + String.valueOf( a );
     print(s);
   }
 
