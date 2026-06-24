@@ -2556,10 +2556,29 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     out ??= newOutput();
     context ??= WasmContext();
 
+    // Desugar a compound assignment `c[k] OP= v` into `c[k] = (c[k] OP v)`.
     if (expression.operator != ASTAssignmentOperator.set) {
-      throw UnimplementedError(
-        "Wasm compound entry assignment (`${expression.operator}`) is not "
-        "supported yet.",
+      var binOp = _compoundToOperator(expression.operator);
+      var access = ASTExpressionVariableEntryAccess(
+        expression.variable,
+        expression.keyExpression,
+      );
+      var operation = ASTExpressionOperation(
+        access,
+        binOp,
+        expression.expression,
+      );
+      var desugared = ASTExpressionVariableEntryAssignment(
+        expression.variable,
+        expression.keyExpression,
+        ASTAssignmentOperator.set,
+        operation,
+      );
+      desugared.resolveNode(expression.parentNode);
+      return _generateWasmEntryAssignment(
+        desugared,
+        out: out,
+        context: context,
       );
     }
 
@@ -2582,6 +2601,24 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     throw UnimplementedError(
       "Wasm entry assignment on `$name` ($containerType) is not supported yet.",
     );
+  }
+
+  /// Maps a compound-assignment operator (`+=`, …) to its binary operator.
+  ASTExpressionOperator _compoundToOperator(ASTAssignmentOperator op) {
+    switch (op) {
+      case ASTAssignmentOperator.sum:
+        return ASTExpressionOperator.add;
+      case ASTAssignmentOperator.subtract:
+        return ASTExpressionOperator.subtract;
+      case ASTAssignmentOperator.multiply:
+        return ASTExpressionOperator.multiply;
+      case ASTAssignmentOperator.divide:
+        return ASTExpressionOperator.divide;
+      case ASTAssignmentOperator.divideAsInt:
+        return ASTExpressionOperator.divideAsInt;
+      case ASTAssignmentOperator.set:
+        throw ArgumentError("`set` is not a compound operator");
+    }
   }
 
   /// `a[i] = v`: store `v` at `dataPtr + i*size`.
