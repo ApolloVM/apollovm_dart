@@ -1,3 +1,20 @@
+## 0.1.28
+
+- Kotlin language support (parse, run, and translate), reaching parity with the
+  existing Java feature set:
+  - New `lib/src/languages/kotlin/` module: `ApolloParserKotlin`,
+    `KotlinGrammarDefinition`/`KotlinGrammarLexer`, `ApolloCodeGeneratorKotlin`
+    and `ApolloRunnerKotlin`, all built on the shared AST (no AST changes).
+  - Grammar covers top-level and class `fun` declarations, `val`/`var`
+    declarations (with type inference), `Int`/`Double`/`Boolean`/`String`/
+    `Unit`/`Any`/`List`/`Map` types, `if/else`, `for (x in ...)`, `while`,
+    expressions/operators, `listOf`/`mapOf` literals, and `"$x"` / `"${expr}"`
+    string templates. `println` is normalized to the VM's `print`.
+  - Registered in `ApolloVM` (`getParser`/`createRunner`/`createCodeGenerator`);
+    `.kt` files already mapped to `kotlin`.
+  - Tests in `test/apollovm_kotlin_test.dart` cover parse+run and
+    Kotlin→Dart/Java/Kotlin translation round-trips.
+
 ## 0.1.27
 
 - Wasm generator — major feature expansion (`ApolloGeneratorWasm`), moving toward full Dart parity:
