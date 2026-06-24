@@ -10,6 +10,9 @@
   - **Full Dart `%` semantics**: integer and double modulo now return the Dart-correct non-negative result in `[0, |b|)` for negative operands (sign-corrected via scratch locals); double `%` is computed as `a - trunc(a / b) * b`.
   - **Fix**: compound assignment (`+=`, `-=`, `*=`, …) emitted its operation to a discarded buffer (missing `out`/`context`), producing broken code; now applied to the real output.
 - Tests: added Wasm coverage for every feature above plus a combined integration test (prime counting / sum-of-squares using loops + calls + logic + modulo), all executed against the real compiled-and-run Wasm module.
+- Wasm strings — String parameters + `memory.grow` (P2, part 5, completes the strings milestone):
+  - Functions taking `String` parameters now work: the runner encodes the Dart string into module memory (via the exported `__alloc`, guided by the `apollovm_sig` param tags) and passes the i32 pointer. Enables `String echo(String s)`, `String greet(String name)`, etc.
+  - The allocator (both the exported `__alloc` and the inline concat allocator) now **grows linear memory on demand** (`memory.size`/`memory.grow`), so large strings/concatenations no longer trap.
 - Wasm strings — number→string interpolation (P2, part 4):
   - Interpolation of `int`/`double` (`"n=$n"`, `"${a + b}"`) now compiles to Wasm via host imports `env.int_to_str`/`env.double_to_str`; the host formats the number (matching the interpreter; doubles via `ASTTypeDouble.doubleToString`) and writes it into module memory.
   - Adds a synthesized, **exported `__alloc`** bump-allocator function so host imports can allocate strings in the module's memory (reentrant host→module calls), plus value-returning host imports and i64↔BigInt marshalling on the web.

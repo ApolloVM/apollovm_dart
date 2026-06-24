@@ -66,6 +66,12 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     var functions = root.functions.expand((fs) => fs.functions).toList();
     var module = WasmModuleContext(functions);
 
+    // A public function with a String parameter requires the host to allocate
+    // the argument in module memory, so ensure `__alloc` is exported.
+    if (_hasStringParam(module)) {
+      module.ensureAllocFunction();
+    }
+
     // Body-first: generate the Code section first so that body codegen can
     // register host imports and string literals on [module]; the Type/Import/
     // Memory/Data sections below then reflect what was discovered.
@@ -130,6 +136,16 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     for (var f in module.functions) {
       if (f.modifiers.isPrivate) continue;
       if (f.returnType is ASTTypeString) return true;
+      for (var p in f.parameters.allParameters) {
+        if (p.type is ASTTypeString) return true;
+      }
+    }
+    return false;
+  }
+
+  bool _hasStringParam(WasmModuleContext module) {
+    for (var f in module.functions) {
+      if (f.modifiers.isPrivate) continue;
       for (var p in f.parameters.allParameters) {
         if (p.type is ASTTypeString) return true;
       }
@@ -2947,7 +2963,6 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     var a = context.scratchLocal(_astTypeString, 0);
     var b = context.scratchLocal(_astTypeString, 1);
     var dest = context.scratchLocal(_astTypeString, 2);
-    const hp = WasmModuleContext.heapGlobalIndex;
 
     void getLen(int strLocal) {
       out.write(Wasm.localGet(strLocal));
@@ -2971,11 +2986,9 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     out.write(Wasm32.i32Const(4));
     out.writeByte(Wasm32.i32Add);
 
-    // Bump-allocate: dest = $hp; $hp += size.
-    out.write(Wasm.globalGet(hp));
-    out.write(Wasm.localTee(dest));
-    out.writeByte(Wasm32.i32Add);
-    out.write(Wasm.globalSet(hp));
+    // Allocate (grow-aware): [size] -> [ptr], then dest = ptr.
+    _emitInlineAlloc(out, context);
+    out.write(Wasm.localSet(dest));
 
     // Store total length at dest.
     out.write(Wasm.localGet(dest));
@@ -3008,6 +3021,49 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     context.stackDrop();
     context.stackDrop();
     context.stackPush(_astTypeString, "string concat");
+  }
+
+  /// Grow-aware bump allocation, emitted inline: consumes `[size]` on the stack
+  /// and leaves `[ptr]`, growing the memory if `$hp + size` would overflow.
+  /// (Mirrors the exported `__alloc`; used by string concatenation.)
+  void _emitInlineAlloc(BytesOutput out, WasmContext context) {
+    const hp = WasmModuleContext.heapGlobalIndex;
+    var sz = context.scratchLocal(_astTypeString, 3);
+    var newHp = context.scratchLocal(_astTypeString, 4);
+    var delta = context.scratchLocal(_astTypeString, 5);
+
+    out.write(Wasm.localSet(sz));
+
+    // newHp = $hp + size
+    out.write(Wasm.globalGet(hp));
+    out.write(Wasm.localGet(sz));
+    out.writeByte(Wasm32.i32Add);
+    out.write(Wasm.localSet(newHp));
+
+    // delta = ceil(newHp / 64KiB) - memory.size
+    out.write(Wasm.localGet(newHp));
+    out.write(Wasm32.i32Const(65535));
+    out.writeByte(Wasm32.i32Add);
+    out.write(Wasm32.i32Const(16));
+    out.writeByte(Wasm32.i32ShiftRightUnsigned);
+    out.write(Wasm.memorySize);
+    out.writeByte(Wasm32.i32Subtract);
+    out.write(Wasm.localSet(delta));
+
+    // if (delta > 0) memory.grow(delta)
+    out.write(Wasm.localGet(delta));
+    out.write(Wasm32.i32Const(0));
+    out.writeByte(Wasm32.i32GreaterThanSigned);
+    out.write(Wasm.ifInstruction(WasmType.voidType));
+    out.write(Wasm.localGet(delta));
+    out.write(Wasm.memoryGrow);
+    out.writeByte(Wasm.drop);
+    out.writeByte(Wasm.end);
+
+    // result = $hp; $hp = newHp  (leaves [ptr])
+    out.write(Wasm.globalGet(hp));
+    out.write(Wasm.localGet(newHp));
+    out.write(Wasm.globalSet(hp));
   }
 
   @override
@@ -3147,13 +3203,46 @@ class WasmModuleContext {
     requiresMemory = true;
     requiresHeapGlobal = true;
 
-    // result = $hp; $hp = $hp + size; return result
+    // i32 __alloc(i32 size):
+    //   newHp = $hp + size
+    //   delta = ceil(newHp / 64KiB) - memory.size; if delta > 0: memory.grow
+    //   result = $hp; $hp = newHp; return result
+    // Locals: 0=size(param), 1=newHp, 2=delta.
     var body = BytesOutput();
-    body.write(Leb128.encodeUnsigned(0), description: "Locals count");
-    body.write(Wasm.globalGet(heapGlobalIndex));
+    // 1 local group of 2 i32 locals.
+    body.write(Leb128.encodeUnsigned(1), description: "Local groups");
+    body.write(Leb128.encodeUnsigned(2), description: "i32 locals");
+    body.writeByte(WasmType.i32Type.value, description: "i32");
+
+    // newHp = $hp + size
     body.write(Wasm.globalGet(heapGlobalIndex));
     body.write(Wasm.localGet(0));
     body.writeByte(Wasm32.i32Add);
+    body.write(Wasm.localSet(1));
+
+    // delta = ((newHp + 65535) >>> 16) - memory.size
+    body.write(Wasm.localGet(1));
+    body.write(Wasm32.i32Const(65535));
+    body.writeByte(Wasm32.i32Add);
+    body.write(Wasm32.i32Const(16));
+    body.writeByte(Wasm32.i32ShiftRightUnsigned);
+    body.write(Wasm.memorySize);
+    body.writeByte(Wasm32.i32Subtract);
+    body.write(Wasm.localSet(2));
+
+    // if (delta > 0) memory.grow(delta) (dropping the previous-size result)
+    body.write(Wasm.localGet(2));
+    body.write(Wasm32.i32Const(0));
+    body.writeByte(Wasm32.i32GreaterThanSigned);
+    body.write(Wasm.ifInstruction(WasmType.voidType));
+    body.write(Wasm.localGet(2));
+    body.write(Wasm.memoryGrow);
+    body.writeByte(Wasm.drop);
+    body.writeByte(Wasm.end);
+
+    // result = $hp; $hp = newHp
+    body.write(Wasm.globalGet(heapGlobalIndex));
+    body.write(Wasm.localGet(1));
     body.write(Wasm.globalSet(heapGlobalIndex));
     body.writeByte(Wasm.end);
 
