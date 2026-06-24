@@ -29,8 +29,9 @@ class WasmRuntimeDartHTML extends WasmRuntime {
   @override
   Future<WasmModuleBrowser> loadModuleImpl(
     String moduleName,
-    Uint8List wasmModuleBinary,
-  ) async {
+    Uint8List wasmModuleBinary, {
+    WasmHostImports? hostImports,
+  }) async {
     try {
       final moduleInstance = await browser_wasm.Instance.fromBytesAsync(
         wasmModuleBinary,

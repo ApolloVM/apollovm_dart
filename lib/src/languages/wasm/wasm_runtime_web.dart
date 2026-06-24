@@ -92,12 +92,19 @@ class WasmRuntimeWeb extends WasmRuntime {
   @override
   Future<WasmModuleBrowser> loadModuleImpl(
     String moduleName,
-    Uint8List wasmModuleBinary,
-  ) async {
+    Uint8List wasmModuleBinary, {
+    WasmHostImports? hostImports,
+  }) async {
     try {
       final buffer = wasmModuleBinary.buffer.toJS;
 
-      final result = await _webAssembly.instantiate(buffer).toDart;
+      final imports = (hostImports != null && hostImports.isNotEmpty)
+          ? _buildImportsObject(hostImports)
+          : null;
+
+      // Extra imports in the object are ignored by the engine; only those the
+      // module declares are bound (missing ones would throw).
+      final result = await _webAssembly.instantiate(buffer, imports).toDart;
 
       final instance = result.instance;
 
@@ -107,6 +114,72 @@ class WasmRuntimeWeb extends WasmRuntime {
         "Can't load wasm module: $moduleName",
         cause: e,
       );
+    }
+  }
+
+  JSObject _buildImportsObject(WasmHostImports hostImports) {
+    final root = JSObject();
+    hostImports.forEach((moduleName, fns) {
+      final mod = JSObject();
+      fns.forEach((name, hf) {
+        mod.setProperty(name.toJS, _toJSFunction(hf));
+      });
+      root.setProperty(moduleName.toJS, mod);
+    });
+    return root;
+  }
+
+  JSFunction _toJSFunction(WasmHostFunction hf) {
+    JSAny? invoke(List<JSAny?> jsArgs) {
+      final dartArgs = [
+        for (var i = 0; i < hf.params.length; ++i)
+          _jsArgToDart(jsArgs[i], hf.params[i]),
+      ];
+      var r = hf.callback(dartArgs);
+      if (hf.results.isEmpty) return null;
+      return _dartResultToJS(r, hf.results.first);
+    }
+
+    switch (hf.params.length) {
+      case 0:
+        return (() => invoke(const [])).toJS;
+      case 1:
+        return ((JSAny? a) => invoke([a])).toJS;
+      case 2:
+        return ((JSAny? a, JSAny? b) => invoke([a, b])).toJS;
+      case 3:
+        return ((JSAny? a, JSAny? b, JSAny? c) => invoke([a, b, c])).toJS;
+      default:
+        throw UnsupportedError(
+          'Wasm host import arity ${hf.params.length} not supported',
+        );
+    }
+  }
+
+  Object? _jsArgToDart(JSAny? a, WasmValueType t) {
+    if (a == null) return null;
+    switch (t) {
+      case WasmValueType.i32:
+        return (a as JSNumber).toDartInt;
+      case WasmValueType.i64:
+        // i64 arrives as a JS BigInt; passed through (handled by callers).
+        return a;
+      case WasmValueType.f32:
+      case WasmValueType.f64:
+        return (a as JSNumber).toDartDouble;
+    }
+  }
+
+  JSAny? _dartResultToJS(Object? r, WasmValueType t) {
+    if (r == null) return null;
+    switch (t) {
+      case WasmValueType.i32:
+        return (r as int).toJS;
+      case WasmValueType.i64:
+        return r is BigInt ? r.toString().toJS : (r as int).toJS;
+      case WasmValueType.f32:
+      case WasmValueType.f64:
+        return (r as num).toDouble().toJS;
     }
   }
 }
@@ -185,6 +258,14 @@ class WasmModuleBrowser extends WasmModule {
     }
 
     return value;
+  }
+
+  @override
+  Uint8List? readMemory() {
+    final mem = _instance.exports.memory('memory');
+    if (mem == null) return null;
+    final buffer = mem.getProperty('buffer'.toJS) as JSArrayBuffer;
+    return buffer.toDart.asUint8List();
   }
 
   @override
