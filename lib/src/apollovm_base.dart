@@ -31,6 +31,9 @@ import 'languages/java/java11/java11_runner.dart';
 import 'languages/javascript/es/javascript_generator.dart';
 import 'languages/javascript/es/javascript_parser.dart';
 import 'languages/javascript/es/javascript_runner.dart';
+import 'languages/kotlin/kotlin_generator.dart';
+import 'languages/kotlin/kotlin_parser.dart';
+import 'languages/kotlin/kotlin_runner.dart';
 import 'languages/wasm/wasm_generator.dart';
 import 'languages/wasm/wasm_parser.dart';
 import 'languages/wasm/wasm_runner.dart';
@@ -38,7 +41,7 @@ import 'languages/wasm/wasm_runner.dart';
 /// The Apollo VM.
 class ApolloVM implements VMTypeResolver {
   // ignore: non_constant_identifier_names
-  static final String VERSION = '0.1.27';
+  static final String VERSION = '0.1.28';
 
   static int _idCount = 0;
 
@@ -55,6 +58,8 @@ class ApolloVM implements VMTypeResolver {
       case 'js':
       case 'javascript':
         return ApolloParserJavaScript.instance as ApolloCodeParser<T>;
+      case 'kotlin':
+        return ApolloParserKotlin.instance as ApolloCodeParser<T>;
       case 'wasm':
         return ApolloParserWasm.instance as ApolloCodeParser<T>;
       default:
@@ -189,6 +194,11 @@ class ApolloVM implements VMTypeResolver {
           this,
           importCorePackageMath: importCorePackageMath,
         );
+      case 'kotlin':
+        return ApolloRunnerKotlin(
+          this,
+          importCorePackageMath: importCorePackageMath,
+        );
       case 'wasm':
         return ApolloRunnerWasm(
           this,
@@ -220,6 +230,8 @@ class ApolloVM implements VMTypeResolver {
       case 'js':
       case 'javascript':
         return ApolloCodeGeneratorJavaScript(codeStorage);
+      case 'kotlin':
+        return ApolloCodeGeneratorKotlin(codeStorage);
       default:
         return null;
     }

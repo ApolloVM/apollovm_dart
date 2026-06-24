@@ -1,5 +1,19 @@
 ## 0.1.28
 
+- Kotlin language support (parse, run, and translate), reaching parity with the
+  existing Java feature set:
+  - New `lib/src/languages/kotlin/` module: `ApolloParserKotlin`,
+    `KotlinGrammarDefinition`/`KotlinGrammarLexer`, `ApolloCodeGeneratorKotlin`
+    and `ApolloRunnerKotlin`, all built on the shared AST (no AST changes).
+  - Grammar covers top-level and class `fun` declarations, `val`/`var`
+    declarations (with type inference), `Int`/`Double`/`Boolean`/`String`/
+    `Unit`/`Any`/`List`/`Map` types, `if/else`, `for (x in ...)`, `while`,
+    expressions/operators, `listOf`/`mapOf` literals, and `"$x"` / `"${expr}"`
+    string templates. `println` is normalized to the VM's `print`.
+  - Registered in `ApolloVM` (`getParser`/`createRunner`/`createCodeGenerator`);
+    `.kt` files already mapped to `kotlin`.
+  - Tests in `test/apollovm_kotlin_test.dart` cover parse+run and
+    Kotlin→Dart/Java/Kotlin translation round-trips.
 - JavaScript (modern ES) language support — fully bidirectional:
   - **Parser** (`ApolloParserJavaScript`, `JavaScriptGrammarDefinition`, `JavaScriptGrammarLexer`): parses `.js`/`javascript` source into the shared ApolloVM AST. Covers classes (fields + methods, `static`, `constructor`), top-level `function` declarations, `let`/`const`/`var`, `for`/`for...of`/`while`, `if`/`else if`/`else`, list literals, `++`/`--`, compound assignment, strict equality (`===`/`!==`), and single/double-quoted strings plus back-tick **template literals** with `${ … }` interpolation. Untyped sites map to `dynamic`; method/function return types are inferred as `void` (no value-return) or `dynamic`.
   - **Code generator** (`ApolloCodeGeneratorJavaScript`): emits idiomatic modern JS from any loaded AST (Dart, Java, or JS) — `let`/`const`, template literals for string interpolation, `for...of`, top-level functions, untyped params/fields, `===`/`!==`, and `Math.trunc(a / b)` for integer division.
@@ -15,6 +29,7 @@
 - JavaScript arrow functions: a named arrow assignment (`const add = (a, b) => a + b;`, `const square = n => n * n;`, `const greet = () => { … };`) is parsed and desugared to a named function declaration — callable by name (`add(1, 2)`), at top level or as a local statement, with expression or block bodies. Translates to a regular `function`/method on output. Anonymous arrows passed as callbacks (true closures) are a follow-up.
 - Code generation fix — logical negation of a complex operand: `!(a > b)` was emitted as `!a > b` (which re-parses as `(!a) > b`). The negated operand is now parenthesized when complex. Affects all languages.
 - Tests: broad JavaScript coverage added — parse + execute + translate (to Dart/Java where applicable) + re-execute the generated code: `javascript_basic_vars`, `branches`, `while_loop`, `for_loop`, `comparisons`, `division`, `negation`, `this_method`, plus the earlier `class_function`, `control_flow`, `for_of`, `arithmetic`, and arrow-function definitions.
+- Docs/examples: added per-language runnable examples under `example/` — `apollovm_example_java.dart`, `apollovm_example_kotlin.dart` and `apollovm_example_javascript.dart` (each load + run + translate to Dart, with verified output) — and fixed the existing `apollovm_example.dart` to `await writeAllSources()` (was printing `Instance of 'Future<StringBuffer>'`). README updated with a Kotlin section and the CLI banner now reads "Dart, Java, Kotlin and JavaScript".
 
 ## 0.1.27
 

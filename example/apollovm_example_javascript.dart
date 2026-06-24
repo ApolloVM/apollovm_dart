@@ -1,0 +1,71 @@
+import 'package:apollovm/apollovm.dart';
+
+void main() async {
+  var vm = ApolloVM();
+
+  var codeUnit = SourceCodeUnit('javascript', r'''
+      class Foo {
+        main(title, a, b, c) {
+          let sumAB = a + b;
+          let sumABC = a + b + c;
+          print(title);
+          print(sumAB);
+          print(sumABC);
+        }
+      }
+      ''', id: 'test');
+
+  var loadOK = await vm.loadCodeUnit(codeUnit);
+
+  if (!loadOK) {
+    print("Can't load source!");
+    return;
+  }
+
+  print('---------------------------------------');
+
+  var jsRunner = vm.createRunner('javascript')!;
+
+  // Map the `print` function in the VM:
+  jsRunner.externalPrintFunction = (o) => print("» $o");
+
+  await jsRunner.executeClassMethod(
+    '',
+    'Foo',
+    'main',
+    positionalParameters: ['Sums:', 10, 20, 30],
+  );
+
+  print('---------------------------------------');
+
+  // Regenerate code in Dart:
+  var codeStorageDart = vm.generateAllCodeIn('dart');
+  var allSourcesDart = await codeStorageDart.writeAllSources();
+  print(allSourcesDart);
+}
+
+/////////////
+// OUTPUT: //
+/////////////
+// ---------------------------------------
+// » Sums:
+// » 30
+// » 60
+// ---------------------------------------
+// <<<< [SOURCES_BEGIN] >>>>
+// <<<< NAMESPACE="" >>>>
+// <<<< CODE_UNIT_START="/test" >>>>
+// class Foo {
+//
+//   void main(dynamic title, dynamic a, dynamic b, dynamic c) {
+//     var sumAB = a + b;
+//     var sumABC = (a + b) + c;
+//     print(title);
+//     print(sumAB);
+//     print(sumABC);
+//   }
+//
+// }
+// <<<< CODE_UNIT_END="/test" >>>>
+// <<<< [SOURCES_END] >>>>
+//

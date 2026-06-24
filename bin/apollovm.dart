@@ -13,7 +13,7 @@ void main(List<String> args) async {
   var commandRunner =
       CommandRunner<bool>(
           'apollovm',
-          'ApolloVM/${ApolloVM.VERSION} - A compact VM for Dart, Java and JavaScript.',
+          'ApolloVM/${ApolloVM.VERSION} - A compact VM for Dart, Java, Kotlin and JavaScript.',
         )
         ..addCommand(CommandRun())
         ..addCommand(CommandTranslate());
@@ -60,7 +60,7 @@ abstract class CommandSourceFileBase extends Command<bool> {
       help:
           'Programming language of source file.\n'
           '(defaults to language of the file extension)',
-      valueHelp: 'dart|java',
+      valueHelp: 'dart|java|kotlin',
     );
   }
 
@@ -198,7 +198,7 @@ class CommandTranslate extends CommandSourceFileBase {
       help:
           'Target Programming language for translation.\n'
           '(defaults to the opposite of the source language)',
-      valueHelp: 'dart|java',
+      valueHelp: 'dart|java|kotlin',
     );
   }
 
