@@ -389,8 +389,15 @@ class ASTExpressionMapLiteral extends ASTExpression {
       ASTExpression.typeFromExpressions(entriesExpressions.map((e) => e.value));
 
   @override
-  FutureOr<ASTType> resolveType(VMContext? context) =>
-      resolveValueType(context);
+  FutureOr<ASTType> resolveType(VMContext? context) {
+    var kt = keyType, vt = valueType;
+    if (kt != null && vt != null) {
+      return ASTTypeMap(kt, vt);
+    }
+    return resolveKeyType(
+      context,
+    ).resolveBoth(resolveValueType(context), (k, v) => ASTTypeMap(k, v));
+  }
 
   @override
   ASTNode? getNodeIdentifier(String name, {ASTNode? requester}) =>
@@ -495,7 +502,10 @@ class ASTExpressionVariableEntryAccess extends ASTExpression {
 
     return expression.run(context, runStatus).resolveMapped((key) {
       return variable.getValue(context).resolveMapped((value) {
-        if (key is ASTValueNum) {
+        // A Map is always accessed by key, even with a numeric key. Only a
+        // positional container (e.g. a List) uses a numeric index.
+        var isMap = value.type is ASTTypeMap;
+        if (!isMap && key is ASTValueNum) {
           var idx = key.getValue(context).toInt();
           return _run2(context, value, idx: idx, readIndex: true);
         } else {
@@ -1509,6 +1519,104 @@ class ASTExpressionVariableAssignment extends ASTExpression {
           return '$variable ~/= $expression';
         }
     }
+  }
+}
+
+/// [ASTExpression] that assigns to a container entry: `m[k] = v` (map) or
+/// `a[i] = v` (list). Supports compound operators (`+=`, `-=`, …).
+class ASTExpressionVariableEntryAssignment extends ASTExpression {
+  ASTVariable variable;
+
+  ASTExpression keyExpression;
+
+  ASTAssignmentOperator operator;
+
+  ASTExpression expression;
+
+  ASTExpressionVariableEntryAssignment(
+    this.variable,
+    this.keyExpression,
+    this.operator,
+    this.expression,
+  );
+
+  @override
+  bool get isComplex => true;
+
+  @override
+  Iterable<ASTNode> get children => [variable, keyExpression, expression];
+
+  @override
+  void resolveNode(ASTNode? parentNode) {
+    super.resolveNode(parentNode);
+    variable.resolveNode(parentNode);
+    keyExpression.resolveNode(parentNode);
+    expression.resolveNode(parentNode);
+  }
+
+  @override
+  ASTNode? getNodeIdentifier(String name, {ASTNode? requester}) =>
+      parentNode?.getNodeIdentifier(name, requester: requester);
+
+  @override
+  FutureOr<ASTType> resolveType(VMContext? context) =>
+      expression.resolveType(context);
+
+  @override
+  FutureOr<ASTValue> run(
+    VMContext parentContext,
+    ASTRunStatus runStatus,
+  ) async {
+    var context = defineRunContext(parentContext);
+
+    var keyValue = await keyExpression.run(context, runStatus);
+    var value = await expression.run(context, runStatus);
+    var container = await variable.getValue(context);
+
+    // A Map is always accessed by key (even a numeric one); a positional
+    // container (List) by index.
+    var isMap = container.type is ASTTypeMap;
+    var key = await keyValue.getValue(context);
+
+    ASTValue result;
+    if (operator == ASTAssignmentOperator.set) {
+      result = value;
+    } else {
+      var currentRaw = isMap
+          ? await container.readKey(context, key)
+          : await container.readIndex(context, (key as num).toInt());
+      var current = ASTValue.fromValue(currentRaw);
+      result = await switch (operator) {
+        ASTAssignmentOperator.sum => current + value,
+        ASTAssignmentOperator.subtract => current - value,
+        ASTAssignmentOperator.divide => current / value,
+        ASTAssignmentOperator.divideAsInt => current ~/ value,
+        ASTAssignmentOperator.multiply => current * value,
+        ASTAssignmentOperator.set => value,
+      };
+    }
+
+    var resultRaw = await result.getValue(context);
+    if (isMap) {
+      await container.writeKey(context, key, resultRaw);
+    } else {
+      await container.writeIndex(context, (key as num).toInt(), resultRaw);
+    }
+
+    return result;
+  }
+
+  @override
+  String toString({bool asGroup = false}) {
+    var op = switch (operator) {
+      ASTAssignmentOperator.set => '=',
+      ASTAssignmentOperator.sum => '+=',
+      ASTAssignmentOperator.subtract => '-=',
+      ASTAssignmentOperator.multiply => '*=',
+      ASTAssignmentOperator.divide => '/=',
+      ASTAssignmentOperator.divideAsInt => '~/=',
+    };
+    return '$variable[$keyExpression] $op $expression';
   }
 }
 

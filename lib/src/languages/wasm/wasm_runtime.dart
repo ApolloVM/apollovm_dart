@@ -8,6 +8,29 @@ import 'wasm_runtime_generic.dart'
     if (dart.library.html) 'wasm_runtime_dart_html.dart'
     if (dart.library.io) 'wasm_runtime_io.dart';
 
+/// A Wasm value type, for host import signatures.
+enum WasmValueType { i32, i64, f32, f64 }
+
+/// A host (Dart) function provided to satisfy a Wasm module import.
+class WasmHostFunction {
+  final List<WasmValueType> params;
+  final List<WasmValueType> results;
+
+  /// Invoked with the positional argument values; returns the result value
+  /// (or `null` for a void import).
+  final Object? Function(List<Object?> args) callback;
+
+  const WasmHostFunction({
+    required this.params,
+    required this.results,
+    required this.callback,
+  });
+}
+
+/// Host imports to provide at instantiation, keyed by module name then import
+/// name (e.g. `{'env': {'print': WasmHostFunction(...)}}`).
+typedef WasmHostImports = Map<String, Map<String, WasmHostFunction>>;
+
 /// A WebAssembly (Wasm) Runtime.
 abstract class WasmRuntime {
   final Map<String, WasmModule> _loadedModules = {};
@@ -36,11 +59,23 @@ abstract class WasmRuntime {
     return _loadedModules[moduleName];
   }
 
-  /// Loads a Wasm module.
+  /// Loads a Wasm module. [hostImports] provides the host (Dart) functions the
+  /// module imports (e.g. `env.print`); only imports actually declared by the
+  /// module are wired. When [hostImports] is provided the module is always
+  /// instantiated fresh (not served from the cache) so the import closures are
+  /// current.
   Future<WasmModule> loadModule(
     String moduleName,
-    Uint8List wasmModuleBinary,
-  ) async {
+    Uint8List wasmModuleBinary, {
+    WasmHostImports? hostImports,
+  }) async {
+    if (hostImports != null) {
+      return _loadedModules[moduleName] = await loadModuleImpl(
+        moduleName,
+        wasmModuleBinary,
+        hostImports: hostImports,
+      );
+    }
     return _loadedModules[moduleName] ??= await loadModuleImpl(
       moduleName,
       wasmModuleBinary,
@@ -51,8 +86,9 @@ abstract class WasmRuntime {
   /// Call [loadModule].
   Future<WasmModule> loadModuleImpl(
     String moduleName,
-    Uint8List wasmModuleBinary,
-  );
+    Uint8List wasmModuleBinary, {
+    WasmHostImports? hostImports,
+  });
 
   /// Removes a Wasm module.
   FutureOr<WasmModule?> removeModule(String moduleName) {
@@ -91,6 +127,15 @@ abstract class WasmModule {
 
   /// Resolves the returned [value] from a called module function.
   Object? resolveReturnedValue(Object? value, ASTFunctionDeclaration? f);
+
+  /// Returns a view of the module's exported linear memory (named `memory`),
+  /// or `null` if the module has no exported memory.
+  Uint8List? readMemory() => null;
+
+  /// Invokes an exported function [name] with [args], returning its result.
+  /// Used by host imports that call back into the module (e.g. `__alloc`).
+  Object? invokeExport(String name, List<Object?> args) =>
+      throw UnimplementedError('invokeExport not supported on this platform');
 
   /// Disposes this module instance.
   FutureOr<void> dispose() {}

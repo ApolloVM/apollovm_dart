@@ -835,6 +835,47 @@ abstract class ApolloCodeGenerator
   }
 
   @override
+  StringBuffer generateASTExpressionVariableEntryAssignment(
+    ASTExpressionVariableEntryAssignment expression, {
+    StringBuffer? out,
+    String indent = '',
+    bool headIndented = true,
+  }) {
+    out ??= newOutput();
+
+    if (headIndented) out.write(indent);
+
+    generateASTVariable(
+      expression.variable,
+      out: out,
+      indent: indent,
+      headIndented: headIndented,
+    );
+
+    out.write('[');
+    generateASTExpression(
+      expression.keyExpression,
+      out: out,
+      indent: '$indent  ',
+      headIndented: false,
+    );
+    out.write(']');
+
+    var op = getASTAssignmentOperatorText(expression.operator);
+    out.write(' ');
+    out.write(op);
+    out.write(' ');
+    generateASTExpression(
+      expression.expression,
+      out: out,
+      indent: '$indent  ',
+      headIndented: false,
+    );
+
+    return out;
+  }
+
+  @override
   StringBuffer generateASTExpressionVariableDirectOperation(
     ASTExpressionVariableDirectOperation expression, {
     StringBuffer? out,
@@ -988,6 +1029,13 @@ abstract class ApolloCodeGenerator
       );
     } else if (expression is ASTExpressionVariableAssignment) {
       return generateASTExpressionVariableAssignment(
+        expression,
+        out: out,
+        indent: indent,
+        headIndented: headIndented,
+      );
+    } else if (expression is ASTExpressionVariableEntryAssignment) {
+      return generateASTExpressionVariableEntryAssignment(
         expression,
         out: out,
         indent: indent,

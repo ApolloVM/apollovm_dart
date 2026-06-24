@@ -18,6 +18,47 @@
 
 ## 0.1.27
 
+- Wasm collections — compound subscript assignment (P3, part 9):
+  - `m[k] += v` (and `-=`, `*=`, `/=`, `~/=`) and the same for list indices `a[i] += v` now compile to Wasm. Lowered by desugaring `c[k] OP= v` into `c[k] = c[k] OP v`, so it reuses the existing get/set codegen and works for maps (`int`/`String` keys) and lists across `int`/`double` values. Matches the interpreter on both `wasm_run` and Chrome (e.g. a frequency counter can now use `m[w] += 1` directly).
+- Wasm collections — map parameters & returns (P3, part 8):
+  - Functions can now accept and return whole `Map`s across the host boundary. The runner marshals a Dart `Map` into the module's map layout (header + parallel key/value buffers, via the exported `__alloc`) for `Map` parameters, and decodes a returned map-header pointer back into a Dart `Map`. Covers `int`/`String` keys × `int`/`double`/`String`/`bool` values, including round-tripping and returning a map built with `m[k] = v`.
+  - The `apollovm_sig` custom section now encodes a map type as `[7, <key tag>, <value tag>]`, so raw-byte modules self-describe their key/value types. Element read/write was factored into shared helpers used by both list and map marshalling.
+- Wasm collections — map `.keys` / `.values` + iteration (P3, part 7):
+  - `m.keys` and `m.values` now compile to Wasm: each materializes a fresh list by copying the map's parallel key (or value) buffer (which already has the list element layout), so `for (var k in m.keys)` / `for (var v in m.values)` work via the existing list for-each. Matches the interpreter on both `wasm_run` and Chrome.
+  - The for-each loop-variable type resolver now derives the element type from the map (`m.keys` → key type, `m.values` → value type) so the loop variable is correctly typed.
+- Wasm collections — maps with `String` keys (P3, part 6):
+  - `Map<String, V>` now compiles to Wasm (`V` = `int`/`double`/`String`/`bool`): literals, `m[k]` get, `m[k] = v` set, `.length`/`.isEmpty`/`.isNotEmpty`, and `.containsKey(k)`. Matches the interpreter on both `wasm_run` and Chrome.
+  - String keys are stored as i32 pointers and compared by content via a synthesized `__streq(a, b)` helper (length check + byte loop), so e.g. `containsKey("app")` correctly returns `false` for a map keyed by `"apple"`, and multi-byte UTF-8 keys work.
+- Wasm collections — maps with `int` keys (P3, part 5):
+  - `Map<int, V>` now compiles to Wasm (`V` = `int`/`double`/`String`/`bool`). A map value is an i32 pointer to a 16-byte header `[length][capacity][keysPtr][valuesPtr]` with parallel key/value buffers; lookup/set is a linear scan with `i64` key equality. Matches the interpreter on both `wasm_run` and Chrome.
+  - Supported: map literals (incl. empty `{}`), `m[k]` get, `m[k] = v` set (in-place update or append, growing both buffers when full), `.length`, `.isEmpty`/`.isNotEmpty`, and `.containsKey(k)`.
+  - Also adds Wasm **list index assignment** `a[i] = v` (the subscript-assignment AST node now lowers to Wasm for both maps and lists).
+  - Out of scope for this slice: `String` keys (need a string-equality helper), `.keys`/`.values`/iteration, map parameters/returns, and compound subscript assignment (`m[k] += v`) — note `m[k] = m[k] + 1` already works.
+- Dart subscript assignment — `m[k] = v` and `a[i] = v` (frontend + interpreter):
+  - The grammar now parses container-entry assignment targets (previously the assignment left-hand side was only a bare variable, so `m[k] = v` / `a[i] = v` failed with a `SyntaxError`). Compound operators (`+=`, `-=`, `*=`, `/=`, `~/=`) are supported, e.g. `m["x"] += 1` for building a frequency map.
+  - New AST node `ASTExpressionVariableEntryAssignment`; new `ASTValue.writeKey`/`writeIndex` write into the underlying `Map`/`List` in place. A `Map` is always written by key (even a numeric one); a `List` by index. Round-trips through the code generators (parse → regenerate → re-parse).
+  - **Empty collection inference fix**: an empty `{}` literal (typed `Map<dynamic,dynamic>`) is now assignable to a typed map such as `Map<String,int>` — `ASTTypeMap.acceptsType` treats a `dynamic` key/value component as a wildcard, matching how lists already ignore their element type for assignment (so `Map<String,int> m = {};` works, like `List<int> a = [];`).
+- Dart `Map` support — frontend + interpreter (read/query; prerequisite for Wasm maps):
+  - **Grammar fix**: `Map<K,V>` type annotations now parse. `mapTyped()` was missing the value-type parser (it accepted only `Map<K,>` and read the `,` token as the value type), so every `Map<int,int>` declaration failed with a `SyntaxError`. Key/value types also accept `List<...>` (e.g. `Map<String,List<int>>`).
+  - Map literals now infer their key/value types from entries (mirroring list literals) instead of being hardcoded to `Map<dynamic,dynamic>`, so `Map<int,int> m = {1:10}` assigns cleanly. `ASTExpressionMapLiteral.resolveType` returns the `Map` type (it previously returned just the *value* type).
+  - **Map index by key**: `m[k]` now does a key lookup for any `Map` (the access was incorrectly routed to positional/list indexing whenever the key was numeric, so int-keyed maps failed).
+  - New core `Map` class (`CoreClassMap`): getters `.length`/`.isEmpty`/`.isNotEmpty`/`.keys`/`.values` and methods `.containsKey`/`.containsValue`/`.remove`/`.clear`. `.keys`/`.values` resolve to `List<keyType>`/`List<valueType>` so iterating them yields properly-typed elements.
+  - Maps work as function parameters.
+  - Note: map subscript assignment (`m[k] = v`) is a follow-up (the grammar's assignment target is still a bare variable).
+  - Functions can now accept and return whole lists across the host boundary. The runner marshals a Dart `List` into module memory (header + elements buffer, via the exported `__alloc`) for `List` parameters, and decodes a returned list-header pointer back into a Dart `List`. Covers `int`/`double`/`String`/`bool` element lists, including round-tripping (`List<int> echo(List<int> a)`) and building a result with `.add` before returning it.
+  - The `apollovm_sig` custom section now carries list types as `[6, <element tag>]` (was a single opaque tag), so modules loaded from raw bytes self-describe their list element types; the runner uses 64-bit element reads/writes via `BigInt` so it works on both the Dart VM and dart2js (Chrome).
+  - A `String`/`List` parameter now also forces an exported `__alloc` (previously only String params did), so list-only functions can be fed their arguments.
+- Wasm collections — `String` & `bool` element lists (P3, part 3):
+  - `List<String>` and `List<bool>` now compile to Wasm: literals, index reads `a[i]`, `for (var e in a)`, `.add`, and the `.first`/`.last`/`.isEmpty`/`.isNotEmpty`/`.length` getters all work (elements stored as i32 — a string pointer or a `0`/`1` boolean). Matches the interpreter on both `wasm_run` and Chrome.
+  - Maps remain a later slice.
+- Wasm collections — growable lists `.add` + getters (P3, part 2):
+  - List values are now an indirect handle: a 12-byte header `[length:i32][capacity:i32][dataPtr:i32]` pointing at a separately-allocated elements buffer. This makes `.add` aliasing-safe — growing reallocates the data buffer (doubling capacity, `memory.copy`ing existing elements) and updates the header in place, so existing references observe the new length/contents.
+  - `list.add(x)` now compiles to Wasm for `int`/`double` lists (including starting from an empty `[]` literal), growing linear memory on demand.
+  - New list getters compiled to Wasm: `.first`, `.last`, `.isEmpty`, `.isNotEmpty`.
+  - `bool`-returning functions loaded from raw Wasm bytes now decode correctly: the `apollovm_sig` custom section is emitted for `bool` returns (not just String signatures), and the runner maps the i32 `0`/`1` back to a Dart `bool`.
+- Wasm collections — lists, read + iterate (P3, part 1):
+  - `int`/`double` list literals compile to linear-memory blocks; index reads `a[i]`, the `.length` getter, and `for (var e in a)` now compile to Wasm (matching the interpreter, on both `wasm_run` and Chrome).
+  - Lists currently stay internal (return scalars); list parameters/returns and maps are later slices.
 - Wasm generator — major feature expansion (`ApolloGeneratorWasm`), moving toward full Dart parity:
   - **Loops**: `while` and `for` loops now compile to Wasm (`block`/`loop`/`br_if`/`br`), including `return` from inside a loop. Added the `br` opcode helper and recursion into loop bodies when collecting function locals.
   - **Function calls**: local function invocation (calling other top-level functions, including recursion) via a function-index table threaded through the generator and a `Wasm.call`.
@@ -28,6 +69,24 @@
   - **Full Dart `%` semantics**: integer and double modulo now return the Dart-correct non-negative result in `[0, |b|)` for negative operands (sign-corrected via scratch locals); double `%` is computed as `a - trunc(a / b) * b`.
   - **Fix**: compound assignment (`+=`, `-=`, `*=`, …) emitted its operation to a discarded buffer (missing `out`/`context`), producing broken code; now applied to the real output.
 - Tests: added Wasm coverage for every feature above plus a combined integration test (prime counting / sum-of-squares using loops + calls + logic + modulo), all executed against the real compiled-and-run Wasm module.
+- Wasm strings — String parameters + `memory.grow` (P2, part 5, completes the strings milestone):
+  - Functions taking `String` parameters now work: the runner encodes the Dart string into module memory (via the exported `__alloc`, guided by the `apollovm_sig` param tags) and passes the i32 pointer. Enables `String echo(String s)`, `String greet(String name)`, etc.
+  - The allocator (both the exported `__alloc` and the inline concat allocator) now **grows linear memory on demand** (`memory.size`/`memory.grow`), so large strings/concatenations no longer trap.
+- Wasm strings — number→string interpolation (P2, part 4):
+  - Interpolation of `int`/`double` (`"n=$n"`, `"${a + b}"`) now compiles to Wasm via host imports `env.int_to_str`/`env.double_to_str`; the host formats the number (matching the interpreter; doubles via `ASTTypeDouble.doubleToString`) and writes it into module memory.
+  - Adds a synthesized, **exported `__alloc`** bump-allocator function so host imports can allocate strings in the module's memory (reentrant host→module calls), plus value-returning host imports and i64↔BigInt marshalling on the web.
+- Wasm strings — String-returning functions (P2, part 3):
+  - Functions returning `String` now work: the value is an i32 pointer the runner decodes back into a Dart `String`.
+  - Modules are now **self-describing**: a custom `apollovm_sig` section records each public function's high-level return/parameter type tags, so the runner can marshal strings even for modules loaded from raw bytes. Emitted only when a public signature involves a `String` (pure-numeric modules stay byte-identical).
+- Wasm strings — concatenation + bump allocator (P2, part 2):
+  - A mutable heap-pointer **Global** (`$hp`) bump allocator; runtime string allocation via `__alloc` + `memory.copy`.
+  - String `+`, adjacent string literals, and `$var` interpolation of `String` variables now compile to Wasm (left-folded binary concatenation producing a fresh `[len:i32][utf8]` string). Validated on `wasm_run` and Chrome.
+  - Note: bump-and-leak (no free yet); number→string interpolation and string returns are later slices.
+- Wasm linear-memory foundation + strings (P2, part 1 — `print` of string literals):
+  - The generator now emits **Import / Memory / Global / Data** sections and offsets the function-index space past imported functions (a body-first two-pass build). Modules with no strings/imports remain byte-identical.
+  - String literals are interned into a static data segment as `[len:i32][utf8]`; a `String` value is an `i32` pointer into the exported linear memory.
+  - `print(stringLiteral)` lowers to a host import `env.print(i32)`. The runtime layer (`WasmRuntime`/`WasmModule`) now wires **host imports** at instantiation and exposes **exported memory** reads, on both the native (`wasm_run`) and browser runtimes; the runner decodes the pointer and routes to `externalPrintFunction`.
+  - New `wasm.dart` memory opcodes (i32/i64 load/store, load8_u/store8, memory.size/grow/copy/fill) and section-id helpers.
 - Test infrastructure — WebAssembly GC validation path:
   - Established a browser (`dart test -p chrome`) parity harness that runs generated Wasm on Chrome's own engine. The native `wasm_run` backend (wasmtime 14 / wasmi 0.31) does not support the WebAssembly GC proposal; Chrome (v119+) does.
   - Added a `wasm-gc` test tag (`dart_test.yaml`) and a WasmGC capability spike; CI's `wasm_run`-based jobs exclude the tag (`--exclude-tags wasm-gc`) while the Chrome job runs it. This gates the planned dual-target (linear-memory + WasmGC) backend work.
@@ -43,6 +102,10 @@
 - Tests:
   - Increased line coverage from ~64.6% to ~70.9%.
   - Added regression tests for all the fixes above and extensive unit/integration tests for `ASTValue`, `ASTType`, `ApolloVM`, expressions, the core library, and the Wasm generator.
+
+- Dependencies:
+  - data_serializer: ^1.2.1 -> ^1.2.2
+  - test: ^1.31.0 -> ^1.31.1
 
 ## 0.1.26
 

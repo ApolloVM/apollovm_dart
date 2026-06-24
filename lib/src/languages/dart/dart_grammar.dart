@@ -602,6 +602,7 @@ class DartGrammarDefinition extends DartGrammarLexer {
               expressionMapEmptyLiteral() |
               expressionMapLiteral() |
               expressionVariableDirectOperation() |
+              expressionVariableEntryAssignment() |
               expressionVariableAssigment() |
               expressionFunctionInvocation() |
               expressionObjectEntryFunctionInvocation() |
@@ -866,8 +867,10 @@ class DartGrammarDefinition extends DartGrammarLexer {
               char(',').trimHidden().optional() &
               char('}').trimHidden())
           .map((v) {
-            var keyType = (v[0]?[1] as ASTType?) ?? ASTTypeDynamic.instance;
-            var valueType = (v[0]?[3] as ASTType?) ?? ASTTypeDynamic.instance;
+            // Leave the types null when there's no explicit `<K,V>` prefix, so
+            // the literal infers them from its entries (mirrors list literals).
+            var keyType = v[0]?[1] as ASTType?;
+            var valueType = v[0]?[3] as ASTType?;
             var entry0 = (v[2] as List).whereType<ASTExpression>().toList();
             var entriesTail = (v[3] as List?)
                 ?.whereType<List>()
@@ -908,6 +911,18 @@ class DartGrammarDefinition extends DartGrammarLexer {
       (variable() & assigmentOperator() & ref0(expression)).map((v) {
         return ASTExpressionVariableAssignment(v[0], v[1], v[2]);
       });
+
+  Parser<ASTExpressionVariableEntryAssignment>
+  expressionVariableEntryAssignment() =>
+      (variable() &
+              char('[') &
+              ref0(expression) &
+              char(']').trimHidden() &
+              assigmentOperator() &
+              ref0(expression))
+          .map((v) {
+            return ASTExpressionVariableEntryAssignment(v[0], v[2], v[4], v[5]);
+          });
 
   Parser<ASTAssignmentOperator> assigmentOperator() =>
       (char('=') |
@@ -1050,12 +1065,13 @@ class DartGrammarDefinition extends DartGrammarLexer {
   Parser<ASTTypeMap> mapTyped() =>
       (string('Map') &
               char('<').trim() &
-              simpleType() &
+              (arrayTyped() | simpleType()).cast<ASTType>() &
               char(',').trim() &
+              (arrayTyped() | simpleType()).cast<ASTType>() &
               char('>').trim())
           .map((v) {
             var key = v[2] as ASTType;
-            var val = v[3] as ASTType;
+            var val = v[4] as ASTType;
             return ASTTypeMap(key, val);
           });
 

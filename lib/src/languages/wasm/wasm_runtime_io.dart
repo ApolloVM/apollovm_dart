@@ -87,11 +87,57 @@ class WasmRuntimeIO extends WasmRuntime {
   @override
   Future<WasmModuleIO> loadModuleImpl(
     String moduleName,
-    Uint8List wasmModuleBinary,
-  ) async {
+    Uint8List wasmModuleBinary, {
+    WasmHostImports? hostImports,
+  }) async {
     var module = await _compileModule(wasmModuleBinary);
-    var moduleInstance = await module.builder().build();
+
+    var builder = module.builder();
+
+    // Wire only the imports the module actually declares, from [hostImports].
+    if (hostImports != null) {
+      for (var imp in module.getImports()) {
+        if (imp.kind != wasm_run.WasmExternalKind.function) continue;
+        var hostFn = hostImports[imp.module]?[imp.name];
+        if (hostFn == null) continue;
+        builder.addImport(imp.module, imp.name, _toWasmFunction(hostFn));
+      }
+    }
+
+    var moduleInstance = await builder.build();
     return WasmModuleIO(moduleName, module, moduleInstance);
+  }
+
+  static wasm_run.ValueTy _toValueTy(WasmValueType t) => switch (t) {
+    WasmValueType.i32 => wasm_run.ValueTy.i32,
+    WasmValueType.i64 => wasm_run.ValueTy.i64,
+    WasmValueType.f32 => wasm_run.ValueTy.f32,
+    WasmValueType.f64 => wasm_run.ValueTy.f64,
+  };
+
+  static wasm_run.WasmFunction _toWasmFunction(WasmHostFunction hf) {
+    var params = hf.params.map(_toValueTy).toList();
+
+    // Adapter matching the import's arity; wasm_run invokes `inner`
+    // positionally.
+    Function inner = switch (hf.params.length) {
+      0 => () => hf.callback(const []),
+      1 => (Object? a) => hf.callback([a]),
+      2 => (Object? a, Object? b) => hf.callback([a, b]),
+      3 => (Object? a, Object? b, Object? c) => hf.callback([a, b, c]),
+      _ => throw UnsupportedError(
+        'Wasm host import arity ${hf.params.length} not supported',
+      ),
+    };
+
+    if (hf.results.isEmpty) {
+      return wasm_run.WasmFunction.voidReturn(inner, params: params);
+    }
+    return wasm_run.WasmFunction(
+      inner,
+      params: params,
+      results: hf.results.map(_toValueTy).toList(),
+    );
   }
 
   final Map<String, wasm_run.WasmModule> _compiledModules = {};
@@ -139,6 +185,18 @@ class WasmModuleIO extends WasmModule {
     if (function == null) return null;
 
     return (function: function, varArgs: true);
+  }
+
+  @override
+  Uint8List? readMemory() => instance.getMemory('memory')?.view;
+
+  @override
+  Object? invokeExport(String name, List<Object?> args) {
+    var f = instance.getFunction(name);
+    if (f == null) {
+      throw StateError("No exported Wasm function `$name`");
+    }
+    return Function.apply(f.inner, args);
   }
 
   @override
