@@ -1,5 +1,8 @@
 ## 0.1.27
 
+- Wasm collections — map parameters & returns (P3, part 8):
+  - Functions can now accept and return whole `Map`s across the host boundary. The runner marshals a Dart `Map` into the module's map layout (header + parallel key/value buffers, via the exported `__alloc`) for `Map` parameters, and decodes a returned map-header pointer back into a Dart `Map`. Covers `int`/`String` keys × `int`/`double`/`String`/`bool` values, including round-tripping and returning a map built with `m[k] = v`.
+  - The `apollovm_sig` custom section now encodes a map type as `[7, <key tag>, <value tag>]`, so raw-byte modules self-describe their key/value types. Element read/write was factored into shared helpers used by both list and map marshalling.
 - Wasm collections — map `.keys` / `.values` + iteration (P3, part 7):
   - `m.keys` and `m.values` now compile to Wasm: each materializes a fresh list by copying the map's parallel key (or value) buffer (which already has the list element layout), so `for (var k in m.keys)` / `for (var v in m.values)` work via the existing list for-each. Matches the interpreter on both `wasm_run` and Chrome.
   - The for-each loop-variable type resolver now derives the element type from the map (`m.keys` → key type, `m.values` → value type) so the loop variable is correctly typed.

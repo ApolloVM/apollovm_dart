@@ -552,4 +552,141 @@ void main() {
       );
     });
   });
+
+  group('Wasm maps: parameters', () {
+    test('int-keyed map parameter, index read', () async {
+      await _testWasmReturn(
+        '''
+        int f(Map<int,int> m) {
+          return m[2];
+        }
+      ''',
+        'f',
+        [
+          {1: 10, 2: 20, 3: 30},
+        ],
+        20,
+      );
+    });
+
+    test('String-keyed map parameter, index read', () async {
+      await _testWasmReturn(
+        '''
+        int f(Map<String,int> m) {
+          return m["b"];
+        }
+      ''',
+        'f',
+        [
+          {'a': 1, 'b': 2},
+        ],
+        2,
+      );
+    });
+
+    test('map parameter, sum values via for-each', () async {
+      await _testWasmReturn(
+        '''
+        int f(Map<int,int> m) {
+          int s = 0;
+          for (var v in m.values) {
+            s = s + v;
+          }
+          return s;
+        }
+      ''',
+        'f',
+        [
+          {1: 5, 2: 7, 3: 9},
+        ],
+        21,
+      );
+    });
+  });
+
+  group('Wasm maps: returns', () {
+    test('return int->int map literal', () async {
+      await _testWasmReturn(
+        '''
+        Map<int,int> f() {
+          return {1: 10, 2: 20, 3: 30};
+        }
+      ''',
+        'f',
+        [],
+        {1: 10, 2: 20, 3: 30},
+      );
+    });
+
+    test('return String->int map literal', () async {
+      await _testWasmReturn(
+        '''
+        Map<String,int> f() {
+          return {"a": 1, "b": 2};
+        }
+      ''',
+        'f',
+        [],
+        {'a': 1, 'b': 2},
+      );
+    });
+
+    test('return int->double map', () async {
+      await _testWasmReturn(
+        '''
+        Map<int,double> f() {
+          return {1: 1.5, 2: 2.5};
+        }
+      ''',
+        'f',
+        [],
+        {1: 1.5, 2: 2.5},
+      );
+    });
+
+    test('return String->String map', () async {
+      await _testWasmReturn(
+        '''
+        Map<String,String> f() {
+          return {"hi": "world", "yo": "there"};
+        }
+      ''',
+        'f',
+        [],
+        {'hi': 'world', 'yo': 'there'},
+      );
+    });
+
+    test('build with sets then return', () async {
+      await _testWasmReturn(
+        '''
+        Map<int,int> f() {
+          Map<int,int> m = {};
+          m[1] = 11;
+          m[2] = 22;
+          m[3] = 33;
+          return m;
+        }
+      ''',
+        'f',
+        [],
+        {1: 11, 2: 22, 3: 33},
+      );
+    });
+
+    test('round-trip a map (param in, map out)', () async {
+      await _testWasmReturn(
+        '''
+        Map<int,int> f(Map<int,int> m) {
+          return m;
+        }
+      ''',
+        'f',
+        [
+          {7: 70, 8: 80},
+        ],
+        {7: 70, 8: 80},
+      );
+    });
+  });
 }
