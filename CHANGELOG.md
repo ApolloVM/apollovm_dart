@@ -29,6 +29,7 @@
 - JavaScript arrow functions: a named arrow assignment (`const add = (a, b) => a + b;`, `const square = n => n * n;`, `const greet = () => { … };`) is parsed and desugared to a named function declaration — callable by name (`add(1, 2)`), at top level or as a local statement, with expression or block bodies. Translates to a regular `function`/method on output. Anonymous arrows passed as callbacks (true closures) are a follow-up.
 - Code generation fix — logical negation of a complex operand: `!(a > b)` was emitted as `!a > b` (which re-parses as `(!a) > b`). The negated operand is now parenthesized when complex. Affects all languages.
 - Tests: broad JavaScript coverage added — parse + execute + translate (to Dart/Java where applicable) + re-execute the generated code: `javascript_basic_vars`, `branches`, `while_loop`, `for_loop`, `comparisons`, `division`, `negation`, `this_method`, plus the earlier `class_function`, `control_flow`, `for_of`, `arithmetic`, and arrow-function definitions.
+- Docs/examples: added per-language runnable examples under `example/` — `apollovm_example_java.dart`, `apollovm_example_kotlin.dart` and `apollovm_example_javascript.dart` (each load + run + translate to Dart, with verified output) — and fixed the existing `apollovm_example.dart` to `await writeAllSources()` (was printing `Instance of 'Future<StringBuffer>'`). README updated with a Kotlin section and the CLI banner now reads "Dart, Java, Kotlin and JavaScript".
 
 ## 0.1.27
 

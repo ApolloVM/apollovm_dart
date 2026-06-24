@@ -41,7 +41,7 @@ Now you can use the `apollovm` Dart executable:
 ```shell
 $> apollovm help
 
-ApolloVM - A compact VM for Dart, Java and JavaScript.
+ApolloVM - A compact VM for Dart, Java, Kotlin and JavaScript.
 
 Usage: apollovm <command> [arguments]
 
@@ -146,7 +146,7 @@ even if you don't have Dart installed.
 
 ## Package Usage
 
-The ApolloVM is still in alpha stage. Below, we can see a simple usage examples in Dart and Java.
+The ApolloVM is still in alpha stage. Below, we can see simple usage examples in Dart, Java, Kotlin and JavaScript.
 
 ### Language: `Dart`
 
@@ -384,6 +384,77 @@ class Foo {
 <<<< CODE_UNIT_END="/test" >>>>
 <<<< [SOURCES_END] >>>>
 ```
+
+### Language: `Kotlin`
+
+Loading Kotlin source code, executing it, and then converting it to Dart:
+
+```dart
+import 'package:apollovm/apollovm.dart';
+
+void main() async {
+  var vm = ApolloVM();
+
+  var codeUnit = SourceCodeUnit(
+          'kotlin',
+          r'''
+            class Foo {
+              fun greet(name: String, count: Int) {
+                val msg = "Hello $name, you have $count messages."
+                println(msg)
+              }
+            }
+          ''',
+          id: 'test');
+
+  var loadOK = await vm.loadCodeUnit(codeUnit);
+
+  if (!loadOK) {
+    throw StateError('Error parsing Kotlin code!');
+  }
+
+  var kotlinRunner = vm.createRunner('kotlin')!;
+
+  // Map the `print` function in the VM:
+  kotlinRunner.externalPrintFunction = (o) => print("» $o");
+
+  await kotlinRunner.executeClassMethod('', 'Foo', 'greet',
+      positionalParameters: ['World', 3]);
+
+  print('---------------------------------------');
+
+  // Regenerate code in Dart:
+  var codeStorageDart = vm.generateAllCodeIn('dart');
+  var allSourcesDart = await codeStorageDart.writeAllSources();
+  print(allSourcesDart.toString());
+}
+```
+
+*Note: the parsed function `println` is normalized to the VM's `print` (mapped as an external function).*
+
+Output:
+```text
+» Hello World, you have 3 messages.
+---------------------------------------
+<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+class Foo {
+
+  void greet(String name, int count) {
+    final msg = 'Hello $name, you have $count messages.';
+    print(msg);
+  }
+
+}
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+```
+
+Kotlin support reaches parity with the Java feature set: top-level and class `fun`
+declarations, `val`/`var` with type inference, `if`/`else`, `for (x in …)`, `while`,
+`listOf`/`mapOf` literals, and `"$x"` / `"${expr}"` string templates — all
+translatable to Dart, Java or back to Kotlin.
 
 ### Language: `JavaScript`
 

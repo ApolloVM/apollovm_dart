@@ -75,14 +75,14 @@ void main() async {
 
   // Regenerate code in Dart:
   var codeStorageDart = vm.generateAllCodeIn('dart');
-  var allSourcesDart = codeStorageDart.writeAllSources();
+  var allSourcesDart = await codeStorageDart.writeAllSources();
   print(allSourcesDart);
 
   print('---------------------------------------');
 
   // Regenerate code in Java11:
   var codeStorageJava = vm.generateAllCodeIn('java11');
-  var allSourcesJava = codeStorageJava.writeAllSources();
+  var allSourcesJava = await codeStorageJava.writeAllSources();
   print(allSourcesJava);
 }
 
