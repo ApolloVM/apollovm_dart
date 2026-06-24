@@ -10,6 +10,10 @@
   - **Full Dart `%` semantics**: integer and double modulo now return the Dart-correct non-negative result in `[0, |b|)` for negative operands (sign-corrected via scratch locals); double `%` is computed as `a - trunc(a / b) * b`.
   - **Fix**: compound assignment (`+=`, `-=`, `*=`, …) emitted its operation to a discarded buffer (missing `out`/`context`), producing broken code; now applied to the real output.
 - Tests: added Wasm coverage for every feature above plus a combined integration test (prime counting / sum-of-squares using loops + calls + logic + modulo), all executed against the real compiled-and-run Wasm module.
+- Wasm strings — concatenation + bump allocator (P2, part 2):
+  - A mutable heap-pointer **Global** (`$hp`) bump allocator; runtime string allocation via `__alloc` + `memory.copy`.
+  - String `+`, adjacent string literals, and `$var` interpolation of `String` variables now compile to Wasm (left-folded binary concatenation producing a fresh `[len:i32][utf8]` string). Validated on `wasm_run` and Chrome.
+  - Note: bump-and-leak (no free yet); number→string interpolation and string returns are later slices.
 - Wasm linear-memory foundation + strings (P2, part 1 — `print` of string literals):
   - The generator now emits **Import / Memory / Global / Data** sections and offsets the function-index space past imported functions (a body-first two-pass build). Modules with no strings/imports remain byte-identical.
   - String literals are interned into a static data segment as `[len:i32][utf8]`; a `String` value is an `i32` pointer into the exported linear memory.
