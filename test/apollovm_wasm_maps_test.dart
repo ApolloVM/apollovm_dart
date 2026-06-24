@@ -689,4 +689,119 @@ void main() {
       );
     });
   });
+
+  group('Wasm maps/lists: compound subscript assignment', () {
+    test('map m[k] += v', () async {
+      await _testWasmReturn(
+        '''
+        int f() {
+          Map<int,int> m = {1: 10};
+          m[1] += 5;
+          return m[1];
+        }
+      ''',
+        'f',
+        [],
+        15,
+      );
+    });
+
+    test('map m[k] -= / *=', () async {
+      await _testWasmReturn(
+        '''
+        int f() {
+          Map<int,int> m = {1: 10};
+          m[1] -= 3;
+          m[1] *= 4;
+          return m[1];
+        }
+      ''',
+        'f',
+        [],
+        28,
+      );
+    });
+
+    test('String-keyed map m[k] += v', () async {
+      await _testWasmReturn(
+        '''
+        int f() {
+          Map<String,int> m = {"a": 1};
+          m["a"] += 9;
+          return m["a"];
+        }
+      ''',
+        'f',
+        [],
+        10,
+      );
+    });
+
+    test('double-valued map m[k] += v', () async {
+      await _testWasmReturn(
+        '''
+        double f() {
+          Map<int,double> m = {1: 1.5};
+          m[1] += 2.0;
+          return m[1];
+        }
+      ''',
+        'f',
+        [],
+        3.5,
+      );
+    });
+
+    test('list a[i] += v', () async {
+      await _testWasmReturn(
+        '''
+        int f() {
+          List<int> a = [1, 2, 3];
+          a[0] += 10;
+          return a[0];
+        }
+      ''',
+        'f',
+        [],
+        11,
+      );
+    });
+
+    test('list a[i] *= with variable rhs', () async {
+      await _testWasmReturn(
+        '''
+        int f(int d) {
+          List<int> a = [2, 3];
+          a[1] *= d;
+          return a[1];
+        }
+      ''',
+        'f',
+        [4],
+        12,
+      );
+    });
+
+    test('frequency counter using += ', () async {
+      await _testWasmReturn(
+        '''
+        int f() {
+          List<String> words = ["a", "b", "a", "a", "b"];
+          Map<String,int> m = {};
+          for (var w in words) {
+            if (m.containsKey(w)) {
+              m[w] += 1;
+            } else {
+              m[w] = 1;
+            }
+          }
+          return m["a"];
+        }
+      ''',
+        'f',
+        [],
+        3,
+      );
+    });
+  });
 }

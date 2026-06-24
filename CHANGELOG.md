@@ -1,5 +1,7 @@
 ## 0.1.27
 
+- Wasm collections — compound subscript assignment (P3, part 9):
+  - `m[k] += v` (and `-=`, `*=`, `/=`, `~/=`) and the same for list indices `a[i] += v` now compile to Wasm. Lowered by desugaring `c[k] OP= v` into `c[k] = c[k] OP v`, so it reuses the existing get/set codegen and works for maps (`int`/`String` keys) and lists across `int`/`double` values. Matches the interpreter on both `wasm_run` and Chrome (e.g. a frequency counter can now use `m[w] += 1` directly).
 - Wasm collections — map parameters & returns (P3, part 8):
   - Functions can now accept and return whole `Map`s across the host boundary. The runner marshals a Dart `Map` into the module's map layout (header + parallel key/value buffers, via the exported `__alloc`) for `Map` parameters, and decodes a returned map-header pointer back into a Dart `Map`. Covers `int`/`String` keys × `int`/`double`/`String`/`bool` values, including round-tripping and returning a map built with `m[k] = v`.
   - The `apollovm_sig` custom section now encodes a map type as `[7, <key tag>, <value tag>]`, so raw-byte modules self-describe their key/value types. Element read/write was factored into shared helpers used by both list and map marshalling.
