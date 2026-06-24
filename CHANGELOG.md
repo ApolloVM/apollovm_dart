@@ -10,6 +10,9 @@
   - **Full Dart `%` semantics**: integer and double modulo now return the Dart-correct non-negative result in `[0, |b|)` for negative operands (sign-corrected via scratch locals); double `%` is computed as `a - trunc(a / b) * b`.
   - **Fix**: compound assignment (`+=`, `-=`, `*=`, …) emitted its operation to a discarded buffer (missing `out`/`context`), producing broken code; now applied to the real output.
 - Tests: added Wasm coverage for every feature above plus a combined integration test (prime counting / sum-of-squares using loops + calls + logic + modulo), all executed against the real compiled-and-run Wasm module.
+- Wasm strings — String-returning functions (P2, part 3):
+  - Functions returning `String` now work: the value is an i32 pointer the runner decodes back into a Dart `String`.
+  - Modules are now **self-describing**: a custom `apollovm_sig` section records each public function's high-level return/parameter type tags, so the runner can marshal strings even for modules loaded from raw bytes. Emitted only when a public signature involves a `String` (pure-numeric modules stay byte-identical).
 - Wasm strings — concatenation + bump allocator (P2, part 2):
   - A mutable heap-pointer **Global** (`$hp`) bump allocator; runtime string allocation via `__alloc` + `memory.copy`.
   - String `+`, adjacent string literals, and `$var` interpolation of `String` variables now compile to Wasm (left-folded binary concatenation producing a fresh `[len:i32][utf8]` string). Validated on `wasm_run` and Chrome.

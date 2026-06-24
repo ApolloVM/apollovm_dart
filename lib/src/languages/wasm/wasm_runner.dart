@@ -152,11 +152,84 @@ class ApolloRunnerWasm extends ApolloRunner {
 
     res = module.resolveReturnedValue(res, astFunction);
 
+    // A `String` return is an i32 pointer into the module's memory; decode it.
+    // The return type comes from the AST when available, else from the module's
+    // `apollovm_sig` custom section (for modules loaded from raw bytes).
+    var returnsString =
+        astFunction?.returnType is ASTTypeString ||
+        _signatures(codeUnit.code)[functionName]?.returnTag == _tagString;
+    if (res != null && returnsString) {
+      res = decodeString(res as int);
+    }
+
     var astValue = res == null
         ? ASTValueNull.instance
         : ASTValue.fromValue(res);
 
     return astValue;
+  }
+
+  // High-level type tags from the `apollovm_sig` custom section.
+  static const int _tagString = 4;
+
+  /// Per-module signature cache, keyed by the wasm binary's identity.
+  final Map<Uint8List, Map<String, ({int returnTag, List<int> paramTags})>>
+  _signaturesCache = {};
+
+  Map<String, ({int returnTag, List<int> paramTags})> _signatures(
+    Uint8List wasmBytes,
+  ) => _signaturesCache[wasmBytes] ??= _parseSignatures(wasmBytes);
+
+  /// Parses the `apollovm_sig` custom section (function name -> return/param
+  /// type tags). Returns an empty map if absent.
+  static Map<String, ({int returnTag, List<int> paramTags})> _parseSignatures(
+    Uint8List b,
+  ) {
+    var sigs = <String, ({int returnTag, List<int> paramTags})>{};
+    if (b.length < 8) return sigs;
+
+    var pos = 8; // skip magic (4) + version (4)
+
+    int readLeb() {
+      var result = 0, shift = 0;
+      while (true) {
+        var byte = b[pos++];
+        result |= (byte & 0x7f) << shift;
+        if ((byte & 0x80) == 0) break;
+        shift += 7;
+      }
+      return result;
+    }
+
+    String readName() {
+      var len = readLeb();
+      var s = utf8.decode(b.sublist(pos, pos + len));
+      pos += len;
+      return s;
+    }
+
+    while (pos < b.length) {
+      var id = b[pos++];
+      var size = readLeb();
+      var sectionEnd = pos + size;
+      if (id == 0) {
+        var name = readName();
+        if (name == 'apollovm_sig') {
+          var count = readLeb();
+          for (var i = 0; i < count; ++i) {
+            var fname = readName();
+            var returnTag = b[pos++];
+            var paramCount = readLeb();
+            var paramTags = b.sublist(pos, pos + paramCount).toList();
+            pos += paramCount;
+            sigs[fname] = (returnTag: returnTag, paramTags: paramTags);
+          }
+        }
+      }
+      pos = sectionEnd;
+    }
+
+    return sigs;
   }
 
   void _resolveWasmCallParameters(

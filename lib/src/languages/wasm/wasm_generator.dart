@@ -101,6 +101,81 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     if (module.hasData) {
       out.writeBytes(generateSectionData(module), description: "Section: Data");
     }
+    // Self-describing high-level signatures (custom section) so the runner can
+    // marshal String returns/params for modules loaded from raw bytes. Only
+    // emitted when a public function involves a String, keeping pure-numeric
+    // modules byte-identical.
+    if (_hasStringSignature(module)) {
+      out.writeBytes(
+        generateSectionCustomSignatures(module),
+        description: "Section: Custom (apollovm_sig)",
+      );
+    }
+
+    return out;
+  }
+
+  /// Type tag used by the `apollovm_sig` custom section.
+  /// 0=void, 1=int, 2=double, 3=bool, 4=String, 5=other.
+  static int _typeTag(ASTType t) {
+    if (t is ASTTypeVoid) return 0;
+    if (t is ASTTypeInt) return 1;
+    if (t is ASTTypeDouble) return 2;
+    if (t is ASTTypeBool) return 3;
+    if (t is ASTTypeString) return 4;
+    return 5;
+  }
+
+  bool _hasStringSignature(WasmModuleContext module) {
+    for (var f in module.functions) {
+      if (f.modifiers.isPrivate) continue;
+      if (f.returnType is ASTTypeString) return true;
+      for (var p in f.parameters.allParameters) {
+        if (p.type is ASTTypeString) return true;
+      }
+    }
+    return false;
+  }
+
+  /// Emits a custom section `apollovm_sig` mapping each public function to its
+  /// high-level return/parameter type tags (see [_typeTag]).
+  BytesOutput generateSectionCustomSignatures(
+    WasmModuleContext module, {
+    BytesOutput? out,
+  }) {
+    out ??= newOutput();
+
+    var publics = module.functions
+        .where((f) => !f.modifiers.isPrivate)
+        .toList();
+
+    var entries = <BytesOutput>[
+      BytesOutput(
+        data: Wasm.encodeString('apollovm_sig'),
+        description: "Custom section name",
+      ),
+      BytesOutput(
+        data: Leb128.encodeUnsigned(publics.length),
+        description: "Function count",
+      ),
+      ...publics.map((f) {
+        var paramTags = f.parameters.allParameters
+            .map((p) => _typeTag(p.type))
+            .toList();
+        return BytesOutput(
+          data: [
+            ...Wasm.encodeString(f.name),
+            _typeTag(f.returnType),
+            ...Leb128.encodeUnsigned(paramTags.length),
+            ...paramTags,
+          ],
+          description: "Signature `${f.name}`",
+        );
+      }),
+    ];
+
+    out.writeByte(0x00, description: "Section Custom ID");
+    out.writeBytesLeb128Block(entries, description: "apollovm_sig");
 
     return out;
   }
