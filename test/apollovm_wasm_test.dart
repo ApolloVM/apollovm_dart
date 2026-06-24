@@ -834,6 +834,375 @@ void main() async {
         },
       ),
     );
+
+    test(
+      'subHeavy1',
+      () => _testWasm(
+        language: 'dart',
+        code: r'''
+
+          int subHeavy1(int a, int b, int c) {
+            int x = a - b - c - 5;
+            return x;
+          }
+
+        ''',
+        functionName: 'subHeavy1',
+        executions: {
+          [100, 20, 30]: 45,
+          [50, 10, 5]: 30,
+        },
+        expecteWasm: {
+          'test':
+              '0061736D0100000001080160037E7E7E017E03020100070D010973756248656176793100000A16011401017E200020017D20027D42057D210320030F0B',
+        },
+      ),
+    );
+
+    test(
+      'cmpLess',
+      () => _testWasm(
+        language: 'dart',
+        code: r'''
+
+          int cmpLess(int a) {
+            if (a < 10) {
+              return 1;
+            }
+            return 0;
+          }
+
+        ''',
+        functionName: 'cmpLess',
+        executions: {
+          [5]: 1,
+          [10]: 0,
+          [20]: 0,
+        },
+        expecteWasm: {
+          'test':
+              '0061736D0100000001060160017E017E03020100070B0107636D704C65737300000A150113002000420A53044042010F0B42000F0042000B',
+        },
+      ),
+    );
+
+    test(
+      'cmpLessEqual',
+      () => _testWasm(
+        language: 'dart',
+        code: r'''
+
+          int cmpLessEqual(int a) {
+            if (a <= 10) {
+              return 1;
+            }
+            return 0;
+          }
+
+        ''',
+        functionName: 'cmpLessEqual',
+        executions: {
+          [5]: 1,
+          [10]: 1,
+          [11]: 0,
+        },
+        expecteWasm: {
+          'test':
+              '0061736D0100000001060160017E017E030201000710010C636D704C657373457175616C00000A150113002000420A57044042010F0B42000F0042000B',
+        },
+      ),
+    );
+
+    test(
+      'cmpGreaterEqual',
+      () => _testWasm(
+        language: 'dart',
+        code: r'''
+
+          int cmpGreaterEqual(int a) {
+            if (a >= 10) {
+              return 1;
+            }
+            return 0;
+          }
+
+        ''',
+        functionName: 'cmpGreaterEqual',
+        executions: {
+          [9]: 0,
+          [10]: 1,
+          [20]: 1,
+        },
+        expecteWasm: {
+          'test':
+              '0061736D0100000001060160017E017E030201000713010F636D7047726561746572457175616C00000A150113002000420A59044042010F0B42000F0042000B',
+        },
+      ),
+    );
+
+    test(
+      'cmpNotEqual',
+      () => _testWasm(
+        language: 'dart',
+        code: r'''
+
+          int cmpNotEqual(int a) {
+            if (a != 5) {
+              return 1;
+            }
+            return 0;
+          }
+
+        ''',
+        functionName: 'cmpNotEqual',
+        executions: {
+          [0]: 1,
+          [5]: 0,
+          [-3]: 1,
+        },
+        expecteWasm: {
+          'test':
+              '0061736D0100000001060160017E017E03020100070F010B636D704E6F74457175616C00000A150113002000420552044042010F0B42000F0042000B',
+        },
+      ),
+    );
+
+    test(
+      'nestedIf1',
+      () => _testWasm(
+        language: 'dart',
+        code: r'''
+
+          int nestedIf1(int a, int b) {
+            if (a > 1) {
+              if (b > 1) {
+                return 1;
+              }
+              return 2;
+            }
+            return 3;
+          }
+
+        ''',
+        functionName: 'nestedIf1',
+        executions: {
+          [5, 5]: 1,
+          [5, 1]: 2,
+          [1, 5]: 3,
+        },
+        expecteWasm: {
+          'test':
+              '0061736D0100000001070160027E7E017E03020100070D01096E657374656449663100000A20011E00200042015504402001420155044042010F0B42020F0B42030F0042000B',
+        },
+      ),
+    );
+
+    test(
+      'ifElseOnly',
+      () => _testWasm(
+        language: 'dart',
+        code: r'''
+
+          int ifElseOnly(int a) {
+            if (a < 1) {
+              return -1;
+            } else {
+              return 1;
+            }
+          }
+
+        ''',
+        functionName: 'ifElseOnly',
+        executions: {
+          [-5]: -1,
+          [5]: 1,
+          [2]: 1,
+        },
+        expecteWasm: {
+          'test':
+              '0061736D0100000001060160017E017E03020100070E010A6966456C73654F6E6C7900000A1601140020004201530440427F0F0542010F0B0042000B',
+        },
+      ),
+    );
+
+    test(
+      'multiIntParams',
+      () => _testWasm(
+        language: 'dart',
+        code: r'''
+
+          int multiIntParams(int a, int b, int c, int d) {
+            int x = a + b;
+            int y = c + d;
+            int z = x * y;
+            return z;
+          }
+
+        ''',
+        functionName: 'multiIntParams',
+        executions: {
+          [1, 2, 3, 4]: 21,
+          [2, 3, 4, 5]: 45,
+        },
+        expecteWasm: {
+          'test':
+              '0061736D0100000001090160047E7E7E7E017E030201000712010E6D756C7469496E74506172616D7300000A22012003017E017E017E200020017C2104200220037C2105200420057E210620060F0B',
+        },
+      ),
+    );
+
+    test(
+      'multiDoubleParams',
+      () => _testWasm(
+        language: 'dart',
+        code: r'''
+
+          double multiDoubleParams(double a, double b, double c) {
+            double x = a + b;
+            double y = x * c;
+            return y;
+          }
+
+        ''',
+        functionName: 'multiDoubleParams',
+        executions: {
+          [1.5, 2.5, 2.0]: 8.0,
+          [0.0, 0.0, 5.0]: 0.0,
+        },
+        expecteWasm: {
+          'test':
+              '0061736D0100000001080160037C7C7C017C03020100071501116D756C7469446F75626C65506172616D7300000A19011702017C017C20002001A0210320032002A2210420040F0B',
+        },
+      ),
+    );
+
+    test(
+      'mixedParams',
+      () => _testWasm(
+        language: 'dart',
+        code: r'''
+
+          double mixedParams(int a, double b, int c, double d) {
+            var x = a * b;
+            var y = c * d;
+            return x + y;
+          }
+
+        ''',
+        functionName: 'mixedParams',
+        executions: {
+          [2, 1.5, 3, 2.0]: 9.0,
+          [10, 0.5, 2, 1.5]: 8.0,
+        },
+        expecteWasm: {
+          'test':
+              '0061736D0100000001090160047E7C7E7C017C03020100070F010B6D69786564506172616D7300000A1E011C02017C017C2000B92001A221042002B92003A2210520042005A00F0B',
+        },
+      ),
+    );
+
+    test(
+      'intDivLocal',
+      () => _testWasm(
+        language: 'dart',
+        code: r'''
+
+          int intDivLocal(int a, int b) {
+            int q = a ~/ b;
+            int r = a - (q * b);
+            return r;
+          }
+
+        ''',
+        functionName: 'intDivLocal',
+        executions: {
+          [17, 5]: 2,
+          [20, 4]: 0,
+          [10, 3]: 1,
+        },
+        expecteWasm: {
+          'test':
+              '0061736D0100000001070160027E7E017E03020100070F010B696E744469764C6F63616C00000A1F011D02017E017E2000B92001B9A3B021022000200220017E7D210320030F0B',
+        },
+      ),
+    );
+
+    test(
+      'returnViaLocal',
+      () => _testWasm(
+        language: 'dart',
+        code: r'''
+
+          int returnViaLocal(int a, int b) {
+            int sum = a + b;
+            int diff = a - b;
+            int result = sum * diff;
+            return result;
+          }
+
+        ''',
+        functionName: 'returnViaLocal',
+        executions: {
+          [10, 3]: 91,
+          [5, 5]: 0,
+        },
+        expecteWasm: {
+          'test':
+              '0061736D0100000001070160027E7E017E030201000712010E72657475726E5669614C6F63616C00000A22012003017E017E017E200020017C2102200020017D2103200220037E210420040F0B',
+        },
+      ),
+    );
+
+    test(
+      'doubleCompare',
+      () => _testWasm(
+        language: 'dart',
+        code: r'''
+
+          int doubleCompare(double a, double b) {
+            if (a >= b) {
+              return 1;
+            }
+            return 0;
+          }
+
+        ''',
+        functionName: 'doubleCompare',
+        executions: {
+          [1.5, 1.0]: 1,
+          [1.0, 1.0]: 1,
+          [0.5, 1.0]: 0,
+        },
+        expecteWasm: {
+          'test':
+              '0061736D0100000001070160027C7C017E030201000711010D646F75626C65436F6D7061726500000A150113002000200166044042010F0B42000F0042000B',
+        },
+      ),
+    );
+
+    test(
+      'arithMix1',
+      () => _testWasm(
+        language: 'dart',
+        code: r'''
+
+          int arithMix1(int a, int b) {
+            int x = a * b - a + b;
+            return x;
+          }
+
+        ''',
+        functionName: 'arithMix1',
+        executions: {
+          [3, 4]: 13,
+          [5, 2]: 7,
+        },
+        expecteWasm: {
+          'test':
+              '0061736D0100000001070160027E7E017E03020100070D010961726974684D69783100000A16011401017E200020017E20007D20017C210220020F0B',
+        },
+      ),
+    );
   });
 }
 

@@ -141,7 +141,7 @@ abstract class ASTExpression with ASTNode implements ASTCodeRunner {
       if (valueType is ASTTypeInt) {
         return ASTNumType.int;
       } else if (valueType is ASTTypeDouble) {
-        return ASTNumType.int;
+        return ASTNumType.double;
       } else if (valueType is ASTTypeNum) {
         return ASTNumType.num;
       }

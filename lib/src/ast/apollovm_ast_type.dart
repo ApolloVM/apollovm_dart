@@ -433,7 +433,9 @@ class ASTTypeBool extends ASTTypePrimitive<bool> {
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      super == other && other is ASTTypeInt && runtimeType == other.runtimeType;
+      super == other &&
+          other is ASTTypeBool &&
+          runtimeType == other.runtimeType;
 
   @override
   int get hashCode => name.hashCode;
@@ -742,7 +744,9 @@ class ASTTypeString extends ASTTypePrimitive<String> {
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      super == other && other is ASTTypeInt && runtimeType == other.runtimeType;
+      super == other &&
+          other is ASTTypeString &&
+          runtimeType == other.runtimeType;
 
   @override
   int get hashCode => name.hashCode;
@@ -794,7 +798,9 @@ class ASTTypeObject extends ASTType<Object> {
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      super == other && other is ASTTypeInt && runtimeType == other.runtimeType;
+      super == other &&
+          other is ASTTypeObject &&
+          runtimeType == other.runtimeType;
 
   @override
   int get hashCode => name.hashCode;
@@ -858,7 +864,9 @@ class ASTTypeConstructorThis extends ASTType<dynamic> {
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      super == other && other is ASTTypeInt && runtimeType == other.runtimeType;
+      super == other &&
+          other is ASTTypeConstructorThis &&
+          runtimeType == other.runtimeType;
 
   @override
   int get hashCode => name.hashCode;
@@ -927,7 +935,7 @@ class ASTTypeVar extends ASTType<dynamic> {
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      super == other && other is ASTTypeInt && runtimeType == other.runtimeType;
+      super == other && other is ASTTypeVar && runtimeType == other.runtimeType;
 
   @override
   int get hashCode => name.hashCode;
@@ -968,7 +976,9 @@ class ASTTypeDynamic extends ASTType<dynamic> {
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      super == other && other is ASTTypeInt && runtimeType == other.runtimeType;
+      super == other &&
+          other is ASTTypeDynamic &&
+          runtimeType == other.runtimeType;
 
   @override
   int get hashCode => name.hashCode;
@@ -1009,7 +1019,9 @@ class ASTTypeNull extends ASTType<Null> {
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      super == other && other is ASTTypeInt && runtimeType == other.runtimeType;
+      super == other &&
+          other is ASTTypeNull &&
+          runtimeType == other.runtimeType;
 
   @override
   int get hashCode => name.hashCode;
@@ -1048,7 +1060,9 @@ class ASTTypeVoid extends ASTType<void> {
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      super == other && other is ASTTypeInt && runtimeType == other.runtimeType;
+      super == other &&
+          other is ASTTypeVoid &&
+          runtimeType == other.runtimeType;
 
   @override
   int get hashCode => name.hashCode;
@@ -1369,9 +1383,9 @@ class ASTTypeMap<TK extends ASTType<K>, TV extends ASTType<V>, K, V>
       } else if (v.length % 2 == 0) {
         map = {};
         for (var i = 0; i < v.length; i += 2) {
-          var k = map[i];
-          var v = map[i + 1];
-          map[k] = v;
+          var k = v[i];
+          var val = v[i + 1];
+          map[k] = val;
         }
       }
     }

@@ -1062,7 +1062,6 @@ class ASTStatementWhileLoop extends ASTStatement {
     ASTRunStatus runStatus,
   ) async {
     var context = VMScopeContext(parentContext.block, parent: parentContext);
-    var runStatus = ASTRunStatus();
 
     var prevContext = VMContext.setCurrent(context);
     try {
@@ -1090,6 +1089,8 @@ class ASTStatementWhileLoop extends ASTStatement {
         await loopBlock.run(loopContext, runStatus);
 
         VMContext.setCurrent(context);
+
+        if (runStatus.returned) break;
       }
     } finally {
       VMContext.setCurrent(prevContext);
@@ -1148,7 +1149,6 @@ class ASTStatementForLoop extends ASTStatement {
     ASTRunStatus runStatus,
   ) async {
     var context = VMScopeContext(parentContext.block, parent: parentContext);
-    var runStatus = ASTRunStatus();
 
     var prevContext = VMContext.setCurrent(context);
     try {
@@ -1178,6 +1178,8 @@ class ASTStatementForLoop extends ASTStatement {
         await loopBlock.run(loopContext, runStatus);
 
         VMContext.setCurrent(context);
+
+        if (runStatus.returned) break;
 
         await continueExpression.run(context, runStatus);
       }
@@ -1259,6 +1261,8 @@ class ASTStatementForEach extends ASTStatement {
         await loopBlock.run(loopContext, runStatus);
 
         VMContext.setCurrent(context);
+
+        if (runStatus.returned) break;
       }
     } finally {
       VMContext.setCurrent(prevContext);

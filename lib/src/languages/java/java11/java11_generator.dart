@@ -398,6 +398,7 @@ class ApolloCodeGeneratorJava11 extends ApolloCodeGenerator {
 
   String _escapeString(String str) {
     return str
+        .replaceAll('\\', r'\\')
         .replaceAll('\t', r'\t')
         .replaceAll('"', r'\"')
         .replaceAll('\r', r'\r')

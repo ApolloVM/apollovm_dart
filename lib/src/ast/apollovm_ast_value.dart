@@ -551,7 +551,7 @@ abstract class ASTValueNum<T extends num> extends ASTValuePrimitive<T> {
       }
 
       throw UnsupportedError(
-        "Can't perform operation '==' in non number values: $value > $v2",
+        "Can't perform operation '==' in non number values: $value == $v2",
       );
     }
     return false;
@@ -819,21 +819,21 @@ class ASTValueString extends ASTValuePrimitive<String> {
   @override
   bool operator <(Object other) {
     throw UnsupportedError(
-      "Can't perform operation '<' in non number values: $this > $other",
+      "Can't perform operation '<' in non number values: $this < $other",
     );
   }
 
   @override
   bool operator >=(Object other) {
     throw UnsupportedError(
-      "Can't perform operation '>=' in non number values: $this > $other",
+      "Can't perform operation '>=' in non number values: $this >= $other",
     );
   }
 
   @override
   bool operator <=(Object other) {
     throw UnsupportedError(
-      "Can't perform operation '<=' in non number values: $this > $other",
+      "Can't perform operation '<=' in non number values: $this <= $other",
     );
   }
 

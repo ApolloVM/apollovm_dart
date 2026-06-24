@@ -1,3 +1,17 @@
+## 0.1.27
+
+- Bug fixes:
+  - Loop `return` propagation: a `return` inside a `for`, `while`, or `for-each` loop was ignored (the loop shadowed `runStatus` with a fresh instance and never broke on return). Returns now propagate and stop iteration correctly.
+  - `ASTType` equality: `ASTTypeBool`, `ASTTypeString`, `ASTTypeObject`, `ASTTypeConstructorThis`, `ASTTypeVar`, `ASTTypeDynamic`, `ASTTypeNull`, and `ASTTypeVoid` mistakenly checked `other is ASTTypeInt`, so equal instances never compared equal. Each now checks its own type.
+  - `ASTTypeMap`: building a map from a flat key/value list read from the (empty) target map instead of the input list, producing an empty map.
+  - Java generator (`_escapeString`): backslashes were not escaped, producing invalid Java string literals (e.g. `"a\b"` instead of `"a\\b"`).
+  - `ASTExpression.literalNumType` returned `ASTNumType.int` for `double` literals.
+  - Corrected the operator symbol shown in `ASTValueString`/`ASTValueNum` comparison/equality error messages.
+
+- Tests:
+  - Increased line coverage from ~64.6% to ~70.9%.
+  - Added regression tests for all the fixes above and extensive unit/integration tests for `ASTValue`, `ASTType`, `ApolloVM`, expressions, the core library, and the Wasm generator.
+
 ## 0.1.26
 
 - `DartGrammarDefinition`:
