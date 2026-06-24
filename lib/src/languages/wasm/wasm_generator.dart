@@ -877,12 +877,17 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     required BytesOutput out,
     required WasmContext context,
   }) {
-    _requireMapType(mapVar.type, expression.variable.name, 'containsKey');
+    var mapType = _requireMapType(
+      mapVar.type,
+      expression.variable.name,
+      'containsKey',
+    );
+    var keyType = mapType.keyType;
 
     var hdr = context.scratchLocal(_astTypeString, 15);
     var keys = context.scratchLocal(_astTypeString, 16);
     var iLoc = context.scratchLocal(_astTypeString, 18);
-    var keyLoc = context.scratchLocal(_astTypeInt, 19); // i64 key
+    var keyLoc = context.scratchLocal(keyType, 19); // i64 (int) or i32 (String)
     var found = context.scratchLocal(_astTypeString, 21);
 
     final s0 = context.stackLength;
@@ -898,6 +903,7 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     _emitMapScan(
       out,
       context,
+      keyType: keyType,
       hdrScratch: hdr,
       keysScratch: keys,
       iScratch: iLoc,
@@ -1325,15 +1331,17 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
   static const int _mapHeaderSize = 16;
 
   /// Resolves a local variable's `ASTTypeMap`, or throws if not a supported map.
+  /// Supported keys: `int` (i64) and `String` (i32 pointer, compared by bytes).
   ASTTypeMap _requireMapType(ASTType t, String name, String op) {
     if (t is! ASTTypeMap) {
       throw UnimplementedError(
         "Wasm $op on `$name` ($t) is not supported yet.",
       );
     }
-    if (t.keyType is! ASTTypeInt) {
+    if (t.keyType is! ASTTypeInt && t.keyType is! ASTTypeString) {
       throw UnimplementedError(
-        "Wasm maps with non-`int` keys (${t.keyType}) are not supported yet.",
+        "Wasm maps with key type ${t.keyType} are not supported yet "
+        "(only `int` and `String` keys).",
       );
     }
     if (!_isSupportedElemType(t.valueType)) {
@@ -1344,6 +1352,9 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     return t;
   }
 
+  /// Storage size of a map key: `int` -> 8 (i64), `String` -> 4 (i32 pointer).
+  int _mapKeySize(ASTType keyType) => keyType is ASTTypeInt ? 8 : 4;
+
   /// Emits the key-comparison loop for `m[k]`. On entry the key is evaluated
   /// into [keyScratch]; emits a `block { loop { … } }` that, for each entry,
   /// runs [onMatch] (with the matching index `i` in [iScratch] and the key
@@ -1352,12 +1363,21 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
   void _emitMapScan(
     BytesOutput out,
     WasmContext context, {
+    required ASTType keyType,
     required int hdrScratch,
     required int keysScratch,
     required int iScratch,
     required int keyScratch,
     required void Function() onMatch,
   }) {
+    var keySize = _mapKeySize(keyType);
+    int? strEqIndex;
+    if (keyType is ASTTypeString) {
+      var module = context.module!;
+      module.ensureStrEqFunction();
+      strEqIndex = module.synthFunctionIndex('__streq')!;
+    }
+
     // keysPtr = load(hdr, 8) ; i = 0
     out.write(Wasm.localGet(hdrScratch));
     out.write(Wasm32.i32Load(2, 8));
@@ -1378,12 +1398,18 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     // if (keys[i] == key) { onMatch(); break }
     out.write(Wasm.localGet(keysScratch));
     out.write(Wasm.localGet(iScratch));
-    out.write(Wasm32.i32Const(8)); // int key size
+    out.write(Wasm32.i32Const(keySize));
     out.writeByte(Wasm32.i32Multiply);
     out.writeByte(Wasm32.i32Add);
-    out.write(Wasm64.i64Load(3, 0)); // keys[i]
-    out.write(Wasm.localGet(keyScratch)); // query key
-    out.writeByte(Wasm64.i64Equals);
+    if (keyType is ASTTypeString) {
+      out.write(Wasm32.i32Load(2, 0)); // keys[i] (string pointer)
+      out.write(Wasm.localGet(keyScratch)); // query key pointer
+      out.write(Wasm.call(strEqIndex!)); // __streq(keys[i], key) -> i32 0/1
+    } else {
+      out.write(Wasm64.i64Load(3, 0)); // keys[i] (i64)
+      out.write(Wasm.localGet(keyScratch)); // query key
+      out.writeByte(Wasm64.i64Equals);
+    }
     out.write(Wasm.ifInstruction(WasmType.voidType));
     onMatch();
     out.write(Wasm.br(2)); // break out of the scan block (if -> loop -> block)
@@ -1441,7 +1467,7 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       keyType = mapType.keyType;
       valueType = mapType.valueType;
     }
-    var keySize = 8; // int key
+    var keySize = _mapKeySize(keyType);
     var valSize = _elemSize(valueType);
 
     var hdrLocal = context.scratchLocal(_astTypeString, 15);
@@ -2450,7 +2476,7 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     var hdr = context.scratchLocal(_astTypeString, 15);
     var keys = context.scratchLocal(_astTypeString, 16);
     var iLoc = context.scratchLocal(_astTypeString, 18);
-    var keyLoc = context.scratchLocal(keyType, 19); // i64 key
+    var keyLoc = context.scratchLocal(keyType, 19); // i64 (int) or i32 (String)
     var result = context.scratchLocal(valueType, 25);
 
     final s0 = context.stackLength;
@@ -2469,6 +2495,7 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     _emitMapScan(
       out,
       context,
+      keyType: keyType,
       hdrScratch: hdr,
       keysScratch: keys,
       iScratch: iLoc,
@@ -2593,13 +2620,13 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     );
     var keyType = mapType.keyType;
     var valueType = mapType.valueType;
-    var keySize = 8; // int key
+    var keySize = _mapKeySize(keyType);
     var valSize = _elemSize(valueType);
 
     var hdr = context.scratchLocal(_astTypeString, 15);
     var keys = context.scratchLocal(_astTypeString, 16);
     var iLoc = context.scratchLocal(_astTypeString, 18);
-    var keyLoc = context.scratchLocal(keyType, 19); // i64 key
+    var keyLoc = context.scratchLocal(keyType, 19); // i64 (int) or i32 (String)
     var valLoc = context.scratchLocal(valueType, 20);
     var found = context.scratchLocal(_astTypeString, 21);
     var newCap = context.scratchLocal(_astTypeString, 22);
@@ -2624,6 +2651,7 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     _emitMapScan(
       out,
       context,
+      keyType: keyType,
       hdrScratch: hdr,
       keysScratch: keys,
       iScratch: iLoc,
@@ -4262,6 +4290,96 @@ class WasmModuleContext {
       ),
     );
     _synthNames.add('__alloc');
+  }
+
+  /// Ensures the `__streq(i32 a, i32 b) -> i32` helper exists: returns `1` if
+  /// the two `[len:i32][utf8]` strings at pointers `a`/`b` are byte-equal, else
+  /// `0`. Used for `String`-keyed map lookups. Not exported.
+  void ensureStrEqFunction() {
+    if (_synthNames.contains('__streq')) return;
+    requiresMemory = true;
+
+    // Locals beyond the 2 params: 2=lenA, 3=i.
+    var body = BytesOutput();
+    body.write(Leb128.encodeUnsigned(1), description: "Local groups");
+    body.write(Leb128.encodeUnsigned(2), description: "i32 locals");
+    body.writeByte(WasmType.i32Type.value, description: "i32");
+
+    // if (a == b) return 1  (same pointer / interned literal)
+    body.write(Wasm.localGet(0));
+    body.write(Wasm.localGet(1));
+    body.writeByte(Wasm32.i32Equals);
+    body.write(Wasm.ifInstruction(WasmType.voidType));
+    body.write(Wasm32.i32Const(1));
+    body.writeByte(Wasm.functionReturn);
+    body.writeByte(Wasm.end);
+
+    // lenA = load(a, 0) ; if (lenA != load(b, 0)) return 0
+    body.write(Wasm.localGet(0));
+    body.write(Wasm32.i32Load(2, 0));
+    body.write(Wasm.localSet(2));
+    body.write(Wasm.localGet(2));
+    body.write(Wasm.localGet(1));
+    body.write(Wasm32.i32Load(2, 0));
+    body.writeByte(Wasm32.i32NotEquals);
+    body.write(Wasm.ifInstruction(WasmType.voidType));
+    body.write(Wasm32.i32Const(0));
+    body.writeByte(Wasm.functionReturn);
+    body.writeByte(Wasm.end);
+
+    // for (i = 0; i < lenA; i++) if (a[4+i] != b[4+i]) return 0
+    body.write(Wasm32.i32Const(0));
+    body.write(Wasm.localSet(3));
+    body.write(Wasm.block(WasmType.voidType));
+    body.write(Wasm.loop(WasmType.voidType));
+    body.write(Wasm.localGet(3));
+    body.write(Wasm.localGet(2));
+    body.writeByte(Wasm32.i32GreaterThanOrEqualsUnsigned);
+    body.write(Wasm.brIf(1));
+    body.write(Wasm.localGet(0));
+    body.write(Wasm.localGet(3));
+    body.writeByte(Wasm32.i32Add);
+    body.write(Wasm32.i32Load8U(0, 4));
+    body.write(Wasm.localGet(1));
+    body.write(Wasm.localGet(3));
+    body.writeByte(Wasm32.i32Add);
+    body.write(Wasm32.i32Load8U(0, 4));
+    body.writeByte(Wasm32.i32NotEquals);
+    body.write(Wasm.ifInstruction(WasmType.voidType));
+    body.write(Wasm32.i32Const(0));
+    body.writeByte(Wasm.functionReturn);
+    body.writeByte(Wasm.end);
+    body.write(Wasm.localGet(3));
+    body.write(Wasm32.i32Const(1));
+    body.writeByte(Wasm32.i32Add);
+    body.write(Wasm.localSet(3));
+    body.write(Wasm.br(0));
+    body.writeByte(Wasm.end); // loop
+    body.writeByte(Wasm.end); // block
+
+    body.write(Wasm32.i32Const(1)); // all bytes matched
+    body.writeByte(Wasm.end); // function end
+
+    synthFunctions.add(
+      WasmSynthFunction(
+        '__streq',
+        const [WasmType.i32Type, WasmType.i32Type],
+        const [WasmType.i32Type],
+        body,
+      ),
+    );
+    _synthNames.add('__streq');
+  }
+
+  /// Resolves the Wasm function index of a synthesized function by [name]
+  /// (placed after imports and module functions). Returns `null` if absent.
+  int? synthFunctionIndex(String name) {
+    for (var j = 0; j < synthFunctions.length; ++j) {
+      if (synthFunctions[j].name == name) {
+        return importCount + functions.length + j;
+      }
+    }
+    return null;
   }
 
   /// Resolves the Wasm function index for a module-defined function with [name]
