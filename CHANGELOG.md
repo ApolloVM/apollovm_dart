@@ -85,6 +85,10 @@
   - Increased line coverage from ~64.6% to ~70.9%.
   - Added regression tests for all the fixes above and extensive unit/integration tests for `ASTValue`, `ASTType`, `ApolloVM`, expressions, the core library, and the Wasm generator.
 
+- Dependencies:
+  - data_serializer: ^1.2.1 -> ^1.2.2
+  - test: ^1.31.0 -> ^1.31.1
+
 ## 0.1.26
 
 - `DartGrammarDefinition`:
