@@ -533,6 +533,68 @@ void main() {
       );
     });
 
+    test('await hoisting: accumulate `t = t + await f(i)` in a loop', () async {
+      var runner = await _wasmRunner(r'''
+        Future<int> f(int n) async {
+          int t = 0;
+          int i = 1;
+          while (i <= n) {
+            t = t + await hostId(i);
+            i = i + 1;
+          }
+          return t;
+        }
+      ''');
+      if (runner == null) {
+        fail('Wasm runtime not supported.');
+      }
+      runner.mapWasmAsyncFunction('hostId', const [WasmValueType.i64], (
+        args,
+      ) async {
+        await Future<void>.delayed(const Duration(milliseconds: 1));
+        return _asInt(args[0]);
+      });
+      var r = await runner.executeFunction('', 'f', positionalParameters: [4]);
+      expect(r.getValueNoContext(), equals(10)); // 1+2+3+4
+    });
+
+    test('await hoisting: `return await f() + 1` and two awaits', () async {
+      var runner = await _wasmRunner(r'''
+        Future<int> plus1(int n) async {
+          return await hostId(n) + 1;
+        }
+        Future<int> sum2(int n) async {
+          int x = await hostId(n) + await hostId(n);
+          return x;
+        }
+      ''');
+      if (runner == null) {
+        fail('Wasm runtime not supported.');
+      }
+      runner.mapWasmAsyncFunction('hostId', const [WasmValueType.i64], (
+        args,
+      ) async {
+        await Future<void>.delayed(const Duration(milliseconds: 1));
+        return _asInt(args[0]);
+      });
+      expect(
+        (await runner.executeFunction(
+          '',
+          'plus1',
+          positionalParameters: [7],
+        )).getValueNoContext(),
+        equals(8),
+      );
+      expect(
+        (await runner.executeFunction(
+          '',
+          'sum2',
+          positionalParameters: [5],
+        )).getValueNoContext(),
+        equals(10),
+      );
+    });
+
     test('a non-async Wasm function still runs synchronously', () async {
       var runner = await _wasmRunner(r'''
         int addOne(int n) {

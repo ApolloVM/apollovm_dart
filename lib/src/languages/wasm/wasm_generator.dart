@@ -3247,6 +3247,100 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     return null;
   }
 
+  bool _hasAwait(ASTExpression n) =>
+      n.descendantChildren.whereType<ASTExpressionAwait>().isNotEmpty;
+
+  /// Functionally rewrites [e], lifting each nested `await call(...)` into a
+  /// fresh temp (appended to [temps] + [hoisted] as a leaf/internal await) and
+  /// replacing it with a reference to that temp. Subtrees without awaits are
+  /// reused unchanged (no AST mutation). Returns `null` for an unsupported
+  /// expression shape containing an await.
+  ASTExpression? _hoistExpr(
+    ASTExpression e,
+    WasmModuleContext module,
+    Set<String> eligible,
+    List<_AwaitPoint> hoisted,
+    List<({String name, ASTType type})> temps,
+  ) {
+    if (e is! ASTExpressionAwait && !_hasAwait(e)) return e; // reuse as-is
+
+    if (e is ASTExpressionAwait) {
+      final call = _classifyAwaitCall(e, module, eligible);
+      if (call == null) return null;
+      final type = call.isInternal
+          ? module
+                .functionByIndex(
+                  module.functionIndex(call.name, call.args.length)!,
+                )!
+                .effectiveReturnType
+          : _astTypeInt; // host result: assume int (i64) for now
+      final tmp = '\$async_h_${temps.length}';
+      temps.add((name: tmp, type: type));
+      hoisted.add(
+        _AwaitPoint(-1, call.name, call.args, tmp, type, call.isInternal),
+      );
+      return ASTExpressionVariableAccess(ASTScopeVariable(tmp));
+    }
+    if (e is ASTExpressionOperation) {
+      final a = _hoistExpr(e.expression1, module, eligible, hoisted, temps);
+      final b = _hoistExpr(e.expression2, module, eligible, hoisted, temps);
+      if (a == null || b == null) return null;
+      return ASTExpressionOperation(a, e.operator, b);
+    }
+    if (e is ASTExpressionVariableAssignment) {
+      final v = _hoistExpr(e.expression, module, eligible, hoisted, temps);
+      if (v == null) return null;
+      return ASTExpressionVariableAssignment(e.variable, e.operator, v);
+    }
+    if (e is ASTExpressionLocalFunctionInvocation) {
+      if (e.hasChainFunctionInvocation) return null;
+      final newArgs = <ASTExpression>[];
+      for (final a in e.arguments) {
+        final h = _hoistExpr(a, module, eligible, hoisted, temps);
+        if (h == null) return null;
+        newArgs.add(h);
+      }
+      return ASTExpressionLocalFunctionInvocation(e.name, newArgs);
+    }
+    if (e is ASTExpressionNegation) {
+      final x = _hoistExpr(e.expression, module, eligible, hoisted, temps);
+      return x == null ? null : ASTExpressionNegation(x);
+    }
+    if (e is ASTExpressionNegative) {
+      final x = _hoistExpr(e.expression, module, eligible, hoisted, temps);
+      return x == null ? null : ASTExpressionNegative(x);
+    }
+    return null; // unsupported expression type containing an await
+  }
+
+  /// Rewrites a statement so its awaits are lifted to statement level (see
+  /// [_hoistExpr]). Returns the rewritten statement or `null` if unsupported.
+  ASTStatement? _hoistStatement(
+    ASTStatement s,
+    WasmModuleContext module,
+    Set<String> eligible,
+    List<_AwaitPoint> hoisted,
+    List<({String name, ASTType type})> temps,
+  ) {
+    if (s is ASTStatementVariableDeclaration && s.value != null) {
+      if (s.type is ASTTypeVar) return null;
+      final v = _hoistExpr(s.value!, module, eligible, hoisted, temps);
+      if (v == null) return null;
+      return ASTStatementVariableDeclaration(s.type, s.name, v);
+    }
+    if (s is ASTStatementReturnWithExpression) {
+      final v = _hoistExpr(s.expression, module, eligible, hoisted, temps);
+      if (v == null) return null;
+      return ASTStatementReturnWithExpression(v);
+    }
+    if (s is ASTStatementExpression) {
+      final v = _hoistExpr(s.expression, module, eligible, hoisted, temps);
+      if (v == null) return null;
+      return ASTStatementExpression(v);
+    }
+    return null;
+  }
+
   /// The await points of [f] if *all* its awaits are top-level statement awaits
   /// (the linear Asyncify shape); `null` otherwise (=> CFG path or collapse).
   List<_AwaitPoint>? _asyncifyAwaitPoints(
@@ -3365,6 +3459,17 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
             }
             return -1;
           }
+          // Control flow whose *condition* awaits is not supported (only the
+          // body may contain awaits).
+          if ((s is ASTStatementWhileLoop &&
+                  _hasAwait(s.conditionExpression)) ||
+              (s is ASTStatementForLoop && _hasAwait(s.conditionExpression)) ||
+              (s is ASTBranchIfBlock && _hasAwait(s.condition)) ||
+              (s is ASTBranchIfElseBlock && _hasAwait(s.condition)) ||
+              (s is ASTBranchIfElseIfsElseBlock && _hasAwait(s.condition))) {
+            ok = false;
+            return cur;
+          }
           // Control flow containing awaits.
           if (s is ASTStatementWhileLoop) {
             final condPc = newBb();
@@ -3456,7 +3561,39 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
             cur = joinPc;
             continue;
           }
-          // for-each, return-with-await (deeply nested): unsupported (v1).
+          // Hoist awaits nested in an expression, e.g. `t = t + await f()` or
+          // `return await f() + 1`: lift each into a temp await, then emit the
+          // rewritten statement.
+          final hoisted = <_AwaitPoint>[];
+          final rewritten = _hoistStatement(
+            s,
+            module,
+            eligible,
+            hoisted,
+            temps,
+          );
+          if (rewritten != null) {
+            sawAwait = true;
+            for (final ap in hoisted) {
+              if (ap.isInternal) {
+                final cont = newBb();
+                blocks[cur].term = _TInternal(ap, cont);
+                cur = cont;
+              } else {
+                final resume = newBb();
+                blocks[cur].term = _TLeaf(ap, resume);
+                blocks[resume].leafResume = ap;
+                cur = resume;
+              }
+            }
+            if (rewritten is ASTStatementReturn) {
+              blocks[cur].term = _TReturn(rewritten);
+              return -1;
+            }
+            blocks[cur].stmts.add(rewritten);
+            continue;
+          }
+          // for-each, awaits in conditions, etc.: unsupported.
           ok = false;
           return cur;
         }
