@@ -421,7 +421,9 @@ class TypeScriptGrammarDefinition extends TypeScriptGrammarLexer {
       (statementReturn() | statementExpression()).cast<ASTStatement>();
 
   Parser<ASTStatement> statement() =>
-      (branch() |
+      (statementTryCatch() |
+              statementThrow() |
+              branch() |
               statementForLoop() |
               statementForEach() |
               statementWhileLoop() |
@@ -432,6 +434,44 @@ class TypeScriptGrammarDefinition extends TypeScriptGrammarLexer {
               statementBlock() |
               statementExpression())
           .cast<ASTStatement>();
+
+  Parser<ASTStatementThrow> statementThrow() =>
+      (throwToken().trimHidden() &
+              ref0(expression) &
+              char(';').trimHidden().optional())
+          .map((v) => ASTStatementThrow(v[1] as ASTExpression));
+
+  Parser<ASTStatementTryCatch> statementTryCatch() =>
+      (tryToken().trimHidden() &
+              codeBlock() &
+              catchClause().star() &
+              (finallyToken().trimHidden() & codeBlock()).optional())
+          .map((v) {
+            var tryBlock = v[1] as ASTBlock;
+            var catches = (v[2] as List).cast<ASTCatchClause>();
+            var finallyOpt = v[3] as List?;
+            var finallyBlock = finallyOpt != null
+                ? finallyOpt[1] as ASTBlock
+                : null;
+            return ASTStatementTryCatch(tryBlock, catches, finallyBlock);
+          });
+
+  /// TypeScript `catch (e[: Type]) { }` (binding and type optional;
+  /// TS only allows `any`/`unknown` annotations, so the type is ignored).
+  Parser<ASTCatchClause> catchClause() =>
+      (catchToken().trimHidden() &
+              (char('(').trimHidden() &
+                      identifier().trimHidden() &
+                      (char(':').trimHidden() & type()).optional() &
+                      char(')').trimHidden())
+                  .optional() &
+              codeBlock())
+          .map((v) {
+            var bind = v[1] as List?;
+            var varName = bind != null ? bind[1] as String : null;
+            var block = v[2] as ASTBlock;
+            return ASTCatchClause(null, varName, block);
+          });
 
   Parser<ASTStatement> statementSimple() =>
       (statementVariableDeclaration() | statementExpression())

@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="Try/Catch/Finally and Throw">
+    <source language="dart">
+        <![CDATA[
+
+            class Calc {
+              String check(int x) {
+                try {
+                  if (x < 0) {
+                    throw 'negative';
+                  }
+                  return 'ok';
+                } catch (e) {
+                  return 'caught';
+                } finally {
+                  print('done');
+                }
+              }
+            }
+
+        ]]>
+    </source>
+    <call class="Calc" function="check" return="ok">
+        [ 5 ]
+    </call>
+    <output>
+        ["done"]
+    </output>
+    <call class="Calc" function="check" return="caught">
+        [ -1 ]
+    </call>
+    <output>
+        ["done"]
+    </output>
+
+    <source-generated language="dart"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+class Calc {
+
+  String check(int x) {
+    try {
+      if (x < 0) {
+          throw 'negative';
+      }
+
+      return 'ok';
+    } catch (e) {
+      return 'caught';
+    } finally {
+      print('done');
+    }
+  }
+
+}
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+
+    <source-generated language="java11"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+class Calc {
+
+  String check(int x) {
+    try {
+      if (x < 0) {
+          throw "negative";
+      }
+
+      return "ok";
+    } catch (Exception e) {
+      return "caught";
+    } finally {
+      print("done");
+    }
+  }
+
+}
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+
+    <source-generated language="javascript"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+class Calc {
+
+  check(x) {
+    try {
+      if (x < 0) {
+          throw 'negative';
+      }
+
+      return 'ok';
+    } catch (e) {
+      return 'caught';
+    } finally {
+      print('done');
+    }
+  }
+
+}
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+
+</test>

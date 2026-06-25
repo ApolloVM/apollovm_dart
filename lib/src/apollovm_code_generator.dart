@@ -428,6 +428,20 @@ abstract class ApolloCodeGenerator
         indent: indent,
         headIndented: headIndented,
       );
+    } else if (statement is ASTStatementThrow) {
+      return generateASTStatementThrow(
+        statement,
+        out: out,
+        indent: indent,
+        headIndented: headIndented,
+      );
+    } else if (statement is ASTStatementTryCatch) {
+      return generateASTStatementTryCatch(
+        statement,
+        out: out,
+        indent: indent,
+        headIndented: headIndented,
+      );
     }
 
     throw UnsupportedError("Can't handle statement: $statement");
@@ -588,6 +602,82 @@ abstract class ApolloCodeGenerator
     out.write('}');
 
     return out;
+  }
+
+  StringBuffer generateASTStatementThrow(
+    ASTStatementThrow statement, {
+    StringBuffer? out,
+    String indent = '',
+    bool headIndented = true,
+  }) {
+    out ??= newOutput();
+
+    if (headIndented) out.write(indent);
+
+    out.write('throw ');
+    generateASTExpression(
+      statement.expression,
+      out: out,
+      indent: indent,
+      headIndented: false,
+    );
+    out.write(';');
+
+    return out;
+  }
+
+  StringBuffer generateASTStatementTryCatch(
+    ASTStatementTryCatch tryCatch, {
+    StringBuffer? out,
+    String indent = '',
+    bool headIndented = true,
+  }) {
+    out ??= newOutput();
+
+    if (headIndented) out.write(indent);
+
+    out.write('try {\n');
+    out.write(
+      generateASTBlock(tryCatch.tryBlock, indent: indent, withBrackets: false),
+    );
+    out.write(indent);
+    out.write('}');
+
+    for (var catchClause in tryCatch.catches) {
+      out.write(' ');
+      out.write(generateASTCatchClauseHeader(catchClause));
+      out.write(' {\n');
+      out.write(
+        generateASTBlock(
+          catchClause.block,
+          indent: indent,
+          withBrackets: false,
+        ),
+      );
+      out.write(indent);
+      out.write('}');
+    }
+
+    var finallyBlock = tryCatch.finallyBlock;
+    if (finallyBlock != null) {
+      out.write(' finally {\n');
+      out.write(
+        generateASTBlock(finallyBlock, indent: indent, withBrackets: false),
+      );
+      out.write(indent);
+      out.write('}');
+    }
+
+    return out;
+  }
+
+  /// Renders the catch-clause header (everything before the `{` block), e.g.
+  /// `catch (e)` or `on T catch (e)`. The base emits an untyped `catch (e)`
+  /// (used by JavaScript/TypeScript); language generators override this to
+  /// emit their idiomatic, typed form.
+  String generateASTCatchClauseHeader(ASTCatchClause catchClause) {
+    var name = catchClause.variableName ?? 'e';
+    return 'catch ($name)';
   }
 
   @override

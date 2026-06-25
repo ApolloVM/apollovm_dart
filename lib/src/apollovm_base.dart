@@ -47,7 +47,7 @@ import 'languages/wasm/wasm_runner.dart';
 /// The Apollo VM.
 class ApolloVM implements VMTypeResolver {
   // ignore: non_constant_identifier_names
-  static final String VERSION = '0.1.32';
+  static final String VERSION = '0.1.33';
 
   static int _idCount = 0;
 
@@ -1283,6 +1283,17 @@ class ApolloVMNullPointerException extends ApolloVMRuntimeError {
 
   @override
   String toString() => 'ApolloVMNullPointerException: $message';
+}
+
+/// A value thrown by a user `throw` statement, carrying the thrown [value].
+/// Caught by an `ASTStatementTryCatch`.
+class ApolloVMThrownException implements Exception {
+  final ASTValue value;
+
+  ApolloVMThrownException(this.value);
+
+  @override
+  String toString() => 'ApolloVMThrownException: $value';
 }
 
 /// An VM Object instance, with respective fields for class [type].

@@ -284,13 +284,52 @@ class KotlinGrammarDefinition extends KotlinGrammarLexer {
       (statementReturn() | statementExpression()).cast<ASTStatement>();
 
   Parser<ASTStatement> statement() =>
-      (branch() |
+      (statementTryCatch() |
+              statementThrow() |
+              branch() |
               statementForEach() |
               statementWhileLoop() |
               statementReturn() |
               statementVariableDeclaration() |
               statementExpression())
           .cast<ASTStatement>();
+
+  Parser<ASTStatementThrow> statementThrow() =>
+      (throwToken().trimHidden() &
+              ref0(expression) &
+              char(';').trimHidden().optional())
+          .map((v) => ASTStatementThrow(v[1] as ASTExpression));
+
+  Parser<ASTStatementTryCatch> statementTryCatch() =>
+      (tryToken().trimHidden() &
+              codeBlock() &
+              catchClause().star() &
+              (finallyToken().trimHidden() & codeBlock()).optional())
+          .map((v) {
+            var tryBlock = v[1] as ASTBlock;
+            var catches = (v[2] as List).cast<ASTCatchClause>();
+            var finallyOpt = v[3] as List?;
+            var finallyBlock = finallyOpt != null
+                ? finallyOpt[1] as ASTBlock
+                : null;
+            return ASTStatementTryCatch(tryBlock, catches, finallyBlock);
+          });
+
+  /// Kotlin `catch (e: Type) { }`.
+  Parser<ASTCatchClause> catchClause() =>
+      (catchToken().trimHidden() &
+              char('(').trimHidden() &
+              identifier().trimHidden() &
+              char(':').trimHidden() &
+              type() &
+              char(')').trimHidden() &
+              codeBlock())
+          .map((v) {
+            var varName = v[2] as String;
+            var exceptionType = v[4] as ASTType;
+            var block = v[6] as ASTBlock;
+            return ASTCatchClause(exceptionType, varName, block);
+          });
 
   Parser<ASTStatementForEach> statementForEach() =>
       (forToken().trimHidden() &

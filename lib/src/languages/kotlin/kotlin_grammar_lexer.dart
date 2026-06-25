@@ -49,6 +49,14 @@ abstract class KotlinGrammarLexer extends BaseGrammarLexer {
 
   Parser whileToken() => ref1(token, 'while');
 
+  Parser tryToken() => ref1(token, 'try');
+
+  Parser catchToken() => ref1(token, 'catch');
+
+  Parser finallyToken() => ref1(token, 'finally');
+
+  Parser throwToken() => ref1(token, 'throw');
+
   // -----------------------------------------------------------------
   // Number tokens.
   // -----------------------------------------------------------------

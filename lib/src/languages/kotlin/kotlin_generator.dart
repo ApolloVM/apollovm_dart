@@ -39,6 +39,14 @@ class ApolloCodeGeneratorKotlin extends ApolloCodeGenerator {
   }
 
   @override
+  String generateASTCatchClauseHeader(ASTCatchClause catchClause) {
+    var name = catchClause.variableName ?? 'e';
+    var type = catchClause.exceptionType;
+    var typeStr = type != null ? '${generateASTType(type)}' : 'Throwable';
+    return 'catch ($name: $typeStr)';
+  }
+
+  @override
   String normalizeTypeFunction(String typeName, String functionName) {
     switch (typeName) {
       case 'int':
