@@ -12,6 +12,7 @@ import 'package:data_serializer/data_serializer.dart';
 import '../../apollovm_code_storage.dart';
 import '../../apollovm_generated_output.dart';
 import '../../apollovm_generator.dart';
+import '../../apollovm_parser.dart';
 import '../../ast/apollovm_ast_expression.dart';
 import '../../ast/apollovm_ast_statement.dart';
 import '../../ast/apollovm_ast_toplevel.dart';
@@ -1612,6 +1613,20 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     return out;
   }
 
+  // TODO(async): Lower `await`/`async` to a resumable continuation (state
+  // machine) that yields to the host event loop (e.g. Asyncify or JSPI).
+  // Wasm has no native async/await, so this is deferred.
+  @override
+  BytesOutput generateASTExpressionAwait(
+    ASTExpressionAwait expression, {
+    BytesOutput? out,
+    WasmContext? context,
+  }) {
+    throw UnsupportedSyntaxError(
+      'Wasm async/await generation not yet supported',
+    );
+  }
+
   ASTTypeDouble _fixStackOpsAsFloat64(
     ASTType stackType1,
     ASTType stackType2,
@@ -3002,6 +3017,13 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     out ??= newOutput();
     context ??= WasmContext();
 
+    if (f.modifiers.isAsync) {
+      // See generateASTExpressionAwait: Wasm async is deferred.
+      throw UnsupportedSyntaxError(
+        "Wasm async/await generation not yet supported (function: '${f.name}')",
+      );
+    }
+
     if (module != null) {
       context.module = module;
     }
@@ -3768,6 +3790,8 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
         out: out,
         context: context,
       );
+    } else if (expression is ASTExpressionAwait) {
+      return generateASTExpressionAwait(expression, out: out, context: context);
     } else if (expression is ASTExpressionLocalFunctionInvocation) {
       return generateASTExpressionLocalFunctionInvocation(
         expression,

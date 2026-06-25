@@ -264,6 +264,8 @@ abstract class ApolloGenerator<
       return generateASTExpressionNegation(expression, out: out);
     } else if (expression is ASTExpressionNegative) {
       return generateASTExpressionNegative(expression, out: out);
+    } else if (expression is ASTExpressionAwait) {
+      return generateASTExpressionAwait(expression, out: out);
     } else if (expression is ASTExpressionLocalFunctionInvocation) {
       return generateASTExpressionLocalFunctionInvocation(expression, out: out);
     } else if (expression is ASTExpressionObjectFunctionInvocation) {
@@ -300,6 +302,8 @@ abstract class ApolloGenerator<
   O generateASTExpressionNegation(ASTExpressionNegation expression, {O? out});
 
   O generateASTExpressionNegative(ASTExpressionNegative expression, {O? out});
+
+  O generateASTExpressionAwait(ASTExpressionAwait expression, {O? out});
 
   O generateASTExpressionGroupFunctionInvocation(
     ASTExpressionGroupFunctionInvocation expression, {

@@ -1,3 +1,29 @@
+## 0.1.30
+
+- `async`/`await` support (real asynchrony) — Dart parse/run/translate and
+  JavaScript translation:
+  - AST: new `ASTModifiers.isAsync`, new `ASTExpressionAwait` expression, and a
+    new abstract `generateASTExpressionAwait` generator hook. Reuses the
+    existing `ASTTypeFuture`/`ASTValueFuture` (added `ASTTypeFuture.futureValueType`).
+  - Runtime: an `async` function returns a first-class future *immediately*
+    (a non-awaited call yields an `ASTValueFuture` that can be stored and
+    awaited later); `await` suspends on real Dart `Future`s, including those
+    returned by external functions declared with a `Future<...>` return type.
+    `ASTEntryPointBlock.execute` awaits the entry future before tearing down the
+    entry-point context (external mapper, current context).
+  - Dart grammar: parses the `async` body keyword (after the parameter list) and
+    the `await` prefix expression; `Future<T>` types parse to `ASTTypeFuture`;
+    the `await`/`async` contextual keywords no longer shadow identifiers
+    (e.g. `awaiter`) or get read as a type name.
+  - Code generation: Dart emits `... ) async {` and `await `; JavaScript emits
+    `async function` / `async name(` and `await `.
+  - Kotlin and Wasm async/await translation is deferred and fails loudly via
+    `UnsupportedSyntaxError` (Wasm has a `TODO(async)` documenting the intended
+    state-machine/host-yield lowering).
+  - Tests in `test/apollovm_async_test.dart` cover parse, real-suspension
+    ordering, await chains, top-level async, the identifier guard, and
+    Dart/JS/Kotlin translation.
+
 ## 0.1.29
 
 - Lua language support (parse, run, and translate):

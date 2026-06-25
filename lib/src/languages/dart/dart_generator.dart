@@ -201,6 +201,10 @@ class ApolloCodeGeneratorDart extends ApolloCodeGenerator {
     }
     out.write(')');
 
+    if (f is ASTFunctionDeclaration && f.modifiers.isAsync) {
+      out.write(' async');
+    }
+
     var blockStr = blockCode.toString();
     var emptyBlock = blockStr.trim().isEmpty;
 
