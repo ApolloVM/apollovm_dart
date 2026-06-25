@@ -115,8 +115,7 @@ class TypeScriptGrammarDefinition extends TypeScriptGrammarLexer {
           });
 
   Parser<ASTType> arrayType() =>
-      (identifier() &
-              (char('[').trimHidden() & char(']').trimHidden()).plus())
+      (identifier() & (char('[').trimHidden() & char(']').trimHidden()).plus())
           .map((v) {
             var elem = getTypeByName(v[0] as String);
             var dims = (v[1] as List).length;

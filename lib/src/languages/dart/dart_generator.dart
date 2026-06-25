@@ -263,7 +263,8 @@ class ApolloCodeGeneratorDart extends ApolloCodeGenerator {
     var isAbstractMethod =
         f is ASTFunctionDeclaration && f.modifiers.isAbstract;
 
-    if (isAbstractMethod || (emptyBlock && f is ASTClassConstructorDeclaration)) {
+    if (isAbstractMethod ||
+        (emptyBlock && f is ASTClassConstructorDeclaration)) {
       out.write(';\n\n');
     } else {
       out.write(' {\n');

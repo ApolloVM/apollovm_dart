@@ -556,7 +556,11 @@ class ApolloCodeGeneratorTypeScript extends ApolloCodeGenerator {
   }
 
   /// TypeScript arrays are rendered as `T[]` (1D), `T[][]` (2D), `T[][][]` (3D).
-  StringBuffer _writeArrayType(ASTType elementType, int dims, StringBuffer out) {
+  StringBuffer _writeArrayType(
+    ASTType elementType,
+    int dims,
+    StringBuffer out,
+  ) {
     out.write(generateASTType(elementType));
     out.write('[]' * dims);
     return out;
