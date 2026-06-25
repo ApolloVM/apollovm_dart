@@ -29,6 +29,17 @@
 
 ## 0.1.30
 
+- Wasm Asyncify: **awaits inside control flow** (`if`/`if-else`/`else if`,
+  `while`, `for`), plus `return await ...` and `x = await ...`. The generator
+  lowers such async functions into a CFG of basic blocks and emits a
+  program-counter state machine — a `loop` + `br_table` dispatch over a `$pc`
+  local, with `$pc` spilled/restored on the Asyncify frame stack alongside the
+  locals. Awaits become block boundaries; leaf (host) and internal (module-
+  async) awaits both work inside loops/branches, composing with multi-frame
+  unwinding. Functions whose awaits are all top-level keep the linear path;
+  unsupported shapes (`for-each`, awaits nested deeper in expressions) fall back
+  to synchronous-collapse. Tested end-to-end through `ApolloRunnerWasm`.
+
 - `async`/`await` support (real asynchrony) — Dart parse/run/translate and
   JavaScript translation:
   - AST: new `ASTModifiers.isAsync`, new `ASTExpressionAwait` expression, and a

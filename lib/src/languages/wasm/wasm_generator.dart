@@ -3048,20 +3048,33 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       context.module = module;
     }
 
-    // Real `async`/`await` suspension (Asyncify): if this async function has a
-    // single statement-level `await` of an external (host) call, emit the
-    // unwind/rewind state machine so it can really suspend. Anything more
-    // complex falls back to the synchronous-collapse path below.
+    // Real `async`/`await` suspension (Asyncify): emit the unwind/rewind state
+    // machine so an async function can really suspend. The linear path handles
+    // top-level statement awaits; the CFG path handles awaits inside control
+    // flow (`while`). Anything else falls back to synchronous-collapse below.
     if (f.modifiers.isAsync && module != null) {
-      var match = _matchAsyncify(f, module);
-      if (match != null) {
-        return _generateAsyncifyFunction(
-          f,
-          match,
-          out: out,
-          context: context,
-          module: module,
-        );
+      final eligible = _asyncifyEligible(module);
+      if (eligible.contains(f.name)) {
+        final points = _asyncifyAwaitPoints(f, module, eligible);
+        if (points != null) {
+          return _generateAsyncifyFunction(
+            f,
+            _AsyncifyMatch(points),
+            out: out,
+            context: context,
+            module: module,
+          );
+        }
+        final cfg = _buildAsyncifyCfg(f, module, eligible);
+        if (cfg != null) {
+          return _generateAsyncifyCfgFunction(
+            f,
+            cfg,
+            out: out,
+            context: context,
+            module: module,
+          );
+        }
       }
     }
 
@@ -3177,6 +3190,65 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
   /// (an await nested in control flow or another expression, multiple awaits in
   /// one statement, awaiting a not-yet-eligible module function, or a `var`-
   /// typed result the Wasm backend can't infer).
+  /// If [s] is a statement-level await (`T v = await call(...)` or
+  /// `await call(...)`) of a supported callee, returns its await point (with
+  /// `stmtIndex` unset = -1); otherwise `null`.
+  /// Classifies a directly-awaited call: `await name(args)` where `name` is a
+  /// host import (leaf) or an eligible module function (internal). `null` if the
+  /// awaited expression isn't a supported call.
+  ({String name, List<ASTExpression> args, bool isInternal})?
+  _classifyAwaitCall(
+    ASTExpressionAwait aw,
+    WasmModuleContext module,
+    Set<String> eligible,
+  ) {
+    final inner = aw.expression;
+    if (inner is! ASTExpressionLocalFunctionInvocation) return null;
+    final name = inner.name;
+    final args = inner.arguments;
+    if (name == 'print') return null;
+    final isInternal = module.functionIndex(name, args.length) != null;
+    if (isInternal && !eligible.contains(name)) return null;
+    return (name: name, args: args, isInternal: isInternal);
+  }
+
+  _AwaitPoint? _statementAwaitPoint(
+    ASTStatement s,
+    WasmModuleContext module,
+    Set<String> eligible,
+  ) {
+    final awaitsInS = s.descendantChildren
+        .whereType<ASTExpressionAwait>()
+        .toList();
+    if (awaitsInS.length != 1) return null;
+
+    final aw = awaitsInS.first;
+    final call = _classifyAwaitCall(aw, module, eligible);
+    if (call == null) return null;
+    final name = call.name;
+    final args = call.args;
+    final isInternal = call.isInternal;
+
+    if (s is ASTStatementVariableDeclaration && identical(s.value, aw)) {
+      if (s.type is ASTTypeVar) return null; // explicit type required
+      return _AwaitPoint(-1, name, args, s.name, s.type, isInternal);
+    } else if (s is ASTStatementExpression) {
+      final e = s.expression;
+      if (identical(e, aw)) {
+        return _AwaitPoint(-1, name, args, null, null, isInternal); // discarded
+      }
+      // `x = await f(...)`: assign the awaited value into an existing local.
+      if (e is ASTExpressionVariableAssignment &&
+          e.operator == ASTAssignmentOperator.set &&
+          identical(e.expression, aw)) {
+        return _AwaitPoint(-1, name, args, e.variable.name, null, isInternal);
+      }
+    }
+    return null;
+  }
+
+  /// The await points of [f] if *all* its awaits are top-level statement awaits
+  /// (the linear Asyncify shape); `null` otherwise (=> CFG path or collapse).
   List<_AwaitPoint>? _asyncifyAwaitPoints(
     ASTFunctionDeclaration f,
     WasmModuleContext module,
@@ -3188,46 +3260,232 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
 
     for (var i = 0; i < stmts.length; i++) {
       final s = stmts[i];
-      final awaitsInS = s.descendantChildren
-          .whereType<ASTExpressionAwait>()
-          .toList();
-      if (awaitsInS.isEmpty) continue;
-      if (awaitsInS.length != 1) return null; // >1 await in one statement
-
-      final aw = awaitsInS.first;
-      final inner = aw.expression;
-      if (inner is! ASTExpressionLocalFunctionInvocation) return null;
-
-      final name = inner.name;
-      final args = inner.arguments;
-      if (name == 'print') return null;
-
-      // Internal frame (awaiting a module function) vs leaf (host import).
-      final isInternal = module.functionIndex(name, args.length) != null;
-      if (isInternal && !eligible.contains(name)) return null;
-
-      String? resultVar;
-      ASTType? resultType;
-      if (s is ASTStatementVariableDeclaration && identical(s.value, aw)) {
-        if (s.type is ASTTypeVar) return null; // explicit type required
-        resultVar = s.name;
-        resultType = s.type;
-      } else if (s is ASTStatementExpression && identical(s.expression, aw)) {
-        // discarded result
-      } else {
-        return null; // await not a clean top-level statement
+      if (s.descendantChildren.whereType<ASTExpressionAwait>().isEmpty) {
+        continue;
       }
-
-      points.add(_AwaitPoint(i, name, args, resultVar, resultType, isInternal));
+      final ap = _statementAwaitPoint(s, module, eligible);
+      if (ap == null) return null; // await not a clean top-level statement
+      points.add(
+        _AwaitPoint(
+          i,
+          ap.calleeName,
+          ap.args,
+          ap.resultVarName,
+          ap.resultType,
+          ap.isInternal,
+        ),
+      );
     }
 
     if (points.isEmpty) return null;
     return points;
   }
 
-  /// Fixed-point set of Asyncify-eligible function names: async functions whose
-  /// awaits all conform and whose awaited module functions are themselves
-  /// eligible. Computed once per module.
+  /// Lowers [f] into a CFG of basic blocks for the Asyncify PC state machine,
+  /// covering awaits inside control flow (`if`/`if-else`/`else if`, `while`,
+  /// `for`) and `return await ...`. Returns `null` for shapes that don't
+  /// require the CFG (no awaits) or that it doesn't support (`for-each`,
+  /// `break`/`continue`, awaits nested deeper in expressions).
+  _Cfg? _buildAsyncifyCfg(
+    ASTFunctionDeclaration f,
+    WasmModuleContext module,
+    Set<String> eligible,
+  ) {
+    if (!f.modifiers.isAsync) return null;
+
+    final blocks = <_Bb>[];
+    final temps = <({String name, ASTType type})>[];
+    int newBb() {
+      final b = _Bb(blocks.length);
+      blocks.add(b);
+      return b.pc;
+    }
+
+    var ok = true;
+    var sawAwait = false;
+
+    // Lowers [stmts] starting at block [cur]; returns the block where control
+    // continues, or -1 if it returned (no fall-through).
+    int lower(List<ASTStatement> stmts, int cur, bool inControl) {
+      for (final s in stmts) {
+        if (!ok) return cur;
+
+        final hasAwait = s.descendantChildren
+            .whereType<ASTExpressionAwait>()
+            .isNotEmpty;
+
+        if (hasAwait) {
+          final ap = _statementAwaitPoint(s, module, eligible);
+          if (ap != null) {
+            sawAwait = true;
+            if (ap.isInternal) {
+              final cont = newBb();
+              blocks[cur].term = _TInternal(ap, cont);
+              cur = cont;
+            } else {
+              final resume = newBb();
+              blocks[cur].term = _TLeaf(ap, resume);
+              blocks[resume].leafResume = ap;
+              cur = resume;
+            }
+            continue;
+          }
+          // `return await f(...)`: await into a synthetic temp, then return it.
+          if (s is ASTStatementReturnWithExpression &&
+              s.expression is ASTExpressionAwait) {
+            final call = _classifyAwaitCall(
+              s.expression as ASTExpressionAwait,
+              module,
+              eligible,
+            );
+            if (call == null) {
+              ok = false;
+              return cur;
+            }
+            sawAwait = true;
+            final tmp = '\$async_ret_${temps.length}';
+            temps.add((name: tmp, type: f.effectiveReturnType));
+            final rap = _AwaitPoint(
+              -1,
+              call.name,
+              call.args,
+              tmp,
+              f.effectiveReturnType,
+              call.isInternal,
+            );
+            if (rap.isInternal) {
+              final ret = newBb();
+              blocks[cur].term = _TInternal(rap, ret);
+              blocks[ret].term = _TReturnLocal(tmp);
+            } else {
+              final resume = newBb();
+              blocks[cur].term = _TLeaf(rap, resume);
+              blocks[resume].leafResume = rap;
+              blocks[resume].term = _TReturnLocal(tmp);
+            }
+            return -1;
+          }
+          // Control flow containing awaits.
+          if (s is ASTStatementWhileLoop) {
+            final condPc = newBb();
+            blocks[cur].term = _TGoto(condPc);
+            final bodyPc = newBb();
+            final exitPc = newBb();
+            blocks[condPc].term = _TBranch(
+              s.conditionExpression,
+              bodyPc,
+              exitPc,
+            );
+            final bodyExit = lower(s.loopBlock.statements, bodyPc, true);
+            if (bodyExit >= 0) blocks[bodyExit].term = _TGoto(condPc);
+            cur = exitPc;
+            continue;
+          }
+          if (s is ASTStatementForLoop) {
+            blocks[cur].stmts.add(s.initStatement);
+            final condPc = newBb();
+            blocks[cur].term = _TGoto(condPc);
+            final bodyPc = newBb();
+            final exitPc = newBb();
+            blocks[condPc].term = _TBranch(
+              s.conditionExpression,
+              bodyPc,
+              exitPc,
+            );
+            final bodyExit = lower(s.loopBlock.statements, bodyPc, true);
+            if (bodyExit >= 0) {
+              blocks[bodyExit].stmts.add(
+                ASTStatementExpression(s.continueExpression),
+              );
+              blocks[bodyExit].term = _TGoto(condPc);
+            }
+            cur = exitPc;
+            continue;
+          }
+          if (s is ASTBranchIfBlock) {
+            final thenPc = newBb();
+            final joinPc = newBb();
+            blocks[cur].term = _TBranch(s.condition, thenPc, joinPc);
+            final thenExit = lower(s.block.statements, thenPc, true);
+            if (thenExit >= 0) blocks[thenExit].term = _TGoto(joinPc);
+            cur = joinPc;
+            continue;
+          }
+          if (s is ASTBranchIfElseBlock) {
+            final thenPc = newBb();
+            final elsePc = s.blockElse != null ? newBb() : -1;
+            final joinPc = newBb();
+            blocks[cur].term = _TBranch(
+              s.condition,
+              thenPc,
+              elsePc >= 0 ? elsePc : joinPc,
+            );
+            final thenExit = lower(s.blockIf.statements, thenPc, true);
+            if (thenExit >= 0) blocks[thenExit].term = _TGoto(joinPc);
+            if (elsePc >= 0) {
+              final elseExit = lower(s.blockElse!.statements, elsePc, true);
+              if (elseExit >= 0) blocks[elseExit].term = _TGoto(joinPc);
+            }
+            cur = joinPc;
+            continue;
+          }
+          if (s is ASTBranchIfElseIfsElseBlock) {
+            final joinPc = newBb();
+            final arms = <({ASTExpression cond, ASTBlock block})>[
+              (cond: s.condition, block: s.blockIf),
+              for (final e in s.blocksElseIf)
+                (cond: e.condition, block: e.block),
+            ];
+            var condCur = cur;
+            for (var ai = 0; ai < arms.length; ai++) {
+              final isLast = ai == arms.length - 1;
+              final thenPc = newBb();
+              final elsePc = isLast
+                  ? (s.blockElse != null ? newBb() : joinPc)
+                  : newBb();
+              blocks[condCur].term = _TBranch(arms[ai].cond, thenPc, elsePc);
+              final thenExit = lower(arms[ai].block.statements, thenPc, true);
+              if (thenExit >= 0) blocks[thenExit].term = _TGoto(joinPc);
+              if (isLast && s.blockElse != null) {
+                final elseExit = lower(s.blockElse!.statements, elsePc, true);
+                if (elseExit >= 0) blocks[elseExit].term = _TGoto(joinPc);
+              } else if (!isLast) {
+                condCur = elsePc; // next arm's condition evaluates here
+              }
+            }
+            cur = joinPc;
+            continue;
+          }
+          // for-each, return-with-await (deeply nested): unsupported (v1).
+          ok = false;
+          return cur;
+        }
+
+        // Straight-line (incl. await-free control flow); a `return` ends control.
+        if (s is ASTStatementReturn) {
+          blocks[cur].term = _TReturn(s);
+          return -1;
+        }
+        blocks[cur].stmts.add(s);
+      }
+      return cur;
+    }
+
+    final exit = lower(f.statements, newBb(), false);
+    if (!ok || !sawAwait) return null;
+
+    if (exit >= 0 && blocks[exit].term == null) {
+      blocks[exit].term = _TReturnEnd();
+    }
+    for (final b in blocks) {
+      b.term ??= _TReturnEnd();
+    }
+    return _Cfg(blocks, temps);
+  }
+
+  /// Fixed-point set of Asyncify-eligible function names: async functions
+  /// transformable by the linear or CFG path whose awaited module functions are
+  /// themselves eligible. Computed once per module.
   Set<String> _asyncifyEligible(WasmModuleContext module) {
     var cached = module.asyncifyEligible;
     if (cached != null) return cached;
@@ -3238,7 +3496,8 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       changed = false;
       for (var f in module.functions) {
         if (eligible.contains(f.name)) continue;
-        if (_asyncifyAwaitPoints(f, module, eligible) != null) {
+        if (_asyncifyAwaitPoints(f, module, eligible) != null ||
+            _buildAsyncifyCfg(f, module, eligible) != null) {
           eligible.add(f.name);
           changed = true;
         }
@@ -3246,17 +3505,6 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     }
 
     return module.asyncifyEligible = eligible;
-  }
-
-  _AsyncifyMatch? _matchAsyncify(
-    ASTFunctionDeclaration f,
-    WasmModuleContext module,
-  ) {
-    final eligible = _asyncifyEligible(module);
-    if (!eligible.contains(f.name)) return null;
-    final points = _asyncifyAwaitPoints(f, module, eligible);
-    if (points == null) return null;
-    return _AsyncifyMatch(points);
   }
 
   /// Emits the Asyncify state machine for a [match]ed async function: a rewind
@@ -3368,7 +3616,7 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     List<int> loadResultInto(_AwaitPoint p) {
       if (p.resultVarName == null) return const [];
       final rv = context.getLocalVariable(p.resultVarName!)!;
-      final rk = p.resultType!.wasmType;
+      final rk = (p.resultType ?? rv.type).wasmType;
       return [
         ...Wasm32.i32Const(0),
         if (rk == WasmType.f64Type)
@@ -3576,6 +3824,339 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     out.writeBytesLeb128Block([
       outBody,
     ], description: "Async function (asyncify)");
+    return out;
+  }
+
+  /// Emits the control-flow-aware Asyncify state machine for [cfg]: a `loop` +
+  /// `br_table` dispatch over a `$pc` local, with `$pc` and locals spilled to
+  /// the Asyncify frame stack at each suspension (see `_buildAsyncifyCfg`).
+  BytesOutput _generateAsyncifyCfgFunction(
+    ASTFunctionDeclaration f,
+    _Cfg cfg, {
+    required BytesOutput out,
+    required WasmContext context,
+    required WasmModuleContext module,
+  }) {
+    module.requiresAsyncify = true;
+    module.requiresMemory = true;
+    module.asyncifyFunctionNames.add(f.name);
+
+    const stateOff = WasmModuleContext.asyncifyStateOffset;
+    const spOff = WasmModuleContext.asyncifyStackPointerOffset;
+    const resultOff = WasmModuleContext.asyncifyResultOffset;
+
+    final returnType = f.effectiveReturnType;
+    final return0 = context.returnsLength;
+    context.returnsPush(returnType, "async-cfg `${f.name}` -> $returnType");
+
+    final userLocals = <({int index, ASTType type})>[];
+    for (var v in f.parameters.declaredVariables()) {
+      userLocals.add((
+        index: context.addLocalVariable(v.key, v.value),
+        type: v.value,
+      ));
+    }
+    final declaredLocals = f.statements.declaredVariables();
+    for (var v in declaredLocals) {
+      userLocals.add((
+        index: context.addLocalVariable(v.key, v.value),
+        type: v.value,
+      ));
+    }
+    // Synthetic temps (e.g. for `return await ...`) are spilled like locals.
+    for (var t in cfg.temps) {
+      userLocals.add((
+        index: context.addLocalVariable(t.name, t.type),
+        type: t.type,
+      ));
+    }
+    final pcIdx = context.addLocalVariable('\$asyncify_pc', _astTypeInt32);
+    final frameSize = 8 + userLocals.length * 8;
+
+    List<int> defaultConst(ASTType t) {
+      final kind = t.wasmType;
+      if (kind == WasmType.voidType) return const [];
+      if (kind == WasmType.f64Type) return Wasm64.f64Const(0);
+      if (kind == WasmType.i32Type) return Wasm32.i32Const(0);
+      return Wasm64.i64Const(0);
+    }
+
+    List<int> loadSP() => [...Wasm32.i32Const(0), ...Wasm32.i32Load(2, spOff)];
+
+    List<int> moveSP({required bool sub}) => [
+      ...Wasm32.i32Const(0),
+      ...loadSP(),
+      ...Wasm32.i32Const(frameSize),
+      if (sub) Wasm32.i32Subtract else Wasm32.i32Add,
+      ...Wasm32.i32Store(2, spOff),
+    ];
+
+    List<int> spillFrame(int idx, ASTType t, int frameOff) {
+      final kind = t.wasmType;
+      return [
+        ...loadSP(),
+        ...Wasm32.i32Const(frameOff),
+        Wasm32.i32Add,
+        ...Wasm.localGet(idx),
+        if (kind == WasmType.f64Type)
+          ...Wasm64.f64Store(FloatAlign.align3, 0)
+        else if (kind == WasmType.i32Type)
+          ...Wasm32.i32Store(2, 0)
+        else
+          ...Wasm64.i64Store(3, 0),
+      ];
+    }
+
+    List<int> restoreFrame(int idx, ASTType t, int frameOff) {
+      final kind = t.wasmType;
+      return [
+        ...loadSP(),
+        ...Wasm32.i32Const(frameOff),
+        Wasm32.i32Add,
+        if (kind == WasmType.f64Type)
+          ...Wasm64.f64Load(FloatAlign.align3, 0)
+        else if (kind == WasmType.i32Type)
+          ...Wasm32.i32Load(2, 0)
+        else
+          ...Wasm64.i64Load(3, 0),
+        ...Wasm.localSet(idx),
+      ];
+    }
+
+    List<int> loadResultInto(_AwaitPoint p) {
+      if (p.resultVarName == null) return const [];
+      final rv = context.getLocalVariable(p.resultVarName!)!;
+      final rk = (p.resultType ?? rv.type).wasmType;
+      return [
+        ...Wasm32.i32Const(0),
+        if (rk == WasmType.f64Type)
+          ...Wasm64.f64Load(FloatAlign.align3, resultOff)
+        else if (rk == WasmType.i32Type)
+          ...Wasm32.i32Load(2, resultOff)
+        else
+          ...Wasm64.i64Load(3, resultOff),
+        ...Wasm.localSet(rv.index),
+      ];
+    }
+
+    final body = newOutput();
+
+    // Suspend: push the frame (resume `$pc` + locals), advance SP, flag
+    // unwound, and return a default value.
+    void emitSuspend(int resumePc) {
+      body.write([
+        ...loadSP(),
+        ...Wasm32.i32Const(resumePc),
+        ...Wasm32.i32Store(2, 0), // frame[0] = resume pc
+      ]);
+      for (var i = 0; i < userLocals.length; i++) {
+        body.write(
+          spillFrame(userLocals[i].index, userLocals[i].type, 8 + i * 8),
+        );
+      }
+      body.write([
+        ...moveSP(sub: false),
+        ...Wasm32.i32Const(0),
+        ...Wasm32.i32Const(1),
+        ...Wasm32.i32Store(2, stateOff),
+        ...defaultConst(returnType),
+      ]);
+      body.writeByte(Wasm.functionReturn);
+    }
+
+    // --- prologue: on rewind pop this frame (restore `$pc` + locals) without
+    // clearing the state; on a fresh call `$pc` = 0. ---
+    body.write([
+      ...Wasm32.i32Const(0),
+      ...Wasm32.i32Load(2, stateOff),
+      ...Wasm32.i32Const(2),
+      Wasm32.i32Equals,
+      ...Wasm.ifInstruction(WasmType.voidType),
+      ...moveSP(sub: true),
+      ...loadSP(),
+      ...Wasm32.i32Load(2, 0),
+      ...Wasm.localSet(pcIdx),
+    ]);
+    for (var i = 0; i < userLocals.length; i++) {
+      body.write(
+        restoreFrame(userLocals[i].index, userLocals[i].type, 8 + i * 8),
+      );
+    }
+    body.write([
+      Wasm.elseInstruction,
+      ...Wasm32.i32Const(0),
+      ...Wasm.localSet(pcIdx),
+      Wasm.end,
+    ]);
+
+    final blocks = cfg.blocks;
+    final n = blocks.length - 1; // max pc
+
+    // --- dispatch: loop { block*(n+1) br_table($pc) ; bb0 ; bb1 ; ... } ---
+    body.write(Wasm.loop(WasmType.voidType));
+    for (var i = 0; i <= n; i++) {
+      body.write(Wasm.block(WasmType.voidType));
+    }
+    body.write([
+      ...Wasm.localGet(pcIdx),
+      ...Wasm.brTable([for (var j = 0; j <= n; j++) j], 0),
+    ]);
+
+    for (var i = 0; i <= n; i++) {
+      body.writeByte(Wasm.end); // end $b_i => bb_i follows
+      final bb = blocks[i];
+      final loopDepth = n - i; // relative depth of `loop` from this bb
+
+      if (bb.leafResume != null) {
+        body.write(loadResultInto(bb.leafResume!));
+        body.write([
+          ...Wasm32.i32Const(0),
+          ...Wasm32.i32Const(0),
+          ...Wasm32.i32Store(2, stateOff), // STATE = normal (rewind done)
+        ]);
+      }
+
+      for (final s in bb.stmts) {
+        generateASTStatement(s, out: body, context: context);
+      }
+
+      final term = bb.term!;
+      switch (term) {
+        case _TGoto():
+          body.write([
+            ...Wasm32.i32Const(term.pc),
+            ...Wasm.localSet(pcIdx),
+            ...Wasm.br(loopDepth),
+          ]);
+        case _TBranch():
+          generateASTExpression(term.cond, out: body, context: context);
+          context.stackDrop();
+          body.write([
+            ...Wasm.ifInstruction(WasmType.voidType),
+            ...Wasm32.i32Const(term.thenPc),
+            ...Wasm.localSet(pcIdx),
+            Wasm.elseInstruction,
+            ...Wasm32.i32Const(term.elsePc),
+            ...Wasm.localSet(pcIdx),
+            Wasm.end,
+            ...Wasm.br(loopDepth),
+          ]);
+        case _TLeaf():
+          final argTypes = <WasmType>[];
+          for (var arg in term.await.args) {
+            generateASTExpression(arg, out: body, context: context);
+            argTypes.add(context.stackGet(0)!.type.wasmType);
+          }
+          final importIndex = module.registerImportedFunction(
+            'env',
+            term.await.calleeName,
+            argTypes,
+            const [],
+          );
+          body.write(Wasm.call(importIndex));
+          for (var _ in term.await.args) {
+            context.stackDrop();
+          }
+          emitSuspend(term.resumePc);
+        case _TInternal():
+          final calleeIndex = module.functionIndex(
+            term.await.calleeName,
+            term.await.args.length,
+          )!;
+          final callee = module.functionByIndex(calleeIndex)!;
+          for (var ai = 0; ai < term.await.args.length; ai++) {
+            generateASTExpression(
+              term.await.args[ai],
+              out: body,
+              context: context,
+            );
+            final paramType = callee.parameters.getParameterByIndex(ai)?.type;
+            if (paramType != null) {
+              _autoConvertStackTypes(
+                context.stackGet(0)!.type,
+                paramType,
+                out: body,
+                context: context,
+              );
+            }
+          }
+          body.write(Wasm.call(calleeIndex));
+          for (var _ in term.await.args) {
+            context.stackDrop();
+          }
+          if (term.await.resultVarName != null) {
+            final rv = context.getLocalVariable(term.await.resultVarName!)!;
+            body.write(Wasm.localSet(rv.index));
+          } else if (!callee.effectiveReturnType.isVoid) {
+            body.writeByte(Wasm.drop);
+          }
+          body.write([
+            ...Wasm32.i32Const(0),
+            ...Wasm32.i32Load(2, stateOff),
+            ...Wasm32.i32Const(1),
+            Wasm32.i32Equals,
+            ...Wasm.ifInstruction(WasmType.voidType),
+          ]);
+          emitSuspend(i); // resume this same block (re-call the callee)
+          body.write([
+            Wasm.end,
+            ...Wasm32.i32Const(term.contPc),
+            ...Wasm.localSet(pcIdx),
+            ...Wasm.br(loopDepth),
+          ]);
+        case _TReturn():
+          generateASTStatement(term.stmt, out: body, context: context);
+        case _TReturnLocal():
+          final rv = context.getLocalVariable(term.name)!;
+          body.write(Wasm.localGet(rv.index));
+          body.writeByte(Wasm.functionReturn);
+        case _TReturnEnd():
+          if (!returnType.isVoid) body.write(defaultConst(returnType));
+          body.writeByte(Wasm.functionReturn);
+      }
+    }
+
+    body.writeByte(Wasm.end); // end loop
+
+    // The loop never falls through (every block branches / returns / suspends),
+    // but a non-void function still needs an unreachable default to type-check.
+    if (!returnType.isVoid) {
+      body.writeByte(Wasm.unreachable);
+      body.write(defaultConst(returnType));
+    }
+
+    // --- assemble: locals preamble + body + end ---
+    final outBody = newOutput();
+    final scratchTypes = context.scratchLocalTypes;
+    outBody.write(
+      Leb128.encodeUnsigned(
+        declaredLocals.length + cfg.temps.length + 1 + scratchTypes.length,
+      ),
+      description: "Local variables count",
+    );
+    for (var v in declaredLocals) {
+      outBody.write(Leb128.encodeUnsigned(1));
+      outBody.writeByte(v.value.wasmCode);
+    }
+    for (var t in cfg.temps) {
+      outBody.write(Leb128.encodeUnsigned(1));
+      outBody.writeByte(t.type.wasmCode);
+    }
+    outBody.write(Leb128.encodeUnsigned(1), description: "\$asyncify_pc");
+    outBody.writeByte(WasmType.i32Type.value);
+    for (var t in scratchTypes) {
+      outBody.write(Leb128.encodeUnsigned(1));
+      outBody.writeByte(t.wasmCode);
+    }
+    outBody.writeBytes(body);
+    outBody.writeByte(Wasm.end, description: "Code body end");
+
+    context.returnsDrop(returnType);
+    context.assertReturnsLength(return0);
+
+    out.writeBytesLeb128Block([
+      outBody,
+    ], description: "Async function (asyncify CFG)");
     return out;
   }
 
@@ -5476,6 +6057,83 @@ class _AsyncifyMatch {
   final List<_AwaitPoint> awaits;
 
   _AsyncifyMatch(this.awaits);
+}
+
+// --- Control-flow-aware Asyncify (PC state machine) ---
+//
+// When awaits appear inside `if`/`while`/`for`, the function body is lowered
+// into a CFG of basic blocks dispatched by a program counter (`$pc`) via a
+// `loop` + `br_table`. Awaits become block boundaries; `$pc` is spilled and
+// restored on the Asyncify frame stack like any other local.
+
+/// A basic block: straight-line [stmts] (no control flow / await) followed by a
+/// single [term]inator.
+class _Bb {
+  final int pc;
+  final List<ASTStatement> stmts = [];
+
+  /// When set, on entering this block the leaf await's host result is loaded
+  /// into its variable (the block is a leaf-await resume target).
+  _AwaitPoint? leafResume;
+
+  _Term? term;
+
+  _Bb(this.pc);
+}
+
+/// A basic-block terminator.
+sealed class _Term {}
+
+/// Unconditional jump: set `$pc = [pc]` and re-dispatch.
+class _TGoto extends _Term {
+  final int pc;
+  _TGoto(this.pc);
+}
+
+/// Conditional: evaluate [cond] and jump to [thenPc] or [elsePc].
+class _TBranch extends _Term {
+  final ASTExpression cond;
+  final int thenPc;
+  final int elsePc;
+  _TBranch(this.cond, this.thenPc, this.elsePc);
+}
+
+/// Leaf await (host import): suspend; on rewind resume at [resumePc].
+class _TLeaf extends _Term {
+  final _AwaitPoint await;
+  final int resumePc;
+  _TLeaf(this.await, this.resumePc);
+}
+
+/// Internal await (module async fn): call it, propagate any unwind, then
+/// continue at [contPc]; re-executes its own block on rewind.
+class _TInternal extends _Term {
+  final _AwaitPoint await;
+  final int contPc;
+  _TInternal(this.await, this.contPc);
+}
+
+/// Emits a `return` statement (block end of control).
+class _TReturn extends _Term {
+  final ASTStatement stmt;
+  _TReturn(this.stmt);
+}
+
+/// Returns the value of a local (used for `return await ...` via a temp).
+class _TReturnLocal extends _Term {
+  final String name;
+  _TReturnLocal(this.name);
+}
+
+/// Implicit function end (fell off the body): return the default / unreachable.
+class _TReturnEnd extends _Term {}
+
+/// A built CFG: its [blocks] plus any synthetic temp locals (e.g. for
+/// `return await ...`) that the emitter must declare.
+class _Cfg {
+  final List<_Bb> blocks;
+  final List<({String name, ASTType type})> temps;
+  _Cfg(this.blocks, this.temps);
 }
 
 extension _ASTFunctionDeclarationExtension on ASTFunctionDeclaration {

@@ -277,6 +277,262 @@ void main() {
       expect(r.getValueNoContext(), equals(21));
     });
 
+    test('await inside a while loop (PC state machine)', () async {
+      var runner = await _wasmRunner(r'''
+        Future<int> sumTo(int n) async {
+          int total = 0;
+          int i = 1;
+          while (i <= n) {
+            int x = await hostId(i);
+            total = total + x;
+            i = i + 1;
+          }
+          return total;
+        }
+      ''');
+      if (runner == null) {
+        fail('Wasm runtime not supported.');
+      }
+
+      var suspends = 0;
+      runner.mapWasmAsyncFunction('hostId', const [WasmValueType.i64], (
+        args,
+      ) async {
+        await Future<void>.delayed(const Duration(milliseconds: 1));
+        suspends++;
+        return _asInt(args[0]);
+      });
+
+      var r = await runner.executeFunction(
+        '',
+        'sumTo',
+        positionalParameters: [4],
+      );
+
+      expect(r.getValueNoContext(), equals(10)); // 1+2+3+4
+      expect(suspends, equals(4), reason: 'one suspension per iteration');
+    });
+
+    test('internal await inside a while loop (multi-frame + PC)', () async {
+      var runner = await _wasmRunner(r'''
+        Future<int> dbl(int v) async {
+          int r = await hostDouble(v);
+          return r;
+        }
+
+        Future<int> sumDoubles(int n) async {
+          int total = 0;
+          int i = 1;
+          while (i <= n) {
+            int x = await dbl(i);
+            total = total + x;
+            i = i + 1;
+          }
+          return total;
+        }
+      ''');
+      if (runner == null) {
+        fail('Wasm runtime not supported.');
+      }
+
+      runner.mapWasmAsyncFunction('hostDouble', const [WasmValueType.i64], (
+        args,
+      ) async {
+        await Future<void>.delayed(const Duration(milliseconds: 1));
+        return _asInt(args[0]) * 2;
+      });
+
+      var r = await runner.executeFunction(
+        '',
+        'sumDoubles',
+        positionalParameters: [3],
+      );
+
+      // dbl(1)=2, dbl(2)=4, dbl(3)=6 => 12.
+      expect(r.getValueNoContext(), equals(12));
+    });
+
+    test('await inside a for loop', () async {
+      var runner = await _wasmRunner(r'''
+        Future<int> sumTo(int n) async {
+          int total = 0;
+          for (int i = 1; i <= n; i = i + 1) {
+            int x = await hostId(i);
+            total = total + x;
+          }
+          return total;
+        }
+      ''');
+      if (runner == null) {
+        fail('Wasm runtime not supported.');
+      }
+      runner.mapWasmAsyncFunction('hostId', const [WasmValueType.i64], (
+        args,
+      ) async {
+        await Future<void>.delayed(const Duration(milliseconds: 1));
+        return _asInt(args[0]);
+      });
+
+      var r = await runner.executeFunction(
+        '',
+        'sumTo',
+        positionalParameters: [4],
+      );
+      expect(r.getValueNoContext(), equals(10)); // 1+2+3+4
+    });
+
+    test('await inside if/else branches', () async {
+      var runner = await _wasmRunner(r'''
+        Future<int> pick(int n) async {
+          int r = 0;
+          if (n > 2) {
+            int x = await hostId(n);
+            r = x + 100;
+          } else {
+            int y = await hostId(n);
+            r = y + 1;
+          }
+          return r;
+        }
+      ''');
+      if (runner == null) {
+        fail('Wasm runtime not supported.');
+      }
+      runner.mapWasmAsyncFunction('hostId', const [WasmValueType.i64], (
+        args,
+      ) async {
+        await Future<void>.delayed(const Duration(milliseconds: 1));
+        return _asInt(args[0]);
+      });
+
+      var hi = await runner.executeFunction(
+        '',
+        'pick',
+        positionalParameters: [5],
+      );
+      expect(hi.getValueNoContext(), equals(105)); // then: 5 + 100
+
+      var lo = await runner.executeFunction(
+        '',
+        'pick',
+        positionalParameters: [1],
+      );
+      expect(lo.getValueNoContext(), equals(2)); // else: 1 + 1
+    });
+
+    test('return await (leaf and internal)', () async {
+      var runner = await _wasmRunner(r'''
+        Future<int> inner(int n) async {
+          return await hostId(n);
+        }
+        Future<int> outer(int n) async {
+          return await inner(n);
+        }
+      ''');
+      if (runner == null) {
+        fail('Wasm runtime not supported.');
+      }
+      runner.mapWasmAsyncFunction('hostId', const [WasmValueType.i64], (
+        args,
+      ) async {
+        await Future<void>.delayed(const Duration(milliseconds: 1));
+        return _asInt(args[0]) + 1;
+      });
+
+      var leaf = await runner.executeFunction(
+        '',
+        'inner',
+        positionalParameters: [7],
+      );
+      expect(leaf.getValueNoContext(), equals(8)); // return await hostId(7)
+
+      var nested = await runner.executeFunction(
+        '',
+        'outer',
+        positionalParameters: [7],
+      );
+      expect(nested.getValueNoContext(), equals(8)); // return await inner(7)
+    });
+
+    test('assignment await inside a loop', () async {
+      var runner = await _wasmRunner(r'''
+        Future<int> f(int n) async {
+          int t = 0;
+          int i = 1;
+          while (i <= n) {
+            t = await hostId(i);
+            i = i + 1;
+          }
+          return t;
+        }
+      ''');
+      if (runner == null) {
+        fail('Wasm runtime not supported.');
+      }
+      runner.mapWasmAsyncFunction('hostId', const [WasmValueType.i64], (
+        args,
+      ) async {
+        await Future<void>.delayed(const Duration(milliseconds: 1));
+        return _asInt(args[0]);
+      });
+
+      var r = await runner.executeFunction('', 'f', positionalParameters: [3]);
+      expect(r.getValueNoContext(), equals(3)); // t = hostId(3)
+    });
+
+    test('await in else-if chain', () async {
+      var runner = await _wasmRunner(r'''
+        Future<int> pick(int n) async {
+          int r = 0;
+          if (n > 10) {
+            int x = await hostId(n);
+            r = x + 1000;
+          } else if (n > 5) {
+            int y = await hostId(n);
+            r = y + 100;
+          } else {
+            int z = await hostId(n);
+            r = z + 1;
+          }
+          return r;
+        }
+      ''');
+      if (runner == null) {
+        fail('Wasm runtime not supported.');
+      }
+      runner.mapWasmAsyncFunction('hostId', const [WasmValueType.i64], (
+        args,
+      ) async {
+        await Future<void>.delayed(const Duration(milliseconds: 1));
+        return _asInt(args[0]);
+      });
+
+      expect(
+        (await runner.executeFunction(
+          '',
+          'pick',
+          positionalParameters: [12],
+        )).getValueNoContext(),
+        equals(1012),
+      );
+      expect(
+        (await runner.executeFunction(
+          '',
+          'pick',
+          positionalParameters: [7],
+        )).getValueNoContext(),
+        equals(107),
+      );
+      expect(
+        (await runner.executeFunction(
+          '',
+          'pick',
+          positionalParameters: [2],
+        )).getValueNoContext(),
+        equals(3),
+      );
+    });
+
     test('a non-async Wasm function still runs synchronously', () async {
       var runner = await _wasmRunner(r'''
         int addOne(int n) {
