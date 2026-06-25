@@ -60,15 +60,43 @@ abstract class ApolloRunner implements VMTypeResolver {
   ApolloExternalFunctionMapper? createDefaultApolloExternalFunctionMapper() {
     var externalFunctionMapper = ApolloExternalFunctionMapper();
 
-    externalFunctionMapper.mapExternalFunction1(
+    // `print` accepts any value, including `null`: force the parameter generic
+    // to be nullable (`Object?`) so the external call doesn't reject `null`.
+    // A `parameterResolver` invokes a class instance's user-defined `toString()`
+    // (if any) so `print(obj)` prints `obj.toString()` rather than the default
+    // `Class{…}` representation.
+    externalFunctionMapper.mapExternalFunction1<Object?, void>(
       ASTTypeVoid.instance,
       'print',
       ASTTypeObject.instance,
       'o',
       (o) => externalPrintFunction(o),
+      parameterResolver: _resolvePrintArgument,
     );
 
     return externalFunctionMapper;
+  }
+
+  /// Resolves a `print` argument: if it is a class instance with a user-defined
+  /// `toString()`, invokes it and returns the resulting String; otherwise
+  /// returns the argument's plain value (the default behavior).
+  static FutureOr<Object?> _resolvePrintArgument(
+    ASTValue? paramVal,
+    VMContext context,
+  ) {
+    if (paramVal is ASTClassInstance) {
+      var f = paramVal.clazz.getFunction(
+        'toString',
+        ASTFunctionSignature.from(null, null),
+        context,
+      );
+      if (f is ASTClassFunctionDeclaration) {
+        return f
+            .objectCall(context, paramVal, positionalParameters: const [])
+            .resolveMapped((ret) => ret.getValue(context));
+      }
+    }
+    return paramVal?.getValue(context);
   }
 
   /// The external [print] function to map.

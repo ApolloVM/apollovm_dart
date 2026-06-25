@@ -2574,3 +2574,90 @@ class ASTExpressionObjectGetterAccess extends ASTExpressionGetterAccess
     return '$variable.$f';
   }
 }
+
+/// [ASTExpression] that assigns to a class instance field: `obj.field = value`
+/// (and `this.field = value`), including compound operators (`+=`, `-=`, …).
+class ASTExpressionObjectSetterAssignment extends ASTExpression {
+  ASTVariable variable;
+
+  String name;
+
+  ASTAssignmentOperator operator;
+
+  ASTExpression expression;
+
+  ASTExpressionObjectSetterAssignment(
+    this.variable,
+    this.name,
+    this.operator,
+    this.expression,
+  );
+
+  @override
+  bool get isComplex => true;
+
+  @override
+  Iterable<ASTNode> get children => [variable, expression];
+
+  @override
+  void resolveNode(ASTNode? parentNode) {
+    super.resolveNode(parentNode);
+    variable.resolveNode(this);
+    expression.resolveNode(this);
+  }
+
+  @override
+  FutureOr<ASTType> resolveType(VMContext? context) =>
+      expression.resolveType(context);
+
+  @override
+  FutureOr<ASTValue> run(
+    VMContext parentContext,
+    ASTRunStatus runStatus,
+  ) async {
+    var context = defineRunContext(parentContext);
+
+    var obj = await variable.getValue(context);
+    if (obj is! ASTClassInstance) {
+      throw ApolloVMRuntimeError(
+        "Can't set field `$name`: target is not a class instance: $obj",
+      );
+    }
+
+    var classContext = obj.createContext(context);
+    var value = await expression.run(context, runStatus);
+
+    FutureOr<ASTValue> result;
+    switch (operator) {
+      case ASTAssignmentOperator.set:
+        result = value;
+      case ASTAssignmentOperator.sum:
+        result = (await _currentField(classContext, obj)) + value;
+      case ASTAssignmentOperator.subtract:
+        result = (await _currentField(classContext, obj)) - value;
+      case ASTAssignmentOperator.multiply:
+        result = (await _currentField(classContext, obj)) * value;
+      case ASTAssignmentOperator.divide:
+        result = (await _currentField(classContext, obj)) / value;
+      case ASTAssignmentOperator.divideAsInt:
+        result = (await _currentField(classContext, obj)) ~/ value;
+    }
+
+    var resultValue = await result;
+    await obj.setField(classContext, name, resultValue);
+    return resultValue;
+  }
+
+  FutureOr<ASTValue> _currentField(
+    VMClassContext classContext,
+    ASTClassInstance obj,
+  ) {
+    return obj
+        .getField(classContext, name)
+        .resolveMapped((v) => v ?? ASTValueNull.instance);
+  }
+
+  @override
+  String toString({bool asGroup = false}) =>
+      '$variable.$name $operator $expression';
+}

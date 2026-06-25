@@ -1229,6 +1229,13 @@ abstract class ApolloCodeGenerator
         indent: indent,
         headIndented: headIndented,
       );
+    } else if (expression is ASTExpressionObjectSetterAssignment) {
+      return generateASTExpressionObjectSetterAssignment(
+        expression,
+        out: out,
+        indent: indent,
+        headIndented: headIndented,
+      );
     } else if (expression is ASTExpressionOperation) {
       return generateASTExpressionOperation(
         expression,
@@ -1675,6 +1682,39 @@ abstract class ApolloCodeGenerator
     out.write(getterName);
 
     _generateChainFunctionInvocation(expression, out, indent);
+
+    return out;
+  }
+
+  StringBuffer generateASTExpressionObjectSetterAssignment(
+    ASTExpressionObjectSetterAssignment expression, {
+    StringBuffer? out,
+    String indent = '',
+    bool headIndented = true,
+  }) {
+    out ??= newOutput();
+
+    if (headIndented) out.write(indent);
+
+    generateASTVariable(
+      expression.variable,
+      out: out,
+      indent: indent,
+      headIndented: false,
+    );
+    out.write('.');
+    out.write(expression.name);
+
+    var op = getASTAssignmentOperatorText(expression.operator);
+    out.write(' ');
+    out.write(op);
+    out.write(' ');
+    generateASTExpression(
+      expression.expression,
+      out: out,
+      indent: '$indent  ',
+      headIndented: false,
+    );
 
     return out;
   }

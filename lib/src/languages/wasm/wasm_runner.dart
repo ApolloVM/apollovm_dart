@@ -306,6 +306,9 @@ class ApolloRunnerWasm extends ApolloRunner {
         var arg = allParams[i];
         if (pt.tag == _tagString && arg is String) {
           allParams[i] = allocAndWriteString(arg);
+        } else if (pt.tag == _tagBool && arg is bool) {
+          // `bool` is an i32 (0/1) in the Wasm ABI.
+          allParams[i] = arg ? 1 : 0;
         } else if (pt.isList && arg is List) {
           allParams[i] = encodeList(arg, pt.elemTag);
         } else if (pt.isMap && arg is Map) {

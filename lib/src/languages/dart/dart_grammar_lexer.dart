@@ -45,7 +45,8 @@ abstract class DartGrammarLexer extends BaseGrammarLexer {
 
   Parser inToken() => ref1(token, 'in');
 
-  Parser newToken() => ref1(token, 'new');
+  // Whole-word match so identifiers like `newValue` aren't read as `new` + …
+  Parser newToken() => _keywordToken('new');
 
   Parser nullToken() => ref1(token, 'null');
 

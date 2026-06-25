@@ -47,7 +47,7 @@ import 'languages/wasm/wasm_runner.dart';
 /// The Apollo VM.
 class ApolloVM implements VMTypeResolver {
   // ignore: non_constant_identifier_names
-  static final String VERSION = '0.1.34';
+  static final String VERSION = '0.1.35';
 
   static int _idCount = 0;
 
@@ -857,20 +857,30 @@ class ApolloExternalFunctionMapper {
   }
 
   /// Maps an external function with 1 parameter.
+  ///
+  /// - [parameterResolver] optionally transforms the argument [ASTValue] before
+  ///   it reaches [f] (e.g. invoking a class instance's `toString()`).
   void mapExternalFunction1<T, R>(
     ASTType<R> fReturn,
     String fName,
     ASTType<T> pType1,
     String pName1,
-    Function(T p1) f,
-  ) {
+    Function(T p1) f, {
+    ParameterValueResolver? parameterResolver,
+  }) {
     var fParameters = ASTFunctionParametersDeclaration(
       [ASTFunctionParameterDeclaration(pType1, pName1, 0, false)],
       null,
       null,
     );
 
-    var fExternal = ASTExternalFunction(fName, fParameters, fReturn, f);
+    var fExternal = ASTExternalFunction(
+      fName,
+      fParameters,
+      fReturn,
+      f,
+      parameterResolver,
+    );
 
     addExternalFunction(fExternal);
   }

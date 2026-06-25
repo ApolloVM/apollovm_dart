@@ -57,6 +57,57 @@ Future<void> _testWasmPrint(
   expect(wasmOut, equals(expectedOutput), reason: 'Wasm print output');
 }
 
+/// Like [_testWasmPrint], but for non-String values: the AST interpreter
+/// receives the raw object (e.g. the `int` 42) while the Wasm host always
+/// receives the stringified form, so both are compared as text against
+/// [expectedText].
+Future<void> _testWasmPrintText(
+  String code,
+  String functionName,
+  List args,
+  List<String> expectedText,
+) async {
+  var vm = ApolloVM();
+  var ok = await vm.loadCodeUnit(SourceCodeUnit('dart', code, id: 'test'));
+  expect(ok, isTrue, reason: "Can't load Dart source");
+
+  // 1) AST interpreter (raw objects -> text).
+  var astRunner = vm.createRunner('dart')!;
+  var astOut = [];
+  astRunner.externalPrintFunction = (o) => astOut.add('$o');
+  await astRunner.executeFunction('', functionName, positionalParameters: args);
+  expect(astOut, equals(expectedText), reason: 'interpreter print output');
+
+  // 2) Compile to Wasm.
+  var storageWasm = vm.generateAllIn<BytesOutput>('wasm');
+  var wasmModules = await storageWasm.allEntries();
+  BytesOutput? compiled;
+  for (var ns in wasmModules.entries) {
+    for (var m in ns.value.entries) {
+      compiled ??= m.value;
+    }
+  }
+  expect(compiled, isNotNull, reason: 'No compiled Wasm module');
+
+  var rt = WasmRuntime()..ensureBooted();
+  if (!rt.isSupported) {
+    fail('Wasm runtime not supported (run `dart run wasm_run:setup`).');
+  }
+
+  // 3) Load + run the compiled Wasm, capturing its `print` host import.
+  var vmWasm = ApolloVM();
+  var loadOK = await vmWasm.loadCodeUnit(
+    BinaryCodeUnit('wasm', compiled!.output(), id: 'test.wasm', namespace: ''),
+  );
+  expect(loadOK, isTrue, reason: 'Compiled Wasm failed to load');
+
+  var wasmRunner = vmWasm.createRunner('wasm')!;
+  var wasmOut = [];
+  wasmRunner.externalPrintFunction = (o) => wasmOut.add('$o');
+  await wasmRunner.executeFunction('', functionName, positionalParameters: args);
+  expect(wasmOut, equals(expectedText), reason: 'Wasm print output');
+}
+
 /// Runs [functionName] via the AST interpreter AND the compiled+executed Wasm
 /// module and asserts both return [expectedReturn].
 Future<void> _testWasmReturn(
@@ -514,6 +565,80 @@ void main() {
         'repeat',
         [200],
         '0123456789' * 200,
+      );
+    });
+  });
+
+  group('Wasm P2: print(any type)', () {
+    test('print int literal', () async {
+      await _testWasmPrintText(
+        'void run() { print(42); }',
+        'run',
+        [],
+        ['42'],
+      );
+    });
+
+    test('print int parameter', () async {
+      await _testWasmPrintText(
+        'void show(int n) { print(n); }',
+        'show',
+        [7],
+        ['7'],
+      );
+    });
+
+    test('print double literal', () async {
+      await _testWasmPrintText(
+        'void run() { print(3.14); }',
+        'run',
+        [],
+        ['3.14'],
+      );
+    });
+
+    test('print bool literals', () async {
+      await _testWasmPrintText(
+        'void run() { print(true); print(false); }',
+        'run',
+        [],
+        ['true', 'false'],
+      );
+    });
+
+    test('print bool parameter', () async {
+      await _testWasmPrintText(
+        'void show(bool b) { print(b); }',
+        'show',
+        [true],
+        ['true'],
+      );
+    });
+
+    test('print null', () async {
+      await _testWasmPrintText(
+        'void run() { print(null); }',
+        'run',
+        [],
+        ['null'],
+      );
+    });
+
+    test('print expression result (int)', () async {
+      await _testWasmPrintText(
+        'void run() { int a = 20; int b = 22; print(a + b); }',
+        'run',
+        [],
+        ['42'],
+      );
+    });
+
+    test('interpolate bool', () async {
+      await _testWasmPrintText(
+        r'void run() { bool b = true; print("flag: $b"); }',
+        'run',
+        [],
+        ['flag: true'],
       );
     });
   });

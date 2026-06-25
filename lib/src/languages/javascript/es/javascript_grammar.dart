@@ -570,6 +570,7 @@ class JavaScriptGrammarDefinition extends JavaScriptGrammarLexer {
               expressionGroup() |
               expressionListLiteral() |
               expressionVariableDirectOperation() |
+              expressionObjectFieldAssignment() |
               expressionVariableAssigment() |
               expressionFunctionInvocation() |
               expressionObjectEntryFunctionInvocation() |
@@ -664,16 +665,16 @@ class JavaScriptGrammarDefinition extends JavaScriptGrammarLexer {
                 .whereType<ASTExpressionChainFunctionInvocation>()
                 .toList();
 
-            if (obj != null && obj != 'this') {
-              var variable = ASTScopeVariable(obj);
-              return ASTExpressionObjectGetterAccess(
-                variable,
-                name,
-                chainFunctions,
-              );
-            } else {
-              return ASTExpressionLocalGetterAccess(name, chainFunctions);
-            }
+            // `this.field` reads from the current instance; `obj.field` from
+            // the named variable's instance.
+            ASTVariable variable = obj == 'this'
+                ? ASTThisVariable()
+                : ASTScopeVariable(obj!);
+            return ASTExpressionObjectGetterAccess(
+              variable,
+              name,
+              chainFunctions,
+            );
           });
 
   Parser<List<ASTExpression>> expressionSequence() =>
@@ -800,6 +801,29 @@ class JavaScriptGrammarDefinition extends JavaScriptGrammarLexer {
       (variable() & assigmentOperator() & ref0(expression)).map((v) {
         return ASTExpressionVariableAssignment(v[0], v[1], v[2]);
       });
+
+  /// `obj.field = value` (and `this.field = value`), including `+=` etc.
+  Parser<ASTExpressionObjectSetterAssignment> expressionObjectFieldAssignment() =>
+      (identifier() &
+              char('.') &
+              identifier().trimHidden() &
+              assigmentOperator() &
+              ref0(expression))
+          .map((v) {
+            var obj = v[0] as String;
+            var name = v[2] as String;
+            var op = v[3] as ASTAssignmentOperator;
+            var valueExpr = v[4] as ASTExpression;
+            ASTVariable variable = obj == 'this'
+                ? ASTThisVariable()
+                : ASTScopeVariable(obj);
+            return ASTExpressionObjectSetterAssignment(
+              variable,
+              name,
+              op,
+              valueExpr,
+            );
+          });
 
   Parser<ASTAssignmentOperator> assigmentOperator() =>
       (string('+=') |

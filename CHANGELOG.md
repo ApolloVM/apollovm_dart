@@ -1,3 +1,86 @@
+## 0.1.35
+
+### Wasm: `print` accepts any value (not only `String`)
+
+- `int` / `double` reuse the host number-to-string imports (`env.int_to_str` /
+  `env.double_to_str`); `bool` lowers in-module to the interned `"true"` /
+  `"false"` literals (via `select`); `print(null)` prints `"null"`. String
+  interpolation gained the same parity.
+- The interpreter's mapped `print` now accepts `null` (nullable `Object?`), and a
+  `bool` argument passed to a public Wasm function is marshalled to its i32 ABI
+  value.
+
+### Classes and instantiation (Dart, Java, and Wasm)
+
+- The `new` keyword is now parsed in Dart and Java (`new User()`); `new User()`
+  and `User()` resolve to the same constructor (boundary-safe, so identifiers
+  like `newValue` are unaffected). Java also gained a generic
+  `new ClassName(args)` rule (previously only `new ArrayList<…>()` /
+  `new HashMap<…>()` were recognized).
+- Classes that declare no constructor get an implicit default (zero-arg)
+  constructor — on the interpreter and the Wasm backend; field initializers still
+  apply.
+- Constructors that set fields: `this.field` parameters, and constructor
+  **bodies** that assign fields (`this.field = value` and bare `field = value`,
+  with parameters shadowing same-named fields, e.g. `User(int id) { this.id = id; }`).
+  Fixed empty-parameter constructors with a body (`User() { … }`), which threw a
+  parser cast error.
+- A class method can instantiate sibling classes and call top-level functions
+  (`ASTClass.getFunction` falls back to the enclosing `ASTRoot`) — essential for
+  Java, where all code lives in a class.
+- Dart arrow (expression-bodied) functions and methods: `T name(params) => expr;`
+  (e.g. `String toString() => '…';`), for top-level functions and instance
+  methods, including `void` bodies. Desugars to `{ return expr; }`.
+- WebAssembly compilation of classes (first slice): single classes (no
+  inheritance) with `int` / `double` / `bool` / `String` / object-reference
+  fields, constructors (`this.field` params, field initializers, default and
+  body constructors), instance methods, in-code instantiation, and method calls
+  (`p.sum()` and implicit-`this` `foo()`). An object is an i32 pointer to a
+  bump-allocated struct; methods take `this` as the first parameter; a discovery
+  pass registers host imports before the code section so cross-function call
+  indices stay correct.
+
+### Object field access on instances (read and write)
+
+- Field assignment `obj.field = value` (and `this.field = value`), including
+  compound operators (`+=`, `-=`, `*=`, `/=`, `~/=`), via a new
+  `ASTExpressionObjectSetterAssignment` node — added to the Dart, Java, Kotlin,
+  JavaScript and TypeScript grammars, the shared source generator (round-trips
+  back to `obj.field = value`), and the Wasm backend (stores at `recv + offset`).
+- Field read `obj.field` is now supported in Java (which had no object
+  getter-access rule); `this.field` reads resolve to the current instance's field
+  across all languages (previously routed to a local-getter lookup and failed
+  with "Can't find getter").
+
+### `print(obj)` calls the user-defined `toString()`
+
+- Interpreter: `print(instance)` invokes a user-declared `toString()` (a class
+  without one still prints the default `Class{…}` representation), and
+  `ASTExternalFunction.call` now awaits resolved argument values so an async
+  resolver result isn't passed through as a `Future`.
+- Wasm: `print(instance)` (and string coercion / interpolation) calls the
+  instance's compiled `toString()` and prints the resulting string handle.
+
+This makes programs like the following compile and run on Wasm with
+interpreter-parity:
+
+```dart
+class User {
+  int id;
+  String name;
+  User(this.id, this.name);
+  String toString() => 'User#$id<$name>';
+}
+void main() {
+  var user = new User(123, 'Joe');
+  print(user);
+  print(user.id * 1000);
+}
+```
+
+Not included: inheritance / interfaces / abstract / `static` members /
+polymorphism.
+
 ## 0.1.34
 
 - Wasm `throw` / `try` / `catch` / `finally`: exception handling now compiles to
