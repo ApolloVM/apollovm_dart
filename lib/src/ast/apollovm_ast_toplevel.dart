@@ -263,6 +263,39 @@ abstract class ASTClass<T> extends ASTEntryPointBlock {
     VMContext? parentContext,
   ]) => VMClassContext(this, parent: parentContext, typeResolver: typeResolver);
 
+  /// Resolves a function/constructor visible from inside this class. Falls back
+  /// to the enclosing [ASTRoot] (reached via the `parentNode` chain set by
+  /// `ASTRoot.resolveNode`) so a method can instantiate sibling classes (their
+  /// constructors) and call top-level functions — the class-method execution
+  /// context is rooted at the class, not the program root.
+  @override
+  ASTInvocableDeclaration? getFunction(
+    String fName,
+    ASTFunctionSignature parametersSignature,
+    VMContext context, {
+    bool caseInsensitive = false,
+  }) {
+    var f = super.getFunction(
+      fName,
+      parametersSignature,
+      context,
+      caseInsensitive: caseInsensitive,
+    );
+    if (f != null) return f;
+
+    for (ASTNode? node = parentNode; node != null; node = node.parentNode) {
+      if (node is ASTRoot) {
+        return node.getFunction(
+          fName,
+          parametersSignature,
+          context,
+          caseInsensitive: caseInsensitive,
+        );
+      }
+    }
+    return null;
+  }
+
   List<ASTConstructorSet> get constructors;
 
   void resolveNodeConstructors(ASTNode? parentNode);
@@ -618,6 +651,29 @@ class ASTClassNormal extends ASTClass<VMObject> {
     return set != null;
   }
 
+  /// Lazily-synthesized implicit default (zero-arg) constructor, for a class
+  /// that declares no constructor at all (see [getConstructor]).
+  ASTClassConstructorDeclaration? _defaultConstructor;
+
+  /// Returns the implicit default (unnamed, zero-arg) constructor, synthesized
+  /// the first time it's needed. Field initializers are still applied at
+  /// instantiation by [initializeInstance] (independent of the constructor
+  /// body), so the empty body is correct.
+  ASTClassConstructorDeclaration _ensureDefaultConstructor() {
+    var ctor = _defaultConstructor;
+    if (ctor != null) return ctor;
+
+    ctor = ASTClassConstructorDeclaration(
+      type,
+      '',
+      ASTConstructorParametersDeclaration(null, null, null),
+    );
+    ctor.parentBlock = this;
+    ctor.resolveNode(this); // resolves `parentClass`.
+
+    return _defaultConstructor = ctor;
+  }
+
   @override
   ASTClassConstructorDeclaration? getConstructor(
     String fName,
@@ -626,7 +682,15 @@ class ASTClassNormal extends ASTClass<VMObject> {
     bool caseInsensitive = false,
   }) {
     var set = getConstructorWithName(fName, caseInsensitive: caseInsensitive);
-    if (set == null) return null;
+    if (set == null) {
+      // A class with no declared constructor gets an implicit default
+      // (zero-arg) constructor for the unnamed (`''`) constructor — matching
+      // Dart/Java semantics (declaring any constructor suppresses it).
+      if (fName.isEmpty && _constructors.isEmpty) {
+        return _ensureDefaultConstructor();
+      }
+      return null;
+    }
 
     if (parametersSignature == null) {
       return set.firstFunction;
@@ -2342,7 +2406,15 @@ class ASTClassConstructorDeclaration<T>
     List? positionalParameters,
     Map? namedParameters,
   }) async {
-    var context = VMScopeContext(this, parent: parent);
+    // Run in a class context so that, after the instance is created, `this` and
+    // bare field reads/writes in the constructor body resolve to the instance
+    // being constructed (and persist to the returned `obj`). Parameters are
+    // declared as locals here, so a parameter shadows a same-named field (the
+    // idiomatic `User(int id) { this.id = id; }`).
+    final parentClass = this.parentClass;
+    var context = parentClass != null
+        ? parentClass.createContext(parent.typeResolver, parent)
+        : VMScopeContext(this, parent: parent);
 
     var prevContext = VMContext.setCurrent(context);
     try {
@@ -2351,6 +2423,10 @@ class ASTClassConstructorDeclaration<T>
         positionalParameters,
         namedParameters,
       );
+
+      if (context is VMClassContext) {
+        context.setClassInstance(obj);
+      }
 
       final parameters = _parameters;
 
@@ -2681,31 +2757,31 @@ class ASTExternalFunction<T> extends ASTFunctionDeclaration<T> {
         result = externalFunction();
       } else if (externalFunction.isParametersSize1 || parametersSize == 1) {
         var paramVal = await getParameterValueByIndex(context, 0);
-        var a0 = resolveParameterValue(paramVal, context);
+        var a0 = await resolveParameterValue(paramVal, context);
         result = externalFunction(a0);
       } else if (this.parametersSize == 2) {
         var paramVal0 = await getParameterValueByIndex(context, 0);
         var paramVal1 = await getParameterValueByIndex(context, 1);
-        var a0 = resolveParameterValue(paramVal0, context);
-        var a1 = resolveParameterValue(paramVal1, context);
+        var a0 = await resolveParameterValue(paramVal0, context);
+        var a1 = await resolveParameterValue(paramVal1, context);
         result = externalFunction(a0, a1);
       } else if (this.parametersSize == 3) {
         var paramVal0 = await getParameterValueByIndex(context, 0);
         var paramVal1 = await getParameterValueByIndex(context, 1);
         var paramVal2 = await getParameterValueByIndex(context, 2);
-        var a0 = resolveParameterValue(paramVal0, context);
-        var a1 = resolveParameterValue(paramVal1, context);
-        var a2 = resolveParameterValue(paramVal2, context);
+        var a0 = await resolveParameterValue(paramVal0, context);
+        var a1 = await resolveParameterValue(paramVal1, context);
+        var a2 = await resolveParameterValue(paramVal2, context);
         result = externalFunction(a0, a1, a2);
       } else if (this.parametersSize == 4) {
         var paramVal0 = await getParameterValueByIndex(context, 0);
         var paramVal1 = await getParameterValueByIndex(context, 1);
         var paramVal2 = await getParameterValueByIndex(context, 2);
         var paramVal3 = await getParameterValueByIndex(context, 4);
-        var a0 = resolveParameterValue(paramVal0, context);
-        var a1 = resolveParameterValue(paramVal1, context);
-        var a2 = resolveParameterValue(paramVal2, context);
-        var a3 = resolveParameterValue(paramVal3, context);
+        var a0 = await resolveParameterValue(paramVal0, context);
+        var a1 = await resolveParameterValue(paramVal1, context);
+        var a2 = await resolveParameterValue(paramVal2, context);
+        var a3 = await resolveParameterValue(paramVal3, context);
         result = externalFunction(a0, a1, a2, a3);
       } else if (this.parametersSize == 5) {
         var paramVal0 = await getParameterValueByIndex(context, 0);
@@ -2713,11 +2789,11 @@ class ASTExternalFunction<T> extends ASTFunctionDeclaration<T> {
         var paramVal2 = await getParameterValueByIndex(context, 2);
         var paramVal3 = await getParameterValueByIndex(context, 4);
         var paramVal4 = await getParameterValueByIndex(context, 5);
-        var a0 = resolveParameterValue(paramVal0, context);
-        var a1 = resolveParameterValue(paramVal1, context);
-        var a2 = resolveParameterValue(paramVal2, context);
-        var a3 = resolveParameterValue(paramVal3, context);
-        var a4 = resolveParameterValue(paramVal4, context);
+        var a0 = await resolveParameterValue(paramVal0, context);
+        var a1 = await resolveParameterValue(paramVal1, context);
+        var a2 = await resolveParameterValue(paramVal2, context);
+        var a3 = await resolveParameterValue(paramVal3, context);
+        var a4 = await resolveParameterValue(paramVal4, context);
         result = externalFunction(a0, a1, a2, a3, a4);
       } else {
         result = externalFunction.call();
@@ -2791,21 +2867,21 @@ class ASTExternalClassFunction<T> extends ASTClassFunctionDeclaration<T> {
         result = externalFunction(obj);
       } else if (externalFunction.isParametersSize1 || parametersSize == 1) {
         var paramVal = await getParameterValueByIndex(context, 0);
-        var a0 = resolveParameterValue(paramVal, context);
+        var a0 = await resolveParameterValue(paramVal, context);
         result = externalFunction(obj, a0);
       } else if (this.parametersSize == 2) {
         var paramVal0 = await getParameterValueByIndex(context, 0);
         var paramVal1 = await getParameterValueByIndex(context, 1);
-        var a0 = resolveParameterValue(paramVal0, context);
-        var a1 = resolveParameterValue(paramVal1, context);
+        var a0 = await resolveParameterValue(paramVal0, context);
+        var a1 = await resolveParameterValue(paramVal1, context);
         result = externalFunction(obj, a0, a1);
       } else if (this.parametersSize == 3) {
         var paramVal0 = await getParameterValueByIndex(context, 0);
         var paramVal1 = await getParameterValueByIndex(context, 1);
         var paramVal2 = await getParameterValueByIndex(context, 2);
-        var a0 = resolveParameterValue(paramVal0, context);
-        var a1 = resolveParameterValue(paramVal1, context);
-        var a2 = resolveParameterValue(paramVal2, context);
+        var a0 = await resolveParameterValue(paramVal0, context);
+        var a1 = await resolveParameterValue(paramVal1, context);
+        var a2 = await resolveParameterValue(paramVal2, context);
         result = externalFunction(a0, a1, a2);
       } else {
         result = externalFunction.call(obj);

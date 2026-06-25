@@ -97,7 +97,7 @@ class DartGrammarDefinition extends DartGrammarLexer {
               identifier() &
               functionParametersDeclaration() &
               asyncToken().optional() &
-              codeBlock())
+              (arrowBody() | codeBlock()))
           .map((v) {
             var returnType = v[0] as ASTType? ?? ASTTypeDynamic.instance;
             var parameters = v[2];
@@ -285,7 +285,7 @@ class DartGrammarDefinition extends DartGrammarLexer {
 
   Parser<ASTConstructorParametersDeclaration>
   constructorParametersDeclaration() =>
-      (functionEmptyParametersDeclaration() |
+      (constructorEmptyParametersDeclaration() |
               constructorPositionalParametersDeclaration())
           .cast<ASTConstructorParametersDeclaration>();
 
@@ -345,7 +345,7 @@ class DartGrammarDefinition extends DartGrammarLexer {
               identifier() &
               functionParametersDeclaration() &
               asyncToken().optional() &
-              (char(';').trimHidden() | codeBlock()))
+              (arrowBody() | char(';').trimHidden() | codeBlock()))
           .map((v) {
             var modifiers =
                 (v[0] as ASTModifiers?) ?? ASTModifiers.modifiersNone;
@@ -530,20 +530,36 @@ class DartGrammarDefinition extends DartGrammarLexer {
             if (value == null) {
               return ASTStatementReturn();
             } else if (value is ASTExpression) {
-              if (value is ASTExpressionVariableAccess) {
-                if (value.variable.name == 'null') {
-                  return ASTStatementReturnNull();
-                } else {
-                  return ASTStatementReturnVariable(value.variable);
-                }
-              } else if (value is ASTExpressionLiteral) {
-                return ASTStatementReturnValue(value.value);
-              } else {
-                return ASTStatementReturnWithExpression(value);
-              }
+              return _returnStatementForExpression(value);
             }
 
             throw UnsupportedError("Can't handle return value: $value");
+          });
+
+  /// Builds the appropriate `return <value>` statement for an expression
+  /// (shared by `return …;` and the arrow body `=> …`).
+  ASTStatementReturn _returnStatementForExpression(ASTExpression value) {
+    if (value is ASTExpressionVariableAccess) {
+      if (value.variable.name == 'null') {
+        return ASTStatementReturnNull();
+      } else {
+        return ASTStatementReturnVariable(value.variable);
+      }
+    } else if (value is ASTExpressionLiteral) {
+      return ASTStatementReturnValue(value.value);
+    } else {
+      return ASTStatementReturnWithExpression(value);
+    }
+  }
+
+  /// Expression-bodied function/method body: `=> expr ;` desugars to a block
+  /// with a single `return expr;`.
+  Parser<ASTBlock> arrowBody() =>
+      (string('=>').trimHidden() & ref0(expression) & char(';').trimHidden())
+          .map((v) {
+            var value = v[1] as ASTExpression;
+            return ASTBlock(null)
+              ..addAllStatements([_returnStatementForExpression(value)]);
           });
 
   Parser<ASTStatementExpression> statementExpression() =>
@@ -759,6 +775,7 @@ class DartGrammarDefinition extends DartGrammarLexer {
               expressionMapLiteral() |
               expressionVariableDirectOperation() |
               expressionVariableEntryAssignment() |
+              expressionObjectFieldAssignment() |
               expressionVariableAssigment() |
               expressionFunctionInvocation() |
               expressionObjectEntryFunctionInvocation() |
@@ -817,19 +834,23 @@ class DartGrammarDefinition extends DartGrammarLexer {
           });
 
   Parser<ASTExpressionFunctionInvocation> expressionFunctionInvocation() =>
-      ((identifier() & char('.')).optional() &
+      // Optional `new` prefix for class instantiation (`new User()`); the
+      // keyword is consumed and discarded — `new User()` and `User()` both
+      // resolve to the class constructor via `ASTRoot.getFunction`.
+      (newToken().optional() &
+              (identifier() & char('.')).optional() &
               identifier() &
               char('(').trimHidden() &
               ref0(expressionSequence).optional() &
               char(')').trimHidden() &
               expressionChainFunctionInvocation().star())
           .map((v) {
-            var objOpt = v[0] as List?;
+            var objOpt = v[1] as List?;
             var obj = objOpt != null ? objOpt[0] as String : null;
-            var name = v[1] as String;
-            var args = v[3] as List<ASTExpression>?;
+            var name = v[2] as String;
+            var args = v[4] as List<ASTExpression>?;
             args ??= <ASTExpression>[];
-            var chainFunctions = (v[5] as List)
+            var chainFunctions = (v[6] as List)
                 .whereType<ASTExpressionChainFunctionInvocation>()
                 .toList();
 
@@ -861,16 +882,16 @@ class DartGrammarDefinition extends DartGrammarLexer {
                 .whereType<ASTExpressionChainFunctionInvocation>()
                 .toList();
 
-            if (obj != null && obj != 'this') {
-              var variable = ASTScopeVariable(obj);
-              return ASTExpressionObjectGetterAccess(
-                variable,
-                name,
-                chainFunctions,
-              );
-            } else {
-              return ASTExpressionLocalGetterAccess(name, chainFunctions);
-            }
+            // `this.field` reads from the current instance; `obj.field` from the
+            // named variable's instance.
+            ASTVariable variable = obj == 'this'
+                ? ASTThisVariable()
+                : ASTScopeVariable(obj!);
+            return ASTExpressionObjectGetterAccess(
+              variable,
+              name,
+              chainFunctions,
+            );
           });
 
   Parser<List<ASTExpression>> expressionSequence() =>
@@ -1078,6 +1099,30 @@ class DartGrammarDefinition extends DartGrammarLexer {
               ref0(expression))
           .map((v) {
             return ASTExpressionVariableEntryAssignment(v[0], v[2], v[4], v[5]);
+          });
+
+  /// `obj.field = value` (and `this.field = value`), including `+=` etc.
+  Parser<ASTExpressionObjectSetterAssignment>
+  expressionObjectFieldAssignment() =>
+      (identifier() &
+              char('.') &
+              identifier().trimHidden() &
+              assigmentOperator() &
+              ref0(expression))
+          .map((v) {
+            var obj = v[0] as String;
+            var name = v[2] as String;
+            var op = v[3] as ASTAssignmentOperator;
+            var valueExpr = v[4] as ASTExpression;
+            ASTVariable variable = obj == 'this'
+                ? ASTThisVariable()
+                : ASTScopeVariable(obj);
+            return ASTExpressionObjectSetterAssignment(
+              variable,
+              name,
+              op,
+              valueExpr,
+            );
           });
 
   Parser<ASTAssignmentOperator> assigmentOperator() =>

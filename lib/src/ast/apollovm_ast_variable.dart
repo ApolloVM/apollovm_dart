@@ -252,6 +252,34 @@ class ASTScopeVariable<T> extends ASTVariable {
   void associateToType(ASTTypedNode node) => _associatedNode = node;
 
   @override
+  FutureOr<void> setValue(VMContext context, ASTValue value) {
+    // A local variable (in this or an enclosing scope) is set directly.
+    return context.getVariable(name, false).resolveMapped((local) {
+      if (local != null) {
+        return local.setValue(context, value);
+      }
+
+      // Otherwise, an unqualified assignment to a class field must write
+      // through to the instance — `resolveVariable` returns a value copy whose
+      // `setValue` would not persist to the object.
+      var obj = context.getClassInstance();
+      if (obj is ASTClassInstance && obj.clazz.getField(name) != null) {
+        return obj.clazz
+            .setInstanceFieldValue(
+              context,
+              ASTRunStatus.dummy,
+              obj,
+              name,
+              value,
+            )
+            .resolveMapped((_) {});
+      }
+
+      return super.setValue(context, value);
+    });
+  }
+
+  @override
   FutureOr<ASTVariable> resolveVariable(VMContext context) {
     if (name == 'null') {
       return ASTRuntimeVariable(
