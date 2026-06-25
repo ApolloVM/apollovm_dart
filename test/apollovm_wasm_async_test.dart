@@ -138,6 +138,56 @@ void main() {
       );
     });
 
+    test('async with if/else awaiting module functions', () async {
+      await _testWasm(
+        r'''
+        Future<int> big(int n) async {
+          return n * 2;
+        }
+
+        Future<int> small(int n) async {
+          return n + 1;
+        }
+
+        Future<int> classify(int n) async {
+          if (n > 10) {
+            return await big(n);
+          }
+          return await small(n);
+        }
+      ''',
+        'classify',
+        {
+          [15]: 30,
+          [5]: 6,
+          [10]: 11,
+        },
+      );
+    });
+
+    test('nested async (a awaits b awaits c) collapses', () async {
+      await _testWasm(
+        r'''
+        Future<int> c(int n) async {
+          return n + 1;
+        }
+
+        Future<int> b(int n) async {
+          return await c(n) + 1;
+        }
+
+        Future<int> a(int n) async {
+          return await b(n) + 1;
+        }
+      ''',
+        'a',
+        {
+          [10]: 13,
+          [0]: 3,
+        },
+      );
+    });
+
     test('async with a loop body', () async {
       await _testWasm(
         r'''

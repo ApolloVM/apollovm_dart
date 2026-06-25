@@ -138,6 +138,36 @@ void main() {
       expect(r.getValueNoContext(), equals(20));
     });
 
+    test('await with a discarded result (statement await)', () async {
+      var runner = await _wasmRunner(r'''
+        Future<int> compute(int n) async {
+          await hostWait(n);
+          return n + 1;
+        }
+      ''');
+      if (runner == null) {
+        fail('Wasm runtime not supported.');
+      }
+
+      var awaited = false;
+      runner.mapWasmAsyncFunction('hostWait', const [WasmValueType.i64], (
+        args,
+      ) async {
+        await Future<void>.delayed(const Duration(milliseconds: 3));
+        awaited = true;
+        return 0; // result is discarded by the function
+      });
+
+      var r = await runner.executeFunction(
+        '',
+        'compute',
+        positionalParameters: [7],
+      );
+
+      expect(r.getValueNoContext(), equals(8)); // suspends, then n + 1
+      expect(awaited, isTrue);
+    });
+
     test('a non-async Wasm function still runs synchronously', () async {
       var runner = await _wasmRunner(r'''
         int addOne(int n) {
