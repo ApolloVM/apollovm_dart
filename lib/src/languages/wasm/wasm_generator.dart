@@ -3193,6 +3193,25 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
   /// If [s] is a statement-level await (`T v = await call(...)` or
   /// `await call(...)`) of a supported callee, returns its await point (with
   /// `stmtIndex` unset = -1); otherwise `null`.
+  /// Classifies a directly-awaited call: `await name(args)` where `name` is a
+  /// host import (leaf) or an eligible module function (internal). `null` if the
+  /// awaited expression isn't a supported call.
+  ({String name, List<ASTExpression> args, bool isInternal})?
+  _classifyAwaitCall(
+    ASTExpressionAwait aw,
+    WasmModuleContext module,
+    Set<String> eligible,
+  ) {
+    final inner = aw.expression;
+    if (inner is! ASTExpressionLocalFunctionInvocation) return null;
+    final name = inner.name;
+    final args = inner.arguments;
+    if (name == 'print') return null;
+    final isInternal = module.functionIndex(name, args.length) != null;
+    if (isInternal && !eligible.contains(name)) return null;
+    return (name: name, args: args, isInternal: isInternal);
+  }
+
   _AwaitPoint? _statementAwaitPoint(
     ASTStatement s,
     WasmModuleContext module,
@@ -3204,21 +3223,26 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     if (awaitsInS.length != 1) return null;
 
     final aw = awaitsInS.first;
-    final inner = aw.expression;
-    if (inner is! ASTExpressionLocalFunctionInvocation) return null;
-
-    final name = inner.name;
-    final args = inner.arguments;
-    if (name == 'print') return null;
-
-    final isInternal = module.functionIndex(name, args.length) != null;
-    if (isInternal && !eligible.contains(name)) return null;
+    final call = _classifyAwaitCall(aw, module, eligible);
+    if (call == null) return null;
+    final name = call.name;
+    final args = call.args;
+    final isInternal = call.isInternal;
 
     if (s is ASTStatementVariableDeclaration && identical(s.value, aw)) {
       if (s.type is ASTTypeVar) return null; // explicit type required
       return _AwaitPoint(-1, name, args, s.name, s.type, isInternal);
-    } else if (s is ASTStatementExpression && identical(s.expression, aw)) {
-      return _AwaitPoint(-1, name, args, null, null, isInternal);
+    } else if (s is ASTStatementExpression) {
+      final e = s.expression;
+      if (identical(e, aw)) {
+        return _AwaitPoint(-1, name, args, null, null, isInternal); // discarded
+      }
+      // `x = await f(...)`: assign the awaited value into an existing local.
+      if (e is ASTExpressionVariableAssignment &&
+          e.operator == ASTAssignmentOperator.set &&
+          identical(e.expression, aw)) {
+        return _AwaitPoint(-1, name, args, e.variable.name, null, isInternal);
+      }
     }
     return null;
   }
@@ -3257,12 +3281,12 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     return points;
   }
 
-  /// Lowers [f] into a CFG of basic blocks when it has awaits inside control
-  /// flow (`if`/`if-else`, `while`, `for`). Returns `null` for the linear case
-  /// (use [_asyncifyAwaitPoints]) or unsupported shapes (`else if` chains,
-  /// `for-each`, `break`/`continue`, awaits nested in expressions, returns with
-  /// awaits).
-  List<_Bb>? _buildAsyncifyCfg(
+  /// Lowers [f] into a CFG of basic blocks for the Asyncify PC state machine,
+  /// covering awaits inside control flow (`if`/`if-else`/`else if`, `while`,
+  /// `for`) and `return await ...`. Returns `null` for shapes that don't
+  /// require the CFG (no awaits) or that it doesn't support (`for-each`,
+  /// `break`/`continue`, awaits nested deeper in expressions).
+  _Cfg? _buildAsyncifyCfg(
     ASTFunctionDeclaration f,
     WasmModuleContext module,
     Set<String> eligible,
@@ -3270,6 +3294,7 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     if (!f.modifiers.isAsync) return null;
 
     final blocks = <_Bb>[];
+    final temps = <({String name, ASTType type})>[];
     int newBb() {
       final b = _Bb(blocks.length);
       blocks.add(b);
@@ -3277,7 +3302,7 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     }
 
     var ok = true;
-    var sawControlAwait = false;
+    var sawAwait = false;
 
     // Lowers [stmts] starting at block [cur]; returns the block where control
     // continues, or -1 if it returned (no fall-through).
@@ -3292,7 +3317,7 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
         if (hasAwait) {
           final ap = _statementAwaitPoint(s, module, eligible);
           if (ap != null) {
-            if (inControl) sawControlAwait = true;
+            sawAwait = true;
             if (ap.isInternal) {
               final cont = newBb();
               blocks[cur].term = _TInternal(ap, cont);
@@ -3304,6 +3329,41 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
               cur = resume;
             }
             continue;
+          }
+          // `return await f(...)`: await into a synthetic temp, then return it.
+          if (s is ASTStatementReturnWithExpression &&
+              s.expression is ASTExpressionAwait) {
+            final call = _classifyAwaitCall(
+              s.expression as ASTExpressionAwait,
+              module,
+              eligible,
+            );
+            if (call == null) {
+              ok = false;
+              return cur;
+            }
+            sawAwait = true;
+            final tmp = '\$async_ret_${temps.length}';
+            temps.add((name: tmp, type: f.effectiveReturnType));
+            final rap = _AwaitPoint(
+              -1,
+              call.name,
+              call.args,
+              tmp,
+              f.effectiveReturnType,
+              call.isInternal,
+            );
+            if (rap.isInternal) {
+              final ret = newBb();
+              blocks[cur].term = _TInternal(rap, ret);
+              blocks[ret].term = _TReturnLocal(tmp);
+            } else {
+              final resume = newBb();
+              blocks[cur].term = _TLeaf(rap, resume);
+              blocks[resume].leafResume = rap;
+              blocks[resume].term = _TReturnLocal(tmp);
+            }
+            return -1;
           }
           // Control flow containing awaits.
           if (s is ASTStatementWhileLoop) {
@@ -3369,7 +3429,34 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
             cur = joinPc;
             continue;
           }
-          // else-if chains, for-each, return-with-await: unsupported (v1).
+          if (s is ASTBranchIfElseIfsElseBlock) {
+            final joinPc = newBb();
+            final arms = <({ASTExpression cond, ASTBlock block})>[
+              (cond: s.condition, block: s.blockIf),
+              for (final e in s.blocksElseIf)
+                (cond: e.condition, block: e.block),
+            ];
+            var condCur = cur;
+            for (var ai = 0; ai < arms.length; ai++) {
+              final isLast = ai == arms.length - 1;
+              final thenPc = newBb();
+              final elsePc = isLast
+                  ? (s.blockElse != null ? newBb() : joinPc)
+                  : newBb();
+              blocks[condCur].term = _TBranch(arms[ai].cond, thenPc, elsePc);
+              final thenExit = lower(arms[ai].block.statements, thenPc, true);
+              if (thenExit >= 0) blocks[thenExit].term = _TGoto(joinPc);
+              if (isLast && s.blockElse != null) {
+                final elseExit = lower(s.blockElse!.statements, elsePc, true);
+                if (elseExit >= 0) blocks[elseExit].term = _TGoto(joinPc);
+              } else if (!isLast) {
+                condCur = elsePc; // next arm's condition evaluates here
+              }
+            }
+            cur = joinPc;
+            continue;
+          }
+          // for-each, return-with-await (deeply nested): unsupported (v1).
           ok = false;
           return cur;
         }
@@ -3385,7 +3472,7 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     }
 
     final exit = lower(f.statements, newBb(), false);
-    if (!ok || !sawControlAwait) return null;
+    if (!ok || !sawAwait) return null;
 
     if (exit >= 0 && blocks[exit].term == null) {
       blocks[exit].term = _TReturnEnd();
@@ -3393,7 +3480,7 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     for (final b in blocks) {
       b.term ??= _TReturnEnd();
     }
-    return blocks;
+    return _Cfg(blocks, temps);
   }
 
   /// Fixed-point set of Asyncify-eligible function names: async functions
@@ -3529,7 +3616,7 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     List<int> loadResultInto(_AwaitPoint p) {
       if (p.resultVarName == null) return const [];
       final rv = context.getLocalVariable(p.resultVarName!)!;
-      final rk = p.resultType!.wasmType;
+      final rk = (p.resultType ?? rv.type).wasmType;
       return [
         ...Wasm32.i32Const(0),
         if (rk == WasmType.f64Type)
@@ -3745,7 +3832,7 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
   /// the Asyncify frame stack at each suspension (see `_buildAsyncifyCfg`).
   BytesOutput _generateAsyncifyCfgFunction(
     ASTFunctionDeclaration f,
-    List<_Bb> cfg, {
+    _Cfg cfg, {
     required BytesOutput out,
     required WasmContext context,
     required WasmModuleContext module,
@@ -3774,6 +3861,13 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       userLocals.add((
         index: context.addLocalVariable(v.key, v.value),
         type: v.value,
+      ));
+    }
+    // Synthetic temps (e.g. for `return await ...`) are spilled like locals.
+    for (var t in cfg.temps) {
+      userLocals.add((
+        index: context.addLocalVariable(t.name, t.type),
+        type: t.type,
       ));
     }
     final pcIdx = context.addLocalVariable('\$asyncify_pc', _astTypeInt32);
@@ -3832,7 +3926,7 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     List<int> loadResultInto(_AwaitPoint p) {
       if (p.resultVarName == null) return const [];
       final rv = context.getLocalVariable(p.resultVarName!)!;
-      final rk = p.resultType!.wasmType;
+      final rk = (p.resultType ?? rv.type).wasmType;
       return [
         ...Wasm32.i32Const(0),
         if (rk == WasmType.f64Type)
@@ -3895,7 +3989,8 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       Wasm.end,
     ]);
 
-    final n = cfg.length - 1; // max pc
+    final blocks = cfg.blocks;
+    final n = blocks.length - 1; // max pc
 
     // --- dispatch: loop { block*(n+1) br_table($pc) ; bb0 ; bb1 ; ... } ---
     body.write(Wasm.loop(WasmType.voidType));
@@ -3909,7 +4004,7 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
 
     for (var i = 0; i <= n; i++) {
       body.writeByte(Wasm.end); // end $b_i => bb_i follows
-      final bb = cfg[i];
+      final bb = blocks[i];
       final loopDepth = n - i; // relative depth of `loop` from this bb
 
       if (bb.leafResume != null) {
@@ -4011,6 +4106,10 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
           ]);
         case _TReturn():
           generateASTStatement(term.stmt, out: body, context: context);
+        case _TReturnLocal():
+          final rv = context.getLocalVariable(term.name)!;
+          body.write(Wasm.localGet(rv.index));
+          body.writeByte(Wasm.functionReturn);
         case _TReturnEnd():
           if (!returnType.isVoid) body.write(defaultConst(returnType));
           body.writeByte(Wasm.functionReturn);
@@ -4030,12 +4129,18 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     final outBody = newOutput();
     final scratchTypes = context.scratchLocalTypes;
     outBody.write(
-      Leb128.encodeUnsigned(declaredLocals.length + 1 + scratchTypes.length),
+      Leb128.encodeUnsigned(
+        declaredLocals.length + cfg.temps.length + 1 + scratchTypes.length,
+      ),
       description: "Local variables count",
     );
     for (var v in declaredLocals) {
       outBody.write(Leb128.encodeUnsigned(1));
       outBody.writeByte(v.value.wasmCode);
+    }
+    for (var t in cfg.temps) {
+      outBody.write(Leb128.encodeUnsigned(1));
+      outBody.writeByte(t.type.wasmCode);
     }
     outBody.write(Leb128.encodeUnsigned(1), description: "\$asyncify_pc");
     outBody.writeByte(WasmType.i32Type.value);
@@ -6014,8 +6119,22 @@ class _TReturn extends _Term {
   _TReturn(this.stmt);
 }
 
+/// Returns the value of a local (used for `return await ...` via a temp).
+class _TReturnLocal extends _Term {
+  final String name;
+  _TReturnLocal(this.name);
+}
+
 /// Implicit function end (fell off the body): return the default / unreachable.
 class _TReturnEnd extends _Term {}
+
+/// A built CFG: its [blocks] plus any synthetic temp locals (e.g. for
+/// `return await ...`) that the emitter must declare.
+class _Cfg {
+  final List<_Bb> blocks;
+  final List<({String name, ASTType type})> temps;
+  _Cfg(this.blocks, this.temps);
+}
 
 extension _ASTFunctionDeclarationExtension on ASTFunctionDeclaration {
   /// The effective Wasm return type. For an `async` function the declared
