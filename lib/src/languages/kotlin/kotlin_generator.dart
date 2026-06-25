@@ -4,7 +4,6 @@
 
 import '../../apollovm_code_generator.dart';
 import '../../apollovm_code_storage.dart';
-import '../../apollovm_parser.dart';
 import '../../ast/apollovm_ast_expression.dart';
 import '../../ast/apollovm_ast_statement.dart';
 import '../../ast/apollovm_ast_toplevel.dart';
@@ -173,20 +172,23 @@ class ApolloCodeGeneratorKotlin extends ApolloCodeGenerator {
   ) {
     out ??= newOutput();
 
-    if (f.modifiers.isAsync) {
-      // Kotlin async maps to `suspend fun` + coroutines, not yet implemented.
-      throw UnsupportedSyntaxError(
-        "Kotlin async/await translation not yet supported (function: '${f.name}')",
-      );
-    }
-
     var blockCode = generateASTBlock(f, indent: indent, withBrackets: false);
 
     out.write(indent);
 
+    // Dart `async` maps to a Kotlin `suspend fun`; `Future<T>` collapses to `T`
+    // (suspension is implicit in coroutines — see [generateASTExpressionAwait]).
+    var returnType = f.returnType;
+    if (f.modifiers.isAsync) {
+      out.write('suspend ');
+      if (returnType is ASTTypeFuture) {
+        returnType = returnType.futureValueType;
+      }
+    }
+
     out.write('fun ');
     out.write(f.name);
-    _generateFunctionParamsAndBlock(f, blockCode, out, indent, f.returnType);
+    _generateFunctionParamsAndBlock(f, blockCode, out, indent, returnType);
 
     return out;
   }
@@ -198,8 +200,13 @@ class ApolloCodeGeneratorKotlin extends ApolloCodeGenerator {
     String indent = '',
     bool headIndented = true,
   }) {
-    throw UnsupportedSyntaxError(
-      'Kotlin async/await translation not yet supported',
+    // Kotlin suspends implicitly when calling a `suspend` function, so `await e`
+    // becomes just `e`.
+    return generateASTExpression(
+      expression.expression,
+      out: out,
+      indent: indent,
+      headIndented: headIndented,
     );
   }
 

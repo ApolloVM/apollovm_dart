@@ -197,17 +197,19 @@ void main() {
       expect(generated, contains('await '));
     });
 
-    test('Dart -> Kotlin async fails loudly (deferred)', () async {
-      expect(
-        () => _translateDart(r'''
+    test('Dart -> Kotlin emits suspend fun and drops await', () async {
+      var kt = await _translateDart(r'''
           class Async {
             Future<int> run(List args) async {
               return await compute(args);
             }
           }
-        ''', 'kotlin'),
-        throwsA(isA<UnsupportedSyntaxError>()),
-      );
+        ''', 'kotlin');
+      // `async` -> `suspend fun`; `Future<int>` -> `Int`; `await x` -> `x`.
+      expect(kt, contains('suspend fun run('));
+      expect(kt, contains('): Int'));
+      expect(kt, contains('return compute(args)'));
+      expect(kt, isNot(contains('await')));
     });
   });
 }

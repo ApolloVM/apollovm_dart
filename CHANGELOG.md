@@ -63,8 +63,9 @@
     API. So real-suspension async/await works end-to-end through the VM
     (`test/apollovm_wasm_asyncify_runner_test.dart`). A `br_table`
     multi-await/multi-frame transform is the remaining follow-up.
-  - Kotlin async/await translation is deferred and fails loudly via
-    `UnsupportedSyntaxError` (the eventual mapping is `suspend fun` + coroutines).
+  - Kotlin async/await translation: an `async` function maps to a `suspend fun`
+    (the declared `Future<T>` collapses to `T`), and `await e` becomes just `e`
+    (suspension is implicit when calling a `suspend` function in coroutines).
   - Tests: `test/apollovm_async_test.dart` (parse, real-suspension ordering,
     await chains, top-level async, identifier guard, Dart/JS/Kotlin translation)
     and `test/apollovm_wasm_async_test.dart` (AST-vs-compiled-Wasm parity).

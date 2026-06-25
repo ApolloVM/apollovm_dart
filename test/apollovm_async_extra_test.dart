@@ -245,6 +245,73 @@ void main() {
     });
   });
 
+  group('Dart -> Kotlin async translation', () {
+    test(
+      'async method -> suspend fun, Future<T> -> T, await dropped',
+      () async {
+        var kt = await _translate(r'''
+        class C {
+          Future<int> compute(List args) async { return 5; }
+          Future<int> run(List args) async {
+            var x = await compute(args);
+            return x + 1;
+          }
+        }
+      ''', 'kotlin');
+        expect(kt, contains('suspend fun compute('));
+        expect(kt, contains('suspend fun run('));
+        expect(kt, contains('): Int'));
+        expect(kt, contains('var x = compute(args)')); // await dropped
+        expect(kt, isNot(contains('await')));
+        expect(kt, isNot(contains('Future')));
+      },
+    );
+
+    test('top-level async functions -> suspend fun', () async {
+      var kt = await _translate(r'''
+        Future<int> compute() async { return 5; }
+        Future<int> main(List args) async {
+          var v = await compute();
+          return v;
+        }
+      ''', 'kotlin');
+      expect(kt, contains('suspend fun compute('));
+      expect(kt, contains('suspend fun main('));
+    });
+
+    test('async with a loop + await -> suspend fun, await dropped', () async {
+      var kt = await _translate(r'''
+        class C {
+          Future<int> step(int i) async { return i; }
+          Future<int> run(List args) async {
+            var total = 0;
+            for (var i = 0; i < 3; i = i + 1) {
+              total = total + await step(i);
+            }
+            return total;
+          }
+        }
+      ''', 'kotlin');
+      expect(kt, contains('suspend fun run('));
+      expect(kt, contains('suspend fun step('));
+      expect(kt, contains('for ('));
+      expect(kt, isNot(contains('await')));
+    });
+
+    test('Future<void> async -> suspend fun with no return type', () async {
+      var kt = await _translate(r'''
+        class C {
+          Future<void> ping() async {
+            await beat();
+          }
+        }
+      ''', 'kotlin');
+      expect(kt, contains('suspend fun ping()'));
+      expect(kt, isNot(contains(': Unit'))); // void/Unit return omitted
+      expect(kt, isNot(contains('await')));
+    });
+  });
+
   group('Dart -> Dart async round-trip (extra)', () {
     test('multiple awaits round-trip', () async {
       var dart = await _translate(r'''
