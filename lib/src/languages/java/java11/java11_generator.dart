@@ -30,6 +30,14 @@ class ApolloCodeGeneratorJava11 extends ApolloCodeGenerator {
   }
 
   @override
+  String generateASTCatchClauseHeader(ASTCatchClause catchClause) {
+    var name = catchClause.variableName ?? 'e';
+    var type = catchClause.exceptionType;
+    var typeStr = type != null ? '${generateASTType(type)}' : 'Exception';
+    return 'catch ($typeStr $name)';
+  }
+
+  @override
   String normalizeTypeFunction(String typeName, String functionName) {
     switch (typeName) {
       case 'int':

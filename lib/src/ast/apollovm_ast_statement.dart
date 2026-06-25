@@ -1287,3 +1287,187 @@ class ASTStatementForEach extends ASTStatement {
   @override
   ASTType resolveType(VMContext? context) => ASTTypeVoid.instance;
 }
+
+/// [ASTStatement] for `throw <expression>;`.
+class ASTStatementThrow extends ASTStatement {
+  ASTExpression expression;
+
+  ASTStatementThrow(this.expression);
+
+  @override
+  Iterable<ASTNode> get children => [expression];
+
+  @override
+  void resolveNode(ASTNode? parentNode) {
+    super.resolveNode(parentNode);
+    expression.resolveNode(parentNode);
+  }
+
+  @override
+  FutureOr<ASTValue> run(VMContext parentContext, ASTRunStatus runStatus) {
+    return expression.run(parentContext, runStatus).resolveMapped((value) {
+      throw ApolloVMThrownException(value);
+    });
+  }
+
+  @override
+  ASTType resolveType(VMContext? context) => ASTTypeVoid.instance;
+
+  @override
+  String toString() => 'throw $expression ;';
+}
+
+/// A single `catch` clause of an [ASTStatementTryCatch].
+///
+/// [exceptionType] is the matched type (`null` = catch-all); [variableName] is
+/// the bound variable (`null` = no variable); [block] is the handler body.
+class ASTCatchClause {
+  final ASTType? exceptionType;
+  final String? variableName;
+  final ASTBlock block;
+
+  ASTCatchClause(this.exceptionType, this.variableName, this.block);
+
+  void resolveNode(ASTNode? parentNode) {
+    exceptionType?.resolveNode(parentNode);
+    block.resolveNode(parentNode);
+  }
+
+  /// Runs the handler with [caught] bound to [variableName] in a child scope.
+  Future<ASTValue> run(
+    VMContext parentContext,
+    ASTRunStatus runStatus,
+    ASTValue caught,
+  ) async {
+    var context = VMScopeContext(parentContext.block, parent: parentContext);
+    var name = variableName;
+    if (name != null) {
+      context.declareVariableWithValue(
+        exceptionType ?? ASTTypeDynamic.instance,
+        name,
+        caught,
+      );
+    }
+    var prevContext = VMContext.setCurrent(context);
+    try {
+      var result = await block.run(context, runStatus);
+      // Materialize any lazy returned value (e.g. a string interpolation that
+      // references the bound variable) while the catch variable is still in
+      // scope — otherwise it would be resolved later, after this scope is gone.
+      if (runStatus.returned) {
+        var returnedValue = runStatus.returnedValue;
+        if (returnedValue != null) {
+          var resolved = await returnedValue.resolve(context);
+          runStatus.returnedValue = resolved;
+          result = resolved;
+        }
+      }
+      return result;
+    } finally {
+      VMContext.setCurrent(prevContext);
+    }
+  }
+}
+
+/// The universal "catch-all" exception supertypes across the supported
+/// languages. A `catch` clause typed with one of these matches any thrown
+/// value (including built-in VM errors), so that an untyped Dart/JS `catch (e)`
+/// round-trips faithfully to Java `catch (Exception e)`, Kotlin
+/// `catch (e: Throwable)`, etc.
+const _catchAllTypeNames = {
+  'Object',
+  'dynamic',
+  'Exception',
+  'Throwable',
+  'Error',
+};
+
+bool _isCatchAllType(ASTType type) => _catchAllTypeNames.contains(type.name);
+
+/// [ASTStatement] for `try { } catch ... { } finally { }`.
+///
+/// Catches both user `throw`n values ([ApolloVMThrownException]) and built-in VM
+/// runtime errors ([ApolloVMRuntimeError]); the latter are surfaced as a
+/// `String` value (their message). A typed clause matches only when the caught
+/// value is an instance of its type; a clause with a `null` type catches all.
+/// The [finallyBlock] always runs, and a `return` inside it overrides.
+class ASTStatementTryCatch extends ASTStatement {
+  final ASTBlock tryBlock;
+  final List<ASTCatchClause> catches;
+  final ASTBlock? finallyBlock;
+
+  ASTStatementTryCatch(this.tryBlock, this.catches, this.finallyBlock);
+
+  @override
+  Iterable<ASTNode> get children => [tryBlock, ?finallyBlock];
+
+  @override
+  void resolveNode(ASTNode? parentNode) {
+    super.resolveNode(parentNode);
+    tryBlock.resolveNode(parentNode);
+    for (var c in catches) {
+      c.resolveNode(parentNode);
+    }
+    finallyBlock?.resolveNode(parentNode);
+  }
+
+  @override
+  VMContext defineRunContext(VMContext parentContext) => parentContext;
+
+  @override
+  FutureOr<ASTValue> run(
+    VMContext parentContext,
+    ASTRunStatus runStatus,
+  ) async {
+    try {
+      try {
+        return await tryBlock.run(parentContext, runStatus);
+      } catch (error) {
+        // Like Dart's `catch (e)` (which catches any `Object`): user `throw`s
+        // surface their thrown value; built-in VM/runtime errors surface as a
+        // `String` (their message). Control flow (return/break) uses
+        // `ASTRunStatus` flags, not exceptions, so it is never caught here.
+        var caught = error is ApolloVMThrownException
+            ? error.value
+            : ASTValueString(error.toString());
+
+        for (var c in catches) {
+          var t = c.exceptionType;
+          if (t == null ||
+              _isCatchAllType(t) ||
+              await caught.isInstanceOfAsync(t)) {
+            return await c.run(parentContext, runStatus, caught);
+          }
+        }
+        rethrow; // no clause matched
+      }
+    } finally {
+      var finallyBlock = this.finallyBlock;
+      if (finallyBlock != null) {
+        var finallyStatus = ASTRunStatus();
+        await finallyBlock.run(parentContext, finallyStatus);
+        // A `return` inside `finally` overrides the try/catch outcome.
+        if (finallyStatus.returned) {
+          runStatus.returned = true;
+          runStatus.returnedValue = finallyStatus.returnedValue;
+          runStatus.returnedFutureValue = finallyStatus.returnedFutureValue;
+        }
+      }
+    }
+  }
+
+  @override
+  ASTType resolveType(VMContext? context) => ASTTypeVoid.instance;
+
+  @override
+  String toString() {
+    var str = StringBuffer('try $tryBlock');
+    for (var c in catches) {
+      str.write(' catch ${c.block}');
+    }
+    if (finallyBlock != null) {
+      str.write(' finally $finallyBlock');
+    }
+    return str.toString();
+  }
+}

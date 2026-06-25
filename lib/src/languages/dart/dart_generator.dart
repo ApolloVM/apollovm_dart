@@ -29,6 +29,16 @@ class ApolloCodeGeneratorDart extends ApolloCodeGenerator {
   }
 
   @override
+  String generateASTCatchClauseHeader(ASTCatchClause catchClause) {
+    var name = catchClause.variableName ?? 'e';
+    var type = catchClause.exceptionType;
+    if (type != null) {
+      return 'on ${generateASTType(type)} catch ($name)';
+    }
+    return 'catch ($name)';
+  }
+
+  @override
   String normalizeTypeFunction(String typeName, String functionName) {
     switch (typeName) {
       case 'int':

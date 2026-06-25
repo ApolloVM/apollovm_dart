@@ -1,3 +1,23 @@
+## 0.1.33
+
+- Exception handling: **`throw`, `try` / `catch` / `finally`** for Dart, Java,
+  Kotlin, JavaScript and TypeScript (parse, run and translate).
+  - New AST nodes `ASTStatementThrow`, `ASTStatementTryCatch` and `ASTCatchClause`;
+    a thrown value is carried by the new `ApolloVMThrownException`.
+  - Catch semantics (faithful to Dart's `catch (e)`): an **untyped** `catch`
+    catches both user `throw`n values *and* built-in VM runtime errors (e.g.
+    integer division by zero, surfaced as their message `String`); a **typed**
+    clause matches user-thrown values by type. The universal supertypes
+    (`Object`, `dynamic`, `Exception`, `Throwable`, `Error`) act as catch-all so
+    an untyped catch round-trips faithfully across languages.
+  - `finally` always runs (on normal completion, after a caught throw, or on a
+    `return` inside `try`/`catch`), and a `return` inside `finally` overrides.
+  - Per-language catch syntax on both parse and generation: Dart `on T catch (e)`
+    / `catch (e)`, Java `catch (T e)` (untyped → `catch (Exception e)`), Kotlin
+    `catch (e: T)` (untyped → `catch (e: Throwable)`), JS/TS `catch (e)`.
+  - **Wasm** `try`/`catch`/`throw` is deferred: it fails loudly (no silent
+    miscompile).
+
 ## 0.1.32
 
 - Wasm Asyncify: **awaits inside `for-each`** over a list. `for (T e in it)` is

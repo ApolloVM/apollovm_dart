@@ -395,7 +395,9 @@ class DartGrammarDefinition extends DartGrammarLexer {
       (statementReturn() | statementExpression()).cast<ASTStatement>();
 
   Parser<ASTStatement> statement() =>
-      (branch() |
+      (statementTryCatch() |
+              statementThrow() |
+              branch() |
               statementForLoop() |
               statementForEach() |
               statementWhileLoop() |
@@ -405,6 +407,62 @@ class DartGrammarDefinition extends DartGrammarLexer {
               statementBlock() |
               statementExpression())
           .cast<ASTStatement>();
+
+  Parser<ASTStatementThrow> statementThrow() =>
+      (string('throw').trimHidden() & ref0(expression) & char(';').trimHidden())
+          .map((v) => ASTStatementThrow(v[1] as ASTExpression));
+
+  Parser<ASTStatementTryCatch> statementTryCatch() =>
+      (string('try').trimHidden() &
+              codeBlock() &
+              catchClause().star() &
+              (string('finally').trimHidden() & codeBlock()).optional())
+          .map((v) {
+            var tryBlock = v[1] as ASTBlock;
+            var catches = (v[2] as List).cast<ASTCatchClause>();
+            var finallyOpt = v[3] as List?;
+            var finallyBlock = finallyOpt != null
+                ? finallyOpt[1] as ASTBlock
+                : null;
+            return ASTStatementTryCatch(tryBlock, catches, finallyBlock);
+          });
+
+  Parser<ASTCatchClause> catchClause() =>
+      (onCatchClause() | bareCatchClause()).cast<ASTCatchClause>();
+
+  /// Dart `on Type [catch (e[, st])] { }`.
+  Parser<ASTCatchClause> onCatchClause() =>
+      (string('on').trimHidden() &
+              type() &
+              (string('catch').trimHidden() &
+                      char('(').trimHidden() &
+                      identifier().trimHidden() &
+                      (char(',').trimHidden() & identifier().trimHidden())
+                          .optional() &
+                      char(')').trimHidden())
+                  .optional() &
+              codeBlock())
+          .map((v) {
+            var type = v[1] as ASTType;
+            var catchPart = v[2] as List?;
+            var varName = catchPart != null ? catchPart[2] as String : null;
+            var block = v[3] as ASTBlock;
+            return ASTCatchClause(type, varName, block);
+          });
+
+  /// Dart `catch (e[, st]) { }` (untyped catch-all).
+  Parser<ASTCatchClause> bareCatchClause() =>
+      (string('catch').trimHidden() &
+              char('(').trimHidden() &
+              identifier().trimHidden() &
+              (char(',').trimHidden() & identifier().trimHidden()).optional() &
+              char(')').trimHidden() &
+              codeBlock())
+          .map((v) {
+            var varName = v[2] as String;
+            var block = v[5] as ASTBlock;
+            return ASTCatchClause(null, varName, block);
+          });
 
   Parser<ASTStatement> statementSimple() =>
       (statementVariableDeclaration() | statementExpression())
