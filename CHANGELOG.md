@@ -28,8 +28,18 @@
     host awaits a real Dart `Future`, then re-invokes the export which rewinds
     and resumes. Demonstrates multi-frame state preservation, exactly-once
     prologue execution, and two concurrent computations interleaving by host
-    delay. Generator integration (general bodies, multiple await points,
-    `br_table` resume dispatch, a real Asyncify stack) is the follow-up.
+    delay.
+  - Wasm **Asyncify code generation (v1)**: the generator now emits the
+    unwind/rewind state machine for an `async` function with a single
+    statement-level `await` of an external (host) call — a fixed low-memory
+    Asyncify control region (`WasmModuleContext`), a rewind-dispatch prologue
+    (`br_if`), live-local spill/restore, and a suspend epilogue. Validated
+    against the live runtime in `test/apollovm_wasm_asyncify_codegen_test.dart`
+    (real suspension, pre/post-await local preservation, concurrent
+    interleaving). Anything more complex (multiple awaits, awaits in control
+    flow, awaiting a module function => multi-frame) falls back to the
+    synchronous-collapse path. Driving it through `ApolloRunnerWasm` and a
+    `br_table` multi-await/multi-frame transform are the follow-ups.
   - Kotlin async/await translation is deferred and fails loudly via
     `UnsupportedSyntaxError` (the eventual mapping is `suspend fun` + coroutines).
   - Tests: `test/apollovm_async_test.dart` (parse, real-suspension ordering,

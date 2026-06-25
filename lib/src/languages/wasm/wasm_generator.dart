@@ -501,12 +501,8 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       data: [
         BytesOutput(data: 0x00, description: "Data kind(active, mem 0)"),
         BytesOutput(
-          data: [
-            ...Wasm32.i32Const(WasmModuleContext.dataBaseOffset),
-            Wasm.end,
-          ],
-          description:
-              "Offset expr (i32.const ${WasmModuleContext.dataBaseOffset})",
+          data: [...Wasm32.i32Const(module.dataBaseOffset), Wasm.end],
+          description: "Offset expr (i32.const ${module.dataBaseOffset})",
         ),
         BytesOutput(
           data: [...Leb128.encodeUnsigned(bytes.length), ...bytes],
@@ -3032,6 +3028,23 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       context.module = module;
     }
 
+    // Real `async`/`await` suspension (Asyncify): if this async function has a
+    // single statement-level `await` of an external (host) call, emit the
+    // unwind/rewind state machine so it can really suspend. Anything more
+    // complex falls back to the synchronous-collapse path below.
+    if (f.modifiers.isAsync && module != null) {
+      var match = _matchAsyncify(f, module);
+      if (match != null) {
+        return _generateAsyncifyFunction(
+          f,
+          match,
+          out: out,
+          context: context,
+          module: module,
+        );
+      }
+    }
+
     var outBody = newOutput();
 
     // For an `async` function the declared `Future<T>` collapses to `T` (Wasm
@@ -3133,6 +3146,250 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
 
     out.writeBytesLeb128Block([outBody], description: "Function body");
 
+    return out;
+  }
+
+  /// Detects the v1 Asyncify shape: an `async` function with exactly one
+  /// `await`, where the await is a top-level statement (`T v = await call(...)`
+  /// or `await call(...)`) and `call` is an external (host) function. Returns
+  /// `null` (=> synchronous-collapse fallback) for anything more complex
+  /// (multiple awaits, awaits nested in control flow, awaiting a module
+  /// function, or a `var`-typed result the Wasm backend can't infer).
+  _AsyncifyMatch? _matchAsyncify(
+    ASTFunctionDeclaration f,
+    WasmModuleContext module,
+  ) {
+    final awaits = <ASTExpressionAwait>[];
+    for (var s in f.statements) {
+      awaits.addAll(s.descendantChildren.whereType<ASTExpressionAwait>());
+    }
+    if (awaits.length != 1) return null;
+
+    final aw = awaits.first;
+    final inner = aw.expression;
+    if (inner is! ASTExpressionLocalFunctionInvocation) return null;
+
+    final name = inner.name;
+    final args = inner.arguments;
+    if (name == 'print') return null;
+    // A module function would require multi-frame unwind (v2).
+    if (module.functionIndex(name, args.length) != null) return null;
+
+    final stmts = f.statements;
+    for (var i = 0; i < stmts.length; i++) {
+      final s = stmts[i];
+      if (s is ASTStatementVariableDeclaration && identical(s.value, aw)) {
+        if (s.type is ASTTypeVar) return null; // explicit type required
+        return _AsyncifyMatch(i, name, args, s.name, s.type);
+      }
+      if (s is ASTStatementExpression && identical(s.expression, aw)) {
+        return _AsyncifyMatch(i, name, args, null, null);
+      }
+    }
+    return null; // await not a top-level statement
+  }
+
+  /// Emits the Asyncify state machine for a [match]ed async function: a rewind
+  /// dispatch prologue, the pre-await segment + suspend (spill live locals,
+  /// set state, return), and the post-await resume segment. The host driver
+  /// re-invokes the export to rewind. See
+  /// `test/apollovm_wasm_asyncify_*` and `WasmModuleContext` for the layout.
+  BytesOutput _generateAsyncifyFunction(
+    ASTFunctionDeclaration f,
+    _AsyncifyMatch match, {
+    required BytesOutput out,
+    required WasmContext context,
+    required WasmModuleContext module,
+  }) {
+    module.requiresAsyncify = true;
+    module.requiresMemory = true;
+
+    const stateOff = WasmModuleContext.asyncifyStateOffset;
+    const resultOff = WasmModuleContext.asyncifyResultOffset;
+    int slotOf(int i) => WasmModuleContext.asyncifyLocalsOffset + i * 8;
+
+    final returnType = f.effectiveReturnType;
+    final return0 = context.returnsLength;
+    context.returnsPush(returnType, "async `${f.name}` -> $returnType");
+
+    // Register params, then declared locals (preamble/index order), then the
+    // `$resume` control local. Collect every user local for spill/restore.
+    final userLocals = <({int index, ASTType type})>[];
+    for (var v in f.parameters.declaredVariables()) {
+      userLocals.add((
+        index: context.addLocalVariable(v.key, v.value),
+        type: v.value,
+      ));
+    }
+    final declaredLocals = f.statements.declaredVariables();
+    for (var v in declaredLocals) {
+      userLocals.add((
+        index: context.addLocalVariable(v.key, v.value),
+        type: v.value,
+      ));
+    }
+    final resumeIdx = context.addLocalVariable(
+      '\$asyncify_resume',
+      _astTypeInt32,
+    );
+
+    List<int> spill(int idx, ASTType t, int slot) {
+      final k = t.wasmType;
+      return [
+        ...Wasm32.i32Const(0),
+        ...Wasm.localGet(idx),
+        if (k == WasmType.f64Type)
+          ...Wasm64.f64Store(FloatAlign.align3, slot)
+        else if (k == WasmType.i32Type)
+          ...Wasm32.i32Store(2, slot)
+        else
+          ...Wasm64.i64Store(3, slot),
+      ];
+    }
+
+    List<int> restore(int idx, ASTType t, int slot) {
+      final k = t.wasmType;
+      return [
+        ...Wasm32.i32Const(0),
+        if (k == WasmType.f64Type)
+          ...Wasm64.f64Load(FloatAlign.align3, slot)
+        else if (k == WasmType.i32Type)
+          ...Wasm32.i32Load(2, slot)
+        else
+          ...Wasm64.i64Load(3, slot),
+        ...Wasm.localSet(idx),
+      ];
+    }
+
+    List<int> defaultConst(ASTType t) {
+      final k = t.wasmType;
+      if (k == WasmType.voidType) return const [];
+      if (k == WasmType.f64Type) return Wasm64.f64Const(0);
+      if (k == WasmType.i32Type) return Wasm32.i32Const(0);
+      return Wasm64.i64Const(0);
+    }
+
+    final body = newOutput();
+
+    // --- prologue: if rewinding, restore locals, clear state, resume=1 ---
+    body.write([
+      ...Wasm32.i32Const(0),
+      ...Wasm32.i32Load(2, stateOff),
+      ...Wasm32.i32Const(2),
+      Wasm32.i32Equals,
+      ...Wasm.ifInstruction(WasmType.voidType),
+    ]);
+    for (var i = 0; i < userLocals.length; i++) {
+      body.write(restore(userLocals[i].index, userLocals[i].type, slotOf(i)));
+    }
+    body.write([
+      ...Wasm32.i32Const(0),
+      ...Wasm32.i32Const(0),
+      ...Wasm32.i32Store(2, stateOff),
+      ...Wasm32.i32Const(1),
+      ...Wasm.localSet(resumeIdx),
+      Wasm.elseInstruction,
+      ...Wasm32.i32Const(0),
+      ...Wasm.localSet(resumeIdx),
+      Wasm.end,
+    ]);
+
+    // --- block $L0: on rewind, skip the pre-await segment and the suspend ---
+    body.write([
+      ...Wasm.block(WasmType.voidType),
+      ...Wasm.localGet(resumeIdx),
+      ...Wasm.brIf(0),
+    ]);
+
+    // Pre-await segment.
+    for (var i = 0; i < match.awaitStmtIndex; i++) {
+      generateASTStatement(f.statements[i], out: body, context: context);
+    }
+
+    // The await: evaluate args, register & call the suspending host import.
+    final argTypes = <WasmType>[];
+    for (var arg in match.args) {
+      generateASTExpression(arg, out: body, context: context);
+      argTypes.add(context.stackGet(0)!.type.wasmType);
+    }
+    final importIndex = module.registerImportedFunction(
+      'env',
+      match.calleeName,
+      argTypes,
+      const [],
+    );
+    body.write(Wasm.call(importIndex));
+    for (var _ in match.args) {
+      context.stackDrop();
+    }
+
+    // Suspend: spill live locals, mark unwound, return a default value.
+    for (var i = 0; i < userLocals.length; i++) {
+      body.write(spill(userLocals[i].index, userLocals[i].type, slotOf(i)));
+    }
+    body.write([
+      ...Wasm32.i32Const(0),
+      ...Wasm32.i32Const(1),
+      ...Wasm32.i32Store(2, stateOff),
+      ...defaultConst(returnType),
+    ]);
+    body.writeByte(Wasm.functionReturn);
+    body.writeByte(Wasm.end); // end $L0 (rewind target)
+
+    // Resume: deliver the host-provided result into the result variable.
+    if (match.resultVarName != null) {
+      final rv = context.getLocalVariable(match.resultVarName!)!;
+      final k = match.resultType!.wasmType;
+      body.write([
+        ...Wasm32.i32Const(0),
+        if (k == WasmType.f64Type)
+          ...Wasm64.f64Load(FloatAlign.align3, resultOff)
+        else if (k == WasmType.i32Type)
+          ...Wasm32.i32Load(2, resultOff)
+        else
+          ...Wasm64.i64Load(3, resultOff),
+        ...Wasm.localSet(rv.index),
+      ]);
+    }
+
+    // Post-await segment (includes the `return`).
+    for (var i = match.awaitStmtIndex + 1; i < f.statements.length; i++) {
+      generateASTStatement(f.statements[i], out: body, context: context);
+    }
+
+    // Safety net (mirrors the synchronous path): a non-void function that can
+    // fall through gets an unreachable default.
+    if (!returnType.isVoid && context.stackLength == 0) {
+      body.writeByte(Wasm.unreachable);
+      body.write(defaultConst(returnType));
+    }
+
+    // --- assemble: locals preamble + body + end ---
+    final outBody = newOutput();
+    final scratchTypes = context.scratchLocalTypes;
+    outBody.write(
+      Leb128.encodeUnsigned(declaredLocals.length + 1 + scratchTypes.length),
+      description: "Local variables count",
+    );
+    for (var v in declaredLocals) {
+      outBody.write(Leb128.encodeUnsigned(1));
+      outBody.writeByte(v.value.wasmCode);
+    }
+    outBody.write(Leb128.encodeUnsigned(1), description: "\$asyncify_resume");
+    outBody.writeByte(WasmType.i32Type.value);
+    for (var t in scratchTypes) {
+      outBody.write(Leb128.encodeUnsigned(1));
+      outBody.writeByte(t.wasmCode);
+    }
+    outBody.writeBytes(body);
+    outBody.writeByte(Wasm.end, description: "Code body end");
+
+    context.returnsDrop(returnType);
+    context.assertReturnsLength(return0);
+
+    out.writeBytesLeb128Block([
+      outBody,
+    ], description: "Async function (asyncify)");
     return out;
   }
 
@@ -4576,11 +4833,37 @@ class WasmModuleContext {
     return functions[i];
   }
 
+  // --- Asyncify control region (real `async`/`await` suspension) ---
+  //
+  // When an `async` function is compiled with real suspension (Asyncify), a
+  // small fixed region of low linear memory holds the suspension state. The
+  // host driver and the generated code agree on these absolute offsets. Offset
+  // `0` stays reserved as the null pointer.
+  //
+  //   ASY_STATE  (i32 @ 8): 0=normal, 1=unwound(suspended), 2=rewinding
+  //   ASY_RESULT (i64 @16): the awaited value, written back by the host
+  //   ASY_LOCALS (i64[] @24): spilled live locals across the suspension
+
+  static const int asyncifyBase = 8;
+  static const int asyncifyStateOffset = 8;
+  static const int asyncifyResultOffset = 16;
+  static const int asyncifyLocalsOffset = 24;
+
+  /// Bytes reserved for the Asyncify control region (state + result + spilled
+  /// locals). 256 bytes => up to 29 spilled i64 locals.
+  static const int asyncifyRegionSize = 256;
+
+  /// Whether the module compiled at least one real-suspension `async` function
+  /// and therefore reserves the Asyncify control region.
+  bool requiresAsyncify = false;
+
   // --- Static data region (interned string literals) ---
 
   /// Base offset of the static data region in linear memory. Offset `0` is
-  /// reserved as a null pointer.
-  static const int dataBaseOffset = 8;
+  /// reserved as a null pointer; when Asyncify is used the static data is
+  /// shifted up past the control region so its fixed offsets never collide.
+  int get dataBaseOffset =>
+      requiresAsyncify ? (asyncifyBase + asyncifyRegionSize) : 8;
 
   final BytesBuilder _data = BytesBuilder();
   final Map<String, int> _literalPointers = {};
@@ -4953,6 +5236,33 @@ extension _ASTTypeNumExtension on ASTTypeNum {
 
 extension on Iterable<ASTFunctionParameterDeclaration> {
   Iterable<int> toWasmCodes() => map((p) => p.type.wasmCode);
+}
+
+/// A matched v1 Asyncify shape (see `_matchAsyncify`): the single statement-
+/// level `await` of an external call that drives the suspension.
+class _AsyncifyMatch {
+  /// Index of the await statement within the function's statements.
+  final int awaitStmtIndex;
+
+  /// Name of the awaited external (host) function.
+  final String calleeName;
+
+  /// Argument expressions passed to the awaited call.
+  final List<ASTExpression> args;
+
+  /// Local that receives the awaited result on resume (`null` if discarded).
+  final String? resultVarName;
+
+  /// Declared type of [resultVarName] (`null` when there is no result var).
+  final ASTType? resultType;
+
+  _AsyncifyMatch(
+    this.awaitStmtIndex,
+    this.calleeName,
+    this.args,
+    this.resultVarName,
+    this.resultType,
+  );
 }
 
 extension _ASTFunctionDeclarationExtension on ASTFunctionDeclaration {
