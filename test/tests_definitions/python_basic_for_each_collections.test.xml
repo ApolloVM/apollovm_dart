@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="For-each over list and dict access">
+    <source language="python">
+        <![CDATA[
+def main(items):
+    total = 0
+    for x in items:
+        total += x
+    print(total)
+    d = {'a': 1, 'b': 2}
+    print(d['a'])
+    nums = [10, 20, 30]
+    print(nums[1])
+        ]]>
+    </source>
+    <call function="main">
+        [[1,2,3]]
+    </call>
+    <output>
+        [6,1,20]
+    </output>
+
+    <source-generated language="python"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+def main(items) -> None:
+    total: int = 0
+    for x in items:
+        total += x
+    print(total)
+    d: Dict[str, int] = {'a': 1, 'b': 2}
+    print(d['a'])
+    nums: List[int] = [10, 20, 30]
+    print(nums[1])
+
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+</test>

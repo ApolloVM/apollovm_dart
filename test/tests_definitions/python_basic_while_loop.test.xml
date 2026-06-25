@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="Basic while loop">
+    <source language="python">
+        <![CDATA[
+def main(n):
+    i = 0
+    total = 0
+    while i < n:
+        total += i
+        i += 1
+    print(total)
+        ]]>
+    </source>
+    <call function="main">
+        [5]
+    </call>
+    <output>
+        [10]
+    </output>
+
+    <source-generated language="python"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+def main(n) -> None:
+    i: int = 0
+    total: int = 0
+    while i < n:
+        total += i
+        i += 1
+    print(total)
+
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+</test>

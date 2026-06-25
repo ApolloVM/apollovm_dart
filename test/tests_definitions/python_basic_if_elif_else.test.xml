@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="if / elif / else">
+    <source language="python">
+        <![CDATA[
+def classify(n):
+    if n > 0:
+        return 'positive'
+    elif n < 0:
+        return 'negative'
+    else:
+        return 'zero'
+
+def main(n):
+    print(classify(n))
+        ]]>
+    </source>
+    <call function="main">
+        [-5]
+    </call>
+    <output>
+        ["negative"]
+    </output>
+    <call function="main">
+        [0]
+    </call>
+    <output>
+        ["zero"]
+    </output>
+    <call function="main">
+        [7]
+    </call>
+    <output>
+        ["positive"]
+    </output>
+
+    <source-generated language="python"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+def classify(n):
+    if n > 0:
+        return 'positive'
+    elif n < 0:
+        return 'negative'
+    else:
+        return 'zero'
+
+def main(n) -> None:
+    print(classify(n))
+
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+</test>

@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="Basic main(args) 1">
+    <source language="python">
+        <![CDATA[
+def main(args):
+    title = args[0]
+    a = args[1]
+    b = args[2]
+    sum_ab = a + b
+    sum_abc = a + b + args[3]
+    greater = sum_abc > sum_ab
+    print(title)
+    print(sum_ab)
+    print(sum_abc)
+    if greater:
+        eq = greater == True
+        print(f'sum_abc > sum_ab = {eq}')
+        ]]>
+    </source>
+    <call function="main">
+        [["Sums:",10,20,50]]
+    </call>
+    <output>
+        ["Sums:",30,80,"sum_abc > sum_ab = true"]
+    </output>
+
+    <source-generated language="python"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+def main(args) -> None:
+    title = args[0]
+    a = args[1]
+    b = args[2]
+    sum_ab = a + b
+    sum_abc = (a + b) + args[3]
+    greater: bool = sum_abc > sum_ab
+    print(title)
+    print(sum_ab)
+    print(sum_abc)
+    if greater:
+        eq: bool = greater == True
+        print(f'sum_abc > sum_ab = {eq}')
+
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+</test>

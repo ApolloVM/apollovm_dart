@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="Try/Except/Finally and Raise">
+    <source language="python">
+        <![CDATA[
+class Calc:
+    def check(self, x):
+        try:
+            if x < 0:
+                raise 'negative'
+            return 'ok'
+        except:
+            return 'caught'
+        finally:
+            print('done')
+        ]]>
+    </source>
+    <call class="Calc" function="check">
+        [5]
+    </call>
+    <output>
+        ["done"]
+    </output>
+    <call class="Calc" function="check">
+        [-1]
+    </call>
+    <output>
+        ["done"]
+    </output>
+
+    <source-generated language="python"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+class Calc:
+    def check(self, x):
+        try:
+            if x < 0:
+                raise 'negative'
+            return 'ok'
+        except:
+            return 'caught'
+        finally:
+            print('done')
+
+
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+</test>
