@@ -2061,10 +2061,17 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
           );
           context.stackOperationBinary(_astTypeDouble64, "Wasm64.f64Divide");
 
-          out.writeByte(
-            Wasm64.f64TruncateToI64Signed,
-            description: "[OP] Wasm64.f64TruncateToi64Signed",
-          );
+          if (context.exceptionMode) {
+            // Guard the truncation: `i64.trunc_f64_s` traps on Infinity/NaN
+            // (e.g. `1 ~/ 0`). Instead raise a catchable exception (matching the
+            // AST interpreter's message) and yield 0.
+            _emitGuardedF64ToI64(out, context);
+          } else {
+            out.writeByte(
+              Wasm64.f64TruncateToI64Signed,
+              description: "[OP] Wasm64.f64TruncateToi64Signed",
+            );
+          }
 
           context.stackReplace(_astTypeInt64, "i64.truncate_f64_signed");
         }
@@ -3048,6 +3055,22 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       context.module = module;
     }
 
+    // Exception handling (`throw` / `try` / `catch`): lower to a `$pc`-dispatched
+    // CFG so unwinding uses absolute jumps. Takes precedence over the synchronous
+    // path; the async+exceptions combination is deferred (builder returns null).
+    if (module != null && _exceptionEligible(module).contains(f.name)) {
+      final cfg = _buildExceptionCfg(f, module, _exceptionEligible(module));
+      if (cfg != null) {
+        return _generateExceptionCfgFunction(
+          f,
+          cfg,
+          out: out,
+          context: context,
+          module: module,
+        );
+      }
+    }
+
     // Real `async`/`await` suspension (Asyncify): emit the unwind/rewind state
     // machine so an async function can really suspend. The linear path handles
     // top-level statement awaits; the CFG path handles awaits inside control
@@ -3695,6 +3718,874 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     return _Cfg(blocks, temps);
   }
 
+  /// Runtime type tag stored in `EXC_TAG` for a thrown value of [type]. Used by
+  /// catch dispatch to match typed clauses (and to choose the load width when
+  /// binding the catch variable).
+  static int _excTypeTag(ASTType type) {
+    if (type is ASTTypeInt) return 1;
+    if (type is ASTTypeDouble) return 2;
+    if (type is ASTTypeBool) return 3;
+    if (type is ASTTypeString) return 4;
+    return 5; // list / map / object / other (i32 pointer)
+  }
+
+  /// The universal catch-all supertypes (mirrors the AST interpreter): a clause
+  /// typed with one of these — or untyped — matches any thrown value.
+  static const _excCatchAllTypeNames = {
+    'Object',
+    'dynamic',
+    'Exception',
+    'Throwable',
+    'Error',
+  };
+
+  /// Representative AST types for each primitive tag, used to compute which tags
+  /// a typed catch clause accepts (via [ASTType.acceptsType]).
+  static final Map<int, ASTType> _tagRepresentativeTypes = {
+    1: ASTTypeInt.instance,
+    2: ASTTypeDouble.instance,
+    3: ASTTypeBool.instance,
+    4: ASTTypeString.instance,
+  };
+
+  /// The set of `EXC_TAG` values a catch clause accepts, or `null` if it is a
+  /// catch-all. Mirrors the AST interpreter: a clause matches a thrown value
+  /// whose type the clause type `acceptsType` (so `on double` also accepts an
+  /// `int`).
+  static Set<int>? _catchClauseAcceptedTags(ASTCatchClause c) {
+    final t = c.exceptionType;
+    if (t == null || _excCatchAllTypeNames.contains(t.name)) return null;
+    final tags = <int>{};
+    _tagRepresentativeTypes.forEach((tag, repr) {
+      if (t.acceptsType(repr)) tags.add(tag);
+    });
+    // A non-primitive (object/list/map) clause matches the pointer tag.
+    if (_excTypeTag(t) == 5) tags.add(5);
+    return tags;
+  }
+
+  /// Emits a non-trapping `f64 -> i64` truncation: if the f64 on the stack is
+  /// finite, truncate; otherwise raise a catchable exception (a `String` whose
+  /// message matches the AST interpreter) and yield `0`. Net stack effect:
+  /// pops one `f64`, pushes one `i64`.
+  void _emitGuardedF64ToI64(BytesOutput out, WasmContext context) {
+    final module = context.module!;
+    module.requiresException = true;
+    final fdiv = context.scratchLocal(_astTypeDouble64, 950);
+    const msg = 'Unsupported operation: Infinity or NaN toInt';
+    final msgPtr = module.internStringLiteral(msg);
+
+    out.write(Wasm.localSet(fdiv)); // $fdiv = result
+    // finite? (result - result == 0; Infinity/NaN make the difference NaN != 0)
+    out.write(Wasm.localGet(fdiv));
+    out.write(Wasm.localGet(fdiv));
+    out.writeByte(Wasm64.f64Subtract);
+    out.write(Wasm64.f64Const(0));
+    out.writeByte(Wasm64.f64Equals);
+    out.write(Wasm.ifInstruction(WasmType.i64Type));
+    // finite: truncate normally.
+    out.write(Wasm.localGet(fdiv));
+    out.writeByte(Wasm64.f64TruncateToI64Signed);
+    out.writeByte(Wasm.elseInstruction);
+    // non-finite: raise a catchable String exception, yield 0.
+    out.write([
+      ...Wasm32.i32Const(0),
+      ...Wasm32.i32Const(4), // EXC_TAG = String
+      ...Wasm32.i32Store(2, module.excTagOffset),
+    ]);
+    out.write([
+      ...Wasm32.i32Const(0),
+      ...Wasm32.i32Const(msgPtr), // EXC_VALUE = interned message pointer
+      ...Wasm32.i32Store(2, module.excValueOffset),
+    ]);
+    out.write([
+      ...Wasm32.i32Const(0),
+      ...Wasm32.i32Const(1), // EXC_PENDING = 1
+      ...Wasm32.i32Store(2, module.excPendingOffset),
+    ]);
+    out.write(Wasm64.i64Const(0));
+    out.writeByte(Wasm.end);
+  }
+
+  /// The returned expression of a `return` statement (for capturing the value
+  /// before a `finally` runs), or `null` for a bare/`null` return.
+  ASTExpression? _returnExpression(ASTStatementReturn s) {
+    if (s is ASTStatementReturnWithExpression) return s.expression;
+    if (s is ASTStatementReturnValue) return ASTExpressionLiteral(s.value);
+    if (s is ASTStatementReturnVariable) {
+      return ASTExpressionVariableAccess(s.variable);
+    }
+    return null;
+  }
+
+  /// Whether [tryBlock] can raise (a `throw` statement or an integer division).
+  bool _tryHasThrow(ASTBlock tryBlock) =>
+      tryBlock.statements.any((s) => s is ASTStatementThrow) ||
+      tryBlock.descendantChildren.any(
+        (n) =>
+            n is ASTStatementThrow ||
+            (n is ASTExpressionOperation &&
+                n.operator == ASTExpressionOperator.divideAsInt),
+      );
+
+  /// The common static type of the values thrown directly within [tryBlock]
+  /// (used to type an untyped catch variable). Returns `null` if no `throw` is
+  /// found or the thrown types differ.
+  ASTType? _inferTryThrownType(ASTBlock tryBlock) {
+    ASTType? result;
+    void consider(ASTType? rt) {
+      if (rt == null) return;
+      result ??= rt;
+    }
+
+    final throws = <ASTStatementThrow>[
+      ...tryBlock.statements.whereType<ASTStatementThrow>(),
+      ...tryBlock.descendantChildren.whereType<ASTStatementThrow>(),
+    ];
+    final types = <String, ASTType>{};
+    for (final t in throws) {
+      final rt = t.expression.resolveType(null);
+      if (rt is! ASTType) return null;
+      types[rt.name] = rt;
+    }
+    // An integer division can raise a `String` ("Infinity or NaN").
+    if (tryBlock.descendantChildren.whereType<ASTExpressionOperation>().any(
+      (o) => o.operator == ASTExpressionOperator.divideAsInt,
+    )) {
+      types['String'] = ASTTypeString.instance;
+    }
+    if (types.length > 1) return null; // mixed thrown types
+    for (final t in types.values) {
+      consider(t);
+    }
+    return result;
+  }
+
+  /// Whether [f] contains a `throw` or `try` and so must be compiled through the
+  /// exception CFG (rather than the straight-line path).
+  bool _functionUsesExceptions(ASTFunctionDeclaration f) {
+    for (var s in f.statements) {
+      if (s is ASTStatementThrow || s is ASTStatementTryCatch) return true;
+      if (s.descendantChildren.any(
+        (n) => n is ASTStatementThrow || n is ASTStatementTryCatch,
+      )) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /// All local-function invocations within [f].
+  Iterable<ASTExpressionLocalFunctionInvocation> _functionCalls(
+    ASTFunctionDeclaration f,
+  ) => f.statements
+      .expand((s) => [s, ...s.descendantChildren])
+      .whereType<ASTExpressionLocalFunctionInvocation>();
+
+  /// Fixed-point set of exception-eligible function names: functions that use
+  /// `throw`/`try` directly, plus any function that (transitively) calls one —
+  /// callers need post-call checks so a thrown exception propagates out. Cached
+  /// per module.
+  Set<String> _exceptionEligible(WasmModuleContext module) {
+    final cached = module.exceptionEligible;
+    if (cached != null) return cached;
+
+    final eligible = <String>{};
+    for (final f in module.functions) {
+      if (_functionUsesExceptions(f)) eligible.add(f.name);
+    }
+    var changed = true;
+    while (changed) {
+      changed = false;
+      for (final f in module.functions) {
+        if (eligible.contains(f.name)) continue;
+        if (_functionCalls(f).any((c) => eligible.contains(c.name))) {
+          eligible.add(f.name);
+          changed = true;
+        }
+      }
+    }
+    return module.exceptionEligible = eligible;
+  }
+
+  /// Number of calls within [s] (including nested) to a function in [eligible].
+  int _countEligibleCalls(ASTStatement s, Set<String> eligible) =>
+      [s, ...s.descendantChildren]
+          .whereType<ASTExpressionLocalFunctionInvocation>()
+          .where((c) => eligible.contains(c.name))
+          .length;
+
+  /// Number of integer divisions (`~/`) within [s] — each can raise a catchable
+  /// "Infinity or NaN" exception under the exception CFG, so the enclosing
+  /// statement needs a post-evaluation pending check.
+  int _countIntDivisions(ASTStatement s) => [s, ...s.descendantChildren]
+      .whereType<ASTExpressionOperation>()
+      .where((o) => o.operator == ASTExpressionOperator.divideAsInt)
+      .length;
+
+  /// Builds the exception-handling CFG for [f]: lowers `throw` / `try` / `catch`
+  /// (and the statements around them) into `$pc`-dispatched basic blocks with
+  /// exception terminators. Returns `null` (caller falls back / fails loudly)
+  /// for shapes not yet supported by this slice.
+  _Cfg? _buildExceptionCfg(
+    ASTFunctionDeclaration f,
+    WasmModuleContext module,
+    Set<String> excEligible,
+  ) {
+    // The combination of real `await` suspension and exceptions in the same
+    // function is a separate, advanced axis — defer it (handled elsewhere).
+    if (f.statements.any(
+      (s) => s.descendantChildren.whereType<ASTExpressionAwait>().isNotEmpty,
+    )) {
+      return null;
+    }
+
+    final blocks = <_Bb>[];
+    final temps = <({String name, ASTType type})>[];
+    int newBb() {
+      final b = _Bb(blocks.length);
+      blocks.add(b);
+      return b.pc;
+    }
+
+    var ok = true;
+
+    // Entry is pc 0; the function-level propagate block re-raises out of `f`.
+    final entryPc = newBb();
+    final propagatePc = newBb();
+    blocks[propagatePc].term = _TPropagate();
+
+    // Where a `return` inside the current `try`/`catch` region must jump after
+    // capturing its value into `$exc_ret`, so any enclosing `finally` runs first.
+    // -1 = no enclosing finally (emit a direct `return`). Saved/restored around
+    // each `try`-with-`finally`.
+    var returnTargetPc = -1;
+
+    // The synthetic local holding a return value while enclosing `finally`s run.
+    String? excRetName;
+    String ensureExcRet() {
+      var name = excRetName;
+      if (name == null) {
+        name = '\$exc_ret';
+        excRetName = name;
+        temps.add((name: name, type: f.effectiveReturnType));
+      }
+      return name;
+    }
+
+    // Statements that stash a `return`'s value into `$exc_ret` (empty for void /
+    // bare return).
+    List<ASTStatement> captureReturn(ASTStatementReturn s) {
+      final expr = _returnExpression(s);
+      if (expr == null || f.effectiveReturnType.isVoid) return const [];
+      final name = ensureExcRet();
+      return [
+        ASTStatementExpression(
+          ASTExpressionVariableAssignment(
+            ASTScopeVariable(name),
+            ASTAssignmentOperator.set,
+            expr,
+          ),
+        ),
+      ];
+    }
+
+    // Mutually-recursive lowering helpers (declared `late` so each can call the
+    // other).
+    late final int Function(List<ASTStatement>, int, int) lower;
+
+    // Lowers a `try`/`catch`/`finally` region; returns the join pc (where
+    // control continues), or -1 if every path left (returned/threw).
+    int lowerTry(ASTStatementTryCatch s, int cur, int handlerPc) {
+      final finallyBlock = s.finallyBlock;
+      final joinPc = newBb();
+
+      // Resolve each catch clause's bound-variable type (typed clause type, or
+      // inferred from the thrown values for an untyped `catch (e)`).
+      final clauseVarTypes = <ASTType?>[];
+      for (final c in s.catches) {
+        var varType = c.exceptionType;
+        if (varType == null && c.variableName != null) {
+          final inferred = _inferTryThrownType(s.tryBlock);
+          if (inferred != null) {
+            varType = inferred;
+          } else if (_tryHasThrow(s.tryBlock)) {
+            ok = false;
+            return cur;
+          } else {
+            varType = _astTypeInt;
+          }
+        }
+        clauseVarTypes.add(varType);
+      }
+
+      final savedReturnTarget = returnTargetPc;
+
+      // --- No `finally`: throws/returns route straight to the enclosing region.
+      if (finallyBlock == null) {
+        final catchPc = newBb();
+        final tryEntry = newBb();
+        blocks[cur].term = _TGoto(tryEntry);
+        final tryExit = lower(s.tryBlock.statements, tryEntry, catchPc);
+        if (tryExit >= 0) blocks[tryExit].term = _TGoto(joinPc);
+
+        final clauses = <_CatchInfo>[];
+        for (var ci = 0; ci < s.catches.length; ci++) {
+          final c = s.catches[ci];
+          final bodyPc = newBb();
+          clauses.add(
+            _CatchInfo(
+              _catchClauseAcceptedTags(c),
+              c.variableName,
+              clauseVarTypes[ci],
+              bodyPc,
+            ),
+          );
+          final clauseExit = lower(c.block.statements, bodyPc, handlerPc);
+          if (clauseExit >= 0) blocks[clauseExit].term = _TGoto(joinPc);
+        }
+        blocks[catchPc].term = _TCatchDispatch(clauses, handlerPc);
+        return joinPc;
+      }
+
+      // --- With `finally`: lower a fresh copy of the finally block for each exit
+      // path (normal completion, caught completion, propagation, and `return`).
+      // The final return continuation runs any *enclosing* finally first.
+      final returnEndPc = newBb();
+      blocks[returnEndPc].term = f.effectiveReturnType.isVoid
+          ? _TReturnEnd()
+          : _TReturnLocal(ensureExcRet());
+      final returnCont = savedReturnTarget >= 0
+          ? savedReturnTarget
+          : returnEndPc;
+
+      // Lowers `finally` into a fresh block chain that continues at [contPc].
+      // A throw or return inside the finally itself re-raises / returns through
+      // the *enclosing* region.
+      int finallyInstance(int contPc) {
+        final fEntry = newBb();
+        returnTargetPc = returnCont;
+        final fExit = lower(finallyBlock.statements, fEntry, handlerPc);
+        if (fExit >= 0) blocks[fExit].term = _TGoto(contPc);
+        return fEntry;
+      }
+
+      final finallyJoin = finallyInstance(joinPc);
+      final finallyPropagate = finallyInstance(handlerPc);
+      final finallyReturn = finallyInstance(returnCont);
+
+      final catchPc = newBb();
+      final tryEntry = newBb();
+      blocks[cur].term = _TGoto(tryEntry);
+
+      // Inside the try/catch bodies, returns route through this try's finally.
+      returnTargetPc = finallyReturn;
+      final tryExit = lower(s.tryBlock.statements, tryEntry, catchPc);
+      if (tryExit >= 0) blocks[tryExit].term = _TGoto(finallyJoin);
+
+      final clauses = <_CatchInfo>[];
+      for (var ci = 0; ci < s.catches.length; ci++) {
+        final c = s.catches[ci];
+        final bodyPc = newBb();
+        clauses.add(
+          _CatchInfo(
+            _catchClauseAcceptedTags(c),
+            c.variableName,
+            clauseVarTypes[ci],
+            bodyPc,
+          ),
+        );
+        // A throw inside a catch body runs `finally`, then propagates.
+        final clauseExit = lower(c.block.statements, bodyPc, finallyPropagate);
+        if (clauseExit >= 0) blocks[clauseExit].term = _TGoto(finallyJoin);
+      }
+      returnTargetPc = savedReturnTarget;
+
+      // No clause matched: run `finally`, then re-raise to the enclosing handler.
+      blocks[catchPc].term = _TCatchDispatch(clauses, finallyPropagate);
+      return joinPc;
+    }
+
+    // Lowers [stmts] from block [cur]; throws/pending jump to [handlerPc].
+    // Returns the continue pc or -1 if control left.
+    lower = (List<ASTStatement> stmts, int cur, int handlerPc) {
+      for (final s in stmts) {
+        if (!ok) return cur;
+
+        if (s is ASTStatementThrow) {
+          blocks[cur].term = _TThrow(s.expression, handlerPc);
+          return -1;
+        }
+
+        if (s is ASTStatementTryCatch) {
+          cur = lowerTry(s, cur, handlerPc);
+          if (cur < 0) return -1;
+          continue;
+        }
+
+        if (s is ASTStatementReturn) {
+          // `return <throwing call>` inside a `try` would exit before this
+          // function's own handler runs — defer rather than miscompile. (Outside
+          // a try it is fine: the callee's pending flag propagates to our caller.)
+          if (_countEligibleCalls(s, excEligible) + _countIntDivisions(s) > 0 &&
+              (handlerPc != propagatePc || returnTargetPc >= 0)) {
+            ok = false;
+            return cur;
+          }
+          // With an enclosing finally, capture the value and route through it;
+          // otherwise return directly.
+          if (returnTargetPc >= 0) {
+            blocks[cur].stmts.addAll(captureReturn(s));
+            blocks[cur].term = _TGoto(returnTargetPc);
+          } else {
+            blocks[cur].term = _TReturn(s);
+          }
+          return -1;
+        }
+
+        // A statement stays straight-line unless it contains a `throw`/`try`
+        // (which must reach [handlerPc]), a call to a function that may throw
+        // (which needs a post-call check to propagate), or — inside a `finally`
+        // region — a `return` (which must route through the enclosing finally).
+        final hasExc = s.descendantChildren.any(
+          (n) => n is ASTStatementThrow || n is ASTStatementTryCatch,
+        );
+        // Operations that can raise: a call to a throwing function, or an
+        // integer division (which may raise "Infinity or NaN").
+        final throwingOps =
+            _countEligibleCalls(s, excEligible) + _countIntDivisions(s);
+        final hasRoutedReturn =
+            returnTargetPc >= 0 &&
+            s.descendantChildren.any((n) => n is ASTStatementReturn);
+        if (!hasExc && !hasRoutedReturn && throwingOps == 0) {
+          blocks[cur].stmts.add(s);
+          continue;
+        }
+
+        // A simple (non-control-flow) statement with a single raising operation:
+        // run it, then check the pending flag and jump to the handler if it
+        // raised.
+        if (throwingOps >= 1 &&
+            s is! ASTStatementTryCatch &&
+            s is! ASTBranch &&
+            s is! ASTStatementWhileLoop &&
+            s is! ASTStatementForLoop &&
+            s is! ASTStatementForEach) {
+          if (throwingOps > 1) {
+            // Multiple raising operations in one statement would need per-op
+            // hoisting — defer rather than miscompile.
+            ok = false;
+            return cur;
+          }
+          final cont = newBb();
+          blocks[cur].term = _TCallCheck(s, cont, handlerPc);
+          cur = cont;
+          continue;
+        }
+
+        // Control flow that *contains* a `throw`/`try`: lower into the CFG so
+        // exceptions raised inside the branch/loop reach [handlerPc]. The
+        // condition itself is assumed exception-free.
+        if (s is ASTBranchIfBlock) {
+          final thenPc = newBb();
+          final joinPc = newBb();
+          blocks[cur].term = _TBranch(s.condition, thenPc, joinPc);
+          final thenExit = lower(s.block.statements, thenPc, handlerPc);
+          if (thenExit >= 0) blocks[thenExit].term = _TGoto(joinPc);
+          cur = joinPc;
+          continue;
+        }
+        if (s is ASTBranchIfElseBlock) {
+          final thenPc = newBb();
+          final joinPc = newBb();
+          final elseBlock = s.blockElse;
+          final elsePc = elseBlock != null ? newBb() : joinPc;
+          blocks[cur].term = _TBranch(s.condition, thenPc, elsePc);
+          final thenExit = lower(s.blockIf.statements, thenPc, handlerPc);
+          if (thenExit >= 0) blocks[thenExit].term = _TGoto(joinPc);
+          if (elseBlock != null) {
+            final elseExit = lower(elseBlock.statements, elsePc, handlerPc);
+            if (elseExit >= 0) blocks[elseExit].term = _TGoto(joinPc);
+          }
+          cur = joinPc;
+          continue;
+        }
+        if (s is ASTBranchIfElseIfsElseBlock) {
+          final joinPc = newBb();
+          final arms = <({ASTExpression cond, ASTBlock block})>[
+            (cond: s.condition, block: s.blockIf),
+            for (final e in s.blocksElseIf) (cond: e.condition, block: e.block),
+          ];
+          var condCur = cur;
+          for (var ai = 0; ai < arms.length; ai++) {
+            final isLast = ai == arms.length - 1;
+            final thenPc = newBb();
+            final elsePc = isLast
+                ? (s.blockElse != null ? newBb() : joinPc)
+                : newBb();
+            blocks[condCur].term = _TBranch(arms[ai].cond, thenPc, elsePc);
+            final thenExit = lower(
+              arms[ai].block.statements,
+              thenPc,
+              handlerPc,
+            );
+            if (thenExit >= 0) blocks[thenExit].term = _TGoto(joinPc);
+            if (isLast && s.blockElse != null) {
+              final elseExit = lower(
+                s.blockElse!.statements,
+                elsePc,
+                handlerPc,
+              );
+              if (elseExit >= 0) blocks[elseExit].term = _TGoto(joinPc);
+            } else if (!isLast) {
+              condCur = elsePc;
+            }
+          }
+          cur = joinPc;
+          continue;
+        }
+        if (s is ASTStatementWhileLoop) {
+          final condPc = newBb();
+          blocks[cur].term = _TGoto(condPc);
+          final bodyPc = newBb();
+          final exitPc = newBb();
+          blocks[condPc].term = _TBranch(s.conditionExpression, bodyPc, exitPc);
+          final bodyExit = lower(s.loopBlock.statements, bodyPc, handlerPc);
+          if (bodyExit >= 0) blocks[bodyExit].term = _TGoto(condPc);
+          cur = exitPc;
+          continue;
+        }
+        if (s is ASTStatementForLoop) {
+          blocks[cur].stmts.add(s.initStatement);
+          final condPc = newBb();
+          blocks[cur].term = _TGoto(condPc);
+          final bodyPc = newBb();
+          final exitPc = newBb();
+          blocks[condPc].term = _TBranch(s.conditionExpression, bodyPc, exitPc);
+          final bodyExit = lower(s.loopBlock.statements, bodyPc, handlerPc);
+          if (bodyExit >= 0) {
+            blocks[bodyExit].stmts.add(
+              ASTStatementExpression(s.continueExpression),
+            );
+            blocks[bodyExit].term = _TGoto(condPc);
+          }
+          cur = exitPc;
+          continue;
+        }
+
+        // Other shapes containing exceptions (e.g. `for-each`, or a throw nested
+        // deep inside an expression) are deferred — fail loudly, don't
+        // miscompile.
+        ok = false;
+        return cur;
+      }
+      return cur;
+    };
+
+    final exit = lower(f.statements, entryPc, propagatePc);
+    if (!ok) return null;
+
+    if (exit >= 0 && blocks[exit].term == null) {
+      blocks[exit].term = _TReturnEnd();
+    }
+    for (final b in blocks) {
+      b.term ??= _TReturnEnd();
+    }
+    return _Cfg(blocks, temps);
+  }
+
+  /// Emits [f] as a `$pc`-dispatched CFG that implements `throw` / `try` /
+  /// `catch`. Unlike the Asyncify CFG there is no suspend/rewind: control simply
+  /// loops over basic blocks, and exception terminators marshal the thrown value
+  /// through the fixed exception slots in linear memory.
+  BytesOutput _generateExceptionCfgFunction(
+    ASTFunctionDeclaration f,
+    _Cfg cfg, {
+    required BytesOutput out,
+    required WasmContext context,
+    required WasmModuleContext module,
+  }) {
+    module.requiresException = true;
+    module.requiresMemory = true;
+    context.exceptionMode = true;
+
+    final pendOff = module.excPendingOffset;
+    final tagOff = module.excTagOffset;
+    final valOff = module.excValueOffset;
+
+    final returnType = f.effectiveReturnType;
+    final return0 = context.returnsLength;
+    context.returnsPush(returnType, "exc-cfg `${f.name}` -> $returnType");
+
+    for (var v in f.parameters.declaredVariables()) {
+      context.addLocalVariable(v.key, v.value);
+    }
+
+    // Collect locals from the *flattened* CFG: variables declared inside `try`/
+    // `catch` bodies (and any other lowered blocks) plus the catch-clause
+    // variables — `f.statements.declaredVariables()` does not see into these.
+    final declaredLocals = <({String name, ASTType type})>[];
+    final seenLocal = <String>{};
+    void addDeclaredLocal(String name, ASTType type) {
+      if (seenLocal.add(name)) {
+        declaredLocals.add((name: name, type: type));
+        context.addLocalVariable(name, type);
+      }
+    }
+
+    for (final b in cfg.blocks) {
+      for (var v in b.stmts.declaredVariables()) {
+        addDeclaredLocal(v.key, v.value);
+      }
+      final t = b.term;
+      if (t is _TCatchDispatch) {
+        for (final c in t.clauses) {
+          if (c.varName != null) {
+            addDeclaredLocal(c.varName!, c.varType ?? _astTypeInt);
+          }
+        }
+      } else if (t is _TReturn) {
+        for (var v in [t.stmt].declaredVariables()) {
+          addDeclaredLocal(v.key, v.value);
+        }
+      } else if (t is _TCallCheck) {
+        for (var v in [t.stmt].declaredVariables()) {
+          addDeclaredLocal(v.key, v.value);
+        }
+      }
+    }
+
+    for (var t in cfg.temps) {
+      context.addLocalVariable(t.name, t.type);
+    }
+    final pcIdx = context.addLocalVariable('\$exc_pc', _astTypeInt32);
+
+    List<int> defaultConst(ASTType t) {
+      final kind = t.wasmType;
+      if (kind == WasmType.voidType) return const [];
+      if (kind == WasmType.f64Type) return Wasm64.f64Const(0);
+      if (kind == WasmType.i32Type) return Wasm32.i32Const(0);
+      return Wasm64.i64Const(0);
+    }
+
+    // Stores the value currently in [valueLocal] (of wasm-kind [kind]) into the
+    // EXC_VALUE slot.
+    List<int> storeThrownValue(int valueLocal, WasmType kind) => [
+      ...Wasm32.i32Const(0),
+      ...Wasm.localGet(valueLocal),
+      if (kind == WasmType.f64Type)
+        ...Wasm64.f64Store(FloatAlign.align3, valOff)
+      else if (kind == WasmType.i32Type)
+        ...Wasm32.i32Store(2, valOff)
+      else
+        ...Wasm64.i64Store(3, valOff),
+    ];
+
+    // Loads EXC_VALUE (with width chosen by the catch variable's wasm-kind) into
+    // the catch variable local.
+    List<int> bindCatchVar(_CatchInfo c) {
+      if (c.varName == null) return const [];
+      final v = context.getLocalVariable(c.varName!)!;
+      final kind = v.type.wasmType;
+      return [
+        ...Wasm32.i32Const(0),
+        if (kind == WasmType.f64Type)
+          ...Wasm64.f64Load(FloatAlign.align3, valOff)
+        else if (kind == WasmType.i32Type)
+          ...Wasm32.i32Load(2, valOff)
+        else
+          ...Wasm64.i64Load(3, valOff),
+        ...Wasm.localSet(v.index),
+      ];
+    }
+
+    List<int> setPending(int value) => [
+      ...Wasm32.i32Const(0),
+      ...Wasm32.i32Const(value),
+      ...Wasm32.i32Store(2, pendOff),
+    ];
+
+    final body = newOutput();
+    final blocks = cfg.blocks;
+    final n = blocks.length - 1;
+
+    body.write(Wasm.loop(WasmType.voidType));
+    for (var i = 0; i <= n; i++) {
+      body.write(Wasm.block(WasmType.voidType));
+    }
+    body.write([
+      ...Wasm.localGet(pcIdx),
+      ...Wasm.brTable([for (var j = 0; j <= n; j++) j], 0),
+    ]);
+
+    // Emits `(EXC_TAG == t0) || (EXC_TAG == t1) || ...` leaving an i32 bool on
+    // the stack.
+    void emitTagTest(Set<int> tags) {
+      final list = tags.toList();
+      for (var k = 0; k < list.length; k++) {
+        body.write([
+          ...Wasm32.i32Const(0),
+          ...Wasm32.i32Load(2, tagOff),
+          ...Wasm32.i32Const(list[k]),
+          Wasm32.i32Equals,
+        ]);
+        if (k > 0) body.writeByte(Wasm32.i32BitwiseOr);
+      }
+    }
+
+    // Emits the catch-clause match chain for a dispatch terminator.
+    void emitCatchChain(List<_CatchInfo> clauses, int noMatchPc, int idx) {
+      if (idx >= clauses.length) {
+        body.write([...Wasm32.i32Const(noMatchPc), ...Wasm.localSet(pcIdx)]);
+        return;
+      }
+      final c = clauses[idx];
+      if (c.tags == null || c.tags!.isEmpty) {
+        // Catch-all: clear pending, bind, jump to body.
+        body.write(setPending(0));
+        body.write(bindCatchVar(c));
+        body.write([...Wasm32.i32Const(c.bodyPc), ...Wasm.localSet(pcIdx)]);
+        return;
+      }
+      emitTagTest(c.tags!);
+      body.write([...Wasm.ifInstruction(WasmType.voidType)]);
+      body.write(setPending(0));
+      body.write(bindCatchVar(c));
+      body.write([...Wasm32.i32Const(c.bodyPc), ...Wasm.localSet(pcIdx)]);
+      body.write([Wasm.elseInstruction]);
+      emitCatchChain(clauses, noMatchPc, idx + 1);
+      body.write([Wasm.end]);
+    }
+
+    for (var i = 0; i <= n; i++) {
+      body.writeByte(Wasm.end); // end $b_i => bb_i follows
+      final bb = blocks[i];
+      final loopDepth = n - i;
+
+      bb.rawInit?.call(body, context);
+
+      for (final s in bb.stmts) {
+        generateASTStatement(s, out: body, context: context);
+      }
+
+      final term = bb.term!;
+      switch (term) {
+        case _TGoto():
+          body.write([
+            ...Wasm32.i32Const(term.pc),
+            ...Wasm.localSet(pcIdx),
+            ...Wasm.br(loopDepth),
+          ]);
+        case _TBranch():
+          generateASTExpression(term.cond, out: body, context: context);
+          context.stackDrop();
+          body.write([
+            ...Wasm.ifInstruction(WasmType.voidType),
+            ...Wasm32.i32Const(term.thenPc),
+            ...Wasm.localSet(pcIdx),
+            Wasm.elseInstruction,
+            ...Wasm32.i32Const(term.elsePc),
+            ...Wasm.localSet(pcIdx),
+            Wasm.end,
+            ...Wasm.br(loopDepth),
+          ]);
+        case _TThrow():
+          generateASTExpression(term.value, out: body, context: context);
+          final vtype = context.stackGet(0)!.type;
+          final kind = vtype.wasmType;
+          final tag = _excTypeTag(vtype);
+          final scratch = context.scratchLocal(vtype, 900 + kind.value);
+          body.write(Wasm.localSet(scratch));
+          context.stackDrop();
+          body.write([
+            ...Wasm32.i32Const(0),
+            ...Wasm32.i32Const(tag),
+            ...Wasm32.i32Store(2, tagOff),
+          ]);
+          body.write(storeThrownValue(scratch, kind));
+          body.write(setPending(1));
+          body.write([
+            ...Wasm32.i32Const(term.handlerPc),
+            ...Wasm.localSet(pcIdx),
+            ...Wasm.br(loopDepth),
+          ]);
+        case _TCatchDispatch():
+          emitCatchChain(term.clauses, term.noMatchPc, 0);
+          body.write(Wasm.br(loopDepth));
+        case _TPropagate():
+          body.write(setPending(1));
+          if (!returnType.isVoid) body.write(defaultConst(returnType));
+          body.writeByte(Wasm.functionReturn);
+        case _TCallCheck():
+          generateASTStatement(term.stmt, out: body, context: context);
+          body.write([
+            ...Wasm32.i32Const(0),
+            ...Wasm32.i32Load(2, pendOff),
+            ...Wasm.ifInstruction(WasmType.voidType),
+            ...Wasm32.i32Const(term.handlerPc),
+            ...Wasm.localSet(pcIdx),
+            Wasm.elseInstruction,
+            ...Wasm32.i32Const(term.contPc),
+            ...Wasm.localSet(pcIdx),
+            Wasm.end,
+            ...Wasm.br(loopDepth),
+          ]);
+        case _TReturn():
+          generateASTStatement(term.stmt, out: body, context: context);
+        case _TReturnLocal():
+          final rv = context.getLocalVariable(term.name)!;
+          body.write(Wasm.localGet(rv.index));
+          body.writeByte(Wasm.functionReturn);
+        case _TReturnEnd():
+          if (!returnType.isVoid) body.write(defaultConst(returnType));
+          body.writeByte(Wasm.functionReturn);
+        case _TLeaf():
+        case _TInternal():
+          throw StateError("Async terminator in exception CFG: $term");
+      }
+    }
+
+    body.writeByte(Wasm.end); // end loop
+
+    if (!returnType.isVoid) {
+      body.writeByte(Wasm.unreachable);
+      body.write(defaultConst(returnType));
+    }
+
+    final outBody = newOutput();
+    final scratchTypes = context.scratchLocalTypes;
+    outBody.write(
+      Leb128.encodeUnsigned(
+        declaredLocals.length + cfg.temps.length + 1 + scratchTypes.length,
+      ),
+      description: "Local variables count",
+    );
+    for (var v in declaredLocals) {
+      outBody.write(Leb128.encodeUnsigned(1));
+      outBody.writeByte(v.type.wasmCode);
+    }
+    for (var t in cfg.temps) {
+      outBody.write(Leb128.encodeUnsigned(1));
+      outBody.writeByte(t.type.wasmCode);
+    }
+    outBody.write(Leb128.encodeUnsigned(1), description: "\$exc_pc");
+    outBody.writeByte(WasmType.i32Type.value);
+    for (var t in scratchTypes) {
+      outBody.write(Leb128.encodeUnsigned(1));
+      outBody.writeByte(t.wasmCode);
+    }
+    outBody.writeBytes(body);
+    outBody.writeByte(Wasm.end, description: "Code body end");
+
+    context.returnsDrop(returnType);
+    context.assertReturnsLength(return0);
+
+    out.writeBytesLeb128Block([
+      outBody,
+    ], description: "Exception function (CFG)");
+    return out;
+  }
+
   /// Fixed-point set of Asyncify-eligible function names: async functions
   /// transformable by the linear or CFG path whose awaited module functions are
   /// themselves eligible. Computed once per module.
@@ -4327,6 +5218,11 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
         case _TReturnEnd():
           if (!returnType.isVoid) body.write(defaultConst(returnType));
           body.writeByte(Wasm.functionReturn);
+        case _TThrow():
+        case _TCatchDispatch():
+        case _TPropagate():
+        case _TCallCheck():
+          throw StateError("Exception terminator in async CFG: $term");
       }
     }
 
@@ -5841,6 +6737,41 @@ class WasmModuleContext {
   /// frame stack). 4 KiB allows a deep enough chain of suspended frames.
   static const int asyncifyRegionSize = 4096;
 
+  // --- Exception control region (try/catch/throw) ---
+  //
+  // `throw` / `try` / `catch` / `finally` lower to a `$pc`-dispatched CFG (like
+  // Asyncify), but a thrown value must also unwind *across* function calls: a
+  // callee that throws sets EXC_PENDING and returns a default value, and each
+  // call site re-checks EXC_PENDING and jumps to its nearest handler (or
+  // re-propagates). The thrown value + an in-flight flag live at fixed linear
+  // memory offsets, placed just past the Asyncify region (when present) so the
+  // absolute offsets never collide.
+  //
+  //   EXC_PENDING (i32): 1 while an exception is unwinding, else 0
+  //   EXC_TAG     (i32): runtime type tag of the thrown value (see `_excTypeTag`)
+  //   EXC_VALUE   (i64): marshalled payload (i64 int / f64 bits / i32 pointer)
+
+  /// Whether the module compiled at least one `throw` / `try` / `catch`, and so
+  /// reserves the exception control region (and a linear memory).
+  bool requiresException = false;
+
+  /// Cached fixed-point set of exception-eligible function names (functions that
+  /// use `throw`/`try` or transitively call one); `null` until first computed.
+  Set<String>? exceptionEligible;
+
+  /// Bytes reserved for the exception control region (pending flag, type tag,
+  /// thrown value).
+  static const int exceptionRegionSize = 16;
+
+  /// Base offset of the exception control region: just past the Asyncify region
+  /// when that is present, otherwise at the start of low memory.
+  int get exceptionBase =>
+      asyncifyBase + (requiresAsyncify ? asyncifyRegionSize : 0);
+
+  int get excPendingOffset => exceptionBase + 0;
+  int get excTagOffset => exceptionBase + 4;
+  int get excValueOffset => exceptionBase + 8;
+
   /// Whether the module compiled at least one real-suspension `async` function
   /// and therefore reserves the Asyncify control region.
   bool requiresAsyncify = false;
@@ -5858,8 +6789,12 @@ class WasmModuleContext {
   /// Base offset of the static data region in linear memory. Offset `0` is
   /// reserved as a null pointer; when Asyncify is used the static data is
   /// shifted up past the control region so its fixed offsets never collide.
-  int get dataBaseOffset =>
-      requiresAsyncify ? (asyncifyBase + asyncifyRegionSize) : 8;
+  int get dataBaseOffset {
+    var base = 8;
+    if (requiresAsyncify) base += asyncifyRegionSize;
+    if (requiresException) base += exceptionRegionSize;
+    return base;
+  }
 
   final BytesBuilder _data = BytesBuilder();
   final Map<String, int> _literalPointers = {};
@@ -5928,6 +6863,11 @@ class WasmContext {
   WasmModuleContext? module;
 
   WasmContext({this.module});
+
+  /// Whether the current function is compiled through the exception CFG. When
+  /// set, integer division emits a non-trapping guard that raises a catchable
+  /// exception on a zero/overflowing divisor instead of trapping the module.
+  bool exceptionMode = false;
 
   /// Resolves the Wasm function index for a function with [name] and [arity].
   int? functionIndex(String name, int arity) =>
@@ -6345,6 +7285,52 @@ class _TReturnLocal extends _Term {
 
 /// Implicit function end (fell off the body): return the default / unreachable.
 class _TReturnEnd extends _Term {}
+
+// --- Exception terminators (try/catch/finally/throw) ---
+
+/// `throw [value]`: marshal the value into the exception slots, flag pending,
+/// and jump to [handlerPc] (a catch-dispatch block, or the function's propagate
+/// block when there is no enclosing `try`).
+class _TThrow extends _Term {
+  final ASTExpression value;
+  final int handlerPc;
+  _TThrow(this.value, this.handlerPc);
+}
+
+/// One `catch` clause within a [_TCatchDispatch].
+class _CatchInfo {
+  /// `null` = catch-all (untyped or a universal supertype); otherwise the set of
+  /// `EXC_TAG` values this clause accepts (mirrors `ASTType.acceptsType`, e.g. an
+  /// `on double` clause also accepts an `int` value).
+  final Set<int>? tags;
+  final String? varName;
+  final ASTType? varType;
+  final int bodyPc;
+  _CatchInfo(this.tags, this.varName, this.varType, this.bodyPc);
+}
+
+/// Catch dispatch: an exception is pending; test [clauses] in order against
+/// `EXC_TAG`. On the first match, clear the pending flag, bind the clause
+/// variable from `EXC_VALUE`, and jump to its body; if none match, jump to
+/// [noMatchPc] (a `finally` runner or the propagate block).
+class _TCatchDispatch extends _Term {
+  final List<_CatchInfo> clauses;
+  final int noMatchPc;
+  _TCatchDispatch(this.clauses, this.noMatchPc);
+}
+
+/// Re-raise / propagate the pending exception out of this function: ensure the
+/// pending flag is set and return the default value (the caller re-checks it).
+class _TPropagate extends _Term {}
+
+/// Emits [stmt] (which contains a call that may throw), then checks the pending
+/// flag: if set, jump to [handlerPc]; otherwise continue at [contPc].
+class _TCallCheck extends _Term {
+  final ASTStatement stmt;
+  final int contPc;
+  final int handlerPc;
+  _TCallCheck(this.stmt, this.contPc, this.handlerPc);
+}
 
 /// A built CFG: its [blocks] plus any synthetic temp locals (e.g. for
 /// `return await ...`) that the emitter must declare.

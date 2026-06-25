@@ -1,3 +1,27 @@
+## 0.1.34
+
+- Wasm `throw` / `try` / `catch` / `finally`: exception handling now compiles to
+  WebAssembly (previously deferred / loud-failure), engine-agnostic — no Wasm
+  exception-handling proposal required.
+  - A function that uses (or transitively calls) exceptions is lowered to a
+    `$pc`-dispatched CFG (like the Asyncify transform but without suspension), so
+    a `throw` is an absolute jump to the nearest handler — no fragile relative
+    `br` bookkeeping. The thrown value + an in-flight flag live in a small fixed
+    exception region of linear memory.
+  - Supported: `throw` of int/double/bool/`String`/object values; typed
+    (`on T catch`), untyped, and multiple catch clauses; type matching that
+    mirrors the interpreter (`ASTType.acceptsType`, e.g. `on double` accepts an
+    `int`); `finally` on every exit path (normal, caught, propagated, and
+    `return`-through-`finally`, with `return`-in-`finally` overriding); `throw`
+    inside `if`/`while`/`for`; **cross-function propagation** (a callee sets the
+    pending flag + returns, each call site re-checks it); and **catching VM
+    traps** — integer division by zero (`1 ~/ 0`) raises a catchable `String`
+    instead of trapping the module.
+  - Deferred (these fail loudly rather than miscompile): `async`/`await` combined
+    with exceptions in the same function, `for-each` containing a `throw`,
+    multiple raising operations in a single statement, and `return <throwing
+    call>` directly inside a `try`.
+
 ## 0.1.33
 
 - Exception handling: **`throw`, `try` / `catch` / `finally`** for Dart, Java,
