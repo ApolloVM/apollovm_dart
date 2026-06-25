@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="TypeScript for loop">
+    <source language="typescript">
+        <![CDATA[
+class M {
+  run(n: number): number {
+    let total: number = 0;
+    for (let i: number = 0; i < n; i++) {
+      total = total + i;
+    }
+    return total;
+  }
+}
+        ]]>
+    </source>
+    <call class="M" function="run">
+        [5]
+    </call>
+    <output>
+        []
+    </output>
+    <source-generated language="typescript"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+class M {
+
+  run(n: number): number {
+    let total: number = 0;
+    for (let i: number = 0; i < n ; i++) {
+      total = total + i;
+    }
+    return total;
+  }
+
+}
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+    <source-generated language="javascript"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+class M {
+
+  run(n) {
+    let total = 0;
+    for (let i = 0; i < n ; i++) {
+      total = total + i;
+    }
+    return total;
+  }
+
+}
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+    <source-generated language="dart"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+class M {
+
+  num run(num n) {
+    num total = 0;
+    for (num i = 0; i < n ; i++) {
+      total = total + i;
+    }
+    return total;
+  }
+
+}
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+</test>

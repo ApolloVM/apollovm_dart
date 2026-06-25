@@ -77,16 +77,63 @@ class ApolloCodeGeneratorDart extends ApolloCodeGenerator {
   }) {
     out ??= newOutput();
 
+    if (clazz is ASTClassEnum) {
+      return generateASTClassEnum(clazz, out: out, indent: indent);
+    }
+
     var code = generateASTBlock(
       clazz,
       withBrackets: true,
       withBlankHeadLine: true,
     );
 
+    // Dart has no `interface` keyword; an interface is an `abstract class`.
+    if (clazz.isAbstract || clazz.isInterface) {
+      out.write('abstract ');
+    }
+
     out.write('class ');
     out.write(clazz.name);
+
+    if (clazz.superClassName != null) {
+      out.write(' extends ');
+      out.write(clazz.superClassName!);
+    }
+
+    var implementsTypes = clazz.implementsTypes;
+    if (implementsTypes != null && implementsTypes.isNotEmpty) {
+      out.write(' implements ');
+      out.write(implementsTypes.join(', '));
+    }
+
     out.write(' ');
     out.write(code);
+
+    return out;
+  }
+
+  /// Generates a Dart `enum` declaration.
+  StringBuffer generateASTClassEnum(
+    ASTClassEnum clazz, {
+    StringBuffer? out,
+    String indent = '',
+  }) {
+    out ??= newOutput();
+
+    out.write(indent);
+    out.write('enum ');
+    out.write(clazz.name);
+    out.write(' {\n');
+
+    var entries = clazz.entries;
+    for (var i = 0; i < entries.length; ++i) {
+      out.write('$indent  ');
+      out.write(entries[i].name);
+      if (i < entries.length - 1) out.write(',');
+      out.write('\n');
+    }
+
+    out.write('$indent}\n');
 
     return out;
   }
@@ -102,6 +149,10 @@ class ApolloCodeGeneratorDart extends ApolloCodeGenerator {
     var typeCode = generateASTType(field.type);
 
     out.write(indent);
+
+    if (field.modifiers.isStatic) {
+      out.write('static ');
+    }
 
     if (field.finalValue) {
       out.write('final ');
@@ -208,7 +259,12 @@ class ApolloCodeGeneratorDart extends ApolloCodeGenerator {
     var blockStr = blockCode.toString();
     var emptyBlock = blockStr.trim().isEmpty;
 
-    if (emptyBlock && f is ASTClassConstructorDeclaration) {
+    // Abstract/interface methods have no body.
+    var isAbstractMethod =
+        f is ASTFunctionDeclaration && f.modifiers.isAbstract;
+
+    if (isAbstractMethod ||
+        (emptyBlock && f is ASTClassConstructorDeclaration)) {
       out.write(';\n\n');
     } else {
       out.write(' {\n');

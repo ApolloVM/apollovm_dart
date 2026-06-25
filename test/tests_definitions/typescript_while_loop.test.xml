@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="TypeScript while loop">
+    <source language="typescript">
+        <![CDATA[
+class M {
+  run(n: number): number {
+    let i: number = 0;
+    let total: number = 0;
+    while (i < n) {
+      total = total + i;
+      i++;
+    }
+    return total;
+  }
+}
+        ]]>
+    </source>
+    <call class="M" function="run">
+        [5]
+    </call>
+    <output>
+        []
+    </output>
+    <source-generated language="typescript"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+class M {
+
+  run(n: number): number {
+    let i: number = 0;
+    let total: number = 0;
+    while( i < n ) {
+      total = total + i;
+      i++;
+    }
+    return total;
+  }
+
+}
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+    <source-generated language="javascript"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+class M {
+
+  run(n) {
+    let i = 0;
+    let total = 0;
+    while( i < n ) {
+      total = total + i;
+      i++;
+    }
+    return total;
+  }
+
+}
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+    <source-generated language="dart"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+class M {
+
+  num run(num n) {
+    num i = 0;
+    num total = 0;
+    while( i < n ) {
+      total = total + i;
+      i++;
+    }
+    return total;
+  }
+
+}
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+</test>

@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="TypeScript typed class method with template literal">
+    <source language="typescript">
+        <![CDATA[
+class Foo {
+  test(a: number): void {
+    let s: string = `a: ${a}`;
+    print(s);
+  }
+}
+        ]]>
+    </source>
+    <call class="Foo" function="test">
+        [123]
+    </call>
+    <output>
+        ["a: 123"]
+    </output>
+    <source-generated language="typescript"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+class Foo {
+
+  test(a: number): void {
+    let s: string = `a: ${a}`;
+    print(s);
+  }
+
+}
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+    <source-generated language="javascript"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+class Foo {
+
+  test(a) {
+    let s = `a: ${a}`;
+    print(s);
+  }
+
+}
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+    <source-generated language="dart"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+class Foo {
+
+  void test(num a) {
+    String s = 'a: ${a}';
+    print(s);
+  }
+
+}
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+</test>

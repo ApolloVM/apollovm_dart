@@ -105,7 +105,16 @@ abstract class ASTTypedVariable<T> extends ASTVariable {
 
 /// [ASTVariable] for class fields.
 class ASTClassField<T> extends ASTTypedVariable<T> {
-  ASTClassField(super.type, super.name, super.finalValue);
+  /// The modifiers of this field (e.g. `static`, `private`, `protected`,
+  /// `final`/`readonly`). Defaults to none.
+  final ASTModifiers modifiers;
+
+  ASTClassField(
+    super.type,
+    super.name,
+    super.finalValue, {
+    ASTModifiers? modifiers,
+  }) : modifiers = modifiers ?? ASTModifiers.modifiersNone;
 
   @override
   Iterable<ASTNode> get children => [];
@@ -128,8 +137,9 @@ class ASTClassFieldWithInitialValue<T> extends ASTClassField<T> {
     ASTType<T> type,
     String name,
     this._initialValueExpression,
-    bool finalValue,
-  ) : super(type, name, finalValue);
+    bool finalValue, {
+    ASTModifiers? modifiers,
+  }) : super(type, name, finalValue, modifiers: modifiers);
 
   ASTExpression get initialValue => _initialValueExpression;
 

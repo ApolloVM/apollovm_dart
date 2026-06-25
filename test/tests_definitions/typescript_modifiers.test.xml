@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="TypeScript class with access modifiers">
+    <source language="typescript">
+        <![CDATA[
+abstract class Base {
+  abstract describe(): string;
+  static label(): string {
+    return `base`;
+  }
+  private helper(): number {
+    return 1;
+  }
+}
+        ]]>
+    </source>
+    <source-generated language="typescript"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+abstract class Base {
+
+  abstract describe(): string;
+
+  static label(): string {
+    return 'base';
+  }
+
+  private helper(): number {
+    return 1;
+  }
+
+}
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+    <source-generated language="dart"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+abstract class Base {
+
+  String describe();
+
+  static String label() {
+    return 'base';
+  }
+
+  num helper() {
+    return 1;
+  }
+
+}
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+</test>
