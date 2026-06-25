@@ -145,6 +145,64 @@ void main() {
       expect(result, equals(306));
     });
 
+    test(
+      'multiple awaits in one function (br_table resume dispatch)',
+      () async {
+        if (!rt.isSupported) {
+          fail('Wasm runtime not supported.');
+        }
+
+        // Two sequential awaits => two real suspensions, resumed via br_table.
+        final wasm = await _compile(r'''
+        Future<int> compute(int n) async {
+          int a = await hostDouble(n);
+          int b = await hostDouble(a);
+          return a + b;
+        }
+      ''');
+
+        var suspends = 0;
+        final result = await _drive(rt, wasm, 'hostDouble', 'compute', [5], (
+          importArgs,
+        ) async {
+          await Future<void>.delayed(const Duration(milliseconds: 2));
+          return (importArgs[0] as int) * 2;
+        }, onSuspend: () => suspends++);
+
+        // a = 2*5 = 10 ; b = 2*10 = 20 ; return 30.
+        expect(result, equals(30));
+        expect(suspends, equals(2), reason: 'two real suspensions');
+      },
+    );
+
+    test('awaits with statements interleaved + locals across each', () async {
+      if (!rt.isSupported) {
+        fail('Wasm runtime not supported.');
+      }
+
+      final wasm = await _compile(r'''
+        Future<int> compute(int n) async {
+          int base = n * 100;
+          int a = await hostDouble(n);
+          int mid = base + a;
+          int b = await hostDouble(mid);
+          return mid + b;
+        }
+      ''');
+
+      var suspends = 0;
+      final result = await _drive(rt, wasm, 'hostDouble', 'compute', [2], (
+        importArgs,
+      ) async {
+        await Future<void>.delayed(const Duration(milliseconds: 2));
+        return (importArgs[0] as int) * 2;
+      }, onSuspend: () => suspends++);
+
+      // base=200; a=4; mid=204; b=408; return mid+b = 612.
+      expect(result, equals(612));
+      expect(suspends, equals(2));
+    });
+
     test('two generated computations interleave by host delay', () async {
       if (!rt.isSupported) {
         fail('Wasm runtime not supported (run `dart run wasm_run:setup`).');

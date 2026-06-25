@@ -103,6 +103,41 @@ void main() {
       expect(r.getValueNoContext(), equals(306)); // 300 + 6
     });
 
+    test('multiple awaits of different host functions', () async {
+      var runner = await _wasmRunner(r'''
+        Future<int> pipeline(int n) async {
+          int a = await hostInc(n);
+          int b = await hostTriple(a);
+          return a + b;
+        }
+      ''');
+      if (runner == null) {
+        fail('Wasm runtime not supported.');
+      }
+
+      runner.mapWasmAsyncFunction('hostInc', const [WasmValueType.i64], (
+        args,
+      ) async {
+        await Future<void>.delayed(const Duration(milliseconds: 2));
+        return _asInt(args[0]) + 1;
+      });
+      runner.mapWasmAsyncFunction('hostTriple', const [WasmValueType.i64], (
+        args,
+      ) async {
+        await Future<void>.delayed(const Duration(milliseconds: 2));
+        return _asInt(args[0]) * 3;
+      });
+
+      var r = await runner.executeFunction(
+        '',
+        'pipeline',
+        positionalParameters: [4],
+      );
+
+      // a = 4+1 = 5 ; b = 5*3 = 15 ; return 20.
+      expect(r.getValueNoContext(), equals(20));
+    });
+
     test('a non-async Wasm function still runs synchronously', () async {
       var runner = await _wasmRunner(r'''
         int addOne(int n) {

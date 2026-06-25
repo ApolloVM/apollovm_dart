@@ -29,16 +29,17 @@
     and resumes. Demonstrates multi-frame state preservation, exactly-once
     prologue execution, and two concurrent computations interleaving by host
     delay.
-  - Wasm **Asyncify code generation (v1)**: the generator now emits the
-    unwind/rewind state machine for an `async` function with a single
-    statement-level `await` of an external (host) call — a fixed low-memory
-    Asyncify control region (`WasmModuleContext`), a rewind-dispatch prologue
-    (`br_if`), live-local spill/restore, and a suspend epilogue. Validated
-    against the live runtime in `test/apollovm_wasm_asyncify_codegen_test.dart`
-    (real suspension, pre/post-await local preservation, concurrent
-    interleaving). Anything more complex (multiple awaits, awaits in control
-    flow, awaiting a module function => multi-frame) falls back to the
-    synchronous-collapse path.
+  - Wasm **Asyncify code generation**: the generator emits the unwind/rewind
+    state machine for an `async` function whose `await`s are statement-level
+    calls to external (host) functions — a fixed low-memory Asyncify control
+    region (`WasmModuleContext`), live-local spill/restore, a suspend epilogue,
+    and **`br_table` resume dispatch supporting multiple `await` points** in one
+    function (statements may interleave; locals survive every suspension).
+    Validated against the live runtime in
+    `test/apollovm_wasm_asyncify_codegen_test.dart` (real suspension, multi-
+    await, pre/post-await local preservation, concurrent interleaving). More
+    complex shapes (awaits nested in control flow, awaiting a module function =>
+    multi-frame) fall back to the synchronous-collapse path.
   - Wasm Asyncify **runner integration**: `ApolloRunnerWasm.executeFunction`
     now detects real-suspension `async` functions (flagged in `apollovm_sig`)
     and drives their unwind/rewind loop, awaiting a real Dart `Future` from a
