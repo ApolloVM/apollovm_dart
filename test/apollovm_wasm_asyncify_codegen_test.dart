@@ -14,7 +14,9 @@ import 'package:test/test.dart';
 ///
 /// Asyncify control region (must match `WasmModuleContext`):
 const _asyState = 8; //  i32: 0=normal, 1=unwound, 2=rewinding
+const _asySp = 12; //    i32: frame-stack pointer
 const _asyResult = 16; // i64: host writes the awaited value here
+const _asyStackBase = 24; // frame stack grows from here
 
 /// Compiles [dartSource] to Wasm bytes.
 Future<Uint8List> _compile(String dartSource) async {
@@ -65,6 +67,14 @@ Future<int> _drive(
       },
     },
   );
+
+  // Initialize the frame-stack pointer once.
+  {
+    final mem0 = module.readMemory()!;
+    mem0.buffer
+        .asByteData(mem0.offsetInBytes, mem0.lengthInBytes)
+        .setInt32(_asySp, _asyStackBase, Endian.little);
+  }
 
   while (true) {
     final ret = module.invokeExport(functionName, args) as int;

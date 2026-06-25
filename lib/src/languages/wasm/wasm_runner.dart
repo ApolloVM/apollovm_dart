@@ -375,9 +375,24 @@ class ApolloRunnerWasm extends ApolloRunner {
       // Asyncify drive loop: invoke; if the call unwound (suspended), await the
       // host `Future` it produced, write the result back, flag a rewind, and
       // re-invoke until it completes normally. Offsets match the Asyncify
-      // control region in `WasmModuleContext` (state @8 i32, result @16 i64).
+      // control region in `WasmModuleContext` (state @8 i32, SP @12 i32,
+      // result @16 i64, frame stack @24+).
       const asyStateOff = 8;
+      const asyStackPointerOff = 12;
       const asyResultOff = 16;
+      const asyStackBase = 24;
+
+      // Initialize the frame-stack pointer once (memory starts zeroed); it then
+      // persists across the unwind/rewind re-invocations.
+      {
+        var mem0 = module.readMemory();
+        if (mem0 != null) {
+          ByteData.sublistView(
+            mem0,
+          ).setInt32(asyStackPointerOff, asyStackBase, Endian.little);
+        }
+      }
+
       while (true) {
         res = invokeOnce();
 

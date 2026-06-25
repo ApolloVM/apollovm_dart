@@ -168,6 +168,115 @@ void main() {
       expect(awaited, isTrue);
     });
 
+    test('multi-frame: async fn awaits another async module fn', () async {
+      // `outer` awaits `inner` (a module async fn) which awaits a host import.
+      // The unwind must propagate through both frames and rewind back down.
+      var runner = await _wasmRunner(r'''
+        Future<int> inner(int n) async {
+          int v = await hostDouble(n);
+          return v + 1;
+        }
+
+        Future<int> outer(int n) async {
+          int a = await inner(n);
+          return a + 100;
+        }
+      ''');
+      if (runner == null) {
+        fail('Wasm runtime not supported.');
+      }
+
+      runner.mapWasmAsyncFunction('hostDouble', const [WasmValueType.i64], (
+        args,
+      ) async {
+        await Future<void>.delayed(const Duration(milliseconds: 4));
+        return _asInt(args[0]) * 2;
+      });
+
+      var r = await runner.executeFunction(
+        '',
+        'outer',
+        positionalParameters: [5],
+      );
+
+      // inner(5): host(5)=10, v=10, return 11. outer: a=11, return 111.
+      expect(r.getValueNoContext(), equals(111));
+    });
+
+    test('multi-frame: three nested async frames (a->b->c->host)', () async {
+      var runner = await _wasmRunner(r'''
+        Future<int> c(int n) async {
+          int v = await hostInc(n);
+          return v;
+        }
+
+        Future<int> b(int n) async {
+          int v = await c(n);
+          return v + 10;
+        }
+
+        Future<int> a(int n) async {
+          int v = await b(n);
+          return v + 100;
+        }
+      ''');
+      if (runner == null) {
+        fail('Wasm runtime not supported.');
+      }
+
+      runner.mapWasmAsyncFunction('hostInc', const [WasmValueType.i64], (
+        args,
+      ) async {
+        await Future<void>.delayed(const Duration(milliseconds: 3));
+        return _asInt(args[0]) + 1;
+      });
+
+      var r = await runner.executeFunction('', 'a', positionalParameters: [5]);
+
+      // c(5): host(5)=6. b: 6+10=16. a: 16+100=116.
+      expect(r.getValueNoContext(), equals(116));
+    });
+
+    test('multi-frame: a frame mixing a leaf and an internal await', () async {
+      var runner = await _wasmRunner(r'''
+        Future<int> inner(int n) async {
+          int v = await hostInc(n);
+          return v;
+        }
+
+        Future<int> outer(int n) async {
+          int x = await hostDouble(n);
+          int y = await inner(x);
+          return x + y;
+        }
+      ''');
+      if (runner == null) {
+        fail('Wasm runtime not supported.');
+      }
+
+      runner.mapWasmAsyncFunction('hostDouble', const [WasmValueType.i64], (
+        args,
+      ) async {
+        await Future<void>.delayed(const Duration(milliseconds: 2));
+        return _asInt(args[0]) * 2;
+      });
+      runner.mapWasmAsyncFunction('hostInc', const [WasmValueType.i64], (
+        args,
+      ) async {
+        await Future<void>.delayed(const Duration(milliseconds: 2));
+        return _asInt(args[0]) + 1;
+      });
+
+      var r = await runner.executeFunction(
+        '',
+        'outer',
+        positionalParameters: [5],
+      );
+
+      // x = 2*5 = 10 ; inner(10): 10+1 = 11 ; return 10 + 11 = 21.
+      expect(r.getValueNoContext(), equals(21));
+    });
+
     test('a non-async Wasm function still runs synchronously', () async {
       var runner = await _wasmRunner(r'''
         int addOne(int n) {

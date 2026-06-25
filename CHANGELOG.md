@@ -31,15 +31,18 @@
     delay.
   - Wasm **Asyncify code generation**: the generator emits the unwind/rewind
     state machine for an `async` function whose `await`s are statement-level
-    calls to external (host) functions — a fixed low-memory Asyncify control
-    region (`WasmModuleContext`), live-local spill/restore, a suspend epilogue,
-    and **`br_table` resume dispatch supporting multiple `await` points** in one
-    function (statements may interleave; locals survive every suspension).
-    Validated against the live runtime in
-    `test/apollovm_wasm_asyncify_codegen_test.dart` (real suspension, multi-
-    await, pre/post-await local preservation, concurrent interleaving). More
-    complex shapes (awaits nested in control flow, awaiting a module function =>
-    multi-frame) fall back to the synchronous-collapse path.
+    calls — a low-memory Asyncify control region (`WasmModuleContext`) with a
+    LIFO **frame stack**, live-local spill/restore, `br_table` resume dispatch
+    supporting **multiple `await` points** in one function, and **multi-frame
+    unwinding**: an `async` function may `await` another module `async` function
+    (an *internal* frame) as well as a host import (a *leaf*). The unwind
+    propagates up every frame on the call stack to the host and rewinds back
+    down (an eligibility fixed-point decides which async functions transform;
+    the rest use synchronous-collapse). Validated against the live runtime in
+    `test/apollovm_wasm_asyncify_codegen_test.dart` and the multi-frame /
+    mixed-await cases in `test/apollovm_wasm_asyncify_runner_test.dart`. Shapes
+    that still fall back to synchronous-collapse: awaits nested in control flow,
+    multiple awaits in one statement, and async recursion.
   - Wasm Asyncify **runner integration**: `ApolloRunnerWasm.executeFunction`
     now detects real-suspension `async` functions (flagged in `apollovm_sig`)
     and drives their unwind/rewind loop, awaiting a real Dart `Future` from a
