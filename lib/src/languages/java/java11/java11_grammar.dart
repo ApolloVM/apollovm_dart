@@ -145,7 +145,7 @@ class Java11GrammarDefinition extends Java11GrammarLexer {
 
   Parser<ASTConstructorParametersDeclaration>
   constructorParametersDeclaration() =>
-      (functionEmptyParametersDeclaration() |
+      (constructorEmptyParametersDeclaration() |
               constructorPositionalParametersDeclaration())
           .cast<ASTConstructorParametersDeclaration>();
 
@@ -520,10 +520,12 @@ class Java11GrammarDefinition extends Java11GrammarLexer {
               expressionMapLiteral() |
               expressionMapEmptyLiteral() |
               expressionVariableDirectOperation() |
+              expressionObjectFieldAssignment() |
               expressionVariableAssigment() |
               expressionFunctionInvocation() |
               expressionObjectEntryFunctionInvocation() |
               expressionVariableEntryAccess() |
+              expressionGetterAccess() |
               expressionNullValue() |
               expressionVariableAccess() |
               expressionNegative())
@@ -577,19 +579,23 @@ class Java11GrammarDefinition extends Java11GrammarLexer {
           });
 
   Parser<ASTExpressionFunctionInvocation> expressionFunctionInvocation() =>
-      ((identifier() & char('.')).optional() &
+      // Optional `new` prefix for class instantiation (`new User()`); the
+      // collection literals (`new ArrayList<…>()`) match earlier in the
+      // alternation, so this generic rule handles user classes.
+      (newToken().optional() &
+              (identifier() & char('.')).optional() &
               identifier() &
               char('(').trimHidden() &
               ref0(expressionSequence).optional() &
               char(')').trimHidden() &
               expressionChainFunctionInvocation().star())
           .map((v) {
-            var objOpt = v[0] as List?;
+            var objOpt = v[1] as List?;
             var obj = objOpt != null ? objOpt[0] as String : null;
-            var name = v[1] as String;
-            var args = v[3] as List<ASTExpression>?;
+            var name = v[2] as String;
+            var args = v[4] as List<ASTExpression>?;
             args ??= <ASTExpression>[];
-            var chainFunctions = (v[5] as List)
+            var chainFunctions = (v[6] as List)
                 .whereType<ASTExpressionChainFunctionInvocation>()
                 .toList();
 
@@ -608,6 +614,28 @@ class Java11GrammarDefinition extends Java11GrammarLexer {
                 chainFunctions,
               );
             }
+          });
+
+  /// `obj.field` (and `this.field`) read access.
+  Parser<ASTExpressionGetterAccess> expressionGetterAccess() =>
+      ((identifier() & char('.')) &
+              identifier().trimHidden() &
+              expressionChainFunctionInvocation().star())
+          .map((v) {
+            var obj = v[0] as String?;
+            var name = v[2] as String;
+            var chainFunctions = (v[3] as List)
+                .whereType<ASTExpressionChainFunctionInvocation>()
+                .toList();
+
+            ASTVariable variable = obj == 'this'
+                ? ASTThisVariable()
+                : ASTScopeVariable(obj!);
+            return ASTExpressionObjectGetterAccess(
+              variable,
+              name,
+              chainFunctions,
+            );
           });
 
   Parser<ASTExpressionChainFunctionInvocation>
@@ -817,6 +845,30 @@ class Java11GrammarDefinition extends Java11GrammarLexer {
       (variable() & assigmentOperator() & ref0(expression)).map((v) {
         return ASTExpressionVariableAssignment(v[0], v[1], v[2]);
       });
+
+  /// `obj.field = value` (and `this.field = value`), including `+=` etc.
+  Parser<ASTExpressionObjectSetterAssignment>
+  expressionObjectFieldAssignment() =>
+      (identifier() &
+              char('.') &
+              identifier().trimHidden() &
+              assigmentOperator() &
+              ref0(expression))
+          .map((v) {
+            var obj = v[0] as String;
+            var name = v[2] as String;
+            var op = v[3] as ASTAssignmentOperator;
+            var valueExpr = v[4] as ASTExpression;
+            ASTVariable variable = obj == 'this'
+                ? ASTThisVariable()
+                : ASTScopeVariable(obj);
+            return ASTExpressionObjectSetterAssignment(
+              variable,
+              name,
+              op,
+              valueExpr,
+            );
+          });
 
   Parser<ASTAssignmentOperator> assigmentOperator() =>
       (char('=') | string('+=') | string('-=') | string('*=') | string('/='))

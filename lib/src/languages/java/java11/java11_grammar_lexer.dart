@@ -41,7 +41,10 @@ abstract class Java11GrammarLexer extends BaseGrammarLexer {
 
   Parser inToken() => ref1(token, 'in');
 
-  Parser newToken() => ref1(token, 'new');
+  // Whole-word match so identifiers like `newValue` aren't read as `new` + …
+  Parser newToken() => (string('new') & ref0(identifierPartLexicalToken).not())
+      .map((v) => v[0])
+      .trim(ref0(hiddenStuffWhitespace));
 
   Parser nullToken() => ref1(token, 'null');
 

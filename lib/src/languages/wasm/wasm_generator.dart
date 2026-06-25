@@ -9,9 +9,11 @@ import 'dart:typed_data';
 import 'package:collection/collection.dart';
 import 'package:data_serializer/data_serializer.dart';
 
+import '../../apollovm_base.dart';
 import '../../apollovm_code_storage.dart';
 import '../../apollovm_generated_output.dart';
 import '../../apollovm_generator.dart';
+import '../../ast/apollovm_ast_base.dart';
 import '../../ast/apollovm_ast_expression.dart';
 import '../../ast/apollovm_ast_statement.dart';
 import '../../ast/apollovm_ast_toplevel.dart';
@@ -63,8 +65,19 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     out.write(Wasm.magicModuleHeader, description: "Wasm Magic");
     out.write(Wasm.moduleVersion, description: "Version 1");
 
-    var functions = root.functions.expand((fs) => fs.functions).toList();
-    var module = WasmModuleContext(functions);
+    var topFunctions = root.functions.expand((fs) => fs.functions).toList();
+
+    // Synthesize the field layouts and the constructor/method functions for
+    // each class, appending them to the module function-index space.
+    var classLayouts = <String, WasmClassLayout>{};
+    var classFunctions = <ASTFunctionDeclaration>[];
+    for (var clazz in root.classes) {
+      classLayouts[clazz.name] = _buildClassLayout(clazz);
+      classFunctions.addAll(_buildClassFunctions(clazz));
+    }
+
+    var functions = [...topFunctions, ...classFunctions];
+    var module = WasmModuleContext(functions, classLayouts: classLayouts);
 
     // A public function with a String or List parameter requires the host to
     // allocate the argument in module memory, so ensure `__alloc` is exported.
@@ -121,6 +134,95 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     return out;
   }
 
+  /// Computes the heap layout of a class instance: instance fields in
+  /// declaration order, each at a byte offset (int/double 8B, else 4B i32).
+  WasmClassLayout _buildClassLayout(ASTClassNormal clazz) {
+    var offsets = <String, int>{};
+    var types = <String, ASTType>{};
+    var offset = 0;
+    for (var field in clazz.fields) {
+      if (field.modifiers.isStatic) continue; // statics aren't instance fields
+      offsets[field.name] = offset;
+      types[field.name] = field.type;
+      offset += _elemSize(field.type);
+    }
+    return WasmClassLayout(clazz.name, offsets, types, offset);
+  }
+
+  /// Synthesizes the module functions for a class: one per constructor (Wasm
+  /// signature = the constructor's value params, returns an i32 object pointer)
+  /// and one per non-static instance method (`this` prepended as param 0).
+  List<ASTFunctionDeclaration> _buildClassFunctions(ASTClassNormal clazz) {
+    var result = <ASTFunctionDeclaration>[];
+
+    var constructors = clazz.constructors;
+    if (constructors.isEmpty) {
+      // Implicit default (zero-arg) constructor: allocate + apply field
+      // initializers + return `this`.
+      var defaultCtor = ASTClassConstructorDeclaration(
+        clazz.type,
+        '',
+        ASTConstructorParametersDeclaration(null, null, null),
+      );
+      defaultCtor.parentBlock = clazz;
+      defaultCtor.resolveNode(clazz);
+      result.add(
+        _WasmConstructorFunction(
+          clazz,
+          defaultCtor,
+          ASTFunctionParametersDeclaration([]),
+        ),
+      );
+    }
+
+    for (var ctorSet in constructors) {
+      for (var ctor in ctorSet.functions) {
+        var params = ctor.parameters.allParameters
+            .map(
+              (p) => ASTFunctionParameterDeclaration(
+                p.type,
+                p.name,
+                p.index,
+                p.optional,
+              ),
+            )
+            .toList();
+        result.add(
+          _WasmConstructorFunction(
+            clazz,
+            ctor,
+            ASTFunctionParametersDeclaration(params),
+          ),
+        );
+      }
+    }
+
+    for (var fnSet in clazz.functions) {
+      for (var fn in fnSet.functions) {
+        if (fn is! ASTClassFunctionDeclaration) continue;
+        if (fn.modifiers.isStatic) continue; // statics not supported this slice
+
+        var params = <ASTFunctionParameterDeclaration>[
+          ASTFunctionParameterDeclaration(clazz.type, 'this', 0, false),
+          ...fn.parameters.allParameters,
+        ];
+
+        result.add(
+          _WasmMethodFunction(
+            clazz,
+            fn,
+            '${clazz.name}.${fn.name}',
+            ASTFunctionParametersDeclaration(params),
+            fn.returnType,
+            block: fn,
+          ),
+        );
+      }
+    }
+
+    return result;
+  }
+
   /// Type tag used by the `apollovm_sig` custom section.
   /// 0=void, 1=int, 2=double, 3=bool, 4=String, 5=other, 6=list, 7=map.
   static int _typeTag(ASTType t) {
@@ -165,6 +267,7 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       if (needs(f.effectiveReturnType)) return true;
       for (var p in f.parameters.allParameters) {
         if (p.type is ASTTypeString ||
+            p.type is ASTTypeBool ||
             p.type is ASTTypeArray ||
             p.type is ASTTypeMap) {
           return true;
@@ -550,8 +653,20 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
   }) {
     out ??= newOutput();
 
+    // A function's call indices are `importCount + position`, but host imports
+    // (`env.print`, `env.int_to_str`, …) are registered lazily as bodies are
+    // generated. With classes a function may call another that is generated
+    // later (and registers imports), so emit a discovery pass first to register
+    // all imports — making `importCount` final — before the real pass. Scoped
+    // to class modules so import-free / single-function modules stay byte-stable.
+    if (module.classLayouts.isNotEmpty) {
+      for (var f in module.functions) {
+        _generateModuleFunctionBody(f, module);
+      }
+    }
+
     var entries = module.functions
-        .map((f) => generateASTFunctionDeclaration(f, module: module))
+        .map((f) => _generateModuleFunctionBody(f, module))
         .toList();
 
     // Synth functions (e.g. `__alloc`) registered during user-body codegen.
@@ -576,6 +691,20 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     out.writeBytesLeb128Block(entries, description: "Functions bodies");
 
     return out;
+  }
+
+  /// Generates the code-section body of a single module function, dispatching
+  /// to the constructor/method generators for synthesized class functions.
+  BytesOutput _generateModuleFunctionBody(
+    ASTFunctionDeclaration f,
+    WasmModuleContext module,
+  ) {
+    if (f is _WasmConstructorFunction) {
+      return _generateClassConstructorFunction(f, module: module);
+    } else if (f is _WasmMethodFunction) {
+      return _generateClassMethodFunction(f, module: module);
+    }
+    return generateASTFunctionDeclaration(f, module: module);
   }
 
   /// Builds a Wasm function-type entry `0x60 vec(params) vec(results)`.
@@ -896,10 +1025,112 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       );
     }
 
+    // Instance method call on a class: `recv.method(args)`.
+    if (context.module?.layoutForType(localVar.type) != null) {
+      return _generateMethodInvocation(
+        expression,
+        localVar,
+        out: out,
+        context: context,
+      );
+    }
+
     throw UnimplementedError(
       "Wasm method `.${expression.name}` on ${localVar.type} "
       "is not supported yet.",
     );
+  }
+
+  /// Lowers `recv.method(args)` to a call of the synthesized method function
+  /// (`this` passed as the first argument).
+  BytesOutput _generateMethodInvocation(
+    ASTExpressionObjectFunctionInvocation expression,
+    ({ASTType type, int index}) recvVar, {
+    required BytesOutput out,
+    required WasmContext context,
+  }) {
+    return _emitClassMethodCall(
+      recv: recvVar,
+      receiverDesc: expression.variable.name,
+      methodName: expression.name,
+      arguments: expression.arguments,
+      out: out,
+      context: context,
+    );
+  }
+
+  /// Emits a call to class [methodName] on the receiver local [recv] (passed as
+  /// the first argument, `this`), used by both `recv.method(args)` and the
+  /// implicit-`this` `method(args)` inside another method.
+  BytesOutput _emitClassMethodCall({
+    required ({ASTType type, int index}) recv,
+    required String receiverDesc,
+    required String methodName,
+    required List<ASTExpression> arguments,
+    required BytesOutput out,
+    required WasmContext context,
+  }) {
+    var module = context.module!;
+    var className = recv.type.name;
+    var arity = arguments.length;
+
+    var calleeIndex = module.methodIndex(className, methodName, arity);
+    if (calleeIndex == null) {
+      throw StateError(
+        "Can't resolve method `$className.$methodName` with $arity argument(s).",
+      );
+    }
+    var callee = module.functionByIndex(calleeIndex) as _WasmMethodFunction;
+
+    final stackLng0 = context.stackLength;
+
+    // Receiver (`this`) is the first argument.
+    _localVariableGet(out, context, recv.index, receiverDesc);
+    context.stackPush(recv.type, "receiver `$receiverDesc`");
+
+    for (var i = 0; i < arity; ++i) {
+      var stackBefore = context.stackLength;
+      generateASTExpression(arguments[i], out: out, context: context);
+      context.assertStackLength(stackBefore + 1, "After method arg[$i]");
+
+      var paramType = callee.method.parameters.getParameterByIndex(i)?.type;
+      if (paramType != null) {
+        _autoConvertStackTypes(
+          context.stackGet(0)!.type,
+          paramType,
+          out: out,
+          context: context,
+        );
+      }
+    }
+
+    out.write(
+      Wasm.call(calleeIndex),
+      description: "[OP] call `$className.$methodName` (index $calleeIndex)",
+    );
+
+    for (var i = 0; i < arity + 1; ++i) {
+      context.stackDrop();
+    }
+
+    var returnType = callee.method.returnType;
+    if (!returnType.isVoid) {
+      ASTType resultType;
+      if (returnType is ASTTypeInt) {
+        resultType = _astTypeInt64;
+      } else if (returnType is ASTTypeDouble) {
+        resultType = _astTypeDouble64;
+      } else {
+        resultType = returnType;
+      }
+      context.stackPush(resultType, "method `$methodName` result");
+    }
+
+    context.assertStackLength(
+      stackLng0 + (returnType.isVoid ? 0 : 1),
+      "After method `$methodName`",
+    );
+    return out;
   }
 
   /// `m.containsKey(k)`: linear scan, pushes an i32 bool (1 found / 0 absent).
@@ -1071,15 +1302,22 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
   int _elemSize(ASTType elemType) =>
       (elemType is ASTTypeInt || elemType is ASTTypeDouble) ? 8 : 4;
 
+  /// A class-instance reference: an i32 pointer to a heap struct.
+  bool _isWasmObjectRef(ASTType t) => t is ASTType<VMObject>;
+
   void _emitElemStore(BytesOutput out, ASTType elemType, int offset) {
     if (elemType is ASTTypeInt) {
       out.write(Wasm64.i64Store(3, offset));
     } else if (elemType is ASTTypeDouble) {
       out.write(Wasm64.f64Store(FloatAlign.align3, offset));
-    } else if (elemType is ASTTypeString || elemType is ASTTypeBool) {
+    } else if (elemType is ASTTypeString ||
+        elemType is ASTTypeBool ||
+        elemType is ASTTypeArray ||
+        elemType is ASTTypeMap ||
+        _isWasmObjectRef(elemType)) {
       out.write(Wasm32.i32Store(2, offset));
     } else {
-      throw UnimplementedError("Wasm list element store for $elemType");
+      throw UnimplementedError("Wasm element/field store for $elemType");
     }
   }
 
@@ -1088,10 +1326,14 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       out.write(Wasm64.i64Load(3, offset));
     } else if (elemType is ASTTypeDouble) {
       out.write(Wasm64.f64Load(FloatAlign.align3, offset));
-    } else if (elemType is ASTTypeString || elemType is ASTTypeBool) {
+    } else if (elemType is ASTTypeString ||
+        elemType is ASTTypeBool ||
+        elemType is ASTTypeArray ||
+        elemType is ASTTypeMap ||
+        _isWasmObjectRef(elemType)) {
       out.write(Wasm32.i32Load(2, offset));
     } else {
-      throw UnimplementedError("Wasm list element load for $elemType");
+      throw UnimplementedError("Wasm element/field load for $elemType");
     }
   }
 
@@ -1228,6 +1470,24 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
 
     var calleeIndex = context.functionIndex(name, argsCount);
     if (calleeIndex == null) {
+      // Inside a method, an unqualified call is an implicit-`this` method call
+      // (`foo()` == `this.foo()`).
+      var layout = context.classLayout;
+      var thisVar = context.getLocalVariable('this');
+      if (layout != null &&
+          thisVar != null &&
+          context.module?.methodIndex(layout.className, name, argsCount) !=
+              null) {
+        return _emitClassMethodCall(
+          recv: thisVar,
+          receiverDesc: 'this',
+          methodName: name,
+          arguments: arguments,
+          out: out,
+          context: context,
+        );
+      }
+
       throw StateError(
         "Can't resolve local function `$name` with $argsCount argument(s) "
         "in the Wasm function index table.",
@@ -1317,16 +1577,23 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
 
     final stackLng0 = context.stackLength;
 
-    // Evaluate the argument; it must resolve to a string handle (i32).
-    generateASTExpression(expression.arguments[0], out: out, context: context);
-    context.assertStackLength(stackLng0 + 1, "After print argument");
+    var arg = expression.arguments[0];
 
-    var argType = context.stackGet(0)!.type;
-    if (argType != _astTypeInt32 && argType is! ASTTypeString) {
-      throw UnimplementedError(
-        "Wasm `print` currently supports String arguments only "
-        "(got $argType); number/other interpolation lands in a later slice.",
+    // `print(null)` prints the literal `null`. The generic null-value path can't
+    // be lowered (Wasm has no null), so intern the text directly.
+    if (arg is ASTExpressionNullValue) {
+      var ptr = module.internStringLiteral('null');
+      out.write(
+        Wasm32.i32Const(ptr),
+        description: "[OP] push 'null' literal ptr($ptr)",
       );
+      context.stackPush(_astTypeString, "print null literal");
+    } else {
+      // Evaluate the argument, then coerce whatever it is (int/double/bool/
+      // String) to an i32 string handle for `env.print`.
+      generateASTExpression(arg, out: out, context: context);
+      context.assertStackLength(stackLng0 + 1, "After print argument");
+      _emitToStringHandle(out, context, context.stackGet(0)!.type);
     }
 
     var importIndex = module.registerImportedFunction('env', 'print', [
@@ -2291,6 +2558,11 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
 
     var name = expression.variable.name;
 
+    // A bare name that is a class field (and not a local) reads `this + offset`.
+    if (context.isFieldAccess(name)) {
+      return _generateFieldGet(out, context, name);
+    }
+
     var localVar = _getLocalVariable(context, name);
 
     final stackLng0 = context.stackLength;
@@ -2323,6 +2595,12 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
 
     var variable = expression.variable;
     var name = variable.name;
+
+    // A bare name that is a class field (and not a local) stores to
+    // `this + offset`.
+    if (context.isFieldAccess(name)) {
+      return _generateFieldSet(expression, out: out, context: context);
+    }
 
     var localVar = _getLocalVariable(context, name);
 
@@ -2369,6 +2647,73 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       "After variable declaration:  ${localVar.index} \$$name",
     );
 
+    return out;
+  }
+
+  /// Loads a class field of the current method's `this`: `this + offset`.
+  BytesOutput _generateFieldGet(
+    BytesOutput out,
+    WasmContext context,
+    String name,
+  ) {
+    final s0 = context.stackLength;
+    var layout = context.classLayout!;
+    var offset = layout.offsets[name]!;
+    var fieldType = layout.types[name]!;
+
+    out.write(
+      Wasm.localGet(context.thisLocalIndex),
+      description: "[OP] this (read field `$name`)",
+    );
+    _emitElemLoad(out, fieldType, offset);
+    context.stackPush(_elemStackType(fieldType), "field `$name`");
+
+    context.assertStackLength(s0 + 1, "After field get `$name`");
+    return out;
+  }
+
+  /// Stores to a class field of the current method's `this`. Mirrors the local
+  /// assignment-expression contract: the address is pushed to the real stack
+  /// only and the value's virtual entry is left on the stack.
+  BytesOutput _generateFieldSet(
+    ASTExpressionVariableAssignment expression, {
+    required BytesOutput out,
+    required WasmContext context,
+  }) {
+    var name = expression.variable.name;
+    var layout = context.classLayout!;
+    var offset = layout.offsets[name]!;
+    var fieldType = layout.types[name]!;
+
+    final s0 = context.stackLength;
+    var op = expression.operator;
+
+    // Address (`this`) on the real stack; not tracked on the virtual stack so
+    // the value sub-expression's relative assertions hold.
+    out.write(
+      Wasm.localGet(context.thisLocalIndex),
+      description: "[OP] this (store field `$name`)",
+    );
+
+    if (op == ASTAssignmentOperator.set) {
+      generateASTExpression(expression.expression, out: out, context: context);
+    } else {
+      var expOp = op.asASTExpressionOperator!;
+      generateASTExpressionOperation(
+        ASTExpressionOperation(
+          ASTExpressionVariableAccess(expression.variable),
+          expOp,
+          expression.expression,
+        ),
+        out: out,
+        context: context,
+      );
+    }
+
+    // `store` consumes the address and value from the real stack; the value's
+    // virtual entry stays (matching local assignment).
+    _emitElemStore(out, fieldType, offset);
+    context.assertStackLength(s0 + 1, "After field set `$name`");
     return out;
   }
 
@@ -2969,6 +3314,19 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
 
     var listType = localVar.type;
 
+    // `obj.field` on a class instance: load `recv + offset`.
+    var classLayout = context.module?.layoutForType(listType);
+    if (classLayout != null && classLayout.offsets.containsKey(name)) {
+      final s0 = context.stackLength;
+      var offset = classLayout.offsets[name]!;
+      var fieldType = classLayout.types[name]!;
+      _localVariableGet(out, context, localVar.index, varName);
+      _emitElemLoad(out, fieldType, offset);
+      context.stackPush(_elemStackType(fieldType), "$varName.$name");
+      context.assertStackLength(s0 + 1, "After getter $varName.$name");
+      return out;
+    }
+
     // `.length`/`.isEmpty`/`.isNotEmpty` read header[0] (length), which is the
     // same offset for both the list and map layouts.
     if (listType is ASTTypeArray || listType is ASTTypeMap) {
@@ -3169,7 +3527,9 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     );
 
     for (var v in localVariables) {
-      var astType = v.value;
+      // Use the context's (possibly refined) type — a `var` initialized from a
+      // constructor is re-typed from `dynamic` to the class type during body gen.
+      var astType = context.getLocalVariable(v.key)?.type ?? v.value;
       outBody.write(
         Leb128.encodeUnsigned(1),
         description: "Declared variable count",
@@ -3202,6 +3562,167 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
 
     out.writeBytesLeb128Block([outBody], description: "Function body");
 
+    return out;
+  }
+
+  /// Generates a class instance method. Reuses [generateASTFunctionDeclaration]
+  /// with a context that knows the class field layout and that `this` is the
+  /// first parameter (local 0), so bare field accesses in the body lower to
+  /// loads/stores against `this`.
+  BytesOutput _generateClassMethodFunction(
+    _WasmMethodFunction f, {
+    required WasmModuleContext module,
+  }) {
+    var context = WasmContext(module: module);
+    context.classLayout = module.classLayouts[f.clazz.name];
+    context.thisLocalIndex = 0; // `this` is parameter 0.
+    return generateASTFunctionDeclaration(f, context: context, module: module);
+  }
+
+  /// Generates a class constructor as a function returning an i32 object
+  /// pointer: allocates the instance struct, applies field initializers and
+  /// `this.field` parameter stores, runs the constructor body, and returns
+  /// `this`.
+  BytesOutput _generateClassConstructorFunction(
+    _WasmConstructorFunction f, {
+    required WasmModuleContext module,
+  }) {
+    var out = newOutput();
+    var context = WasmContext(module: module);
+
+    var clazz = f.clazz;
+    var layout = module.classLayouts[clazz.name]!;
+    context.classLayout = layout;
+
+    module.requiresMemory = true;
+    module.requiresHeapGlobal = true;
+    module.ensureAllocFunction();
+
+    var classType = clazz.type;
+    var return0 = context.returnsLength;
+    context.returnsPush(classType, "Constructor `${clazz.name}` return");
+
+    // Value parameters become locals 0..n-1.
+    var paramVars = f.parameters.declaredVariables();
+    for (var v in paramVars) {
+      context.addLocalVariable(v.key, v.value);
+    }
+
+    // The `this` pointer is a local just past the parameters.
+    var thisIndex = context.addLocalVariable('this', classType);
+    context.thisLocalIndex = thisIndex;
+
+    // Locals declared in the constructor body.
+    var bodyLocals = f.ctor.statements.declaredVariables();
+    for (var v in bodyLocals) {
+      context.addLocalVariable(v.key, v.value);
+    }
+
+    var bodyCode = newOutput();
+
+    // this = __alloc(sizeof(class))
+    bodyCode.write(
+      Wasm32.i32Const(layout.size),
+      description: "[OP] sizeof ${clazz.name} = ${layout.size}",
+    );
+    _emitInlineAlloc(bodyCode, context);
+    bodyCode.write(
+      Wasm.localSet(thisIndex),
+      description: "[OP] this = alloc(${clazz.name})",
+    );
+
+    var thisParamNames = f.ctor.parameters.allParameters
+        .where((p) => p.thisParameter)
+        .map((p) => p.name)
+        .toSet();
+
+    // Field initializers (e.g. `int y = 5`) for fields not set by a `this.`
+    // parameter.
+    for (var field in clazz.fields) {
+      if (field.modifiers.isStatic) continue;
+      if (thisParamNames.contains(field.name)) continue;
+      if (field is! ASTClassFieldWithInitialValue) continue;
+
+      var offset = layout.offsets[field.name]!;
+      var fieldType = layout.types[field.name]!;
+      bodyCode.write(
+        Wasm.localGet(thisIndex),
+        description: "[OP] this (init field `${field.name}`)",
+      );
+      generateASTExpression(
+        field.initialValue,
+        out: bodyCode,
+        context: context,
+      );
+      context.stackDrop(); // value consumed by the field store
+      _emitElemStore(bodyCode, fieldType, offset);
+    }
+
+    // `this.field` parameter stores.
+    for (var p in f.ctor.parameters.allParameters) {
+      if (!p.thisParameter) continue;
+      var offset = layout.offsets[p.name];
+      if (offset == null) continue;
+      var fieldType = layout.types[p.name]!;
+      var paramLocal = context.getLocalVariable(p.name)!;
+      bodyCode.write(
+        Wasm.localGet(thisIndex),
+        description: "[OP] this (store param `${p.name}`)",
+      );
+      bodyCode.write(
+        Wasm.localGet(paramLocal.index),
+        description: "[OP] param `${p.name}`",
+      );
+      _emitElemStore(bodyCode, fieldType, offset);
+    }
+
+    // Explicit constructor body statements.
+    for (var stm in f.ctor.statements) {
+      generateASTStatement(stm, out: bodyCode, context: context);
+    }
+
+    // return this
+    bodyCode.write(
+      Wasm.localGet(thisIndex),
+      description: "[OP] return this (${clazz.name})",
+    );
+
+    // Preamble: the `this` local, then body locals, then scratch locals.
+    var outBody = newOutput();
+    var scratchTypes = context.scratchLocalTypes;
+
+    outBody.write(
+      Leb128.encodeUnsigned(1 + bodyLocals.length + scratchTypes.length),
+      description: "Local variables count",
+    );
+    outBody.write(Leb128.encodeUnsigned(1), description: "this local count");
+    outBody.writeByte(classType.wasmCode, description: "this local (i32)");
+    for (var v in bodyLocals) {
+      var astType = context.getLocalVariable(v.key)?.type ?? v.value;
+      outBody.write(
+        Leb128.encodeUnsigned(1),
+        description: "Declared var count",
+      );
+      outBody.writeByte(
+        astType.wasmCode,
+        description: "Local `${v.key}` (${astType.wasmType.name})",
+      );
+    }
+    for (var astType in scratchTypes) {
+      outBody.write(Leb128.encodeUnsigned(1), description: "Scratch var count");
+      outBody.writeByte(
+        astType.wasmCode,
+        description: "Scratch (${astType.wasmType.name})",
+      );
+    }
+
+    outBody.writeBytes(bodyCode);
+    outBody.writeByte(Wasm.end, description: "Code body end");
+
+    context.returnsDrop(classType);
+    context.assertReturnsLength(return0);
+
+    out.writeBytesLeb128Block([outBody], description: "Constructor body");
     return out;
   }
 
@@ -5667,16 +6188,21 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     var variable = statement.variable;
     var name = variable.name;
 
-    var localVar = _getLocalVariable(context, name);
-
     var stackLength0 = context.stackLength;
 
-    _localVariableGet(out, context, localVar.index, name, '(return)');
-
-    context.stackPush(
-      localVar.type,
-      'Local get: ${localVar.index} \$$name (return)',
-    );
+    if (context.isFieldAccess(name)) {
+      _generateFieldGet(out, context, name);
+    } else {
+      var localVar = _getLocalVariable(context, name);
+      _localVariableGet(out, context, localVar.index, name, '(return)');
+      var pushType = localVar.type is ASTTypeBool
+          ? _astTypeInt32
+          : localVar.type;
+      context.stackPush(
+        pushType,
+        'Local get: ${localVar.index} \$$name (return)',
+      );
+    }
 
     context.assertStackLength(stackLength0 + 1, "Return variable: $name");
 
@@ -5687,7 +6213,7 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
 
     out.writeByte(
       Wasm.functionReturn,
-      description: "[OP] return variable: ${localVar.index} \$$name",
+      description: "[OP] return variable: \$$name",
     );
     context.stackDrop();
 
@@ -5835,6 +6361,13 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       "After variable declaration expression",
     );
 
+    // A `var` that the AST couldn't statically resolve (e.g. `var p = Point()`)
+    // is registered as `dynamic`; refine it to the initializer's real type so
+    // method/field access and the local's Wasm type are correct.
+    if (localVar.type is ASTTypeDynamic) {
+      context.updateLocalVariableType(name, context.stackGet(0)!.type);
+    }
+
     _localVariableSet(out, context, localVar.index, name);
 
     context.assertStackLength(
@@ -5948,6 +6481,12 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       );
     } else if (expression is ASTExpressionGroupFunctionInvocation) {
       return generateASTExpressionGroupFunctionInvocation(expression, out: out);
+    } else if (expression is ASTExpressionObjectSetterAssignment) {
+      return _generateObjectSetterAssignment(
+        expression,
+        out: out,
+        context: context,
+      );
     } else if (expression is ASTExpressionOperation) {
       return generateASTExpressionOperation(
         expression,
@@ -5957,6 +6496,61 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     }
 
     throw UnsupportedError("Can't generate expression: $expression");
+  }
+
+  /// Lowers `obj.field = value` (and `this.field = value`), including compound
+  /// operators, to a store at `recv + offset`.
+  BytesOutput _generateObjectSetterAssignment(
+    ASTExpressionObjectSetterAssignment expression, {
+    BytesOutput? out,
+    WasmContext? context,
+  }) {
+    out ??= newOutput();
+    context ??= WasmContext();
+
+    var recvName = expression.variable.name;
+    var recvVar = _getLocalVariable(context, recvName);
+    var layout = context.module?.layoutForType(recvVar.type);
+    if (layout == null || !layout.offsets.containsKey(expression.name)) {
+      throw UnimplementedError(
+        "Wasm field assignment `${recvVar.type}.${expression.name}` "
+        "is not supported.",
+      );
+    }
+    var offset = layout.offsets[expression.name]!;
+    var fieldType = layout.types[expression.name]!;
+
+    final s0 = context.stackLength;
+
+    // Receiver pointer (the store address) on the real stack only — the value
+    // sub-expression's relative assertions hold, and the value's virtual entry
+    // remains (matching the local assignment-expression contract).
+    _localVariableGet(out, context, recvVar.index, recvName);
+
+    if (expression.operator == ASTAssignmentOperator.set) {
+      generateASTExpression(expression.expression, out: out, context: context);
+    } else {
+      var expOp = expression.operator.asASTExpressionOperator!;
+      generateASTExpressionOperation(
+        ASTExpressionOperation(
+          ASTExpressionObjectGetterAccess(expression.variable, expression.name),
+          expOp,
+          expression.expression,
+        ),
+        out: out,
+        context: context,
+      );
+    }
+
+    _autoConvertStackTypes(
+      context.stackGet(0)!.type,
+      fieldType,
+      out: out,
+      context: context,
+    );
+    _emitElemStore(out, fieldType, offset);
+    context.assertStackLength(s0 + 1, "After object field set");
+    return out;
   }
 
   @override
@@ -6203,16 +6797,7 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
 
     generateASTExpression(value.expression, out: out, context: context);
 
-    var t = context.stackGet(0)!.type;
-    if (t is ASTTypeString) {
-      // Already a string handle.
-    } else if (t is ASTTypeInt || t is ASTTypeDouble) {
-      _emitNumberToString(out, context, t);
-    } else {
-      throw UnimplementedError(
-        "Wasm string interpolation of expression type $t is not supported yet.",
-      );
-    }
+    _emitToStringHandle(out, context, context.stackGet(0)!.type);
 
     return out;
   }
@@ -6228,21 +6813,23 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     context ??= WasmContext();
 
     var name = value.variable.name;
+
+    // A field interpolated inside a method (`'$x'`) loads `this + offset`.
+    if (context.isFieldAccess(name)) {
+      _generateFieldGet(out, context, name);
+      _emitToStringHandle(out, context, context.stackGet(0)!.type);
+      return out;
+    }
+
     var localVar = _getLocalVariable(context, name);
     var t = localVar.type;
 
     _localVariableGet(out, context, localVar.index, name);
 
-    if (t is ASTTypeString) {
-      context.stackPush(_astTypeString, "string var: \$$name");
-    } else if (t is ASTTypeInt || t is ASTTypeDouble) {
-      context.stackPush(t, "number var: \$$name");
-      _emitNumberToString(out, context, t);
-    } else {
-      throw UnimplementedError(
-        "Wasm interpolation of variable `$name` ($t) is not supported yet.",
-      );
-    }
+    // Booleans live as i32 on the stack; push the storage type, then coerce.
+    var pushType = t is ASTTypeBool ? _astTypeInt32 : t;
+    context.stackPush(pushType, "interp var: \$$name");
+    _emitToStringHandle(out, context, pushType);
 
     return out;
   }
@@ -6288,6 +6875,89 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     );
     context.stackDrop();
     context.stackPush(_astTypeString, "number to string");
+  }
+
+  /// Coerces the value currently on top of the stack to an i32 string handle,
+  /// ready for `env.print` or string concatenation. Strings already are handles;
+  /// `int`/`double` route through [_emitNumberToString] and `bool` through
+  /// [_emitBoolToString]. A bare i32 stack value is a `bool` (booleans, logic and
+  /// comparison results are all represented as i32 in this generator).
+  void _emitToStringHandle(BytesOutput out, WasmContext context, ASTType type) {
+    if (type is ASTTypeString) {
+      // Already a string handle.
+    } else if (type is ASTTypeBool || identical(type, _astTypeInt32)) {
+      // Booleans (and comparison/logic results) are the only values pushed as
+      // the i32 singleton; checked before `ASTTypeInt` since `instance32` *is*
+      // an `ASTTypeInt`. Real `int`s are pushed as i64 (`instance64`).
+      _emitBoolToString(out, context);
+    } else if (type is ASTTypeInt || type is ASTTypeDouble) {
+      _emitNumberToString(out, context, type);
+    } else if (_isWasmObjectRef(type)) {
+      _emitInstanceToString(out, context, type);
+    } else {
+      throw UnimplementedError(
+        "Wasm string coercion of type $type is not supported yet.",
+      );
+    }
+  }
+
+  /// Converts the class instance pointer on top of the stack to an i32 string
+  /// handle by calling its `toString()` method (which returns a string handle).
+  void _emitInstanceToString(
+    BytesOutput out,
+    WasmContext context,
+    ASTType type,
+  ) {
+    var module = context.module;
+    var className = type.name;
+    var calleeIndex = module?.methodIndex(className, 'toString', 0);
+    if (calleeIndex == null) {
+      throw UnimplementedError(
+        "Wasm `print`/interpolation of a `$className` needs a `toString()` "
+        "method.",
+      );
+    }
+    // The receiver is already on the stack; `toString()` consumes it and
+    // returns the string handle.
+    out.write(
+      Wasm.call(calleeIndex),
+      description: "[OP] call `$className.toString` (index $calleeIndex)",
+    );
+    context.stackDrop();
+    context.stackPush(_astTypeString, "$className.toString() result");
+  }
+
+  /// Converts the i32 boolean on top of the stack to an i32 string handle:
+  /// `select`s between the interned `"true"` / `"false"` literals. `select`
+  /// pops `[a, b, cond]` and keeps `a` when `cond != 0`, so the condition is
+  /// stashed in a scratch local and re-pushed above the two pointers.
+  void _emitBoolToString(BytesOutput out, WasmContext context) {
+    var module = context.module;
+    if (module == null) {
+      throw StateError("Can't convert a bool to String without a module.");
+    }
+    var truePtr = module.internStringLiteral('true');
+    var falsePtr = module.internStringLiteral('false');
+
+    // i32 scratch local (an `ASTTypeInt` would map to i64; `_astTypeString` is
+    // the i32-typed slot used throughout this generator).
+    var condLocal = context.scratchLocal(_astTypeString, 30);
+
+    // cond := top ; [truePtr, falsePtr, cond] ; select -> chosen pointer.
+    out.write(Wasm.localSet(condLocal), description: "[OP] stash bool cond");
+    out.write(
+      Wasm32.i32Const(truePtr),
+      description: "[OP] push 'true' literal ptr($truePtr)",
+    );
+    out.write(
+      Wasm32.i32Const(falsePtr),
+      description: "[OP] push 'false' literal ptr($falsePtr)",
+    );
+    out.write(Wasm.localGet(condLocal), description: "[OP] reload bool cond");
+    out.writeByte(Wasm.select, description: "[OP] select true/false string");
+
+    context.stackDrop(); // bool consumed
+    context.stackPush(_astTypeString, "bool to string");
   }
 
   /// Concatenates the top two string handles on the stack (`[a, b]`) into a
@@ -6498,14 +7168,93 @@ class WasmSynthFunction {
   });
 }
 
+/// Memory layout of a class instance: field byte [offsets] (declaration order),
+/// field [types], and total [size]. An instance is an i32 pointer to a heap
+/// struct holding the fields at these offsets (int/double -> 8B, everything
+/// else -> 4B i32).
+class WasmClassLayout {
+  final String className;
+  final Map<String, int> offsets;
+  final Map<String, ASTType> types;
+  final int size;
+
+  WasmClassLayout(this.className, this.offsets, this.types, this.size);
+}
+
+/// A synthesized module function wrapping a class constructor. Its Wasm
+/// signature takes the constructor's value parameters and returns an i32 object
+/// pointer; codegen allocates the struct, stores fields, runs the body and
+/// returns `this` (see `generateClassConstructorFunction`).
+class _WasmConstructorFunction extends ASTFunctionDeclaration {
+  final ASTClassNormal clazz;
+  final ASTClassConstructorDeclaration ctor;
+
+  _WasmConstructorFunction(
+    this.clazz,
+    this.ctor,
+    ASTFunctionParametersDeclaration parameters,
+  ) : super(
+        clazz.name,
+        parameters,
+        clazz.type,
+        modifiers: ASTModifiers(isPrivate: true),
+      );
+}
+
+/// A synthesized module function wrapping a class instance method. Its Wasm
+/// signature takes `this` (i32) as the first parameter followed by the method's
+/// declared parameters (see `generateClassMethodFunction`).
+class _WasmMethodFunction extends ASTFunctionDeclaration {
+  final ASTClassNormal clazz;
+  final ASTClassFunctionDeclaration method;
+
+  _WasmMethodFunction(
+    this.clazz,
+    this.method,
+    String name,
+    ASTFunctionParametersDeclaration parameters,
+    ASTType returnType, {
+    ASTBlock? block,
+  }) : super(
+         name,
+         parameters,
+         returnType,
+         block: block,
+         modifiers: ASTModifiers(isPrivate: true),
+       );
+}
+
 /// Module-level Wasm codegen state shared across all functions: the function
 /// index space (imports + defined functions) and the static data region
 /// (interned string literals).
 class WasmModuleContext {
   /// Module-defined functions, in index order (placed after any imports).
+  /// Includes top-level functions plus synthesized class constructors
+  /// ([_WasmConstructorFunction]) and methods ([_WasmMethodFunction]).
   final List<ASTFunctionDeclaration> functions;
 
-  WasmModuleContext(this.functions);
+  /// Field memory layout for each class, keyed by class name.
+  final Map<String, WasmClassLayout> classLayouts;
+
+  WasmModuleContext(this.functions, {this.classLayouts = const {}});
+
+  /// The field layout of the class whose instances have type [t], or `null`.
+  WasmClassLayout? layoutForType(ASTType t) => classLayouts[t.name];
+
+  /// Resolves the Wasm function index of class [className]'s method
+  /// [methodName] taking [arity] declared arguments (excluding `this`).
+  int? methodIndex(String className, String methodName, int arity) {
+    for (var i = 0; i < functions.length; ++i) {
+      var f = functions[i];
+      if (f is _WasmMethodFunction &&
+          f.clazz.name == className &&
+          f.method.name == methodName &&
+          f.method.parameters.size == arity) {
+        return importCount + i;
+      }
+    }
+    return null;
+  }
 
   // --- Imported functions (function indices 0..importCount-1) ---
 
@@ -6877,6 +7626,20 @@ class WasmContext {
   ASTFunctionDeclaration? functionByIndex(int index) =>
       module?.functionByIndex(index);
 
+  /// When generating a class constructor/method body, the field layout of the
+  /// owning class and the local index holding the `this` pointer. A bare name
+  /// that isn't a local but is a field resolves to a load/store at
+  /// `this + offset`.
+  WasmClassLayout? classLayout;
+  int thisLocalIndex = -1;
+
+  /// Whether [name] resolves to a field of the current method's class (and is
+  /// not shadowed by a local variable).
+  bool isFieldAccess(String name) =>
+      classLayout != null &&
+      !_localVariables.containsKey(name) &&
+      classLayout!.offsets.containsKey(name);
+
   final Map<String, ({ASTType type, int index})> _localVariables = {};
 
   ({ASTType type, int index})? getLocalVariable(String name) {
@@ -6922,6 +7685,16 @@ class WasmContext {
     var entry = (type: type, index: _localVariables.length);
     _localVariables[name] = entry;
     return entry.index;
+  }
+
+  /// Re-types an existing local (keeping its index). Used to refine a `var`
+  /// declared as `dynamic` once its initializer's real type is known.
+  void updateLocalVariableType(String name, ASTType type) {
+    var prev = _localVariables[name];
+    if (prev == null) {
+      throw StateError("Variable `$name` not defined!");
+    }
+    _localVariables[name] = (type: type, index: prev.index);
   }
 
   /// Scratch (temporary) local types, in the order they were allocated. These
@@ -7156,6 +7929,9 @@ extension _ASTTypeExtension on ASTType {
       return WasmType.voidType;
     } else if (name == 'void') {
       return WasmType.voidType;
+    } else if (this is ASTType<VMObject>) {
+      // A class instance is an i32 pointer into linear memory.
+      return WasmType.i32Type;
     }
 
     throw StateError("Can't handle type: $this");
