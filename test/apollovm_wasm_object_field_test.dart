@@ -53,7 +53,8 @@ Future<void> _testWasmPrints(
 void main() {
   group('Wasm: object fields + default constructor + toString', () {
     test('the motivating program', () async {
-      await _testWasmPrints(r'''
+      await _testWasmPrints(
+        r'''
         class User {
           int id;
           String name;
@@ -67,11 +68,15 @@ void main() {
           var id2 = user.id * 1000;
           print(id2);
         }
-      ''', 'main', ['User#123<Joe>', '123000']);
+      ''',
+        'main',
+        ['User#123<Joe>', '123000'],
+      );
     });
 
     test('default constructor + external field read/write', () async {
-      await _testWasmPrints(r'''
+      await _testWasmPrints(
+        r'''
         class Point { int x; int y; }
         void main() {
           var p = new Point();
@@ -79,11 +84,15 @@ void main() {
           p.y = 4;
           print(p.x + p.y);
         }
-      ''', 'main', ['7']);
+      ''',
+        'main',
+        ['7'],
+      );
     });
 
     test('compound assignment on a field', () async {
-      await _testWasmPrints(r'''
+      await _testWasmPrints(
+        r'''
         class Counter { int n; }
         void main() {
           var c = new Counter();
@@ -91,11 +100,15 @@ void main() {
           c.n += 5;
           print(c.n);
         }
-      ''', 'main', ['15']);
+      ''',
+        'main',
+        ['15'],
+      );
     });
 
     test('constructor with `this.` parameters', () async {
-      await _testWasmPrints(r'''
+      await _testWasmPrints(
+        r'''
         class Point {
           int x;
           int y;
@@ -107,11 +120,15 @@ void main() {
           print(p);
           print(p.x * p.y);
         }
-      ''', 'main', ['(3,4)', '12']);
+      ''',
+        'main',
+        ['(3,4)', '12'],
+      );
     });
 
     test('constructor body assigns fields', () async {
-      await _testWasmPrints(r'''
+      await _testWasmPrints(
+        r'''
         class Box {
           int v;
           Box(int initial) { this.v = initial * 2; }
@@ -121,11 +138,15 @@ void main() {
           var b = new Box(21);
           print(b);
         }
-      ''', 'main', ['Box(42)']);
+      ''',
+        'main',
+        ['Box(42)'],
+      );
     });
 
     test('arrow (expression-bodied) toString + method', () async {
-      await _testWasmPrints(r'''
+      await _testWasmPrints(
+        r'''
         class User {
           int id;
           String name;
@@ -136,11 +157,15 @@ void main() {
           var user = new User(123, 'Joe');
           print(user);
         }
-      ''', 'main', ['User#123<Joe>']);
+      ''',
+        'main',
+        ['User#123<Joe>'],
+      );
     });
 
     test('String field through toString', () async {
-      await _testWasmPrints(r'''
+      await _testWasmPrints(
+        r'''
         class Greeter {
           String name;
           String toString() { return 'Hi ' + name; }
@@ -150,7 +175,10 @@ void main() {
           g.name = 'Bob';
           print(g);
         }
-      ''', 'main', ['Hi Bob']);
+      ''',
+        'main',
+        ['Hi Bob'],
+      );
     });
   });
 }

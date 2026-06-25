@@ -25,7 +25,9 @@ Future<List<String>> _runPrints(
 void main() {
   group('Dart: instantiation + toString()', () {
     test('new User() — default constructor + user toString()', () async {
-      var out = await _runPrints('dart', r'''
+      var out = await _runPrints(
+        'dart',
+        r'''
         class User {
           int id;
           String name;
@@ -37,12 +39,17 @@ void main() {
             print(user);
           }
         }
-      ''', 'Main', 'run');
+      ''',
+        'Main',
+        'run',
+      );
       expect(out, equals(['#null<null>']));
     });
 
     test('User() without `new`', () async {
-      var out = await _runPrints('dart', r'''
+      var out = await _runPrints(
+        'dart',
+        r'''
         class User {
           int id = 7;
           String name = "bob";
@@ -51,32 +58,50 @@ void main() {
         class Main {
           void run() { print(User()); }
         }
-      ''', 'Main', 'run');
+      ''',
+        'Main',
+        'run',
+      );
       expect(out, equals(['#7<bob>']));
     });
 
-    test('class without toString() prints the default representation', () async {
-      var out = await _runPrints('dart', r'''
+    test(
+      'class without toString() prints the default representation',
+      () async {
+        var out = await _runPrints(
+          'dart',
+          r'''
         class User { int id = 7; }
         class Main { void run() { print(new User()); } }
-      ''', 'Main', 'run');
-      expect(out.single, contains('User{'));
-    });
+      ''',
+          'Main',
+          'run',
+        );
+        expect(out.single, contains('User{'));
+      },
+    );
 
     test('`new`-prefixed identifiers stay identifiers', () async {
-      var out = await _runPrints('dart', r'''
+      var out = await _runPrints(
+        'dart',
+        r'''
         class Main {
           void run() {
             var newValue = 5;
             print(newValue);
           }
         }
-      ''', 'Main', 'run');
+      ''',
+        'Main',
+        'run',
+      );
       expect(out, equals(['5']));
     });
 
     test('declared constructor still works with `new`', () async {
-      var out = await _runPrints('dart', r'''
+      var out = await _runPrints(
+        'dart',
+        r'''
         class Point {
           int x;
           int y;
@@ -86,16 +111,21 @@ void main() {
         class Main {
           void run() { print(new Point(3, 4)); }
         }
-      ''', 'Main', 'run');
+      ''',
+        'Main',
+        'run',
+      );
       expect(out, equals(['(3,4)']));
     });
 
     test('instantiate from a top-level function', () async {
       var vm = ApolloVM();
-      await vm.loadCodeUnit(SourceCodeUnit('dart', r'''
+      await vm.loadCodeUnit(
+        SourceCodeUnit('dart', r'''
         class User { int id = 9; String toString() { return 'U$id'; } }
         void run() { print(new User()); }
-      ''', id: 'test'));
+      ''', id: 'test'),
+      );
       var runner = vm.createRunner('dart')!;
       var out = <String>[];
       runner.externalPrintFunction = (o) => out.add('$o');
@@ -106,7 +136,9 @@ void main() {
 
   group('Java: instantiation + toString()', () {
     test('new User() — default constructor + user toString()', () async {
-      var out = await _runPrints('java11', r'''
+      var out = await _runPrints(
+        'java11',
+        r'''
         class User {
           int id = 7;
           String name = "bob";
@@ -118,19 +150,27 @@ void main() {
             print(user);
           }
         }
-      ''', 'Main', 'run');
+      ''',
+        'Main',
+        'run',
+      );
       expect(out, equals(['#7<bob>']));
     });
 
     test('`new`-prefixed identifiers stay identifiers', () async {
-      var out = await _runPrints('java11', r'''
+      var out = await _runPrints(
+        'java11',
+        r'''
         class Main {
           void run() {
             int newValue = 5;
             print(newValue);
           }
         }
-      ''', 'Main', 'run');
+      ''',
+        'Main',
+        'run',
+      );
       expect(out, equals(['5']));
     });
   });

@@ -265,7 +265,13 @@ class ASTScopeVariable<T> extends ASTVariable {
       var obj = context.getClassInstance();
       if (obj is ASTClassInstance && obj.clazz.getField(name) != null) {
         return obj.clazz
-            .setInstanceFieldValue(context, ASTRunStatus.dummy, obj, name, value)
+            .setInstanceFieldValue(
+              context,
+              ASTRunStatus.dummy,
+              obj,
+              name,
+              value,
+            )
             .resolveMapped((_) {});
       }
 

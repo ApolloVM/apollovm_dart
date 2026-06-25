@@ -100,7 +100,11 @@ Future<void> _testClassPrint(
   var wasmRunner = vmWasm.createRunner('wasm')!;
   var wasmOut = [];
   wasmRunner.externalPrintFunction = (o) => wasmOut.add('$o');
-  await wasmRunner.executeFunction('', functionName, positionalParameters: args);
+  await wasmRunner.executeFunction(
+    '',
+    functionName,
+    positionalParameters: args,
+  );
   expect(wasmOut, equals(expectedText), reason: 'Wasm print output');
 }
 

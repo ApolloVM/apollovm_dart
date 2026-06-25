@@ -104,7 +104,11 @@ Future<void> _testWasmPrintText(
   var wasmRunner = vmWasm.createRunner('wasm')!;
   var wasmOut = [];
   wasmRunner.externalPrintFunction = (o) => wasmOut.add('$o');
-  await wasmRunner.executeFunction('', functionName, positionalParameters: args);
+  await wasmRunner.executeFunction(
+    '',
+    functionName,
+    positionalParameters: args,
+  );
   expect(wasmOut, equals(expectedText), reason: 'Wasm print output');
 }
 
@@ -571,12 +575,7 @@ void main() {
 
   group('Wasm P2: print(any type)', () {
     test('print int literal', () async {
-      await _testWasmPrintText(
-        'void run() { print(42); }',
-        'run',
-        [],
-        ['42'],
-      );
+      await _testWasmPrintText('void run() { print(42); }', 'run', [], ['42']);
     });
 
     test('print int parameter', () async {
@@ -589,12 +588,9 @@ void main() {
     });
 
     test('print double literal', () async {
-      await _testWasmPrintText(
-        'void run() { print(3.14); }',
-        'run',
-        [],
-        ['3.14'],
-      );
+      await _testWasmPrintText('void run() { print(3.14); }', 'run', [], [
+        '3.14',
+      ]);
     });
 
     test('print bool literals', () async {
@@ -616,12 +612,9 @@ void main() {
     });
 
     test('print null', () async {
-      await _testWasmPrintText(
-        'void run() { print(null); }',
-        'run',
-        [],
-        ['null'],
-      );
+      await _testWasmPrintText('void run() { print(null); }', 'run', [], [
+        'null',
+      ]);
     });
 
     test('print expression result (int)', () async {

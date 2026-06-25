@@ -3649,7 +3649,11 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
         Wasm.localGet(thisIndex),
         description: "[OP] this (init field `${field.name}`)",
       );
-      generateASTExpression(field.initialValue, out: bodyCode, context: context);
+      generateASTExpression(
+        field.initialValue,
+        out: bodyCode,
+        context: context,
+      );
       context.stackDrop(); // value consumed by the field store
       _emitElemStore(bodyCode, fieldType, offset);
     }
@@ -3695,7 +3699,10 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     outBody.writeByte(classType.wasmCode, description: "this local (i32)");
     for (var v in bodyLocals) {
       var astType = context.getLocalVariable(v.key)?.type ?? v.value;
-      outBody.write(Leb128.encodeUnsigned(1), description: "Declared var count");
+      outBody.write(
+        Leb128.encodeUnsigned(1),
+        description: "Declared var count",
+      );
       outBody.writeByte(
         astType.wasmCode,
         description: "Local `${v.key}` (${astType.wasmType.name})",
@@ -6188,7 +6195,9 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     } else {
       var localVar = _getLocalVariable(context, name);
       _localVariableGet(out, context, localVar.index, name, '(return)');
-      var pushType = localVar.type is ASTTypeBool ? _astTypeInt32 : localVar.type;
+      var pushType = localVar.type is ASTTypeBool
+          ? _astTypeInt32
+          : localVar.type;
       context.stackPush(
         pushType,
         'Local get: ${localVar.index} \$$name (return)',

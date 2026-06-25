@@ -1102,7 +1102,8 @@ class DartGrammarDefinition extends DartGrammarLexer {
           });
 
   /// `obj.field = value` (and `this.field = value`), including `+=` etc.
-  Parser<ASTExpressionObjectSetterAssignment> expressionObjectFieldAssignment() =>
+  Parser<ASTExpressionObjectSetterAssignment>
+  expressionObjectFieldAssignment() =>
       (identifier() &
               char('.') &
               identifier().trimHidden() &
