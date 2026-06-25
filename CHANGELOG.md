@@ -1,3 +1,14 @@
+## 0.1.32
+
+- Wasm Asyncify: **awaits inside `for-each`** over a list. `for (T e in it)` is
+  desugared in the CFG into an indexed loop (`__i = 0; while (__i < it.length) {
+  T e = it[__i]; body; __i++ }`), so awaits in the body really suspend. `it[__i]`
+  uses the normal list index-access; the index/length are temp locals
+  spilled/restored on the Asyncify frame stack, and the only non-AST bit (the
+  length read + index reset) is emitted via a small per-block raw hook. The
+  iterable must be a list variable; other iterables fall back to
+  synchronous-collapse. Tested end-to-end through `ApolloRunnerWasm`.
+
 ## 0.1.31
 
 - TypeScript language support (parse, run, translate):

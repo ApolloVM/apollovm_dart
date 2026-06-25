@@ -595,6 +595,40 @@ void main() {
       );
     });
 
+    test('await inside a for-each over a list', () async {
+      var runner = await _wasmRunner(r'''
+        Future<int> sumList(List<int> items) async {
+          int total = 0;
+          for (var x in items) {
+            int v = await hostId(x);
+            total = total + v;
+          }
+          return total;
+        }
+      ''');
+      if (runner == null) {
+        fail('Wasm runtime not supported.');
+      }
+      var suspends = 0;
+      runner.mapWasmAsyncFunction('hostId', const [WasmValueType.i64], (
+        args,
+      ) async {
+        await Future<void>.delayed(const Duration(milliseconds: 1));
+        suspends++;
+        return _asInt(args[0]);
+      });
+
+      var r = await runner.executeFunction(
+        '',
+        'sumList',
+        positionalParameters: [
+          [1, 2, 3, 4],
+        ],
+      );
+      expect(r.getValueNoContext(), equals(10)); // 1+2+3+4
+      expect(suspends, equals(4), reason: 'one suspension per element');
+    });
+
     test('a non-async Wasm function still runs synchronously', () async {
       var runner = await _wasmRunner(r'''
         int addOne(int n) {

@@ -3507,6 +3507,81 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
             cur = exitPc;
             continue;
           }
+          // `for (T e in it)` over a list variable, desugared to an index loop:
+          //   __i = 0; while (__i < it.length) { T e = it[__i]; body; __i++ }
+          // Only `it.length` is raw (no AST getter); the rest is synthetic AST.
+          if (s is ASTStatementForEach) {
+            final iter = s.iterableExpression;
+            if (iter is! ASTExpressionVariableAccess) {
+              ok = false;
+              return cur;
+            }
+            final itVar = iter.variable;
+            final iName = '\$async_fe_i${temps.length}';
+            final lenName = '\$async_fe_n${temps.length}';
+            temps.add((name: iName, type: _astTypeInt));
+            temps.add((name: lenName, type: _astTypeInt));
+
+            ASTExpression iAccess() =>
+                ASTExpressionVariableAccess(ASTScopeVariable(iName));
+
+            final condPc = newBb();
+            blocks[cur].rawInit = (body, ctx) {
+              final i = ctx.getLocalVariable(iName)!;
+              final n = ctx.getLocalVariable(lenName)!;
+              final it = ctx.getLocalVariable(itVar.name)!;
+              body.write([
+                ...Wasm64.i64Const(0),
+                ...Wasm.localSet(i.index), // __i = 0
+                ...Wasm.localGet(it.index), // list header ptr
+                ...Wasm32.i32Load(2, 0), // length (i32)
+                Wasm32.i32ExtendToI64Unsigned,
+                ...Wasm.localSet(n.index), // __len
+              ]);
+            };
+            blocks[cur].term = _TGoto(condPc);
+
+            final bodyPc = newBb();
+            final exitPc = newBb();
+            blocks[condPc].term = _TBranch(
+              ASTExpressionOperation(
+                iAccess(),
+                ASTExpressionOperator.lower,
+                ASTExpressionVariableAccess(ASTScopeVariable(lenName)),
+              ),
+              bodyPc,
+              exitPc,
+            );
+
+            // Body entry: bind `T e = it[__i]`, then the original body.
+            blocks[bodyPc].stmts.add(
+              ASTStatementVariableDeclaration(
+                s.variableType,
+                s.variableName,
+                ASTExpressionVariableEntryAccess(itVar, iAccess()),
+              ),
+            );
+            final bodyExit = lower(s.loopBlock.statements, bodyPc, true);
+            if (bodyExit >= 0) {
+              // __i = __i + 1
+              blocks[bodyExit].stmts.add(
+                ASTStatementExpression(
+                  ASTExpressionVariableAssignment(
+                    ASTScopeVariable(iName),
+                    ASTAssignmentOperator.set,
+                    ASTExpressionOperation(
+                      iAccess(),
+                      ASTExpressionOperator.add,
+                      ASTExpressionLiteral(ASTValueInt(1)),
+                    ),
+                  ),
+                ),
+              );
+              blocks[bodyExit].term = _TGoto(condPc);
+            }
+            cur = exitPc;
+            continue;
+          }
           if (s is ASTBranchIfBlock) {
             final thenPc = newBb();
             final joinPc = newBb();
@@ -4152,6 +4227,8 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
           ...Wasm32.i32Store(2, stateOff), // STATE = normal (rewind done)
         ]);
       }
+
+      bb.rawInit?.call(body, context);
 
       for (final s in bb.stmts) {
         generateASTStatement(s, out: body, context: context);
@@ -6212,6 +6289,10 @@ class _Bb {
   /// When set, on entering this block the leaf await's host result is loaded
   /// into its variable (the block is a leaf-await resume target).
   _AwaitPoint? leafResume;
+
+  /// Raw Wasm emitted at block entry (before [stmts]); used for `for-each` loop
+  /// setup that has no AST form (reading the list length, resetting the index).
+  void Function(BytesOutput body, WasmContext ctx)? rawInit;
 
   _Term? term;
 
