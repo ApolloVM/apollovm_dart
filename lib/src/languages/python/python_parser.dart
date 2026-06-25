@@ -73,11 +73,18 @@ class PythonIndentationPreprocessor {
   static String process(String source) {
     var logicalLines = _scanLogicalLines(source);
 
+    // Dedent by the common minimum indentation, so a uniformly-indented block
+    // (e.g. an indented heredoc embedded in another language) parses the same
+    // as a flush-left one.
+    var baseIndent = logicalLines.isEmpty
+        ? 0
+        : logicalLines.map((l) => l.indent).reduce((a, b) => a < b ? a : b);
+
     var out = StringBuffer();
     var indentStack = <int>[0];
 
     for (var line in logicalLines) {
-      var ind = line.indent;
+      var ind = line.indent - baseIndent;
 
       if (ind > indentStack.last) {
         indentStack.add(ind);

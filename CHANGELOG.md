@@ -5,7 +5,9 @@
   - Indentation-significant blocks are handled by an INDENT/DEDENT/NEWLINE
     pre-tokenizer (`PythonIndentationPreprocessor`), so the petitparser grammar
     consumes Python suites like braces; implicit (`(`/`[`/`{`) and explicit (`\`)
-    line continuations, blank/comment lines, and string literals are handled.
+    line continuations, blank/comment lines, and string literals are handled,
+    and the source is dedented by its common minimum indentation (so a
+    uniformly-indented embedded block parses like a flush-left one).
   - Strict generation: PEP-484 type hints when the AST type is statically known
     (`def f(x: int) -> int:`, `x: str = ...`, `List[T]`/`Dict[K, V]`), with a
     dynamic/untyped fallback; `==`/`!=`, `and`/`or`/`not`, `//` integer division,
