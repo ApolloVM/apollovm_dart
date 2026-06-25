@@ -36,9 +36,11 @@
   local, with `$pc` spilled/restored on the Asyncify frame stack alongside the
   locals. Awaits become block boundaries; leaf (host) and internal (module-
   async) awaits both work inside loops/branches, composing with multi-frame
-  unwinding. Functions whose awaits are all top-level keep the linear path;
-  unsupported shapes (`for-each`, awaits nested deeper in expressions) fall back
-  to synchronous-collapse. Tested end-to-end through `ApolloRunnerWasm`.
+  unwinding. Functions whose awaits are all top-level keep the linear path.
+  Awaits nested inside expressions (`t = t + await f()`, `return await f() + 1`,
+  `await f() + await g()`) are hoisted into temp locals automatically. Remaining
+  unsupported shapes (`for-each`, awaits in loop/branch conditions) fall back to
+  synchronous-collapse. Tested end-to-end through `ApolloRunnerWasm`.
 
 - `async`/`await` support (real asynchrony) — Dart parse/run/translate and
   JavaScript translation:
