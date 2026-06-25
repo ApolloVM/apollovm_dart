@@ -152,6 +152,9 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
   /// function with a return/param the runner must marshal from/to its raw Wasm
   /// value — a String, a `bool` return, or a list/map (param or return).
   bool _requiresSignatureSection(WasmModuleContext module) {
+    // Real-suspension async functions need the section so the runner knows to
+    // drive their unwind/rewind loop.
+    if (module.asyncifyFunctionNames.isNotEmpty) return true;
     bool needs(ASTType t) =>
         t is ASTTypeString ||
         t is ASTTypeBool ||
@@ -223,6 +226,23 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
         );
       }),
     ];
+
+    // Trailing, backward-compatible block: the names of Asyncify (real-
+    // suspension) functions the runner must drive. Only emitted when present,
+    // so non-async modules stay byte-identical; older readers stop after the
+    // entries above and ignore it.
+    var asyncNames = module.asyncifyFunctionNames;
+    if (asyncNames.isNotEmpty) {
+      entries.add(
+        BytesOutput(
+          data: [
+            ...Leb128.encodeUnsigned(asyncNames.length),
+            for (var n in asyncNames) ...Wasm.encodeString(n),
+          ],
+          description: "Asyncify functions",
+        ),
+      );
+    }
 
     out.writeByte(0x00, description: "Section Custom ID");
     out.writeBytesLeb128Block(entries, description: "apollovm_sig");
@@ -3203,6 +3223,7 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
   }) {
     module.requiresAsyncify = true;
     module.requiresMemory = true;
+    module.asyncifyFunctionNames.add(f.name);
 
     const stateOff = WasmModuleContext.asyncifyStateOffset;
     const resultOff = WasmModuleContext.asyncifyResultOffset;
@@ -4856,6 +4877,10 @@ class WasmModuleContext {
   /// Whether the module compiled at least one real-suspension `async` function
   /// and therefore reserves the Asyncify control region.
   bool requiresAsyncify = false;
+
+  /// Names of functions compiled with the Asyncify transform (real suspension).
+  /// Surfaced in the `apollovm_sig` section so the runner drives them.
+  final Set<String> asyncifyFunctionNames = {};
 
   // --- Static data region (interned string literals) ---
 

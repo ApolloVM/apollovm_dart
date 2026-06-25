@@ -30,6 +30,30 @@ class ApolloRunnerWasm extends ApolloRunner {
     return ApolloRunnerWasm(apolloVM);
   }
 
+  /// Async host functions for real-suspension (Asyncify) `async` Wasm
+  /// functions, keyed by import name. When a compiled `async` function awaits
+  /// `name(args)`, the runner calls [fn] to produce a `Future`, suspends the
+  /// Wasm call, awaits it, then resumes (rewinds) the module. [params] must
+  /// match the awaited call's Wasm parameter types (e.g. `i64` for `int`).
+  final Map<
+    String,
+    ({
+      List<WasmValueType> params,
+      Future<Object?> Function(List<Object?> args) fn,
+    })
+  >
+  _wasmAsyncExternals = {};
+
+  /// Registers an async host function [name] used by real-suspension `async`
+  /// Wasm code (see [_wasmAsyncExternals]).
+  void mapWasmAsyncFunction(
+    String name,
+    List<WasmValueType> params,
+    Future<Object?> Function(List<Object?> args) fn,
+  ) {
+    _wasmAsyncExternals[name] = (params: params, fn: fn);
+  }
+
   @override
   Future<ASTValue> executeFunction(
     String namespace,
@@ -240,6 +264,23 @@ class ApolloRunnerWasm extends ApolloRunner {
       },
     };
 
+    // Real-suspension `async` support: a registered async host function is
+    // wired as a *suspending* import — its callback produces a `Future` (held
+    // in `pendingAwait`) and returns; the generated Asyncify code then unwinds.
+    // The drive loop below awaits the `Future` and rewinds the module.
+    Future<Object?>? pendingAwait;
+    for (var e in _wasmAsyncExternals.entries) {
+      var spec = e.value;
+      hostImports['env']![e.key] = WasmHostFunction(
+        params: spec.params,
+        results: const [],
+        callback: (args) {
+          pendingAwait = spec.fn(args);
+          return null;
+        },
+      );
+    }
+
     var module = await _wasmRuntime.loadModule(
       codeUnit.id,
       codeUnit.code,
@@ -258,7 +299,7 @@ class ApolloRunnerWasm extends ApolloRunner {
     // BEFORE numeric parameter resolution, which would otherwise mangle them.
     // The function receives the i32 pointer; param types come from the
     // `apollovm_sig` descriptors.
-    var paramTypes = _signatures(codeUnit.code)[functionName]?.params;
+    var paramTypes = _signatures(codeUnit.code).sigs[functionName]?.params;
     if (paramTypes != null) {
       for (var i = 0; i < allParams.length && i < paramTypes.length; ++i) {
         var pt = paramTypes[i];
@@ -291,35 +332,83 @@ class ApolloRunnerWasm extends ApolloRunner {
 
     final (function: function, varArgs: varArgs) = f;
 
-    dynamic res;
-    try {
-      if (!varArgs) {
-        if (function is Function(List)) {
-          res = Function.apply(function, [allParams]);
-        } else if (function is Function()) {
-          if (allParams.isNotEmpty) {
-            throw WasmModuleExecutionError(
-              functionName,
-              parameters: allParams,
-              function: function,
-              cause:
-                  "Function expects no arguments, but ${allParams.length} were provided: $allParams",
-            );
+    dynamic invokeOnce() {
+      try {
+        if (!varArgs) {
+          if (function is Function(List)) {
+            return Function.apply(function, [allParams]);
+          } else if (function is Function()) {
+            if (allParams.isNotEmpty) {
+              throw WasmModuleExecutionError(
+                functionName,
+                parameters: allParams,
+                function: function,
+                cause:
+                    "Function expects no arguments, but ${allParams.length} were provided: $allParams",
+              );
+            }
+            return Function.apply(function, []);
+          } else {
+            return Function.apply(function, allParams);
           }
-          res = Function.apply(function, []);
         } else {
-          res = Function.apply(function, allParams);
+          return Function.apply(function, allParams);
         }
-      } else {
-        res = Function.apply(function, allParams);
+      } catch (e) {
+        throw WasmModuleExecutionError(
+          functionName,
+          parameters: allParams,
+          function: function,
+          cause: e,
+        );
       }
-    } catch (e) {
-      throw WasmModuleExecutionError(
-        functionName,
-        parameters: allParams,
-        function: function,
-        cause: e,
-      );
+    }
+
+    final isAsyncFn = _signatures(
+      codeUnit.code,
+    ).asyncFns.contains(functionName);
+
+    dynamic res;
+    if (!isAsyncFn) {
+      res = invokeOnce();
+    } else {
+      // Asyncify drive loop: invoke; if the call unwound (suspended), await the
+      // host `Future` it produced, write the result back, flag a rewind, and
+      // re-invoke until it completes normally. Offsets match the Asyncify
+      // control region in `WasmModuleContext` (state @8 i32, result @16 i64).
+      const asyStateOff = 8;
+      const asyResultOff = 16;
+      while (true) {
+        res = invokeOnce();
+
+        var mem = module.readMemory();
+        if (mem == null) break;
+        var bd = ByteData.sublistView(mem);
+
+        if (bd.getInt32(asyStateOff, Endian.little) != 1) {
+          break; // normal completion (state 0)
+        }
+
+        var pending = pendingAwait;
+        if (pending == null) {
+          throw WasmModuleExecutionError(
+            functionName,
+            parameters: allParams,
+            cause:
+                "Async Wasm function suspended but no host `Future` was "
+                "produced. Register the awaited host function via "
+                "`mapWasmAsyncFunction`.",
+          );
+        }
+        pendingAwait = null;
+
+        var resolved = await pending;
+        var resolvedInt = resolved is BigInt
+            ? resolved.toInt()
+            : (resolved is num ? resolved.toInt() : 0);
+        _writeI64(bd, asyResultOff, resolvedInt);
+        bd.setInt32(asyStateOff, 2, Endian.little); // rewinding
+      }
     }
 
     res = module.resolveReturnedValue(res, astFunction);
@@ -327,7 +416,7 @@ class ApolloRunnerWasm extends ApolloRunner {
     // Decode the raw Wasm return into a Dart value. The return type comes from
     // the AST when available, else from the module's `apollovm_sig` custom
     // section (for modules loaded from raw bytes).
-    var sigReturn = _signatures(codeUnit.code)[functionName]?.ret;
+    var sigReturn = _signatures(codeUnit.code).sigs[functionName]?.ret;
 
     if (res != null) {
       // `String` return: an i32 pointer to a `[len][utf8]` block.
@@ -458,17 +547,22 @@ class ApolloRunnerWasm extends ApolloRunner {
   static const int _tagMap = 7;
 
   /// Per-module signature cache, keyed by the wasm binary's identity.
-  final Map<Uint8List, Map<String, _WasmSig>> _signaturesCache = {};
+  final Map<Uint8List, ({Map<String, _WasmSig> sigs, Set<String> asyncFns})>
+  _signaturesCache = {};
 
-  Map<String, _WasmSig> _signatures(Uint8List wasmBytes) =>
-      _signaturesCache[wasmBytes] ??= _parseSignatures(wasmBytes);
+  ({Map<String, _WasmSig> sigs, Set<String> asyncFns}) _signatures(
+    Uint8List wasmBytes,
+  ) => _signaturesCache[wasmBytes] ??= _parseSignatures(wasmBytes);
 
   /// Parses the `apollovm_sig` custom section (function name -> return/param
   /// type descriptors). Returns an empty map if absent. Each type is a one-byte
   /// tag, except a list (`6`) which is followed by its element tag byte.
-  static Map<String, _WasmSig> _parseSignatures(Uint8List b) {
+  static ({Map<String, _WasmSig> sigs, Set<String> asyncFns}) _parseSignatures(
+    Uint8List b,
+  ) {
     var sigs = <String, _WasmSig>{};
-    if (b.length < 8) return sigs;
+    var asyncFns = <String>{};
+    if (b.length < 8) return (sigs: sigs, asyncFns: asyncFns);
 
     var pos = 8; // skip magic (4) + version (4)
 
@@ -518,12 +612,20 @@ class ApolloRunnerWasm extends ApolloRunner {
             var params = [for (var p = 0; p < paramCount; ++p) readType()];
             sigs[fname] = _WasmSig(ret, params);
           }
+          // Optional trailing block: names of Asyncify (real-suspension)
+          // functions the runner must drive. Absent in older/non-async modules.
+          if (pos < sectionEnd) {
+            var asyncCount = readLeb();
+            for (var i = 0; i < asyncCount; ++i) {
+              asyncFns.add(readName());
+            }
+          }
         }
       }
       pos = sectionEnd;
     }
 
-    return sigs;
+    return (sigs: sigs, asyncFns: asyncFns);
   }
 
   void _resolveWasmCallParameters(

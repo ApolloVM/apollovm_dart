@@ -38,8 +38,14 @@
     (real suspension, pre/post-await local preservation, concurrent
     interleaving). Anything more complex (multiple awaits, awaits in control
     flow, awaiting a module function => multi-frame) falls back to the
-    synchronous-collapse path. Driving it through `ApolloRunnerWasm` and a
-    `br_table` multi-await/multi-frame transform are the follow-ups.
+    synchronous-collapse path.
+  - Wasm Asyncify **runner integration**: `ApolloRunnerWasm.executeFunction`
+    now detects real-suspension `async` functions (flagged in `apollovm_sig`)
+    and drives their unwind/rewind loop, awaiting a real Dart `Future` from a
+    host function registered via the new `ApolloRunnerWasm.mapWasmAsyncFunction`
+    API. So real-suspension async/await works end-to-end through the VM
+    (`test/apollovm_wasm_asyncify_runner_test.dart`). A `br_table`
+    multi-await/multi-frame transform is the remaining follow-up.
   - Kotlin async/await translation is deferred and fails loudly via
     `UnsupportedSyntaxError` (the eventual mapping is `suspend fun` + coroutines).
   - Tests: `test/apollovm_async_test.dart` (parse, real-suspension ordering,
