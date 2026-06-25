@@ -12,7 +12,7 @@
 [![Code size](https://img.shields.io/github/languages/code-size/ApolloVM/apollovm_dart?logo=github&logoColor=white)](https://github.com/ApolloVM/apollovm_dart)
 [![License](https://img.shields.io/github/license/ApolloVM/apollovm_dart?logo=open-source-initiative&logoColor=green)](https://github.com/ApolloVM/apollovm_dart/blob/master/LICENSE)
 
-ApolloVM is a portable VM (native, JS/Web, Flutter) that can parse, translate, and execute multiple languages such as Dart, Java, Kotlin, JavaScript, TypeScript, and Lua. It also provides on-the-fly compilation to Wasm.
+ApolloVM is a portable VM (native, JS/Web, Flutter) that can parse, translate, and execute multiple languages such as Dart, Java, Kotlin, JavaScript, TypeScript, Lua, and Python. It also provides on-the-fly compilation to Wasm.
 
 -----------------------------
 
@@ -41,7 +41,7 @@ Now you can use the `apollovm` Dart executable:
 ```shell
 $> apollovm help
 
-ApolloVM - A compact VM for Dart, Java, Kotlin, JavaScript, TypeScript and Lua.
+ApolloVM - A compact VM for Dart, Java, Kotlin, JavaScript, TypeScript, Lua and Python.
 
 Usage: apollovm <command> [arguments]
 
@@ -165,7 +165,7 @@ even if you don't have Dart installed.
 
 ## Package Usage
 
-The ApolloVM is still in alpha stage. Below, we can see simple usage examples in Dart, Java, Kotlin, JavaScript, TypeScript and Lua.
+The ApolloVM is still in alpha stage. Below, we can see simple usage examples in Dart, Java, Kotlin, JavaScript, TypeScript, Lua and Python.
 
 ### Language: `Dart`
 

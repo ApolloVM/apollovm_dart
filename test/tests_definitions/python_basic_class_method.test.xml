@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="Basic class self method">
+    <source language="python">
+        <![CDATA[
+class Foo:
+    def m10(self, a):
+        return a * 10
+
+    def test(self, a):
+        b = self.m10(a)
+        c = self.m10(b)
+        s = f'a: {a} ; b: {b} ; c: {c}'
+        print(s)
+        ]]>
+    </source>
+    <call class="Foo" function="test">
+        [123]
+    </call>
+    <output>
+        ["a: 123 ; b: 1230 ; c: 12300"]
+    </output>
+
+    <source-generated language="python"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+class Foo:
+    def m10(self, a):
+        return a * 10
+
+    def test(self, a) -> None:
+        b = m10(a)
+        c = m10(b)
+        s: str = f'a: {a} ; b: {b} ; c: {c}'
+        print(s)
+
+
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+</test>

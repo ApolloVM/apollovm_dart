@@ -1,3 +1,22 @@
+## 0.1.35
+
+- Added **Python** language support (parse, run, and code-generation target),
+  emitting strict, idiomatic Python 3.
+  - Indentation-significant blocks are handled by an INDENT/DEDENT/NEWLINE
+    pre-tokenizer (`PythonIndentationPreprocessor`), so the petitparser grammar
+    consumes Python suites like braces; implicit (`(`/`[`/`{`) and explicit (`\`)
+    line continuations, blank/comment lines, and string literals are handled.
+  - Strict generation: PEP-484 type hints when the AST type is statically known
+    (`def f(x: int) -> int:`, `x: str = ...`, `List[T]`/`Dict[K, V]`), with a
+    dynamic/untyped fallback; `==`/`!=`, `and`/`or`/`not`, `//` integer division,
+    `True`/`False`/`None`, f-strings for interpolation, and `self`-based methods.
+  - Supports functions, variables (Python first-binding-is-declaration scoping),
+    arithmetic/comparison/boolean expressions, `if`/`elif`/`else`, `while`,
+    `for ... in`, `try`/`except`/`finally` + `raise`, `class` with methods, lists
+    & dicts, and `import`/`from ... import`.
+  - Registered `python` (`py` / `.py`) across `getParser`, `createRunner`,
+    `createCodeGenerator`, and the CLI.
+
 ## 0.1.34
 
 - Wasm `throw` / `try` / `catch` / `finally`: exception handling now compiles to
