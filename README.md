@@ -12,7 +12,7 @@
 [![Code size](https://img.shields.io/github/languages/code-size/ApolloVM/apollovm_dart?logo=github&logoColor=white)](https://github.com/ApolloVM/apollovm_dart)
 [![License](https://img.shields.io/github/license/ApolloVM/apollovm_dart?logo=open-source-initiative&logoColor=green)](https://github.com/ApolloVM/apollovm_dart/blob/master/LICENSE)
 
-ApolloVM is a portable VM (native, JS/Web, Flutter) that can parse, translate, and execute multiple languages such as Dart, Java, Kotlin, JavaScript, and Lua. It also provides on-the-fly compilation to Wasm.
+ApolloVM is a portable VM (native, JS/Web, Flutter) that can parse, translate, and execute multiple languages such as Dart, Java, Kotlin, JavaScript, TypeScript, and Lua. It also provides on-the-fly compilation to Wasm.
 
 -----------------------------
 
@@ -41,7 +41,7 @@ Now you can use the `apollovm` Dart executable:
 ```shell
 $> apollovm help
 
-ApolloVM - A compact VM for Dart, Java, Kotlin, JavaScript and Lua.
+ApolloVM - A compact VM for Dart, Java, Kotlin, JavaScript, TypeScript and Lua.
 
 Usage: apollovm <command> [arguments]
 
@@ -115,6 +115,25 @@ class Hello {
 <<<< [SOURCES_END] >>>>
 ```
 
+The same commands work for TypeScript (`.ts`) files. To `translate` a TypeScript file to Dart:
+```shell
+$> apollovm translate -v --target dart test/hello_world.ts
+## [TRANSLATE]  File: 'test/hello_world.ts' ; language: typescript > targetLanguage: dart
+<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test/hello_world.ts" >>>>
+class Hello {
+
+  static void main(String name) {
+    print('Hello World!');
+    print('- name: ${name}');
+  }
+
+}
+<<<< CODE_UNIT_END="/test/hello_world.ts" >>>>
+<<<< [SOURCES_END] >>>>
+```
+
 ### Compiling ApolloVM executable.
 
 Dart supports compilation to native self-contained executables.
@@ -146,7 +165,7 @@ even if you don't have Dart installed.
 
 ## Package Usage
 
-The ApolloVM is still in alpha stage. Below, we can see simple usage examples in Dart, Java, Kotlin, JavaScript and Lua.
+The ApolloVM is still in alpha stage. Below, we can see simple usage examples in Dart, Java, Kotlin, JavaScript, TypeScript and Lua.
 
 ### Language: `Dart`
 
@@ -527,6 +546,83 @@ the AST, execute it, and generate idiomatic modern ES (`let`/`const`, template
 literals, `for...of`, top-level functions, `===`/`!==`) from any loaded AST (Dart,
 Java, or JavaScript).
 
+### Language: `TypeScript`
+
+TypeScript is supported as a superset of JavaScript: everything JavaScript supports,
+plus **type annotations** (variables, parameters, return types, fields), **interfaces**,
+**enums**, and **access modifiers** (`public`/`private`/`protected`/`readonly`/`static`/
+`abstract`).
+
+Loading TypeScript source code, executing it, and then converting it to Dart:
+
+```dart
+import 'package:apollovm/apollovm.dart';
+
+void main() async {
+  var vm = ApolloVM();
+
+  var codeUnit = SourceCodeUnit(
+          'typescript',
+          r'''
+            class Foo {
+              greet(name: string, count: number): void {
+                let msg: string = `Hello ${name}, you have ${count} messages.`;
+                print(msg);
+              }
+            }
+          ''',
+          id: 'test');
+
+  var loadOK = await vm.loadCodeUnit(codeUnit);
+
+  if (!loadOK) {
+    throw StateError('Error parsing TypeScript code!');
+  }
+
+  var tsRunner = vm.createRunner('typescript')!;
+
+  // Map the `print` function in the VM:
+  tsRunner.externalPrintFunction = (o) => print("» $o");
+
+  await tsRunner.executeClassMethod('', 'Foo', 'greet',
+      positionalParameters: ['World', 3]);
+
+  print('---------------------------------------');
+
+  // Regenerate code in Dart:
+  var codeStorageDart = vm.generateAllCodeIn('dart');
+  var allSourcesDart = await codeStorageDart.writeAllSources();
+  print(allSourcesDart.toString());
+}
+```
+
+*Note: the parsed function `print` was mapped as an external function.*
+
+Output:
+```text
+» Hello World, you have 3 messages.
+---------------------------------------
+<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+class Foo {
+
+  void greet(String name, num count) {
+    String msg = 'Hello ${name}, you have ${count} messages.';
+    print(msg);
+  }
+
+}
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+```
+
+TypeScript is bidirectional: ApolloVM parses `.ts`/`typescript` source (including
+`interface`, `enum`, and member modifiers) into the AST, executes it, and generates
+idiomatic TypeScript with type annotations. The same `interface`/`enum`/modifier
+constructs are also supported in Dart (`abstract class`, `enum`, `static`/`final`),
+so they cross-translate between Dart, TypeScript and JavaScript.
+
 ### Language: `Lua`
 
 Loading Lua source code, executing it, and then converting it to Dart:
@@ -607,7 +703,7 @@ generates idiomatic Lua (keyword-delimited blocks with `end`, `local` variables,
 concatenation, `and`/`or`/`not`/`~=`, and generic `for ... in ipairs(...)`) from any
 loaded AST. Object-oriented code uses the conventional table + metatable form
 (`Name = {}`, `Name.__index = Name`, `function Name:method(...)`), so classes round-trip
-to and from Dart, Java, Kotlin and JavaScript.
+to and from Dart, Java, Kotlin, JavaScript and TypeScript.
 
 ## Wasm Support
 
@@ -825,6 +921,10 @@ Any help from the open-source community is always welcome and needed:
 
 - JavaScript: extended support (anonymous arrow callbacks/closures, destructuring, spread, async/await, `this.x` constructor parameters, full ESM modules). *Named arrow functions (`const f = (a, b) => a + b;`) are already supported.*
   - *See the [JavaScript implementation (at "lib/src/languages/javascript/es")](https://github.com/ApolloVM/apollovm_dart/tree/master/lib/src/languages/javascript/es).*
+
+
+- TypeScript: extended support (generics, union/intersection types, type aliases, parameter properties, enum member access at runtime, decorators). *Type annotations, `interface`, `enum`, and access modifiers (`public`/`private`/`protected`/`readonly`/`static`/`abstract`) are already supported.*
+  - *See the [TypeScript implementation (at "lib/src/languages/typescript/ts")](https://github.com/ApolloVM/apollovm_dart/tree/master/lib/src/languages/typescript/ts).*
 
 
 - Lua: extended support (`repeat ... until`, multiple assignment/returns, varargs, non-`ipairs` numeric-for round-tripping, and hand-written metatable styles beyond the `Name = {}` / `function Name:method` convention).

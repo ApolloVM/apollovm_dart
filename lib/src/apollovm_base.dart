@@ -37,6 +37,9 @@ import 'languages/kotlin/kotlin_runner.dart';
 import 'languages/lua/lua_generator.dart';
 import 'languages/lua/lua_parser.dart';
 import 'languages/lua/lua_runner.dart';
+import 'languages/typescript/ts/typescript_generator.dart';
+import 'languages/typescript/ts/typescript_parser.dart';
+import 'languages/typescript/ts/typescript_runner.dart';
 import 'languages/wasm/wasm_generator.dart';
 import 'languages/wasm/wasm_parser.dart';
 import 'languages/wasm/wasm_runner.dart';
@@ -44,7 +47,7 @@ import 'languages/wasm/wasm_runner.dart';
 /// The Apollo VM.
 class ApolloVM implements VMTypeResolver {
   // ignore: non_constant_identifier_names
-  static final String VERSION = '0.1.30';
+  static final String VERSION = '0.1.31';
 
   static int _idCount = 0;
 
@@ -61,6 +64,9 @@ class ApolloVM implements VMTypeResolver {
       case 'js':
       case 'javascript':
         return ApolloParserJavaScript.instance as ApolloCodeParser<T>;
+      case 'ts':
+      case 'typescript':
+        return ApolloParserTypeScript.instance as ApolloCodeParser<T>;
       case 'kotlin':
         return ApolloParserKotlin.instance as ApolloCodeParser<T>;
       case 'lua':
@@ -199,6 +205,12 @@ class ApolloVM implements VMTypeResolver {
           this,
           importCorePackageMath: importCorePackageMath,
         );
+      case 'ts':
+      case 'typescript':
+        return ApolloRunnerTypeScript(
+          this,
+          importCorePackageMath: importCorePackageMath,
+        );
       case 'kotlin':
         return ApolloRunnerKotlin(
           this,
@@ -240,6 +252,9 @@ class ApolloVM implements VMTypeResolver {
       case 'js':
       case 'javascript':
         return ApolloCodeGeneratorJavaScript(codeStorage);
+      case 'ts':
+      case 'typescript':
+        return ApolloCodeGeneratorTypeScript(codeStorage);
       case 'kotlin':
         return ApolloCodeGeneratorKotlin(codeStorage);
       case 'lua':
@@ -351,6 +366,8 @@ class ApolloVM implements VMTypeResolver {
         return 'java11';
       case 'js':
         return 'javascript';
+      case 'ts':
+        return 'typescript';
       case 'py':
         return 'python';
       case 'rb':

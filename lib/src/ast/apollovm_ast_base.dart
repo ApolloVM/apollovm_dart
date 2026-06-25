@@ -139,6 +139,7 @@ class ASTModifiers {
     isFinal: true,
   );
   static final ASTModifiers modifierAsync = ASTModifiers(isAsync: true);
+  static final ASTModifiers modifierAbstract = ASTModifiers(isAbstract: true);
 
   final bool isStatic;
 
@@ -151,12 +152,21 @@ class ASTModifiers {
   /// If `true` this is an asynchronous element (`async` function).
   final bool isAsync;
 
+  /// If `true` this is an abstract element (e.g. an abstract method or a member
+  /// without a body, as in an interface or abstract class).
+  final bool isAbstract;
+
+  /// If `true` this is a protected element (e.g. TypeScript `protected`).
+  final bool isProtected;
+
   ASTModifiers({
     this.isStatic = false,
     this.isFinal = false,
     this.isPrivate = false,
     this.isPublic = false,
     this.isAsync = false,
+    this.isAbstract = false,
+    this.isProtected = false,
   }) {
     if (isPrivate && isPublic) {
       throw StateError("Can't be private and public at the same time!");
@@ -169,6 +179,8 @@ class ASTModifiers {
     bool? isPrivate,
     bool? isPublic,
     bool? isAsync,
+    bool? isAbstract,
+    bool? isProtected,
   }) {
     return ASTModifiers(
       isStatic: isStatic ?? this.isStatic,
@@ -176,12 +188,16 @@ class ASTModifiers {
       isPrivate: isPrivate ?? this.isPrivate,
       isPublic: isPublic ?? this.isPublic,
       isAsync: isAsync ?? this.isAsync,
+      isAbstract: isAbstract ?? this.isAbstract,
+      isProtected: isProtected ?? this.isProtected,
     );
   }
 
   List<String> get modifiers => [
     if (isPublic) 'public',
     if (isPrivate) 'private',
+    if (isProtected) 'protected',
+    if (isAbstract) 'abstract',
     if (isStatic) 'static',
     if (isFinal) 'final',
     if (isAsync) 'async',

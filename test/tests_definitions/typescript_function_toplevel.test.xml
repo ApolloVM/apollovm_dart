@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="TypeScript top-level typed function">
+    <source language="typescript">
+        <![CDATA[
+function sum(a: number, b: number): number {
+  return a + b;
+}
+        ]]>
+    </source>
+    <call function="sum">
+        [4,6]
+    </call>
+    <output>
+        []
+    </output>
+    <source-generated language="typescript"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+  function sum(a: number, b: number): number {
+    return a + b;
+  }
+
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+    <source-generated language="javascript"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+  function sum(a, b) {
+    return a + b;
+  }
+
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+    <source-generated language="dart"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+  num sum(num a, num b) {
+    return a + b;
+  }
+
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+</test>

@@ -13,6 +13,7 @@ import '../apollovm_base.dart';
 import '../apollovm_utils.dart';
 import '../core/apollovm_core_base.dart';
 import 'apollovm_ast_base.dart';
+import 'apollovm_ast_expression.dart';
 import 'apollovm_ast_statement.dart';
 import 'apollovm_ast_type.dart';
 import 'apollovm_ast_value.dart';
@@ -530,9 +531,35 @@ class ASTClassPrimitive<T> extends ASTClass<T> {
   }) => null;
 }
 
+/// The kind of an [ASTClassNormal]: a regular class, an abstract class, or an
+/// interface (e.g. a TypeScript `interface`).
+enum ASTClassKind { normalClass, abstractClass, interface }
+
 /// AST of a normal VM Class.
 class ASTClassNormal extends ASTClass<VMObject> {
-  ASTClassNormal(super.name, super.type, super.parentBlock);
+  /// The kind of this class (normal / abstract / interface).
+  final ASTClassKind kind;
+
+  /// The name of the super class this class `extends` (if any).
+  final String? superClassName;
+
+  /// The names of the interfaces this class `implements` (if any).
+  final List<String>? implementsTypes;
+
+  ASTClassNormal(
+    super.name,
+    super.type,
+    super.parentBlock, {
+    this.kind = ASTClassKind.normalClass,
+    this.superClassName,
+    this.implementsTypes,
+  });
+
+  /// Returns `true` if this class is an `interface`.
+  bool get isInterface => kind == ASTClassKind.interface;
+
+  /// Returns `true` if this class is `abstract`.
+  bool get isAbstract => kind == ASTClassKind.abstractClass;
 
   @override
   void set(ASTBlock? other) {
@@ -873,6 +900,41 @@ class ASTClassNormal extends ASTClass<VMObject> {
   String toString() {
     return 'class $name';
   }
+}
+
+/// An entry of an [ASTClassEnum] (e.g. `Red` or `Red = 1`).
+class ASTEnumEntry {
+  /// The entry name.
+  final String name;
+
+  /// The optional explicit value expression (e.g. `1` in `Red = 1`).
+  final ASTExpression? value;
+
+  ASTEnumEntry(this.name, [this.value]);
+
+  @override
+  String toString() => value != null ? '$name = $value' : name;
+}
+
+/// AST of an enum class (e.g. Dart/TypeScript `enum`).
+///
+/// Extends [ASTClassNormal] so it flows through the existing class generation
+/// and resolution; the [entries] hold the enum constants.
+class ASTClassEnum extends ASTClassNormal {
+  /// The enum entries (constants), in declaration order.
+  final List<ASTEnumEntry> entries;
+
+  ASTClassEnum(
+    super.name,
+    super.type,
+    super.parentBlock, {
+    List<ASTEnumEntry>? entries,
+    super.superClassName,
+    super.implementsTypes,
+  }) : entries = entries ?? <ASTEnumEntry>[];
+
+  @override
+  String toString() => 'enum $name';
 }
 
 /// An AST Root.

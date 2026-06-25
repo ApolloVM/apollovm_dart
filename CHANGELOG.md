@@ -1,3 +1,32 @@
+## 0.1.31
+
+- TypeScript language support (parse, run, translate):
+  - New language at `lib/src/languages/typescript/ts/`: `ApolloParserTypeScript`,
+    `TypeScriptGrammarDefinition`, `TypeScriptGrammarLexer`,
+    `ApolloCodeGeneratorTypeScript`, `ApolloRunnerTypeScript`.
+  - Superset of JavaScript: all JS features plus **type annotations** on
+    variables, parameters, return types and class fields
+    (`number`/`string`/`boolean`/`any`/`void`, `T[]`/`Array<T>`), **interfaces**,
+    **enums**, and access modifiers (`public`/`private`/`protected`/`readonly`/
+    `static`/`abstract`).
+  - Code generation emits idiomatic TypeScript (type annotations, `interface`,
+    `enum`, `abstract class`, member modifiers) and erases types cleanly when
+    targeting JavaScript.
+  - Registered `'typescript'`/`'ts'` in the parser/runner/generator factories and
+    the `.ts` file-extension mapping; CLI `apollovm run`/`translate` support `.ts`.
+  - Tests: TypeScript test definitions under `test/tests_definitions/` plus the
+    `test/hello_world.ts` fixture and `example/apollovm_example_typescript.dart`.
+
+- Generalized class/member modeling in the shared AST (used by Dart and TypeScript):
+  - `ASTModifiers`: added `isAbstract` and `isProtected` (and `modifierAbstract`).
+  - `ASTClassNormal`: added `kind` (`ASTClassKind.normalClass` / `abstractClass` /
+    `interface`), plus optional `superClassName` and `implementsTypes`.
+  - New `ASTClassEnum` (extends `ASTClassNormal`) with `ASTEnumEntry` entries.
+  - `ASTClassField`: added a `modifiers` field (e.g. `static`/`private`/`readonly`).
+  - Dart now parses and generates `abstract class`, `enum`, `extends`/`implements`,
+    abstract (body-less) methods, and `static` fields; these cross-translate
+    between Dart, TypeScript and JavaScript.
+
 ## 0.1.30
 
 - `async`/`await` support (real asynchrony) — Dart parse/run/translate and

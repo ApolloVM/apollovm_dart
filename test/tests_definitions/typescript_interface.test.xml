@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="TypeScript interface declaration">
+    <source language="typescript">
+        <![CDATA[
+interface Shape {
+  name: string;
+  area(): number;
+}
+        ]]>
+    </source>
+    <source-generated language="typescript"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+interface Shape {
+
+  name: string;
+
+  area(): number;
+
+}
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+    <source-generated language="dart"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+abstract class Shape {
+
+  String name;
+
+  num area();
+
+}
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+</test>

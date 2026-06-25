@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="Basic TypeScript typed variables">
+    <source language="typescript">
+        <![CDATA[
+class M {
+  run(): void {
+    let a: number = 10;
+    const b: number = 20;
+    var c: number = a + b;
+    print(a);
+    print(b);
+    print(c);
+  }
+}
+        ]]>
+    </source>
+    <call class="M" function="run">
+        []
+    </call>
+    <output>
+        [10,20,30]
+    </output>
+    <source-generated language="typescript"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+class M {
+
+  run(): void {
+    let a: number = 10;
+    const b: number = 20;
+    let c: number = a + b;
+    print(a);
+    print(b);
+    print(c);
+  }
+
+}
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+    <source-generated language="javascript"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+class M {
+
+  run() {
+    let a = 10;
+    const b = 20;
+    let c = a + b;
+    print(a);
+    print(b);
+    print(c);
+  }
+
+}
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+    <source-generated language="dart"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+class M {
+
+  void run() {
+    num a = 10;
+    num b = 20;
+    num c = a + b;
+    print(a);
+    print(b);
+    print(c);
+  }
+
+}
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+</test>

@@ -86,8 +86,9 @@ class DartGrammarDefinition extends DartGrammarLexer {
           });
 
   Parser topLevelDefinition() =>
-      (functionDeclaration() |
+      (enumDeclaration() |
               classDeclaration() |
+              functionDeclaration() |
               statementVariableDeclaration())
           .plus();
 
@@ -125,13 +126,77 @@ class DartGrammarDefinition extends DartGrammarLexer {
           });
 
   Parser<ASTClassNormal> classDeclaration() =>
-      (string('class').trimHidden() & identifier() & classCodeBlock()).map((v) {
-        var name = v[1] as String;
-        var block = v[2];
-        var clazz = ASTClassNormal(name, ASTType<VMObject>(name), null);
-        clazz.set(block);
-        return clazz;
-      });
+      (abstractToken().trimHidden().optional() &
+              string('class').trimHidden() &
+              identifier() &
+              (extendsToken().trimHidden() & identifier()).optional() &
+              (implementsToken().trimHidden() &
+                      identifier() &
+                      (char(',').trimHidden() & identifier()).star())
+                  .optional() &
+              classCodeBlock())
+          .map((v) {
+            var isAbstract = v[0] != null;
+            var name = v[2] as String;
+
+            var extendsOpt = v[3] as List?;
+            var superName = extendsOpt != null ? extendsOpt[1] as String : null;
+
+            var implementsOpt = v[4] as List?;
+            var interfaces = <String>[];
+            if (implementsOpt != null) {
+              interfaces.add(implementsOpt[1] as String);
+              for (var e in (implementsOpt[2] as List)) {
+                interfaces.add(e[1] as String);
+              }
+            }
+
+            var block = v[5];
+            var clazz = ASTClassNormal(
+              name,
+              ASTType<VMObject>(name),
+              null,
+              kind: isAbstract
+                  ? ASTClassKind.abstractClass
+                  : ASTClassKind.normalClass,
+              superClassName: superName,
+              implementsTypes: interfaces.isEmpty ? null : interfaces,
+            );
+            clazz.set(block);
+            return clazz;
+          });
+
+  Parser<ASTClassEnum> enumDeclaration() =>
+      (string('enum').trimHidden() &
+              identifier() &
+              char('{').trimHidden() &
+              enumEntry() &
+              (char(',').trimHidden() & enumEntry()).star() &
+              char(',').trimHidden().optional() &
+              char('}').trimHidden())
+          .map((v) {
+            var name = v[1] as String;
+            var entries = <ASTEnumEntry>[v[3] as ASTEnumEntry];
+            for (var e in (v[4] as List)) {
+              entries.add(e[1] as ASTEnumEntry);
+            }
+            return ASTClassEnum(
+              name,
+              ASTType<VMObject>(name),
+              null,
+              entries: entries,
+            );
+          });
+
+  Parser<ASTEnumEntry> enumEntry() =>
+      (identifier().trimHidden() &
+              (char('=').trimHidden() & ref0(expression)).optional())
+          .map((v) {
+            var name = v[0] as String;
+            var valueOpt = v[1] as List?;
+            var value = valueOpt != null ? valueOpt[1] as ASTExpression : null;
+            return ASTEnumEntry(name, value);
+          });
 
   Parser<ASTBlock> classCodeBlock() =>
       (char('{').trimHidden() &
@@ -159,29 +224,46 @@ class DartGrammarDefinition extends DartGrammarLexer {
           });
 
   Parser<ASTClassField> classFieldDeclaration() =>
-      ((finalToken() | constToken()).optional() &
+      (staticToken().trimHidden().optional() &
+              (finalToken() | constToken()).optional() &
               type().trimHidden() &
               identifier().trimHidden() &
               char(';').trimHidden())
           .map((v) {
-            var finalValue = v[0] != null;
-            var type = v[1] as ASTType;
-            var name = v[2] as String;
-            return ASTClassField(type, name, finalValue);
+            var isStatic = v[0] != null;
+            var finalValue = v[1] != null;
+            var type = v[2] as ASTType;
+            var name = v[3] as String;
+            return ASTClassField(
+              type,
+              name,
+              finalValue,
+              modifiers: ASTModifiers(isStatic: isStatic, isFinal: finalValue),
+            );
           });
 
   Parser<ASTClassField> classFieldDeclarationWithValue() =>
-      (type() &
+      (staticToken().trimHidden().optional() &
+              (finalToken() | constToken()).optional() &
+              type() &
               identifier() &
               char('=').trimHidden() &
               ref0(expression) &
               char(';').trimHidden())
           .map((v) {
-            var type = v[0] as ASTType;
-            var name = v[1] as String;
-            var expression = v[3] as ASTExpression;
+            var isStatic = v[0] != null;
+            var finalValue = v[1] != null;
+            var type = v[2] as ASTType;
+            var name = v[3] as String;
+            var expression = v[5] as ASTExpression;
             type.associateToType(expression);
-            return ASTClassFieldWithInitialValue(type, name, expression, false);
+            return ASTClassFieldWithInitialValue(
+              type,
+              name,
+              expression,
+              finalValue,
+              modifiers: ASTModifiers(isStatic: isStatic, isFinal: finalValue),
+            );
           });
 
   Parser<ASTClassConstructorDeclaration> classConstructorDefaultDeclaration() =>
@@ -263,7 +345,7 @@ class DartGrammarDefinition extends DartGrammarLexer {
               identifier() &
               functionParametersDeclaration() &
               asyncToken().optional() &
-              codeBlock())
+              (char(';').trimHidden() | codeBlock()))
           .map((v) {
             var modifiers =
                 (v[0] as ASTModifiers?) ?? ASTModifiers.modifiersNone;
@@ -273,7 +355,11 @@ class DartGrammarDefinition extends DartGrammarLexer {
             var returnType = v[1] as ASTType? ?? ASTTypeDynamic.instance;
             var name = v[2] as String;
             var parameters = v[3] as ASTFunctionParametersDeclaration;
-            var block = v[5] as ASTBlock;
+            // An abstract/interface method has no body (`;` instead of a block).
+            var block = v[5] is ASTBlock ? v[5] as ASTBlock : null;
+            if (block == null) {
+              modifiers = modifiers.copyWith(isAbstract: true);
+            }
             return ASTClassFunctionDeclaration(
               null,
               name,
