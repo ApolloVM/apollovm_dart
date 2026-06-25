@@ -17,12 +17,16 @@
     (e.g. `awaiter`) or get read as a type name.
   - Code generation: Dart emits `... ) async {` and `await `; JavaScript emits
     `async function` / `async name(` and `await `.
-  - Kotlin and Wasm async/await translation is deferred and fails loudly via
-    `UnsupportedSyntaxError` (Wasm has a `TODO(async)` documenting the intended
-    state-machine/host-yield lowering).
-  - Tests in `test/apollovm_async_test.dart` cover parse, real-suspension
-    ordering, await chains, top-level async, the identifier guard, and
-    Dart/JS/Kotlin translation.
+  - Wasm: async/await compiles via **synchronous collapse** — the backend runs
+    synchronously, so `Future<T>` collapses to `T` (`effectiveReturnType`) and
+    `await` is a value pass-through. Compute-style async Dart compiles to Wasm
+    and matches the AST interpreter. Real suspension (Asyncify/JSPI) remains a
+    `TODO(async)`.
+  - Kotlin async/await translation is deferred and fails loudly via
+    `UnsupportedSyntaxError` (the eventual mapping is `suspend fun` + coroutines).
+  - Tests: `test/apollovm_async_test.dart` (parse, real-suspension ordering,
+    await chains, top-level async, identifier guard, Dart/JS/Kotlin translation)
+    and `test/apollovm_wasm_async_test.dart` (AST-vs-compiled-Wasm parity).
 
 ## 0.1.29
 

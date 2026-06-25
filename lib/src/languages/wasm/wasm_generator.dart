@@ -12,7 +12,6 @@ import 'package:data_serializer/data_serializer.dart';
 import '../../apollovm_code_storage.dart';
 import '../../apollovm_generated_output.dart';
 import '../../apollovm_generator.dart';
-import '../../apollovm_parser.dart';
 import '../../ast/apollovm_ast_expression.dart';
 import '../../ast/apollovm_ast_statement.dart';
 import '../../ast/apollovm_ast_toplevel.dart';
@@ -160,7 +159,7 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
         t is ASTTypeMap;
     for (var f in module.functions) {
       if (f.modifiers.isPrivate) continue;
-      if (needs(f.returnType)) return true;
+      if (needs(f.effectiveReturnType)) return true;
       for (var p in f.parameters.allParameters) {
         if (p.type is ASTTypeString ||
             p.type is ASTTypeArray ||
@@ -216,7 +215,7 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
         return BytesOutput(
           data: [
             ...Wasm.encodeString(f.name),
-            ..._typeDescriptor(f.returnType),
+            ..._typeDescriptor(f.effectiveReturnType),
             ...Leb128.encodeUnsigned(paramDescriptors.length),
             ...paramDescriptors.expand((d) => d),
           ],
@@ -1264,7 +1263,7 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       context.stackDrop();
     }
 
-    var returnType = callee.returnType;
+    var returnType = callee.effectiveReturnType;
     if (!returnType.isVoid) {
       ASTType resultType;
       if (returnType is ASTTypeInt) {
@@ -1613,17 +1612,29 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     return out;
   }
 
-  // TODO(async): Lower `await`/`async` to a resumable continuation (state
-  // machine) that yields to the host event loop (e.g. Asyncify or JSPI).
-  // Wasm has no native async/await, so this is deferred.
+  // The Wasm backend executes synchronously, so a `Future<T>` value is always
+  // already available: `await expr` compiles to just `expr` (a value
+  // pass-through), and an `async` function is compiled as a normal function
+  // returning the unwrapped `T` (see `effectiveReturnType`). This yields
+  // correct results for compute-style async code.
+  //
+  // TODO(async): real suspension — lower `await`/`async` to a resumable
+  // continuation (state machine) that yields to the host event loop
+  // (e.g. Asyncify or JSPI). That requires runtime support the synchronous
+  // `WasmRuntime` does not yet have.
   @override
   BytesOutput generateASTExpressionAwait(
     ASTExpressionAwait expression, {
     BytesOutput? out,
     WasmContext? context,
   }) {
-    throw UnsupportedSyntaxError(
-      'Wasm async/await generation not yet supported',
+    out ??= newOutput();
+    context ??= WasmContext();
+
+    return generateASTExpression(
+      expression.expression,
+      out: out,
+      context: context,
     );
   }
 
@@ -3017,23 +3028,20 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     out ??= newOutput();
     context ??= WasmContext();
 
-    if (f.modifiers.isAsync) {
-      // See generateASTExpressionAwait: Wasm async is deferred.
-      throw UnsupportedSyntaxError(
-        "Wasm async/await generation not yet supported (function: '${f.name}')",
-      );
-    }
-
     if (module != null) {
       context.module = module;
     }
 
     var outBody = newOutput();
 
+    // For an `async` function the declared `Future<T>` collapses to `T` (Wasm
+    // executes synchronously); compile it as a normal function returning `T`.
+    var effectiveReturnType = f.effectiveReturnType;
+
     var return0 = context.returnsLength;
     context.returnsPush(
-      f.returnType,
-      "Function `${f.name}` return: ${f.returnType}",
+      effectiveReturnType,
+      "Function `${f.name}` return: $effectiveReturnType",
     );
     context.assertReturnsLength(return0 + 1);
 
@@ -3060,7 +3068,7 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       generateASTStatement(stm, out: bodyCode, context: context);
     }
 
-    var returnType = f.returnType;
+    var returnType = effectiveReturnType;
 
     if (!returnType.isVoid && context.stackLength == 0) {
       // Notify that the function can't reach the end.
@@ -3118,7 +3126,7 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     outBody.writeBytes(bodyCode);
 
     context.assertReturnsLength(return0 + 1);
-    context.returnsDrop(f.returnType);
+    context.returnsDrop(effectiveReturnType);
     context.assertReturnsLength(return0);
 
     outBody.writeByte(Wasm.end, description: "Code body end");
@@ -4948,6 +4956,20 @@ extension on Iterable<ASTFunctionParameterDeclaration> {
 }
 
 extension _ASTFunctionDeclarationExtension on ASTFunctionDeclaration {
+  /// The effective Wasm return type. For an `async` function the declared
+  /// `Future<T>` collapses to `T`, because the Wasm backend executes
+  /// synchronously — a future's value is always already available, so
+  /// `await` is a value pass-through and an `async` function is compiled as a
+  /// normal function returning `T`. (Real suspension would require Asyncify or
+  /// JSPI; see the `TODO(async)` on `generateASTExpressionAwait`.)
+  ASTType get effectiveReturnType {
+    var rt = returnType;
+    if (modifiers.isAsync && rt is ASTTypeFuture) {
+      return rt.futureValueType;
+    }
+    return rt;
+  }
+
   List<int> get parametersTypesWasmCode {
     final parameters = this.parameters;
 
@@ -4979,6 +5001,8 @@ extension _ASTFunctionDeclarationExtension on ASTFunctionDeclaration {
     } else {
       out.writeByte(0, description: "No parameters");
     }
+
+    var returnType = effectiveReturnType;
 
     if (!returnType.isVoid) {
       out.write([
