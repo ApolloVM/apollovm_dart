@@ -20,8 +20,16 @@
   - Wasm: async/await compiles via **synchronous collapse** — the backend runs
     synchronously, so `Future<T>` collapses to `T` (`effectiveReturnType`) and
     `await` is a value pass-through. Compute-style async Dart compiles to Wasm
-    and matches the AST interpreter. Real suspension (Asyncify/JSPI) remains a
-    `TODO(async)`.
+    and matches the AST interpreter.
+  - Wasm real-suspension **Asyncify prototype**
+    (`test/apollovm_wasm_asyncify_prototype_test.dart`): a hand-assembled
+    two-frame module proves real suspension against the live `WasmRuntime` — a
+    running call unwinds to the host (saving live locals to linear memory), the
+    host awaits a real Dart `Future`, then re-invokes the export which rewinds
+    and resumes. Demonstrates multi-frame state preservation, exactly-once
+    prologue execution, and two concurrent computations interleaving by host
+    delay. Generator integration (general bodies, multiple await points,
+    `br_table` resume dispatch, a real Asyncify stack) is the follow-up.
   - Kotlin async/await translation is deferred and fails loudly via
     `UnsupportedSyntaxError` (the eventual mapping is `suspend fun` + coroutines).
   - Tests: `test/apollovm_async_test.dart` (parse, real-suspension ordering,

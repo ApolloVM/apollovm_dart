@@ -68,12 +68,14 @@ void main() {
       expect(r.value, equals(42));
     });
 
-    test('real suspension: non-awaited calls complete by delay order', () async {
-      // `slow(30,1)` and `slow(5,2)` are started but not awaited. With real
-      // asynchrony the 5ms call completes (and prints) before the 30ms one,
-      // so the print order is [2, 1]. Eager evaluation would print [1, 2].
-      var r = await runDartAsync(
-        r'''
+    test(
+      'real suspension: non-awaited calls complete by delay order',
+      () async {
+        // `slow(30,1)` and `slow(5,2)` are started but not awaited. With real
+        // asynchrony the 5ms call completes (and prints) before the 30ms one,
+        // so the print order is [2, 1]. Eager evaluation would print [1, 2].
+        var r = await runDartAsync(
+          r'''
         class Async {
           Future<int> slow(int ms, int v) async {
             await delayMs(ms, v);
@@ -90,12 +92,13 @@ void main() {
           }
         }
       ''',
-        'Async',
-        'run',
-      );
+          'Async',
+          'run',
+        );
 
-      expect(r.output, equals([2, 1]));
-    });
+        expect(r.output, equals([2, 1]));
+      },
+    );
 
     test('await chains across async functions', () async {
       var r = await runDartAsync(
@@ -123,9 +126,7 @@ void main() {
     test('top-level async function', () async {
       var vm = ApolloVM();
       await vm.loadCodeUnit(
-        SourceCodeUnit(
-          'dart',
-          r'''
+        SourceCodeUnit('dart', r'''
           Future<int> compute() async {
             return 10;
           }
@@ -134,9 +135,7 @@ void main() {
             var v = await compute();
             return v + 1;
           }
-        ''',
-          id: 'test',
-        ),
+        ''', id: 'test'),
       );
 
       var runner = vm.createRunner('dart')!;
@@ -171,34 +170,28 @@ void main() {
 
   group('async/await translation', () {
     test('Dart -> Dart round-trip preserves async/await', () async {
-      var generated = await _translateDart(
-        r'''
+      var generated = await _translateDart(r'''
         class Async {
           Future<int> run(List args) async {
             var x = await compute(args);
             return x;
           }
         }
-      ''',
-        'dart',
-      );
+      ''', 'dart');
 
       expect(generated, contains(') async {'));
       expect(generated, contains('await '));
     });
 
     test('Dart -> JavaScript emits async function / await', () async {
-      var generated = await _translateDart(
-        r'''
+      var generated = await _translateDart(r'''
         class Async {
           Future<int> run(List args) async {
             var x = await compute(args);
             return x;
           }
         }
-      ''',
-        'javascript',
-      );
+      ''', 'javascript');
 
       expect(generated, contains('async run('));
       expect(generated, contains('await '));
@@ -206,16 +199,13 @@ void main() {
 
     test('Dart -> Kotlin async fails loudly (deferred)', () async {
       expect(
-        () => _translateDart(
-          r'''
+        () => _translateDart(r'''
           class Async {
             Future<int> run(List args) async {
               return await compute(args);
             }
           }
-        ''',
-          'kotlin',
-        ),
+        ''', 'kotlin'),
         throwsA(isA<UnsupportedSyntaxError>()),
       );
     });

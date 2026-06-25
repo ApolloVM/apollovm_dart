@@ -600,9 +600,8 @@ class DartGrammarDefinition extends DartGrammarLexer {
           });
 
   Parser<ASTExpressionAwait> expressionAwait() =>
-      (awaitToken() & (ref0(expressionNoOperation) | ref0(expressionGroup))).map(
-        (v) => ASTExpressionAwait(v[1] as ASTExpression),
-      );
+      (awaitToken() & (ref0(expressionNoOperation) | ref0(expressionGroup)))
+          .map((v) => ASTExpressionAwait(v[1] as ASTExpression));
 
   Parser<ASTExpression> expressionNoOperation() =>
       (expressionAwait() |
