@@ -817,6 +817,59 @@ class ASTExpressionNegative extends ASTExpression {
   }
 }
 
+/// [ASTExpression] that awaits another [expression] (`await x`).
+///
+/// At runtime it resolves [expression] and, if the resolved value is a
+/// [ASTValueFuture] or backed by a native Dart [Future], suspends until it
+/// completes and yields the underlying value. Awaiting a non-future value is
+/// the identity (returns the value as-is), matching Dart semantics.
+class ASTExpressionAwait extends ASTExpression {
+  ASTExpression expression;
+
+  ASTExpressionAwait(this.expression);
+
+  @override
+  bool get isComplex => true;
+
+  @override
+  Iterable<ASTNode> get children => [expression];
+
+  @override
+  FutureOr<ASTType> resolveType(VMContext? context) {
+    return expression.resolveType(context).resolveMapped((t) {
+      return t is ASTTypeFuture ? t.futureValueType : t;
+    });
+  }
+
+  @override
+  FutureOr<ASTValue> run(VMContext parentContext, ASTRunStatus runStatus) {
+    var context = defineRunContext(parentContext);
+
+    return expression.run(context, runStatus).resolveMapped((val) {
+      // Case 1: a VM-level future value.
+      if (val is ASTValueFuture) {
+        return val.future.then((v) => ASTValue.fromValue(v));
+      }
+
+      // Case 2: an `ASTValue` whose underlying value is a native Dart `Future`
+      // (e.g. returned by an external function).
+      var raw = val.getValue(context);
+      if (raw is Future) {
+        return raw.then((v) => ASTValue.fromValue(v));
+      }
+
+      // Case 3: awaiting a non-future value is the identity.
+      return val;
+    });
+  }
+
+  @override
+  String toString({bool asGroup = false}) {
+    var s = 'await $expression';
+    return asGroup ? '($s)' : s;
+  }
+}
+
 /// [ASTExpression] for an operation between 2 expressions.
 class ASTExpressionOperation extends ASTExpression {
   ASTExpression expression1;

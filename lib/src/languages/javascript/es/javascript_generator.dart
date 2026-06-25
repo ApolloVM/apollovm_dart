@@ -159,6 +159,9 @@ class ApolloCodeGeneratorJavaScript extends ApolloCodeGenerator {
     var blockCode = generateASTBlock(f, indent: indent, withBrackets: false);
 
     out.write(indent);
+    if (f.modifiers.isAsync) {
+      out.write('async ');
+    }
     out.write('function ');
     out.write(f.name);
     _generateFunctionParamsAndBlock(f, blockCode, out, indent);
@@ -180,6 +183,10 @@ class ApolloCodeGeneratorJavaScript extends ApolloCodeGenerator {
 
     if (f.modifiers.isStatic) {
       out.write('static ');
+    }
+
+    if (f.modifiers.isAsync) {
+      out.write('async ');
     }
 
     out.write(f.name);

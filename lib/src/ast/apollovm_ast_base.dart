@@ -138,6 +138,7 @@ class ASTModifiers {
     isStatic: true,
     isFinal: true,
   );
+  static final ASTModifiers modifierAsync = ASTModifiers(isAsync: true);
 
   final bool isStatic;
 
@@ -147,11 +148,15 @@ class ASTModifiers {
 
   final bool isPublic;
 
+  /// If `true` this is an asynchronous element (`async` function).
+  final bool isAsync;
+
   ASTModifiers({
     this.isStatic = false,
     this.isFinal = false,
     this.isPrivate = false,
     this.isPublic = false,
+    this.isAsync = false,
   }) {
     if (isPrivate && isPublic) {
       throw StateError("Can't be private and public at the same time!");
@@ -163,12 +168,14 @@ class ASTModifiers {
     bool? isFinal,
     bool? isPrivate,
     bool? isPublic,
+    bool? isAsync,
   }) {
     return ASTModifiers(
       isStatic: isStatic ?? this.isStatic,
       isFinal: isFinal ?? this.isFinal,
       isPrivate: isPrivate ?? this.isPrivate,
       isPublic: isPublic ?? this.isPublic,
+      isAsync: isAsync ?? this.isAsync,
     );
   }
 
@@ -177,6 +184,7 @@ class ASTModifiers {
     if (isPrivate) 'private',
     if (isStatic) 'static',
     if (isFinal) 'final',
+    if (isAsync) 'async',
   ];
 
   @override

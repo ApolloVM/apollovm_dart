@@ -116,6 +116,17 @@ abstract class DartGrammarLexer extends BaseGrammarLexer {
 
   Parser typedefToken() => ref1(token, 'typedef');
 
+  // `async`/`await` are contextual keywords: they must match as whole words so
+  // identifiers like `awaiter` are not read as `await` + `er`.
+  Parser asyncToken() => _keywordToken('async');
+
+  Parser awaitToken() => _keywordToken('await');
+
+  Parser _keywordToken(String word) =>
+      (string(word) & ref0(identifierPartLexicalToken).not())
+          .map((v) => v[0])
+          .trim(ref0(hiddenStuffWhitespace));
+
   Parser hexNumberLexicalToken() =>
       string('0x') & ref0(hexDigitLexicalToken).plus() |
       string('0X') & ref0(hexDigitLexicalToken).plus();

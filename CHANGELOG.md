@@ -1,3 +1,61 @@
+## 0.1.30
+
+- `async`/`await` support (real asynchrony) — Dart parse/run/translate and
+  JavaScript translation:
+  - AST: new `ASTModifiers.isAsync`, new `ASTExpressionAwait` expression, and a
+    new abstract `generateASTExpressionAwait` generator hook. Reuses the
+    existing `ASTTypeFuture`/`ASTValueFuture` (added `ASTTypeFuture.futureValueType`).
+  - Runtime: an `async` function returns a first-class future *immediately*
+    (a non-awaited call yields an `ASTValueFuture` that can be stored and
+    awaited later); `await` suspends on real Dart `Future`s, including those
+    returned by external functions declared with a `Future<...>` return type.
+    `ASTEntryPointBlock.execute` awaits the entry future before tearing down the
+    entry-point context (external mapper, current context).
+  - Dart grammar: parses the `async` body keyword (after the parameter list) and
+    the `await` prefix expression; `Future<T>` types parse to `ASTTypeFuture`;
+    the `await`/`async` contextual keywords no longer shadow identifiers
+    (e.g. `awaiter`) or get read as a type name.
+  - Code generation: Dart emits `... ) async {` and `await `; JavaScript emits
+    `async function` / `async name(` and `await `.
+  - Wasm: async/await compiles via **synchronous collapse** — the backend runs
+    synchronously, so `Future<T>` collapses to `T` (`effectiveReturnType`) and
+    `await` is a value pass-through. Compute-style async Dart compiles to Wasm
+    and matches the AST interpreter.
+  - Wasm real-suspension **Asyncify prototype**
+    (`test/apollovm_wasm_asyncify_prototype_test.dart`): a hand-assembled
+    two-frame module proves real suspension against the live `WasmRuntime` — a
+    running call unwinds to the host (saving live locals to linear memory), the
+    host awaits a real Dart `Future`, then re-invokes the export which rewinds
+    and resumes. Demonstrates multi-frame state preservation, exactly-once
+    prologue execution, and two concurrent computations interleaving by host
+    delay.
+  - Wasm **Asyncify code generation**: the generator emits the unwind/rewind
+    state machine for an `async` function whose `await`s are statement-level
+    calls — a low-memory Asyncify control region (`WasmModuleContext`) with a
+    LIFO **frame stack**, live-local spill/restore, `br_table` resume dispatch
+    supporting **multiple `await` points** in one function, and **multi-frame
+    unwinding**: an `async` function may `await` another module `async` function
+    (an *internal* frame) as well as a host import (a *leaf*). The unwind
+    propagates up every frame on the call stack to the host and rewinds back
+    down (an eligibility fixed-point decides which async functions transform;
+    the rest use synchronous-collapse). Validated against the live runtime in
+    `test/apollovm_wasm_asyncify_codegen_test.dart` and the multi-frame /
+    mixed-await cases in `test/apollovm_wasm_asyncify_runner_test.dart`. Shapes
+    that still fall back to synchronous-collapse: awaits nested in control flow,
+    multiple awaits in one statement, and async recursion.
+  - Wasm Asyncify **runner integration**: `ApolloRunnerWasm.executeFunction`
+    now detects real-suspension `async` functions (flagged in `apollovm_sig`)
+    and drives their unwind/rewind loop, awaiting a real Dart `Future` from a
+    host function registered via the new `ApolloRunnerWasm.mapWasmAsyncFunction`
+    API. So real-suspension async/await works end-to-end through the VM
+    (`test/apollovm_wasm_asyncify_runner_test.dart`). A `br_table`
+    multi-await/multi-frame transform is the remaining follow-up.
+  - Kotlin async/await translation is deferred and fails loudly via
+    `UnsupportedSyntaxError` (the eventual mapping is `suspend fun` + coroutines).
+  - Tests: `test/apollovm_async_test.dart` (parse, real-suspension ordering,
+    await chains, top-level async, identifier guard, Dart/JS/Kotlin translation)
+    and `test/apollovm_wasm_async_test.dart` (AST-vs-compiled-Wasm parity).
+
 ## 0.1.29
 
 - Lua language support (parse, run, and translate):

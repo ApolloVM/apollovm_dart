@@ -1090,6 +1090,13 @@ abstract class ApolloCodeGenerator
         indent: indent,
         headIndented: headIndented,
       );
+    } else if (expression is ASTExpressionAwait) {
+      return generateASTExpressionAwait(
+        expression,
+        out: out,
+        indent: indent,
+        headIndented: headIndented,
+      );
     } else if (expression is ASTExpressionLocalFunctionInvocation) {
       return generateASTExpressionLocalFunctionInvocation(
         expression,
@@ -1358,6 +1365,34 @@ abstract class ApolloCodeGenerator
       indent: indent,
       headIndented: false,
     );
+
+    return out;
+  }
+
+  /// Generates an `await` expression. Shared by languages that use the
+  /// `await` keyword (Dart, JavaScript). Languages without it (e.g. Kotlin,
+  /// Wasm) should override this to fail loudly.
+  @override
+  StringBuffer generateASTExpressionAwait(
+    ASTExpressionAwait expression, {
+    StringBuffer? out,
+    String indent = '',
+    bool headIndented = true,
+  }) {
+    out ??= newOutput();
+
+    if (headIndented) out.write(indent);
+
+    out.write('await ');
+
+    // Parenthesize a complex operand so `await a + b` is not emitted (which
+    // would re-parse as `(await a) + b`).
+    final inner = expression.expression;
+    final group = inner.isComplex;
+
+    if (group) out.write('(');
+    generateASTExpression(inner, out: out, indent: indent, headIndented: false);
+    if (group) out.write(')');
 
     return out;
   }

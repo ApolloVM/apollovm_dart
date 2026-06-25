@@ -78,6 +78,15 @@ class Wasm {
 
   static List<int> brIf(int i) => <int>[0x0d, ...Leb128.encodeUnsigned(i)];
 
+  /// `br_table`: branch to `targets[operand]` (relative block depths), or
+  /// [defaultTarget] when the operand is out of range.
+  static List<int> brTable(List<int> targets, int defaultTarget) => <int>[
+    0x0e,
+    ...Leb128.encodeUnsigned(targets.length),
+    for (var t in targets) ...Leb128.encodeUnsigned(t),
+    ...Leb128.encodeUnsigned(defaultTarget),
+  ];
+
   static List<int> call(int i) => <int>[0x10, ...Leb128.encodeUnsigned(i)];
 
   static const drop = 0x1a;

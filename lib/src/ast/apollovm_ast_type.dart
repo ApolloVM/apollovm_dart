@@ -1431,6 +1431,14 @@ class ASTTypeMap<TK extends ASTType<K>, TV extends ASTType<V>, K, V>
 class ASTTypeFuture<T extends ASTType<V>, V> extends ASTType<Future<V>> {
   ASTTypeFuture(T type) : super('Future', generics: [type]);
 
+  /// The type of the value the [Future] resolves to (the `T` in `Future<T>`).
+  ASTType get futureValueType {
+    var generics = this.generics;
+    return (generics != null && generics.isNotEmpty)
+        ? generics.first
+        : ASTTypeDynamic.instance;
+  }
+
   @override
   Iterable<ASTNode> get children => [];
 

@@ -107,11 +107,23 @@ class ASTEntryPointBlock extends ASTBlock {
         }
       }
 
-      return await f.call(
+      var result = await f.call(
         context,
         positionalParameters: positionalParameters,
         namedParameters: namedParameters,
       );
+
+      // If the entry function is `async` it returns a first-class future
+      // *immediately*; await its completion here, while the entry-point
+      // context (external function mapper, current context, etc.) is still
+      // alive — otherwise the deferred body would run after the `finally`
+      // below has torn it down.
+      if (result is ASTValueFuture) {
+        var resolved = await result.future;
+        return ASTValue.fromValue(resolved);
+      }
+
+      return result;
     } finally {
       VMContext.setCurrent(prevContext);
 
@@ -1844,7 +1856,21 @@ abstract class ASTInvocableDeclaration<
     VMContext parent, {
     List? positionalParameters,
     Map? namedParameters,
-  }) async {
+  }) {
+    // An `async` function returns a first-class future *immediately*, without
+    // awaiting its body, so a non-awaited call can be stored in a `Future<T>`
+    // variable and awaited later (real asynchrony).
+    if (modifiers.isAsync) {
+      return _callAsync(parent, positionalParameters, namedParameters);
+    }
+    return _callBody(parent, positionalParameters, namedParameters);
+  }
+
+  Future<ASTValue<T>> _callBody(
+    VMContext parent,
+    List? positionalParameters,
+    Map? namedParameters,
+  ) async {
     var context = VMScopeContext(this, parent: parent);
 
     var prevContext = VMContext.setCurrent(context);
@@ -1853,6 +1879,49 @@ abstract class ASTInvocableDeclaration<
 
       var result = await super.run(context, ASTRunStatus());
       return await resolveReturnValue(context, result);
+    } finally {
+      VMContext.setCurrent(prevContext);
+    }
+  }
+
+  /// The type the `async` body resolves to (the `T` of `Future<T>`, or the
+  /// declared return type itself when it isn't a `Future<...>`).
+  ASTType get _asyncInnerReturnType {
+    ASTType rt = returnType;
+    return rt is ASTTypeFuture ? rt.futureValueType : rt;
+  }
+
+  ASTValue<T> _callAsync(
+    VMContext parent,
+    List? positionalParameters,
+    Map? namedParameters,
+  ) {
+    var context = VMScopeContext(this, parent: parent);
+    var innerType = _asyncInnerReturnType;
+    var bodyFuture = _runAsyncBody(
+      context,
+      positionalParameters,
+      namedParameters,
+      innerType,
+    );
+    return ASTValueFuture(innerType, bodyFuture) as ASTValue<T>;
+  }
+
+  Future<dynamic> _runAsyncBody(
+    VMContext context,
+    List? positionalParameters,
+    Map? namedParameters,
+    ASTType innerType,
+  ) async {
+    var prevContext = VMContext.setCurrent(context);
+    try {
+      await initializeVariables(context, positionalParameters, namedParameters);
+
+      var result = await super.run(context, ASTRunStatus());
+      // Resolve to the inner (unwrapped) value carried by the `Future`.
+      var astValue = await innerType.toValue(context, result);
+      astValue ??= ASTValueVoid.instance;
+      return await astValue.getValue(context);
     } finally {
       VMContext.setCurrent(prevContext);
     }
@@ -2593,6 +2662,12 @@ class ASTExternalFunction<T> extends ASTFunctionDeclaration<T> {
       }
 
       if (result is Future) {
+        // If the external function is declared to return a `Future<...>`, keep
+        // it as a first-class future (don't eager-await) so callers can await
+        // it on demand.
+        if (returnType is ASTTypeFuture) {
+          return await resolveReturnValue(context, result);
+        }
         var r = await result;
         return await resolveReturnValue(context, r);
       } else {

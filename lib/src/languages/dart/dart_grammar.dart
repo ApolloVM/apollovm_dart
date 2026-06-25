@@ -95,18 +95,20 @@ class DartGrammarDefinition extends DartGrammarLexer {
       (type().optional() &
               identifier() &
               functionParametersDeclaration() &
+              asyncToken().optional() &
               codeBlock())
           .map((v) {
             var returnType = v[0] as ASTType? ?? ASTTypeDynamic.instance;
             var parameters = v[2];
             var name = v[1];
-            var block = v[3];
+            var isAsync = v[3] != null;
+            var block = v[4];
             return ASTFunctionDeclaration(
               name,
               parameters,
               returnType,
               block: block,
-              modifiers: ASTModifiers.modifierStatic,
+              modifiers: ASTModifiers(isStatic: true, isAsync: isAsync),
             );
           });
 
@@ -260,13 +262,18 @@ class DartGrammarDefinition extends DartGrammarLexer {
               type().optional() &
               identifier() &
               functionParametersDeclaration() &
+              asyncToken().optional() &
               codeBlock())
           .map((v) {
-            var modifiers = v[0];
+            var modifiers =
+                (v[0] as ASTModifiers?) ?? ASTModifiers.modifiersNone;
+            if (v[4] != null) {
+              modifiers = modifiers.copyWith(isAsync: true);
+            }
             var returnType = v[1] as ASTType? ?? ASTTypeDynamic.instance;
             var name = v[2] as String;
             var parameters = v[3] as ASTFunctionParametersDeclaration;
-            var block = v[4] as ASTBlock;
+            var block = v[5] as ASTBlock;
             return ASTClassFunctionDeclaration(
               null,
               name,
@@ -592,8 +599,13 @@ class DartGrammarDefinition extends DartGrammarLexer {
             return op;
           });
 
+  Parser<ASTExpressionAwait> expressionAwait() =>
+      (awaitToken() & (ref0(expressionNoOperation) | ref0(expressionGroup)))
+          .map((v) => ASTExpressionAwait(v[1] as ASTExpression));
+
   Parser<ASTExpression> expressionNoOperation() =>
-      (expressionNegate() |
+      (expressionAwait() |
+              expressionNegate() |
               expressionLiteral() |
               expressionGroupFunctionInvocation() |
               expressionGroup() |
@@ -987,16 +999,31 @@ class DartGrammarDefinition extends DartGrammarLexer {
           });
 
   Parser<ASTType> type() =>
-      (arrayTyped() |
+      (futureTyped() |
+              arrayTyped() |
               arrayTypeDynamic() |
               mapTyped() |
               mapTypeDynamic() |
               simpleType())
           .cast<ASTType>();
 
-  Parser<ASTType> simpleType() => identifier().map((v) {
-    return getTypeByName(v);
-  });
+  Parser<ASTTypeFuture> futureTyped() =>
+      (string('Future') &
+              char('<').trimHidden() &
+              ref0(type) &
+              char('>').trimHidden())
+          .map((v) {
+            var t = v[2] as ASTType;
+            return ASTTypeFuture(t);
+          });
+
+  Parser<ASTType> simpleType() =>
+      // Guard against the `await` contextual keyword being read as a type name
+      // (so `await x;` parses as an await expression, not a `await x` variable
+      // declaration).
+      (awaitToken().not() & identifier()).map((v) {
+        return getTypeByName(v[1] as String);
+      });
 
   Parser<ASTTypeArray> arrayTyped() =>
       (array3DTyped() | array2DTyped() | array1DTyped()).cast<ASTTypeArray>();
