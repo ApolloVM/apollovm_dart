@@ -12,7 +12,7 @@
 [![Code size](https://img.shields.io/github/languages/code-size/ApolloVM/apollovm_dart?logo=github&logoColor=white)](https://github.com/ApolloVM/apollovm_dart)
 [![License](https://img.shields.io/github/license/ApolloVM/apollovm_dart?logo=open-source-initiative&logoColor=green)](https://github.com/ApolloVM/apollovm_dart/blob/master/LICENSE)
 
-ApolloVM is a portable VM (native, JS/Web, Flutter) that can parse, translate, and execute multiple languages such as Dart, Java, Kotlin, and JavaScript. It also provides on-the-fly compilation to Wasm.
+ApolloVM is a portable VM (native, JS/Web, Flutter) that can parse, translate, and execute multiple languages such as Dart, Java, Kotlin, JavaScript, and Lua. It also provides on-the-fly compilation to Wasm.
 
 -----------------------------
 
@@ -41,7 +41,7 @@ Now you can use the `apollovm` Dart executable:
 ```shell
 $> apollovm help
 
-ApolloVM - A compact VM for Dart, Java, Kotlin and JavaScript.
+ApolloVM - A compact VM for Dart, Java, Kotlin, JavaScript and Lua.
 
 Usage: apollovm <command> [arguments]
 
@@ -146,7 +146,7 @@ even if you don't have Dart installed.
 
 ## Package Usage
 
-The ApolloVM is still in alpha stage. Below, we can see simple usage examples in Dart, Java, Kotlin and JavaScript.
+The ApolloVM is still in alpha stage. Below, we can see simple usage examples in Dart, Java, Kotlin, JavaScript and Lua.
 
 ### Language: `Dart`
 
@@ -527,6 +527,88 @@ the AST, execute it, and generate idiomatic modern ES (`let`/`const`, template
 literals, `for...of`, top-level functions, `===`/`!==`) from any loaded AST (Dart,
 Java, or JavaScript).
 
+### Language: `Lua`
+
+Loading Lua source code, executing it, and then converting it to Dart:
+
+```dart
+import 'package:apollovm/apollovm.dart';
+
+void main() async {
+  var vm = ApolloVM();
+
+  var codeUnit = SourceCodeUnit(
+          'lua',
+          r'''
+            Foo = {}
+            Foo.__index = Foo
+
+            function Foo:main(title, a, b, c)
+              local sumAB = a + b
+              local sumABC = a + b + c
+              print(title)
+              print(sumAB)
+              print(sumABC)
+            end
+          ''',
+          id: 'test');
+
+  var loadOK = await vm.loadCodeUnit(codeUnit);
+
+  if (!loadOK) {
+    throw StateError('Error parsing Lua code!');
+  }
+
+  var luaRunner = vm.createRunner('lua')!;
+
+  // Map the `print` function in the VM:
+  luaRunner.externalPrintFunction = (o) => print("» $o");
+
+  await luaRunner.executeClassMethod('', 'Foo', 'main',
+      positionalParameters: ['Sums:', 10, 20, 30]);
+
+  print('---------------------------------------');
+
+  // Regenerate code in Dart:
+  var codeStorageDart = vm.generateAllCodeIn('dart');
+  var allSourcesDart = await codeStorageDart.writeAllSources();
+  print(allSourcesDart.toString());
+}
+```
+
+*Note: the parsed function `print` was mapped as an external function.*
+
+Output:
+```text
+» Sums:
+» 30
+» 60
+---------------------------------------
+<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+class Foo {
+
+  void main(dynamic title, dynamic a, dynamic b, dynamic c) {
+    var sumAB = a + b;
+    var sumABC = (a + b) + c;
+    print(title);
+    print(sumAB);
+    print(sumABC);
+  }
+
+}
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+```
+
+Lua is bidirectional: ApolloVM parses `.lua` source into the AST, executes it, and
+generates idiomatic Lua (keyword-delimited blocks with `end`, `local` variables, `..`
+concatenation, `and`/`or`/`not`/`~=`, and generic `for ... in ipairs(...)`) from any
+loaded AST. Object-oriented code uses the conventional table + metatable form
+(`Name = {}`, `Name.__index = Name`, `function Name:method(...)`), so classes round-trip
+to and from Dart, Java, Kotlin and JavaScript.
+
 ## Wasm Support
 
 ApolloVM can compile its AST tree to WebAssembly (Wasm). This means that parsed code loaded into the VM can be compiled
@@ -743,6 +825,10 @@ Any help from the open-source community is always welcome and needed:
 
 - JavaScript: extended support (anonymous arrow callbacks/closures, destructuring, spread, async/await, `this.x` constructor parameters, full ESM modules). *Named arrow functions (`const f = (a, b) => a + b;`) are already supported.*
   - *See the [JavaScript implementation (at "lib/src/languages/javascript/es")](https://github.com/ApolloVM/apollovm_dart/tree/master/lib/src/languages/javascript/es).*
+
+
+- Lua: extended support (`repeat ... until`, multiple assignment/returns, varargs, non-`ipairs` numeric-for round-tripping, and hand-written metatable styles beyond the `Name = {}` / `function Name:method` convention).
+  - *See the [Lua implementation (at "lib/src/languages/lua")](https://github.com/ApolloVM/apollovm_dart/tree/master/lib/src/languages/lua).*
 
 
 - Python support.

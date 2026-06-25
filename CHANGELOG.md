@@ -1,3 +1,22 @@
+## 0.1.29
+
+- Lua language support (parse, run, and translate):
+  - New `lib/src/languages/lua/` module: `ApolloParserLua`,
+    `LuaGrammarDefinition`/`LuaGrammarLexer`, `ApolloCodeGeneratorLua` and
+    `ApolloRunnerLua`, all built on the shared AST (no AST changes).
+  - Grammar covers top-level and `local` functions, `local`/global variables,
+    `if/elseif/else`, `while`, numeric and generic `for ... in ipairs(...)`,
+    `return`, expressions/operators (`and`/`or`/`not`, `~=`, `..` concatenation),
+    table constructors (list and map), and a table-based class convention
+    (`Name = {}`, `Name.__index = Name`, `function Name:method(...)`) grouped
+    into the shared class AST. Return types are inferred (`void` vs `dynamic`).
+  - Generator emits idiomatic Lua: keyword-delimited blocks with `end`, `local`
+    variables, `..` string concatenation, `and`/`or`/`not`/`~=`, table literals,
+    and `self.`/`self:` prefixing inside methods.
+  - Registered in `ApolloVM` (`getParser`/`createRunner`/`createCodeGenerator`).
+  - Tests in `test/apollovm_lua_test.dart` cover parse+run, translate+re-execute
+    to Dart/Lua/Kotlin, and bidirectional table-based classes.
+
 ## 0.1.28
 
 - Kotlin language support (parse, run, and translate), reaching parity with the
