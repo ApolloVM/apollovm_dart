@@ -1114,6 +1114,30 @@ void main() async {
     );
 
     test(
+      'callThenPrint',
+      () => _testWasm(
+        language: 'dart',
+        code: r'''
+
+          int dbl(int n) {
+            return n * 2;
+          }
+
+          int run(int x) {
+            var d = dbl(x);
+            print('d: $d');
+            return d;
+          }
+
+        ''',
+        functionName: 'run',
+        executions: {
+          [10]: 20,
+        },
+      ),
+    );
+
+    test(
       'closureReturned',
       () => _testWasm(
         language: 'dart',

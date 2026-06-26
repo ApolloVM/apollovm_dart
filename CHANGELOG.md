@@ -1,3 +1,27 @@
+## 0.1.37
+
+### Lambda / anonymous-function input parsing (Java, Kotlin, Lua)
+
+- **Java**: parse lambdas as expressions — `(a, b) -> expr`, `(int a) -> { ... }`,
+  `x -> x * 2`, `() -> 0` (typed or untyped parameters).
+- **Kotlin**: parse lambdas `{ x -> x * 2 }`, `{ x: Int, y: Int -> x + y }`,
+  `{ 42 }`; the last expression is the implicit return value.
+- **Lua**: parse anonymous functions `function(x) ... end`.
+- Closures now round-trip (parse → execute → regenerate) in these languages, not
+  just generate.
+
+### Wasm: host imports no longer corrupt module-function call indices
+
+- A module-function `call` index is `importCount + position`, but host imports
+  (`env.print`, `env.int_to_str`, …) are registered lazily while bodies are
+  generated. A call emitted *before* an import was registered (e.g. calling a
+  function and then `print`-ing, including across `await` points) got a stale
+  index and produced invalid Wasm (`type mismatch`). The import-discovery pass
+  that freezes `importCount` before the real pass now runs for all modules (it
+  only touches idempotent state, so import-free modules stay byte-identical).
+- Fixes `async`/`await` functions that call other functions and `print` between
+  awaits, which now run identically on the interpreter and Wasm.
+
 ## 0.1.36
 
 ### Ternary / conditional expressions
