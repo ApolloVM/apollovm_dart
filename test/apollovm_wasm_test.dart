@@ -1138,6 +1138,38 @@ void main() async {
     );
 
     test(
+      'closureCaptureByReference',
+      () => _testWasm(
+        language: 'dart',
+        code: r'''
+
+          int Function(int) makeCounter() {
+            var c = 0;
+            return (int d) {
+              c = c + d;
+              return c;
+            };
+          }
+
+          int run() {
+            var a = makeCounter();
+            var b = makeCounter();
+            a(5);
+            b(100);
+            return a(1) + b(1);
+          }
+
+        ''',
+        functionName: 'run',
+        executions: {
+          // a accumulates 5 then 1 -> 6 ; b accumulates 100 then 1 -> 101 ;
+          // 6 + 101 = 107 (each closure mutates its own captured cell).
+          []: 107,
+        },
+      ),
+    );
+
+    test(
       'closureReturned',
       () => _testWasm(
         language: 'dart',
