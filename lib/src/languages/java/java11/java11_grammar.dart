@@ -288,7 +288,7 @@ class Java11GrammarDefinition extends Java11GrammarLexer {
     var isStatic = v.contains('static');
     var isFinal = v.contains('final');
     var isPrivate = v.contains('private');
-    var isPublic = v.contains('private');
+    var isPublic = v.contains('public');
     return ASTModifiers(
       isStatic: isStatic,
       isFinal: isFinal,

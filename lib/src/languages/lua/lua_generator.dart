@@ -683,6 +683,19 @@ class ApolloCodeGeneratorLua extends ApolloCodeGenerator {
         return 'or';
       case ASTExpressionOperator.divideAsInt:
         return '//';
+      // Lua 5.3 bitwise operators. NOTE: `bitwiseXor` must be `~` in Lua (the
+      // shared default is `^`, which is exponentiation in Lua), so this case is
+      // essential, not just cosmetic.
+      case ASTExpressionOperator.bitwiseAnd:
+        return '&';
+      case ASTExpressionOperator.bitwiseOr:
+        return '|';
+      case ASTExpressionOperator.bitwiseXor:
+        return '~';
+      case ASTExpressionOperator.shiftLeft:
+        return '<<';
+      case ASTExpressionOperator.shiftRight:
+        return '>>';
       default:
         return getASTExpressionOperatorText(operator);
     }

@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="Kotlin member visibility modifiers">
+    <source language="kotlin">
+        <![CDATA[
+class C {
+  private fun helper(): Int {
+    return 7
+  }
+
+  fun run(): Int {
+    return helper() + 3
+  }
+}
+        ]]>
+    </source>
+    <call class="C" function="run" return="10">
+        []
+    </call>
+    <output>
+        []
+    </output>
+    <source-generated language="kotlin"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+class C {
+
+  private fun helper(): Int {
+    return 7
+  }
+
+  fun run(): Int {
+    return helper() + 3
+  }
+
+}
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+</test>

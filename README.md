@@ -16,6 +16,21 @@ ApolloVM is a portable VM (native, JS/Web, Flutter) that can parse, translate, a
 
 -----------------------------
 
+## Use Cases
+
+- 🤖 **MCP tool for LLMs** — expose ApolloVM over MCP so an LLM can use it as a sandboxed reasoning scratchpad and validate generated code (parse, run, check output).
+- 🔄 **Cross-language translation / porting** — translate and regenerate source between any supported languages to prototype, migrate, or share logic across stacks.
+- 📱 **Embedded scripting in Dart/Flutter** — ship logic, UIs, and behavior that update live at runtime, with no rebuild or app-store redeploy.
+- 📐 **Business rules & formulas** — define pricing, discounts, validation, and eligibility logic as editable rules in a real, familiar language, evaluated safely at runtime — no hardcoding or custom expression engine to build and maintain.
+- 🔒 **Sandboxed execution** — run untrusted, user-supplied snippets isolated from the host, via the interpreter or compiled Wasm.
+- ⚙️ **On-the-fly WebAssembly** — compile loaded source to portable Wasm modules at runtime (browser or native) without any external toolchain.
+- 🎓 **Playgrounds & education** — build multi-language runners/REPLs that show the same program across languages and its translated output.
+- 🧪 **Reference implementations / test oracles** — write an algorithm once, then run or emit it across language targets to cross-check behavior.
+- 🌳 **Polyglot AST tooling** — parse multiple languages into one shared AST for analysis, transformation, and code generation.
+- 🪶 **Small, multi-platform VM** — runs on native, web/JS, and Flutter; the CLI compiles to a self-contained native binary under 10 MB with all features included.
+
+-----------------------------
+
 ## Live Example
 
 Experience ApolloVM in action right from your browser:
@@ -24,6 +39,95 @@ Experience ApolloVM in action right from your browser:
 
 If you prefer to run the demo on your local machine:
 - Follow the step-by-step instructions available in the [GitHub Repository](https://github.com/ApolloVM/apollovm_web_example).
+
+-----------------------------
+
+## Supported Features
+
+ApolloVM can **parse**, **execute** (interpret), and **translate** (cross-compile)
+source code between all supported languages, and **compile to WebAssembly** on the fly.
+
+### Languages
+
+`Dart`, `Java 11`, `Kotlin`, `C#`, `JavaScript`, `TypeScript`, `Lua` and `Python`.
+
+Any supported language can be translated to any other (e.g. Java → Dart, C# → Python,
+Kotlin → JavaScript), and code can be regenerated back to its original language.
+
+### Core capabilities
+
+- **Parsing** of each language into a shared AST.
+- **Execution**: a tree-walking interpreter runs the AST directly.
+- **Translation**: regenerate the AST as source in any supported language.
+- **Wasm compilation**: compile to WebAssembly, including `async`/`await` (via
+  Asyncify), classes, exceptions, maps and GC types.
+
+### Control flow & operators
+
+Legend: ✅ supported · ⚠️ supported via the language's idiom · 🚧 not yet supported (exists in the
+language but not implemented yet) · — not applicable (the language has no such construct).
+
+The **Wasm** column shows what the on-the-fly WebAssembly compiler currently supports
+(any source language is compiled through the same shared AST).
+
+| Feature | Dart | Java | Kotlin | C# | JS | TS | Lua | Python | Wasm |
+|---|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|
+| `if` / `else if` / `else`        | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `for` (C-style)                  | ✅ | ✅ | —  | ✅ | ✅ | ✅ | ⚠️¹ | — | ✅ |
+| `for-each` / `for-in`            | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `while`                          | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `do` / `while`                   | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ⚠️² | — | ✅ |
+| `switch` / `case`                | ✅ | ✅ | ⚠️³ | ✅ | ✅ | ✅ | —  | ⚠️⁴ | ✅ |
+| `break`                          | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `continue`                       | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | —  | ✅ | ✅ |
+| `try` / `catch` / `finally`      | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | —  | ✅ | ✅ |
+| `throw` / `raise`                | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | —  | ✅ | ✅ |
+| Ternary (`? :`)                  | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | —  | ✅ | ✅ |
+| Arithmetic (`+ - * / %`)         | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Comparison / logical             | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Bitwise (`& \| ^ << >> ~`)       | ✅ | ✅ | ⚠️⁵ | ✅ | ✅ | ✅ | ⚠️⁶ | ✅ | ✅ |
+| `++` / `--`, compound assign     | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Lambdas / closures               | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| String interpolation / concat    | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| List & map / dict literals       | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `null` / `None` / `nil`          | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+
+¹ Lua numeric-for (`for i = a, b do`). &nbsp; ² Lua `repeat … until`. &nbsp;
+³ Kotlin `when`. &nbsp; ⁴ Python `match` / `case`. &nbsp;
+⁵ Kotlin bitwise are infix functions: `and`/`or`/`xor`/`shl`/`shr` and `.inv()`. &nbsp;
+⁶ Lua bitwise use `&`/`|`/`~` (xor)/`<<`/`>>` and unary `~` (Lua 5.3).
+
+### Classes, types & OOP
+
+Legend: ✅ supported · ⚠️ supported via the language's idiom · 🚧 not yet supported (exists in the
+language but not implemented yet) · — not applicable (the language has no such construct).
+
+| Feature | Dart | Java | Kotlin | C# | JS | TS | Lua | Python |
+|---|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|
+| Classes                                                       | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | —  | ✅ |
+| Fields (with initializers)                                    | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ⚠️¹ | ✅ |
+| Constructors & instantiation (`new Foo(...)` / `Foo(...)`)    | ✅ | ✅ | ✅ | ✅ | 🚧 | ✅ | ⚠️¹ | 🚧² |
+| Methods                                                       | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Static / visibility modifiers                                 | ✅ | ✅ | ⚠️⁴ | ✅ | ⚠️³ | ✅ | —  | —  |
+| Inheritance (`extends`) / interfaces                          | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | —  | ✅ |
+| Enums (incl. runtime value access)                            | ✅ | ✅ | ✅ | ✅ | —  | ✅ | —  | ✅ |
+| Generics (generic classes + instantiation + type erasure)    | ✅ | ✅ | ✅ | ✅ | —  | ✅ | —  | —  |
+| Type inference (`var` / `val` / `auto`)                       | ✅ | ✅ | ✅ | ✅ | —  | ✅ | —  | —  |
+
+¹ Lua is table-based (no class construct): "fields" are table entries (`obj.x`) and "constructors"
+are factory functions / `setmetatable` idioms; methods use `function Obj:method`. &nbsp;
+² Python declares constructors via `__init__`, but instance-field assignment (`self.x = ...`) is not
+implemented yet, so constructors aren't usable end-to-end. &nbsp;
+³ JavaScript supports the `static` modifier but has no visibility keywords (privacy is by convention /
+closures). &nbsp;
+⁴ Kotlin member visibility modifiers (`private`/`public`/`internal`/`protected`) are supported; Kotlin
+has no `static` (it uses `companion object`, not yet supported). &nbsp;
+Generics are marked `—` for JS/Lua/Python because those languages have no static type syntax to
+parameterize.
+
+> Per-language behavior is normalized to a shared AST, so types and constructs map
+> cleanly when translating between languages (e.g. C# `string` ⇄ Dart `String`,
+> Java `List<Integer>` ⇄ Dart `List<int>`).
 
 -----------------------------
 
@@ -784,8 +888,12 @@ cross-translatable with Dart, Java, Kotlin, JavaScript, TypeScript and Lua.
 ApolloVM can compile its AST tree to WebAssembly (Wasm). This means that parsed code loaded into the VM can be compiled
 on the fly, without the need for any third-party tools.
 
-- **Status:** *Wasm support is still in the alpha stage and currently only supports basic integer operations. Full support for
-AST trees is currently under development.*
+- **Status:** *Wasm support is under active development. It already compiles a broad subset of
+the AST — functions, full control flow (`if`/`for`/`for-each`/`while`/`do-while`/`switch`/
+`break`/`continue`/ternary), arithmetic/comparison/logical/bitwise operators, `try`/`catch`/`throw`,
+classes, closures, lists/maps, and `async`/`await` (via Asyncify); see the
+[feature table](#supported-features). Constructs not yet compiled to Wasm are limited to a few
+higher-level features (e.g. non-integer `switch`).*
 
 Example of Dart code compiled to Wasm:
 ```dart
@@ -997,11 +1105,11 @@ Any help from the open-source community is always welcome and needed:
   - *See the [JavaScript implementation (at "lib/src/languages/javascript/es")](https://github.com/ApolloVM/apollovm_dart/tree/master/lib/src/languages/javascript/es).*
 
 
-- TypeScript: extended support (generics, union/intersection types, type aliases, parameter properties, enum member access at runtime, decorators). *Type annotations, `interface`, `enum`, and access modifiers (`public`/`private`/`protected`/`readonly`/`static`/`abstract`) are already supported.*
+- TypeScript: extended support (union/intersection types, type aliases, parameter properties, decorators). *Type annotations, `interface`, `enum` (incl. member access at runtime), generic classes/instantiation, and access modifiers (`public`/`private`/`protected`/`readonly`/`static`/`abstract`) are already supported.*
   - *See the [TypeScript implementation (at "lib/src/languages/typescript/ts")](https://github.com/ApolloVM/apollovm_dart/tree/master/lib/src/languages/typescript/ts).*
 
 
-- Lua: extended support (`repeat ... until`, multiple assignment/returns, varargs, non-`ipairs` numeric-for round-tripping, and hand-written metatable styles beyond the `Name = {}` / `function Name:method` convention).
+- Lua: extended support (multiple assignment/returns, varargs, non-`ipairs` numeric-for round-tripping, and hand-written metatable styles beyond the `Name = {}` / `function Name:method` convention).
   - *See the [Lua implementation (at "lib/src/languages/lua")](https://github.com/ApolloVM/apollovm_dart/tree/master/lib/src/languages/lua).*
 
 

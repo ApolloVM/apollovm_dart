@@ -279,6 +279,13 @@ class ApolloCodeGeneratorKotlin extends ApolloCodeGenerator {
 
     out.write(indent);
 
+    // Visibility modifier (Kotlin defaults to `public`, so only emit when set).
+    if (f.modifiers.isPrivate) {
+      out.write('private ');
+    } else if (f.modifiers.isPublic) {
+      out.write('public ');
+    }
+
     // Dart `async` maps to a Kotlin `suspend fun`; `Future<T>` collapses to `T`
     // (suspension is implicit in coroutines — see [generateASTExpressionAwait]).
     var returnType = f.returnType;
@@ -624,7 +631,47 @@ class ApolloCodeGeneratorKotlin extends ApolloCodeGenerator {
     if (operator == ASTExpressionOperator.divideAsInt) {
       return getASTExpressionOperatorText(ASTExpressionOperator.divide);
     }
-    return getASTExpressionOperatorText(operator);
+    // Kotlin uses named infix functions for bitwise operators instead of the
+    // C-family symbols (`&`, `|`, `^`, `<<`, `>>`). The operation formatter
+    // surrounds the operator with spaces, producing e.g. `a and b`.
+    switch (operator) {
+      case ASTExpressionOperator.bitwiseAnd:
+        return 'and';
+      case ASTExpressionOperator.bitwiseOr:
+        return 'or';
+      case ASTExpressionOperator.bitwiseXor:
+        return 'xor';
+      case ASTExpressionOperator.shiftLeft:
+        return 'shl';
+      case ASTExpressionOperator.shiftRight:
+        return 'shr';
+      default:
+        return getASTExpressionOperatorText(operator);
+    }
+  }
+
+  /// Kotlin writes bitwise-not as `x.inv()` (a method call), not `~x`.
+  @override
+  StringBuffer generateASTExpressionBitwiseNot(
+    ASTExpressionBitwiseNot expression, {
+    StringBuffer? out,
+    String indent = '',
+    bool headIndented = true,
+  }) {
+    out ??= newOutput();
+
+    if (headIndented) out.write(indent);
+
+    out.write('(');
+    generateASTExpression(
+      expression.expression,
+      out: out,
+      indent: indent,
+      headIndented: false,
+    );
+    out.write(').inv()');
+
+    return out;
   }
 
   @override

@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="Kotlin bitwise infix operators">
+    <source language="kotlin">
+        <![CDATA[
+class C {
+  fun run(): Int {
+    var r = 12 and 10
+    r = r + (12 or 10)
+    r = r + (12 xor 10)
+    r = r + (1 shl 4)
+    r = r + (32 shr 2)
+    return r
+  }
+}
+        ]]>
+    </source>
+    <call class="C" function="run" return="52">
+        []
+    </call>
+    <output>
+        []
+    </output>
+    <source-generated language="kotlin"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+class C {
+
+  fun run(): Int {
+    var r = 12 and 10
+    r = r + (12 or 10)
+    r = r + (12 xor 10)
+    r = r + (1 shl 4)
+    r = r + (32 shr 2)
+    return r
+  }
+
+}
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+</test>

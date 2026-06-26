@@ -217,18 +217,46 @@ class KotlinGrammarDefinition extends KotlinGrammarLexer {
             return block;
           });
 
+  /// Optional Kotlin member modifiers: visibility (`private`/`public`/
+  /// `internal`/`protected`) and a few common ones (`open`/`override`/
+  /// `abstract`/`final`/`const`). Returns the merged [ASTModifiers].
+  Parser<ASTModifiers> memberModifiers() => memberModifier().star().map((mods) {
+    var names = mods.cast<String>();
+    return ASTModifiers(
+      isPrivate: names.contains('private'),
+      isPublic: names.contains('public'),
+      isFinal: names.contains('final') || names.contains('const'),
+      isAbstract: names.contains('abstract'),
+    );
+  });
+
+  Parser<String> memberModifier() =>
+      ((string('private') |
+                  string('public') |
+                  string('internal') |
+                  string('protected') |
+                  string('open') |
+                  string('override') |
+                  string('abstract') |
+                  string('final') |
+                  string('const')) &
+              ref0(identifierPartLexicalToken).not())
+          .map((v) => v[0] as String)
+          .trimHidden();
+
   Parser<ASTClassField> classFieldDeclaration() =>
-      ((valToken() | varToken()).trimHidden() &
+      (memberModifiers() &
+              (valToken() | varToken()).trimHidden() &
               identifier().trimHidden() &
               char(':').trimHidden() &
               type() &
               (char('=').trimHidden() & ref0(expression)).optional() &
               char(';').trimHidden().optional())
           .map((v) {
-            var finalValue = (v[0] as Token).value == 'val';
-            var name = v[1] as String;
-            var type = v[3] as ASTType;
-            var valueOpt = v[4];
+            var finalValue = (v[1] as Token).value == 'val';
+            var name = v[2] as String;
+            var type = v[4] as ASTType;
+            var valueOpt = v[5];
             if (valueOpt != null) {
               var expression = valueOpt[1] as ASTExpression;
               type.associateToType(expression);
@@ -243,17 +271,20 @@ class KotlinGrammarDefinition extends KotlinGrammarLexer {
           });
 
   Parser<ASTClassConstructorDeclaration> classConstructorDeclaration() =>
-      (constructorToken().trimHidden() &
+      (memberModifiers() &
+              constructorToken().trimHidden() &
               constructorParametersDeclaration() &
               codeBlock())
           .map((v) {
-            var parameters = v[1] as ASTConstructorParametersDeclaration;
-            var block = v[2];
+            var modifiers = v[0] as ASTModifiers;
+            var parameters = v[2] as ASTConstructorParametersDeclaration;
+            var block = v[3];
             return ASTClassConstructorDeclaration(
               ASTType(''),
               '',
               parameters,
               block: block,
+              modifiers: modifiers,
             );
           });
 
@@ -302,22 +333,25 @@ class KotlinGrammarDefinition extends KotlinGrammarLexer {
           });
 
   Parser<ASTFunctionDeclaration> classFunctionDeclaration() =>
-      (funToken().trimHidden() &
+      (memberModifiers() &
+              funToken().trimHidden() &
               identifier() &
               functionParametersDeclaration() &
               (char(':').trimHidden() & type()).optional() &
               codeBlock())
           .map((v) {
-            var name = v[1] as String;
-            var parameters = v[2] as ASTFunctionParametersDeclaration;
-            var returnType = (v[3]?[1] as ASTType?) ?? ASTTypeVoid.instance;
-            var block = v[4] as ASTBlock;
+            var modifiers = v[0] as ASTModifiers;
+            var name = v[2] as String;
+            var parameters = v[3] as ASTFunctionParametersDeclaration;
+            var returnType = (v[4]?[1] as ASTType?) ?? ASTTypeVoid.instance;
+            var block = v[5] as ASTBlock;
             return ASTClassFunctionDeclaration(
               null,
               name,
               parameters,
               returnType,
               block: block,
+              modifiers: modifiers,
             );
           });
 
@@ -658,7 +692,8 @@ class KotlinGrammarDefinition extends KotlinGrammarLexer {
           });
 
   Parser<ASTExpressionOperator> expressionOperator() =>
-      (char('+') |
+      (ref0(bitwiseInfixOperator) |
+              char('+') |
               char('-') |
               char('*') |
               char('/') |
@@ -673,7 +708,39 @@ class KotlinGrammarDefinition extends KotlinGrammarLexer {
               string('||'))
           .trimHidden()
           .map((v) {
-            return getASTExpressionOperator(v);
+            // Word-operators ([bitwiseInfixOperator]) already yield the enum;
+            // symbol-operators yield a [String] to be mapped.
+            if (v is ASTExpressionOperator) return v;
+            return getASTExpressionOperator(v as String);
+          });
+
+  /// Kotlin has no `&`/`|`/`^`/`<<`/`>>` symbols; bitwise operations use named
+  /// infix functions instead: `a and b`, `a or b`, `a xor b`, `a shl b`,
+  /// `a shr b`. Matched as whole words (via the [identifierPartLexicalToken]
+  /// negative-lookahead) so identifiers like `android` or `order` are not
+  /// mis-parsed as operators.
+  Parser<ASTExpressionOperator> bitwiseInfixOperator() =>
+      ((string('and') |
+                  string('or') |
+                  string('xor') |
+                  string('shl') |
+                  string('shr')) &
+              ref0(identifierPartLexicalToken).not())
+          .map((v) {
+            switch (v[0] as String) {
+              case 'and':
+                return ASTExpressionOperator.bitwiseAnd;
+              case 'or':
+                return ASTExpressionOperator.bitwiseOr;
+              case 'xor':
+                return ASTExpressionOperator.bitwiseXor;
+              case 'shl':
+                return ASTExpressionOperator.shiftLeft;
+              case 'shr':
+                return ASTExpressionOperator.shiftRight;
+              default:
+                throw UnsupportedError(v[0] as String);
+            }
           });
 
   Parser<ASTExpression> expressionNoOperation() =>
