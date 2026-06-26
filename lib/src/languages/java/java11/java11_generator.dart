@@ -18,6 +18,35 @@ class ApolloCodeGeneratorJava11 extends ApolloCodeGenerator {
     : super('java11', codeStorage);
 
   @override
+  StringBuffer generateASTExpressionLiteralFunction(
+    ASTExpressionLiteralFunction expression, {
+    StringBuffer? out,
+    String indent = '',
+    bool headIndented = true,
+  }) {
+    out ??= newOutput();
+    if (headIndented) out.write(indent);
+
+    var f = expression.function;
+    generateFunctionParametersNames(f, out: out);
+
+    // Java lambda: `(params) -> expr` or `(params) -> { body }`.
+    out.write(' -> ');
+    var single = singleReturnExpression(f);
+    if (single != null) {
+      generateASTExpression(single, out: out, headIndented: false);
+    } else {
+      var blockCode = generateASTBlock(f, indent: indent, withBrackets: false);
+      out.write('{\n');
+      out.write(blockCode);
+      out.write(indent);
+      out.write('}');
+    }
+
+    return out;
+  }
+
+  @override
   String normalizeTypeName(String typeName, [String? callingFunction]) {
     switch (typeName) {
       case 'int':

@@ -76,8 +76,20 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       classFunctions.addAll(_buildClassFunctions(clazz));
     }
 
-    var functions = [...topFunctions, ...classFunctions];
+    var baseFunctions = [...topFunctions, ...classFunctions];
+
+    // Anonymous functions / closures: each `ASTExpressionLiteralFunction`
+    // becomes a module function with a function-table slot (a function value is
+    // the i32 index of its slot, dispatched via `call_indirect`). Wasm needs a
+    // concrete signature, so rebuild each with the return/parameter types
+    // inferred from the function-typed parameter it is passed to.
+    var anonClosures = _collectAnonymousClosures(baseFunctions);
+
+    var functions = [...baseFunctions, ...anonClosures.map((c) => c.function)];
     var module = WasmModuleContext(functions, classLayouts: classLayouts);
+    for (var c in anonClosures) {
+      module.registerClosure(c);
+    }
 
     // A public function with a String or List parameter requires the host to
     // allocate the argument in module memory, so ensure `__alloc` is exported.
@@ -103,6 +115,12 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       );
     }
     out.writeBytes(sectionFunction, description: "Section: Function");
+    if (module.requiresTable) {
+      out.writeBytes(
+        generateSectionTable(module),
+        description: "Section: Table",
+      );
+    }
     if (module.requiresMemory) {
       out.writeBytes(
         generateSectionMemory(module),
@@ -116,6 +134,12 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       );
     }
     out.writeBytes(sectionExports, description: "Section: Export");
+    if (module.requiresTable) {
+      out.writeBytes(
+        generateSectionElement(module),
+        description: "Section: Element",
+      );
+    }
     out.writeBytes(sectionCode, description: "Section: Code");
     if (module.hasData) {
       out.writeBytes(generateSectionData(module), description: "Section: Data");
@@ -460,7 +484,21 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       ...module.importedFunctions.map(
         (imp) => _wasmFuncTypeBytes(imp.params, imp.results),
       ),
-      ...module.functions.map((f) => f.wasmSignature()),
+      ...module.functions.map((f) {
+        // A closure takes a hidden env pointer (i32) as its first parameter and
+        // uses the concrete return/parameter types inferred at registration
+        // (its declared types may be `dynamic`).
+        var info = module.closureInfo(f);
+        if (info == null) return f.wasmSignature();
+        var params = <WasmType>[
+          WasmType.i32Type,
+          ...info.paramTypes.map((t) => WasmType.fromValue(t.wasmCode)),
+        ];
+        var results = info.returnType.isVoid
+            ? const <WasmType>[]
+            : [WasmType.fromValue(info.returnType.wasmCode)];
+        return _wasmFuncTypeBytes(params, results);
+      }),
       ...module.synthFunctions.map(
         (s) => _wasmFuncTypeBytes(s.params, s.results),
       ),
@@ -549,6 +587,292 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     out.writeLeb128Block(indexes, description: "Functions type indexes");
 
     return out;
+  }
+
+  /// Table section: a single `funcref` table holding the module's function
+  /// values (closures), sized to the number of table functions.
+  BytesOutput generateSectionTable(
+    WasmModuleContext module, {
+    BytesOutput? out,
+  }) {
+    out ??= newOutput();
+
+    var size = module.tableFunctions.length;
+    var entry = BytesOutput(
+      data: [
+        BytesOutput(data: Wasm.funcRefType, description: "Elem type funcref"),
+        BytesOutput(data: 0x00, description: "Limits flags(min only)"),
+        BytesOutput(
+          data: Leb128.encodeUnsigned(size),
+          description: "Min($size)",
+        ),
+      ],
+      description: "Table 0",
+    );
+
+    out.writeByte(Wasm.sectionTable, description: "Section Table ID");
+    out.writeBytesLeb128Block([
+      BytesOutput(data: Leb128.encodeUnsigned(1), description: "Tables count"),
+      entry,
+    ], description: "Tables");
+
+    return out;
+  }
+
+  /// Element section: one active segment initializing table 0 (from offset 0)
+  /// with the function indices of each table function, slot-by-slot.
+  BytesOutput generateSectionElement(
+    WasmModuleContext module, {
+    BytesOutput? out,
+  }) {
+    out ??= newOutput();
+
+    var funcIndices = module.tableFunctions
+        .map(
+          (f) => BytesOutput(
+            data: Leb128.encodeUnsigned(module.functionIndexByDeclaration(f)),
+            description: "Func index",
+          ),
+        )
+        .toList();
+
+    var segment = BytesOutput(
+      data: [
+        BytesOutput(
+          data: Leb128.encodeUnsigned(0),
+          description: "Segment flags(active, table 0, offset expr)",
+        ),
+        BytesOutput(
+          data: [...Wasm32.i32Const(0), Wasm.end],
+          description: "Offset (i32.const 0)",
+        ),
+        BytesOutput(
+          data: Leb128.encodeUnsigned(funcIndices.length),
+          description: "Functions count",
+        ),
+        ...funcIndices,
+      ],
+      description: "Element segment 0",
+    );
+
+    out.writeByte(Wasm.sectionElement, description: "Section Element ID");
+    out.writeBytesLeb128Block([
+      BytesOutput(
+        data: Leb128.encodeUnsigned(1),
+        description: "Segments count",
+      ),
+      segment,
+    ], description: "Elements");
+
+    return out;
+  }
+
+  /// Collects anonymous functions (closures) and computes their Wasm layout:
+  /// concrete return/parameter types (inferred from the function-typed
+  /// parameter each is passed to) and the captured-variable environment.
+  List<WasmClosureInfo> _collectAnonymousClosures(
+    List<ASTFunctionDeclaration> baseFunctions,
+  ) {
+    var moduleFnNames = baseFunctions.map((f) => f.name).toSet();
+
+    // Map each closure to the function type it is passed as, and to the
+    // function that lexically encloses it (for resolving captured-var types).
+    var expected = <ASTFunctionDeclaration, ASTTypeFunction>{};
+    var enclosingOf = <ASTFunctionDeclaration, ASTFunctionDeclaration>{};
+    for (var encl in baseFunctions) {
+      for (var node in encl.descendantChildren) {
+        if (node is ASTExpressionLiteralFunction) {
+          enclosingOf.putIfAbsent(node.function, () => encl);
+        }
+        if (node is ASTExpressionLocalFunctionInvocation) {
+          var callee = _findModuleFunction(
+            baseFunctions,
+            node.name,
+            node.arguments.length,
+          );
+          if (callee == null) continue;
+          var args = node.arguments;
+          for (var i = 0; i < args.length; ++i) {
+            var arg = args[i];
+            if (arg is ASTExpressionLiteralFunction) {
+              var pt = callee.parameters.getParameterByIndex(i)?.type;
+              if (pt is ASTTypeFunction) expected[arg.function] = pt;
+            }
+          }
+        }
+        // A returned closure takes its signature from the enclosing function's
+        // (concrete) function return type, e.g. `int Function(int) make() { ... }`.
+        if (node is ASTStatementReturnWithExpression) {
+          var ret = node.expression;
+          var enclReturn = encl.returnType;
+          if (ret is ASTExpressionLiteralFunction &&
+              enclReturn is ASTTypeFunction) {
+            expected[ret.function] = enclReturn;
+          }
+        }
+      }
+    }
+
+    var result = <WasmClosureInfo>[];
+    var seen = <ASTFunctionDeclaration>{};
+    for (var encl in baseFunctions) {
+      for (var node in encl.descendantChildren) {
+        if (node is ASTExpressionLiteralFunction) {
+          var fn = node.function;
+          if (!seen.add(fn)) continue;
+
+          var funcType = expected[fn];
+          var returnType = _closureReturnType(fn, funcType);
+          var paramTypes = _closureParamTypes(fn, funcType);
+          var captures = _closureCaptures(fn, enclosingOf[fn], moduleFnNames);
+
+          // Env struct layout: i32 table slot at offset 0, then captures.
+          var offset = 4;
+          var layout = <WasmCapture>[];
+          for (var c in captures) {
+            layout.add((name: c.name, type: c.type, offset: offset));
+            offset += _elemSize(c.type);
+          }
+
+          result.add(
+            WasmClosureInfo(
+              fn,
+              returnType,
+              paramTypes,
+              layout,
+              offset,
+              result.length,
+            ),
+          );
+        }
+      }
+    }
+    return result;
+  }
+
+  ASTFunctionDeclaration? _findModuleFunction(
+    List<ASTFunctionDeclaration> functions,
+    String name,
+    int arity,
+  ) {
+    for (var f in functions) {
+      if (f.name == name && f.parameters.size == arity) return f;
+    }
+    return null;
+  }
+
+  ASTType _closureReturnType(
+    ASTFunctionDeclaration fn,
+    ASTTypeFunction? funcType,
+  ) {
+    var declared = fn.returnType;
+    if (declared is! ASTTypeDynamic && !declared.isVoid) return declared;
+
+    if (funcType != null) {
+      var generics = funcType.generics;
+      if (generics != null && generics.isNotEmpty) {
+        var rt = generics.first;
+        if (rt is! ASTTypeDynamic && !rt.isVoid) return rt;
+      }
+    }
+
+    if (declared.isVoid) return declared;
+
+    throw UnsupportedError(
+      "Wasm: can't infer the return type of an anonymous function. Pass it to a "
+      "typed function parameter with a concrete return type, e.g. "
+      "`int Function(int n)`.",
+    );
+  }
+
+  /// Concrete parameter types for closure [fn]: a declared (typed) parameter
+  /// keeps its type; an untyped parameter takes the type from the function-typed
+  /// parameter [funcType] (`generics[i + 1]`).
+  List<ASTType> _closureParamTypes(
+    ASTFunctionDeclaration fn,
+    ASTTypeFunction? funcType,
+  ) {
+    var params = fn.parameters.allParameters;
+    var fromType = funcType?.generics;
+    var result = <ASTType>[];
+    for (var i = 0; i < params.length; ++i) {
+      var declared = params[i].type;
+      if (declared is! ASTTypeDynamic) {
+        result.add(declared);
+        continue;
+      }
+      // generics[0] is the return type; parameter i is generics[i + 1].
+      if (fromType != null && fromType.length > i + 1) {
+        var t = fromType[i + 1];
+        if (t is! ASTTypeDynamic) {
+          result.add(t);
+          continue;
+        }
+      }
+      throw UnsupportedError(
+        "Wasm: can't infer the type of parameter `${params[i].name}` of an "
+        "anonymous function. Pass it to a typed function parameter, e.g. "
+        "`int Function(int n)`.",
+      );
+    }
+    return result;
+  }
+
+  /// The free variables captured by closure [fn] (referenced in its body but not
+  /// declared as its parameters/locals, nor a module function), paired with the
+  /// type they have in the [enclosing] function's scope.
+  List<({String name, ASTType type})> _closureCaptures(
+    ASTFunctionDeclaration fn,
+    ASTFunctionDeclaration? enclosing,
+    Set<String> moduleFnNames,
+  ) {
+    var declared = <String>{};
+    for (var p in fn.parameters.allParameters) {
+      declared.add(p.name);
+    }
+    for (var v in fn.statements.declaredVariables()) {
+      declared.add(v.key);
+    }
+
+    var used = <String>[];
+    var usedSet = <String>{};
+    for (var node in fn.descendantChildren) {
+      if (node is ASTScopeVariable) {
+        var name = node.name;
+        if (name == 'this' ||
+            declared.contains(name) ||
+            moduleFnNames.contains(name)) {
+          continue;
+        }
+        if (usedSet.add(name)) used.add(name);
+      }
+    }
+
+    if (used.isEmpty) return const [];
+
+    // Resolve captured-variable types from the enclosing function's scope.
+    var scope = <String, ASTType>{};
+    if (enclosing != null) {
+      for (var p in enclosing.parameters.allParameters) {
+        scope[p.name] = p.type;
+      }
+      for (var v in enclosing.statements.declaredVariables()) {
+        scope[v.key] = v.value;
+      }
+    }
+
+    var result = <({String name, ASTType type})>[];
+    for (var name in used) {
+      var type = scope[name];
+      if (type == null || type is ASTTypeDynamic) {
+        throw UnsupportedError(
+          "Wasm: can't capture variable `$name` in a closure (its type isn't "
+          "statically known).",
+        );
+      }
+      result.add((name: name, type: type));
+    }
+    return result;
   }
 
   BytesOutput generateSectionMemory(
@@ -1488,6 +1812,19 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
         );
       }
 
+      // A function value held in a local variable (a closure / function-typed
+      // parameter): dispatch via `call_indirect`.
+      var localFn = context.getLocalVariable(name);
+      if (localFn != null && localFn.type is ASTTypeFunction) {
+        return _emitIndirectCall(
+          expression,
+          localFn.type as ASTTypeFunction,
+          localFn.index,
+          out: out,
+          context: context,
+        );
+      }
+
       throw StateError(
         "Can't resolve local function `$name` with $argsCount argument(s) "
         "in the Wasm function index table.",
@@ -1555,6 +1892,112 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     context.assertStackLength(
       stackLng0 + (returnType.isVoid ? 0 : 1),
       "After call `$name` result",
+    );
+
+    return out;
+  }
+
+  /// Calls a function value held in a local (a closure / function-typed
+  /// parameter) via `call_indirect`. The value is the i32 table index; the
+  /// signature comes from the variable's [funcType] (`generics[0]` = return
+  /// type, the rest = parameter types).
+  BytesOutput _emitIndirectCall(
+    ASTExpressionLocalFunctionInvocation expression,
+    ASTTypeFunction funcType,
+    int localIndex, {
+    BytesOutput? out,
+    WasmContext? context,
+  }) {
+    out ??= newOutput();
+    context ??= WasmContext();
+
+    var arguments = expression.arguments;
+    var generics = funcType.generics ?? const <ASTType>[];
+    var returnType = generics.isNotEmpty
+        ? generics.first
+        : ASTTypeDynamic.instance;
+    var paramTypes = generics.length > 1
+        ? generics.sublist(1)
+        : const <ASTType>[];
+
+    final stackLng0 = context.stackLength;
+
+    // The function value is a pointer to the closure struct; it is also passed
+    // as the hidden first argument (the environment).
+    out.write(
+      Wasm.localGet(localIndex),
+      description: "[OP] closure env ptr `${expression.name}`",
+    );
+    context.stackPush(_astTypeInt32, "closure env `${expression.name}`");
+
+    // Push arguments (converting to the declared parameter types).
+    for (var i = 0; i < arguments.length; ++i) {
+      generateASTExpression(arguments[i], out: out, context: context);
+      var stackType = context.stackGet(0)!.type;
+      if (i < paramTypes.length) {
+        _autoConvertStackTypes(
+          stackType,
+          paramTypes[i],
+          out: out,
+          context: context,
+        );
+      }
+    }
+
+    // Push the table slot loaded from the closure struct (`env[0]`).
+    out.write(
+      Wasm.localGet(localIndex),
+      description: "[OP] closure ptr `${expression.name}` (slot load)",
+    );
+    out.write(Wasm32.i32Load(2, 0));
+    context.stackPush(_astTypeInt32, "closure table slot `${expression.name}`");
+
+    // Resolve the type index matching the call signature (env i32 + params).
+    var paramCodes = [
+      WasmType.i32Type.value,
+      ...paramTypes.map((t) => t.wasmCode),
+    ];
+    var resultCode = returnType.isVoid ? null : returnType.wasmCode;
+    var typeIndex = context.module!.typeIndexForSignature(
+      paramCodes,
+      resultCode,
+    );
+    if (typeIndex < 0) {
+      throw StateError(
+        "Wasm: no function type matches the indirect-call signature of "
+        "`${expression.name}` ($funcType).",
+      );
+    }
+
+    out.write(
+      Wasm.callIndirect(typeIndex),
+      description: "[OP] call_indirect `${expression.name}` (type $typeIndex)",
+    );
+
+    // Drop the env, the arguments and the table slot; push the return value.
+    context.stackDrop(); // table slot
+    for (var i = 0; i < arguments.length; ++i) {
+      context.stackDrop();
+    }
+    context.stackDrop(); // env pointer
+    if (!returnType.isVoid) {
+      ASTType resultType;
+      if (returnType is ASTTypeInt) {
+        resultType = _astTypeInt64;
+      } else if (returnType is ASTTypeDouble) {
+        resultType = _astTypeDouble64;
+      } else {
+        resultType = returnType;
+      }
+      context.stackPush(
+        resultType,
+        "call_indirect `${expression.name}` result",
+      );
+    }
+
+    context.assertStackLength(
+      stackLng0 + (returnType.isVoid ? 0 : 1),
+      "After call_indirect `${expression.name}`",
     );
 
     return out;
@@ -2121,6 +2564,151 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
   }
 
   @override
+  BytesOutput generateASTExpressionLiteralFunction(
+    ASTExpressionLiteralFunction expression, {
+    BytesOutput? out,
+    WasmContext? context,
+  }) {
+    out ??= newOutput();
+    context ??= WasmContext();
+
+    var module = context.module;
+    var info = module?.closureInfo(expression.function);
+    if (module == null || info == null) {
+      throw UnsupportedError(
+        "Wasm: this anonymous function wasn't registered as a function value: "
+        "$expression",
+      );
+    }
+
+    module.requiresMemory = true;
+    module.requiresHeapGlobal = true;
+
+    final s0 = context.stackLength;
+
+    // A function value is an i32 pointer to a heap struct
+    // `[tableSlot@0, capture0, capture1, ...]`.
+    out.write(
+      Wasm32.i32Const(info.envSize),
+      description: "[OP] closure env size (${info.envSize})",
+    );
+    _emitInlineAlloc(out, context); // size -> ptr
+
+    var ptrLocal = context.scratchLocal(_astTypeString, 12);
+    out.write(Wasm.localSet(ptrLocal), description: "[OP] save closure ptr");
+
+    // Store the table slot at offset 0.
+    out.write(Wasm.localGet(ptrLocal));
+    out.write(Wasm32.i32Const(info.slot));
+    out.write(
+      Wasm32.i32Store(2, 0),
+      description: "[OP] closure[0] = table slot ${info.slot}",
+    );
+
+    // Store each captured variable's current value into the environment.
+    for (var c in info.captures) {
+      out.write(Wasm.localGet(ptrLocal));
+      _emitCapturedValueRead(out, context, c.name);
+      _emitElemStore(out, c.type, c.offset);
+    }
+
+    // Leave the closure pointer on the stack as the result.
+    out.write(Wasm.localGet(ptrLocal), description: "[OP] closure ptr (value)");
+    context.stackPush(
+      ASTTypeFunction(),
+      "closure value (slot ${info.slot}, env ${info.envSize}B)",
+    );
+    context.assertStackLength(s0 + 1, "After closure value");
+
+    return out;
+  }
+
+  /// Emits (untracked) the current value of [name] for storing into a closure
+  /// environment: a captured variable (nested closure), a class field, or a
+  /// local variable of the enclosing scope.
+  void _emitCapturedValueRead(
+    BytesOutput out,
+    WasmContext context,
+    String name,
+  ) {
+    if (context.isCapturedVariable(name)) {
+      var cap = context.capturedVariables[name]!;
+      out.write(Wasm.localGet(context.closureEnvLocalIndex));
+      _emitElemLoad(out, cap.type, cap.offset);
+      return;
+    }
+    if (context.isFieldAccess(name)) {
+      out.write(Wasm.localGet(context.thisLocalIndex));
+      _emitElemLoad(
+        out,
+        context.classLayout!.types[name]!,
+        context.classLayout!.offsets[name]!,
+      );
+      return;
+    }
+    var localVar = context.getLocalVariable(name);
+    if (localVar == null) {
+      throw StateError("Wasm: can't read captured value `$name`.");
+    }
+    out.write(Wasm.localGet(localVar.index));
+  }
+
+  @override
+  BytesOutput generateASTExpressionConditional(
+    ASTExpressionConditional expression, {
+    BytesOutput? out,
+    WasmContext? context,
+  }) {
+    out ??= newOutput();
+    context ??= WasmContext();
+
+    final stackLng0 = context.stackLength;
+
+    // Condition (i32 boolean).
+    generateASTExpression(expression.condition, out: out, context: context);
+    context.assertStackLength(stackLng0 + 1, "After conditional condition");
+
+    var condType = context.stackGet(0)!.type;
+    if (condType != _astTypeInt32) {
+      throw StateError(
+        "Conditional (ternary) condition is not a boolean (i32): $condType",
+      );
+    }
+
+    // The `if` block yields the value of the selected branch, so it needs the
+    // result type up-front. Both branches must agree on this type.
+    var resultType = expression.resolveType(null);
+    if (resultType is Future) {
+      throw UnsupportedError(
+        "Conditional (ternary) with async type resolution not supported in Wasm",
+      );
+    }
+
+    out.write(
+      Wasm.ifInstruction(resultType.wasmType),
+      description: "[OP] conditional (ternary): $expression",
+    );
+    context.stackDrop(_astTypeInt32);
+
+    // `then` branch value.
+    generateASTExpression(expression.valueIfTrue, out: out, context: context);
+    // The two branches are mutually exclusive: drop the `then` result from the
+    // virtual stack before generating the `else` branch.
+    context.stackDrop();
+
+    out.writeByte(Wasm.elseInstruction, description: "[OP] conditional else");
+
+    // `else` branch value.
+    generateASTExpression(expression.valueIfFalse, out: out, context: context);
+
+    out.writeByte(Wasm.end, description: "[OP] conditional end");
+
+    context.assertStackLength(stackLng0 + 1, "After conditional (ternary)");
+
+    return out;
+  }
+
+  @override
   BytesOutput generateASTExpressionOperation(
     ASTExpressionOperation expression, {
     BytesOutput? out,
@@ -2557,6 +3145,23 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     context ??= WasmContext();
 
     var name = expression.variable.name;
+
+    // A captured variable is read from the closure environment (`env + offset`).
+    if (context.isCapturedVariable(name)) {
+      final s0 = context.stackLength;
+      var cap = context.capturedVariables[name]!;
+      out.write(
+        Wasm.localGet(context.closureEnvLocalIndex),
+        description: "[OP] closure env ptr",
+      );
+      _emitElemLoad(out, cap.type, cap.offset);
+      context.stackPush(
+        _elemStackType(cap.type),
+        "captured `$name` (env + ${cap.offset})",
+      );
+      context.assertStackLength(s0 + 1, "After captured `$name`");
+      return out;
+    }
 
     // A bare name that is a class field (and not a local) reads `this + offset`.
     if (context.isFieldAccess(name)) {
@@ -3463,7 +4068,9 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
 
     // For an `async` function the declared `Future<T>` collapses to `T` (Wasm
     // executes synchronously); compile it as a normal function returning `T`.
-    var effectiveReturnType = f.effectiveReturnType;
+    // Anonymous functions use the concrete return type inferred at registration.
+    var effectiveReturnType =
+        context.module?.returnTypeOverride(f) ?? f.effectiveReturnType;
 
     var return0 = context.returnsLength;
     context.returnsPush(
@@ -3472,10 +4079,30 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     );
     context.assertReturnsLength(return0 + 1);
 
-    var parametersVariables = f.parameters.declaredVariables();
-
-    for (var v in parametersVariables) {
-      context.addLocalVariable(v.key, v.value);
+    var closureInfo = context.module?.closureInfo(f);
+    if (closureInfo != null) {
+      // Hidden environment pointer as parameter 0.
+      context.closureEnvLocalIndex = context.addLocalVariable(
+        '__env',
+        _astTypeInt32,
+      );
+      // Real parameters with their inferred (concrete) types.
+      var params = f.parameters.allParameters;
+      for (var i = 0; i < params.length; ++i) {
+        var t = i < closureInfo.paramTypes.length
+            ? closureInfo.paramTypes[i]
+            : params[i].type;
+        context.addLocalVariable(params[i].name, t);
+      }
+      // Captured variables are read from the environment struct.
+      for (var c in closureInfo.captures) {
+        context.capturedVariables[c.name] = (type: c.type, offset: c.offset);
+      }
+    } else {
+      var parametersVariables = f.parameters.declaredVariables();
+      for (var v in parametersVariables) {
+        context.addLocalVariable(v.key, v.value);
+      }
     }
 
     var localVariables = f.statements.declaredVariables();
@@ -6493,6 +7120,18 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
         out: out,
         context: context,
       );
+    } else if (expression is ASTExpressionConditional) {
+      return generateASTExpressionConditional(
+        expression,
+        out: out,
+        context: context,
+      );
+    } else if (expression is ASTExpressionLiteralFunction) {
+      return generateASTExpressionLiteralFunction(
+        expression,
+        out: out,
+        context: context,
+      );
     }
 
     throw UnsupportedError("Can't generate expression: $expression");
@@ -7181,6 +7820,45 @@ class WasmClassLayout {
   WasmClassLayout(this.className, this.offsets, this.types, this.size);
 }
 
+/// A captured variable of a closure: its [name], [type] and byte [offset]
+/// within the closure's heap environment struct.
+typedef WasmCapture = ({String name, ASTType type, int offset});
+
+/// Compile-time info for an anonymous function (closure). A closure value is an
+/// i32 pointer to a heap struct laid out as `[tableSlot@0, capture0, ...]`; the
+/// closure function takes that pointer as a hidden first parameter (`env`) and
+/// reads its captured variables from it.
+class WasmClosureInfo {
+  final ASTFunctionDeclaration function;
+
+  /// Concrete return type (the declared one may be `dynamic`).
+  final ASTType returnType;
+
+  /// Concrete parameter types (the declared ones may be `dynamic` / untyped),
+  /// in declaration order, inferred from the function-typed parameter the
+  /// closure is passed to.
+  final List<ASTType> paramTypes;
+
+  /// Captured (free) variables, with their env-struct offsets.
+  final List<WasmCapture> captures;
+
+  /// Total size of the environment struct in bytes (`4` for the table slot plus
+  /// each capture's size).
+  final int envSize;
+
+  /// The function-table slot (the closure's dispatch index).
+  final int slot;
+
+  WasmClosureInfo(
+    this.function,
+    this.returnType,
+    this.paramTypes,
+    this.captures,
+    this.envSize,
+    this.slot,
+  );
+}
+
 /// A synthesized module function wrapping a class constructor. Its Wasm
 /// signature takes the constructor's value parameters and returns an i32 object
 /// pointer; codegen allocates the struct, stores fields, runs the body and
@@ -7240,6 +7918,91 @@ class WasmModuleContext {
 
   /// The field layout of the class whose instances have type [t], or `null`.
   WasmClassLayout? layoutForType(ASTType t) => classLayouts[t.name];
+
+  // --- Function table (for closures / function values via `call_indirect`) ---
+
+  /// Functions placed in the module's function table, in table-slot order. A
+  /// function value is an i32 pointer to a heap closure struct
+  /// `[tableSlot@0, captured0, captured1, ...]`.
+  final List<ASTFunctionDeclaration> tableFunctions = [];
+
+  /// Closure info per anonymous-function declaration.
+  final Map<ASTFunctionDeclaration, WasmClosureInfo> closures = {};
+
+  bool get requiresTable => tableFunctions.isNotEmpty;
+
+  /// Registers an anonymous function (closure), returning its table slot.
+  int registerClosure(WasmClosureInfo info) {
+    var existing = closures[info.function];
+    if (existing != null) return existing.slot;
+    tableFunctions.add(info.function);
+    closures[info.function] = info;
+    return info.slot;
+  }
+
+  /// The table slot of the anonymous function [f], or -1.
+  int closureSlot(ASTFunctionDeclaration f) => closures[f]?.slot ?? -1;
+
+  /// The closure info for [f], or `null` if [f] is not a closure.
+  WasmClosureInfo? closureInfo(ASTFunctionDeclaration f) => closures[f];
+
+  bool isClosure(ASTFunctionDeclaration f) => closures.containsKey(f);
+
+  /// The concrete return type to use for closure [f] (its declared return type
+  /// may be `dynamic`), or `null` if [f] is not a closure.
+  ASTType? returnTypeOverride(ASTFunctionDeclaration f) =>
+      closures[f]?.returnType;
+
+  /// The Wasm function index of a module-defined function [f] (by identity).
+  int functionIndexByDeclaration(ASTFunctionDeclaration f) {
+    for (var i = 0; i < functions.length; ++i) {
+      if (identical(functions[i], f)) return importCount + i;
+    }
+    return -1;
+  }
+
+  /// Finds the type index whose signature matches [paramCodes] → [resultCode]
+  /// (a Wasm value-type byte, or `null` for void). Used by `call_indirect`,
+  /// which must reference a type index. Reuses an existing function's type
+  /// (every callable-by-value function is a module function, so a match
+  /// exists). Returns -1 if none matches.
+  int typeIndexForSignature(List<int> paramCodes, int? resultCode) {
+    var want = _sigKey(paramCodes, resultCode);
+
+    var index = 0;
+    for (var imp in importedFunctions) {
+      var key = _sigKey(
+        imp.params.map((p) => p.value).toList(),
+        imp.results.isEmpty ? null : imp.results.first.value,
+      );
+      if (key == want) return index;
+      index++;
+    }
+    for (var f in functions) {
+      var info = closures[f];
+      var rt = info?.returnType ?? f.effectiveReturnType;
+      // Closures take a hidden env pointer (i32) as their first parameter and
+      // use their inferred (concrete) parameter types.
+      var params = info != null
+          ? [WasmType.i32Type.value, ...info.paramTypes.map((t) => t.wasmCode)]
+          : f.parametersTypesWasmCode;
+      var key = _sigKey(params, rt.isVoid ? null : rt.wasmCode);
+      if (key == want) return index;
+      index++;
+    }
+    for (var s in synthFunctions) {
+      var key = _sigKey(
+        s.params.map((p) => p.value).toList(),
+        s.results.isEmpty ? null : s.results.first.value,
+      );
+      if (key == want) return index;
+      index++;
+    }
+    return -1;
+  }
+
+  static String _sigKey(List<int> paramCodes, int? resultCode) =>
+      '${paramCodes.join(',')}>${resultCode ?? ''}';
 
   /// Resolves the Wasm function index of class [className]'s method
   /// [methodName] taking [arity] declared arguments (excluding `this`).
@@ -7633,6 +8396,16 @@ class WasmContext {
   WasmClassLayout? classLayout;
   int thisLocalIndex = -1;
 
+  /// When generating a closure body, the local index of the hidden environment
+  /// pointer (parameter 0), and the captured variables stored in that
+  /// environment (read as `env + offset`). `-1` / empty when not a closure.
+  int closureEnvLocalIndex = -1;
+  final Map<String, ({ASTType type, int offset})> capturedVariables = {};
+
+  /// Whether [name] is a captured variable read from the closure environment.
+  bool isCapturedVariable(String name) =>
+      closureEnvLocalIndex >= 0 && capturedVariables.containsKey(name);
+
   /// Whether [name] resolves to a field of the current method's class (and is
   /// not shadowed by a local variable).
   bool isFieldAccess(String name) =>
@@ -7924,6 +8697,9 @@ extension _ASTTypeExtension on ASTType {
       return WasmType.i32Type;
     } else if (this is ASTTypeMap) {
       // A map is an i32 pointer into linear memory.
+      return WasmType.i32Type;
+    } else if (this is ASTTypeFunction) {
+      // A function value is an i32 index into the module's function table.
       return WasmType.i32Type;
     } else if (this is ASTTypeVoid) {
       return WasmType.voidType;

@@ -627,6 +627,68 @@ class ApolloCodeGeneratorLua extends ApolloCodeGenerator {
   }
 
   @override
+  StringBuffer generateASTExpressionLiteralFunction(
+    ASTExpressionLiteralFunction expression, {
+    StringBuffer? out,
+    String indent = '',
+    bool headIndented = true,
+  }) {
+    out ??= newOutput();
+    if (headIndented) out.write(indent);
+
+    var f = expression.function;
+
+    // Lua anonymous function: `function(params) ... end`.
+    out.write('function');
+    generateFunctionParametersNames(f, out: out);
+
+    var single = singleReturnExpression(f);
+    if (single != null) {
+      out.write(' return ');
+      generateASTExpression(single, out: out, headIndented: false);
+      out.write(' end');
+    } else {
+      out.write('\n');
+      var blockCode = generateASTBlock(f, indent: indent, withBrackets: false);
+      out.write(blockCode);
+      out.write(indent);
+      out.write('end');
+    }
+
+    return out;
+  }
+
+  @override
+  StringBuffer generateASTExpressionConditional(
+    ASTExpressionConditional expression, {
+    StringBuffer? out,
+    String indent = '',
+    bool headIndented = true,
+  }) {
+    out ??= newOutput();
+    if (headIndented) out.write(indent);
+
+    // Lua has no `?:` ternary; the idiomatic form is `cond and a or b`
+    // (short-circuit). NOTE: this differs from a true ternary when `valueIfTrue`
+    // is `false`/`nil` — a known limitation of the Lua idiom.
+    generateASTExpression(expression.condition, out: out, headIndented: false);
+    out.write(' and ');
+    generateASTExpression(
+      expression.valueIfTrue,
+      out: out,
+      headIndented: false,
+    );
+    out.write(' or ');
+    generateASTExpression(
+      expression.valueIfFalse,
+      out: out,
+      headIndented: false,
+    );
+
+    return out;
+  }
+
+  @override
   StringBuffer generateASTExpressionOperation(
     ASTExpressionOperation expression, {
     StringBuffer? out,

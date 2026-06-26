@@ -919,6 +919,10 @@ class ASTTypeVar extends ASTType<dynamic> {
 
   @override
   FutureOr<ASTValue<dynamic>> toValue(VMContext context, Object? v) {
+    // Preserve function values (anonymous functions / closures) assigned to a
+    // `var`/`final` variable so they remain callable.
+    if (v is ASTValueFunction) return v;
+
     if (v is ASTValue<dynamic> && v.type == this) {
       return v;
     }
@@ -960,6 +964,10 @@ class ASTTypeDynamic extends ASTType<dynamic> {
 
   @override
   FutureOr<ASTValue<dynamic>> toValue(VMContext context, Object? v) {
+    // Preserve function values (anonymous functions / closures) so they remain
+    // callable when held in a `dynamic`/untyped variable or parameter.
+    if (v is ASTValueFunction) return v;
+
     if (v is ASTValue && v.type == this) {
       return v;
     }
@@ -1466,22 +1474,41 @@ class ASTTypeFunction<F extends Function> extends ASTType<F> {
   ASTTypeFunction([ASTType? returnType, List<ASTType>? parameters])
     : super('Function', generics: [?returnType, ...?parameters]);
 
+  /// Any function type is accepted as another function type. Function values
+  /// carry their own declaration and are checked at call time, so signature
+  /// generics (return/parameter types) aren't enforced structurally here — this
+  /// lets an untyped `Function` argument bind to a typed `int Function(int)`
+  /// parameter and vice versa.
+  @override
+  bool acceptsType(ASTType type) {
+    if (type is ASTTypeFunction) return true;
+    return super.acceptsType(type);
+  }
+
   @override
   Iterable<ASTNode> get children => [];
 
   @override
-  ASTValueFunction<F>? toValue(VMContext context, Object? v) {
+  FutureOr<ASTValueFunction<F>?> toValue(VMContext context, Object? v) {
     if (v == null) return null;
 
-    throw UnsupportedError(
-      "Can't resolve an `ASTValueFunction` from a: ${v.runtimeType}",
-    );
+    if (v is ASTValueFunction) return v as ASTValueFunction<F>;
+
+    if (v is ASTValue) {
+      return v.getValue(context).resolveMapped((val) => toASTValue(val));
+    }
+
+    return toASTValue(v);
   }
 
   @override
   ASTValueFunction<F>? toASTValue(Object? value) {
     if (value == null) return null;
 
+    if (value is ASTValueFunction) return value as ASTValueFunction<F>;
+
+    // A raw Dart [Function] isn't backed by an AST declaration, so it can't be
+    // turned into an `ASTValueFunction` here.
     throw UnsupportedError(
       "Can't resolve an `ASTValueFunction` from a: ${value.runtimeType}",
     );

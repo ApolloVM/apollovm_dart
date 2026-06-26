@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="Function-type parameter without return type">
+    <source language="dart">
+        <![CDATA[
+int f1(Function(int n) f) {
+  var a = f(10);
+  var b = f(20);
+  print('a: $a');
+  print('b: $b');
+  return a + b;
+}
+
+int run() {
+  return f1((int n) => n * 10);
+}
+        ]]>
+    </source>
+    <call function="run" return="300">
+        []
+    </call>
+    <output>
+        ["a: 100", "b: 200"]
+    </output>
+
+    <source-generated language="dart"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+  int f1(Function(int) f) {
+    var a = f(10);
+    var b = f(20);
+    print('a: $a');
+    print('b: $b');
+    return a + b;
+  }
+
+  int run() {
+    return f1((int n) => n * 10);
+  }
+
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+</test>

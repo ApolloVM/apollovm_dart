@@ -183,6 +183,11 @@ class ASTBlock extends ASTStatement {
     if (set == null) {
       _functions[name] = ASTFunctionSetSingle(f);
     } else {
+      // Idempotent: a local function declaration is re-registered on every
+      // execution (see `ASTStatementFunctionDeclaration.run`); without this
+      // guard the same declaration would accumulate in the set, corrupting the
+      // AST and duplicating it in regenerated code.
+      if (set.functions.any((e) => identical(e, f))) return;
       var set2 = set.add(f);
       if (!identical(set, set2)) {
         _functions[name] = set2;

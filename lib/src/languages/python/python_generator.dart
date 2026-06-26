@@ -766,6 +766,67 @@ class ApolloCodeGeneratorPython extends ApolloCodeGenerator {
   }
 
   @override
+  StringBuffer generateASTExpressionLiteralFunction(
+    ASTExpressionLiteralFunction expression, {
+    StringBuffer? out,
+    String indent = '',
+    bool headIndented = true,
+  }) {
+    out ??= newOutput();
+    if (headIndented) out.write(indent);
+
+    var f = expression.function;
+
+    // Python anonymous functions are `lambda params: expr` and can only hold a
+    // single expression.
+    var single = singleReturnExpression(f);
+    if (single == null) {
+      throw UnsupportedError(
+        "Python `lambda` only supports a single-expression body: $f",
+      );
+    }
+
+    out.write('lambda');
+    if (f.parametersSize > 0) {
+      out.write(' ');
+      generateASTParametersDeclaration(f.parameters, out: out);
+    }
+    out.write(': ');
+    generateASTExpression(single, out: out, headIndented: false);
+
+    return out;
+  }
+
+  @override
+  StringBuffer generateASTExpressionConditional(
+    ASTExpressionConditional expression, {
+    StringBuffer? out,
+    String indent = '',
+    bool headIndented = true,
+  }) {
+    out ??= newOutput();
+    if (headIndented) out.write(indent);
+
+    // Python's conditional expression: `valueIfTrue if condition else
+    // valueIfFalse`.
+    generateASTExpression(
+      expression.valueIfTrue,
+      out: out,
+      headIndented: false,
+    );
+    out.write(' if ');
+    generateASTExpression(expression.condition, out: out, headIndented: false);
+    out.write(' else ');
+    generateASTExpression(
+      expression.valueIfFalse,
+      out: out,
+      headIndented: false,
+    );
+
+    return out;
+  }
+
+  @override
   StringBuffer generateASTExpressionNegation(
     ASTExpressionNegation expression, {
     StringBuffer? out,

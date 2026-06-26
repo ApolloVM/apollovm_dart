@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="Self member access: field read and method call">
+    <source language="python">
+        <![CDATA[
+class Counter:
+    base = 100
+
+    def bump(self, n):
+        return n + 1
+
+    def total(self, n):
+        b = self.bump(n)
+        return self.base + b
+        ]]>
+    </source>
+    <call class="Counter" function="total" return="106">
+        [5]
+    </call>
+    <output>
+        []
+    </output>
+
+    <source-generated language="python"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+class Counter:
+    base = 100
+
+    def bump(self, n):
+        return n + 1
+
+    def total(self, n):
+        b = self.bump(n)
+        return self.base + b
+
+
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+
+    <source-generated language="dart"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+class Counter {
+
+  dynamic base = 100;
+
+  dynamic bump(dynamic n) {
+    return n + 1;
+  }
+
+  dynamic total(dynamic n) {
+    var b = this.bump(n);
+    return this.base + b;
+  }
+
+}
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+</test>

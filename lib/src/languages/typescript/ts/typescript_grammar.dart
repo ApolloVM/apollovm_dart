@@ -617,6 +617,27 @@ class TypeScriptGrammarDefinition extends TypeScriptGrammarLexer {
   Parser<ASTStatementFunctionDeclaration> statementArrowFunction() =>
       arrowNamedFunction().map((f) => ASTStatementFunctionDeclaration(f));
 
+  /// Anonymous arrow function used as an expression (a closure), e.g.
+  /// `(a, b) => a + b`, `x => x * x`, `(a): number => a`.
+  Parser<ASTExpression> expressionArrowFunction() =>
+      (arrowParameters() &
+              typeAnnotation().optional() &
+              string('=>').trimHidden() &
+              arrowBody())
+          .map((v) {
+            var parameters = v[0] as ASTFunctionParametersDeclaration;
+            var declaredReturn = v[1] as ASTType?;
+            var block = v[3] as ASTBlock;
+            var f = ASTFunctionDeclaration(
+              '',
+              parameters,
+              declaredReturn ?? inferReturnType(block),
+              block: block,
+              modifiers: ASTModifiers.modifierStatic,
+            );
+            return ASTExpressionLiteralFunction(f);
+          });
+
   /// Arrow parameters: `(a, b)`, `()`, or a single bare identifier `a`.
   Parser<ASTFunctionParametersDeclaration> arrowParameters() =>
       (functionParametersDeclaration() | arrowSingleParameter())
@@ -755,6 +776,24 @@ class TypeScriptGrammarDefinition extends TypeScriptGrammarLexer {
   Parser<ASTExpression> parseExpressionInString() => ref0(expression);
 
   Parser<ASTExpression> expression() =>
+      (ref0(expressionOperationChain) &
+              (char('?').trimHidden() &
+                      ref0(expression) &
+                      char(':').trimHidden() &
+                      ref0(expression))
+                  .optional())
+          .map((v) {
+            var base = v[0] as ASTExpression;
+            var ternary = v[1] as List?;
+            if (ternary == null) return base;
+            return ASTExpressionConditional(
+              base,
+              ternary[1] as ASTExpression,
+              ternary[3] as ASTExpression,
+            );
+          });
+
+  Parser<ASTExpression> expressionOperationChain() =>
       (ref0(expressionNoOperation) &
               (expressionOperator() & ref0(expressionNoOperation)).star())
           .map((v) {
@@ -803,7 +842,8 @@ class TypeScriptGrammarDefinition extends TypeScriptGrammarLexer {
           });
 
   Parser<ASTExpression> expressionNoOperation() =>
-      (expressionNegate() |
+      (expressionArrowFunction() |
+              expressionNegate() |
               expressionLiteral() |
               expressionGroupFunctionInvocation() |
               expressionGroup() |

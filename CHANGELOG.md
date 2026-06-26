@@ -1,3 +1,61 @@
+## 0.1.36
+
+### Ternary / conditional expressions
+
+- Parse `condition ? a : b` in Dart, Java, JavaScript and TypeScript, plus the
+  native conditional-expression forms `a if condition else b` (Python) and
+  `if (condition) a else b` (Kotlin).
+- New `ASTExpressionConditional` AST node (only the selected branch is
+  evaluated); generated idiomatically per target: `?:` (Dart/Java/JS/TS),
+  `a if c else b` (Python), `if (c) a else b` (Kotlin), `c and a or b` (Lua),
+  and a value-typed `if`/`else` block in Wasm.
+
+### Anonymous functions / lambdas / closures
+
+- New `ASTExpressionLiteralFunction` AST node that captures the defining scope
+  (closure semantics); function values held in variables/parameters are now
+  invocable.
+- Parse anonymous functions: `(x) => …` / `(x) { … }` (Dart), `(x) => …` /
+  `x => …` (JavaScript, TypeScript) and `lambda x: …` (Python).
+- Generate anonymous functions for every target: arrow forms (Dart/JS/TS),
+  Java `(x) -> …`, Kotlin `{ x -> … }`, Lua `function(x) … end`, Python
+  `lambda x: …`.
+
+### Dart function types
+
+- Parse function types `int Function(int n)`, `void Function()` and
+  `Function(int n)` (omitted return type → `dynamic`); `ASTTypeFunction` accepts
+  any other function type, and function types are generated as
+  `int Function(int)` (Dart) / bare `Function` elsewhere.
+
+### Wasm: closures via function table + `call_indirect`
+
+- Added Table and Element sections and the `call_indirect` instruction. A
+  function value is an i32 pointer to a heap environment struct
+  `[tableSlot, captured…]`; each closure function takes a hidden environment
+  pointer and reads its captured variables from it.
+- Concrete signatures are inferred for capture-less closures, untyped lambda
+  parameters, capturing closures, and closures returned through a concrete
+  `Function` return type. Each closure instance gets its own heap environment.
+- *Not yet supported in Wasm:* polymorphic dynamic-return function types (a
+  `Function(int)` parameter called with both an `int`- and a `double`-returning
+  lambda) — these report a clear error and still work on the interpreter.
+
+### Bug fixes
+
+- Python: `self.method()` and `self.field` now round-trip correctly; fixed a
+  `self.field` getter parse crash and a stack overflow on self-referential
+  bindings (`s = s + i`) during code generation.
+- Local function declarations were duplicated in regenerated code after a
+  function was executed (`addFunction` is now idempotent and block generation
+  no longer emits a statement-level function twice).
+- Fixed doubled indentation of nested function declarations.
+
+### Documentation
+
+- Added **Python** to the package description and the README (a `Python`
+  language section and updated the TODO list).
+
 ## 0.1.35
 
 ### Python language support

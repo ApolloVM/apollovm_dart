@@ -498,6 +498,29 @@ class KotlinGrammarDefinition extends KotlinGrammarLexer {
       expression().map((e) => ParsedString.expression(e));
 
   Parser<ASTExpression> expression() =>
+      (ref0(ifExpression) | ref0(expressionOperationChain))
+          .cast<ASTExpression>();
+
+  /// Kotlin's `if` used as an expression that yields a value:
+  /// `if (cond) valueIfTrue else valueIfFalse`. Statement-level `if` with
+  /// `{ ... }` blocks is handled earlier by [branch].
+  Parser<ASTExpression> ifExpression() =>
+      (ifToken().trimHidden() &
+              char('(').trimHidden() &
+              ref0(expression) &
+              char(')').trimHidden() &
+              ref0(expressionOperationChain) &
+              elseToken().trimHidden() &
+              ref0(expression))
+          .map(
+            (v) => ASTExpressionConditional(
+              v[2] as ASTExpression,
+              v[4] as ASTExpression,
+              v[6] as ASTExpression,
+            ),
+          );
+
+  Parser<ASTExpression> expressionOperationChain() =>
       (ref0(expressionNoOperation) &
               (expressionOperator() & ref0(expressionNoOperation)).star())
           .map((v) {

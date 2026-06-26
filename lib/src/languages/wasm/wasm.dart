@@ -18,6 +18,9 @@ enum WasmType {
   final int value;
 
   const WasmType(this.name, this.value);
+
+  /// The [WasmType] whose [value] byte is [v].
+  static WasmType fromValue(int v) => values.firstWhere((t) => t.value == v);
 }
 
 enum FloatAlign { align1, align2, align3 }
@@ -36,11 +39,16 @@ class Wasm {
   static const sectionType = 0x01;
   static const sectionImport = 0x02;
   static const sectionFunction = 0x03;
+  static const sectionTable = 0x04;
   static const sectionMemory = 0x05;
   static const sectionGlobal = 0x06;
   static const sectionExport = 0x07;
+  static const sectionElement = 0x09;
   static const sectionCode = 0x0a;
   static const sectionData = 0x0b;
+
+  /// `funcref` element/table type.
+  static const funcRefType = 0x70;
 
   /// Export/import external kinds.
   static const externalKindFunction = 0x00;
@@ -88,6 +96,14 @@ class Wasm {
   ];
 
   static List<int> call(int i) => <int>[0x10, ...Leb128.encodeUnsigned(i)];
+
+  /// `call_indirect typeidx tableidx(0)`: calls the function whose index is on
+  /// top of the stack, in table 0, checked against type [typeIndex].
+  static List<int> callIndirect(int typeIndex) => <int>[
+    0x11,
+    ...Leb128.encodeUnsigned(typeIndex),
+    0x00,
+  ];
 
   static const drop = 0x1a;
   static const select = 0x1b;

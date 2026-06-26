@@ -113,6 +113,8 @@ abstract class PythonGrammarLexer extends BaseGrammarLexer {
 
   Parser isToken() => ref1(keyword, 'is');
 
+  Parser lambdaToken() => ref1(keyword, 'lambda');
+
   Parser noneToken() => ref1(keyword, 'None');
 
   Parser notToken() => ref1(keyword, 'not');

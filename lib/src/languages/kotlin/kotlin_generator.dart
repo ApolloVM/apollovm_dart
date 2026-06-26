@@ -17,6 +17,71 @@ class ApolloCodeGeneratorKotlin extends ApolloCodeGenerator {
     : super('kotlin', codeStorage);
 
   @override
+  StringBuffer generateASTExpressionLiteralFunction(
+    ASTExpressionLiteralFunction expression, {
+    StringBuffer? out,
+    String indent = '',
+    bool headIndented = true,
+  }) {
+    out ??= newOutput();
+    if (headIndented) out.write(indent);
+
+    var f = expression.function;
+
+    // Kotlin lambda: `{ params -> body }`. Parameters are listed without
+    // parentheses; an empty list omits the `->`.
+    out.write('{ ');
+    if (f.parametersSize > 0) {
+      generateASTParametersDeclaration(f.parameters, out: out);
+      out.write(' -> ');
+    }
+
+    var single = singleReturnExpression(f);
+    if (single != null) {
+      generateASTExpression(single, out: out, headIndented: false);
+      out.write(' }');
+    } else {
+      out.write('\n');
+      var blockCode = generateASTBlock(f, indent: indent, withBrackets: false);
+      out.write(blockCode);
+      out.write(indent);
+      out.write('}');
+    }
+
+    return out;
+  }
+
+  @override
+  StringBuffer generateASTExpressionConditional(
+    ASTExpressionConditional expression, {
+    StringBuffer? out,
+    String indent = '',
+    bool headIndented = true,
+  }) {
+    out ??= newOutput();
+    if (headIndented) out.write(indent);
+
+    // Kotlin has no `?:` ternary; `if/else` is an expression that yields a
+    // value: `if (cond) valueIfTrue else valueIfFalse`.
+    out.write('if (');
+    generateASTExpression(expression.condition, out: out, headIndented: false);
+    out.write(') ');
+    generateASTExpression(
+      expression.valueIfTrue,
+      out: out,
+      headIndented: false,
+    );
+    out.write(' else ');
+    generateASTExpression(
+      expression.valueIfFalse,
+      out: out,
+      headIndented: false,
+    );
+
+    return out;
+  }
+
+  @override
   String normalizeTypeName(String typeName, [String? callingFunction]) {
     switch (typeName) {
       case 'int':

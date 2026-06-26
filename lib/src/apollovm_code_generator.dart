@@ -144,8 +144,18 @@ abstract class ApolloCodeGenerator
       }
     }
 
+    // Local function declarations are kept as statements (and emitted in the
+    // statements loop below). Executing the block also registers them in
+    // `block.functions` for resolution, so skip those here to avoid emitting
+    // them twice.
+    var statementFunctions = block.statements
+        .whereType<ASTStatementFunctionDeclaration>()
+        .map((s) => s.functionDeclaration)
+        .toList();
+
     for (var set in block.functions) {
       for (var f in set.functions) {
+        if (statementFunctions.any((s) => identical(s, f))) continue;
         if (f is ASTClassFunctionDeclaration) {
           generateASTClassFunctionDeclaration(f, out: out, indent: indent2);
         } else {
@@ -269,9 +279,24 @@ abstract class ApolloCodeGenerator
       return generateASTTypeArray2D(type, out: out, indent: indent);
     } else if (type is ASTTypeArray3D) {
       return generateASTTypeArray3D(type, out: out, indent: indent);
+    } else if (type is ASTTypeFunction) {
+      return generateASTTypeFunction(type, out: out, indent: indent);
     }
 
     return generateASTTypeDefault(type, out: out, indent: indent);
+  }
+
+  /// Renders a function type. The default drops the signature generics and
+  /// emits a bare `Function` (valid as a type name in most targets); languages
+  /// with a dedicated function-type syntax (e.g. Dart) override this.
+  StringBuffer generateASTTypeFunction(
+    ASTTypeFunction type, {
+    StringBuffer? out,
+    String indent = '',
+  }) {
+    out ??= newOutput();
+    out.write('Function');
+    return out;
   }
 
   @override
@@ -883,12 +908,13 @@ abstract class ApolloCodeGenerator
   }) {
     out ??= newOutput();
 
-    if (headIndented) out.write(indent);
-
+    // `generateASTFunctionDeclaration` writes the leading indent itself, so
+    // don't write it here too (that produced a doubled indent for nested
+    // function declarations).
     return generateASTFunctionDeclaration(
       statement.functionDeclaration,
       out: out,
-      indent: indent,
+      indent: headIndented ? indent : '',
     );
   }
 
@@ -1243,6 +1269,20 @@ abstract class ApolloCodeGenerator
         indent: indent,
         headIndented: headIndented,
       );
+    } else if (expression is ASTExpressionConditional) {
+      return generateASTExpressionConditional(
+        expression,
+        out: out,
+        indent: indent,
+        headIndented: headIndented,
+      );
+    } else if (expression is ASTExpressionLiteralFunction) {
+      return generateASTExpressionLiteralFunction(
+        expression,
+        out: out,
+        indent: indent,
+        headIndented: headIndented,
+      );
     }
 
     throw UnsupportedError("Can't generate expression: $expression");
@@ -1312,6 +1352,102 @@ abstract class ApolloCodeGenerator
     if (group2) out.write('(');
     out.write(exp2);
     if (group2) out.write(')');
+
+    return out;
+  }
+
+  @override
+  StringBuffer generateASTExpressionConditional(
+    ASTExpressionConditional expression, {
+    StringBuffer? out,
+    String indent = '',
+    bool headIndented = true,
+  }) {
+    out ??= newOutput();
+
+    if (headIndented) out.write(indent);
+
+    var cond = generateASTExpression(
+      expression.condition,
+      indent: '$indent  ',
+      headIndented: false,
+    );
+    var valueTrue = generateASTExpression(
+      expression.valueIfTrue,
+      indent: '$indent  ',
+      headIndented: false,
+    );
+    var valueFalse = generateASTExpression(
+      expression.valueIfFalse,
+      indent: '$indent  ',
+      headIndented: false,
+    );
+
+    if (expression.condition.isComplex) {
+      out.write('(');
+      out.write(cond);
+      out.write(')');
+    } else {
+      out.write(cond);
+    }
+
+    out.write(' ? ');
+    out.write(valueTrue);
+    out.write(' : ');
+    out.write(valueFalse);
+
+    return out;
+  }
+
+  /// If [f]'s body is a single `return <expr>;`, returns that expression (used
+  /// to emit concise single-expression lambdas); otherwise returns `null`.
+  ASTExpression? singleReturnExpression(ASTFunctionDeclaration f) {
+    var statements = f.statements;
+    if (statements.length != 1) return null;
+    var stm = statements.first;
+    if (stm is ASTStatementReturnWithExpression) return stm.expression;
+    return null;
+  }
+
+  /// Generates the comma-separated parameter names of [f] wrapped in `( )`.
+  StringBuffer generateFunctionParametersNames(
+    ASTFunctionDeclaration f, {
+    required StringBuffer out,
+  }) {
+    out.write('(');
+    if (f.parametersSize > 0) {
+      generateASTParametersDeclaration(f.parameters, out: out);
+    }
+    out.write(')');
+    return out;
+  }
+
+  /// Default (C-style arrow, e.g. JavaScript/TypeScript) anonymous function:
+  /// `(params) => expr` or `(params) => { body }`.
+  @override
+  StringBuffer generateASTExpressionLiteralFunction(
+    ASTExpressionLiteralFunction expression, {
+    StringBuffer? out,
+    String indent = '',
+    bool headIndented = true,
+  }) {
+    out ??= newOutput();
+    if (headIndented) out.write(indent);
+
+    var f = expression.function;
+    generateFunctionParametersNames(f, out: out);
+    out.write(' => ');
+
+    var single = singleReturnExpression(f);
+    if (single != null) {
+      generateASTExpression(single, out: out, headIndented: false);
+    } else {
+      var blockCode = generateASTBlock(f, indent: indent, withBrackets: false);
+      out.write('{\n');
+      out.write(blockCode);
+      out.write(indent);
+      out.write('}');
+    }
 
     return out;
   }

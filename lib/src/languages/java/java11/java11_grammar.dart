@@ -478,6 +478,24 @@ class Java11GrammarDefinition extends Java11GrammarLexer {
           });
 
   Parser<ASTExpression> expression() =>
+      (ref0(expressionOperationChain) &
+              (char('?').trimHidden() &
+                      ref0(expression) &
+                      char(':').trimHidden() &
+                      ref0(expression))
+                  .optional())
+          .map((v) {
+            var base = v[0] as ASTExpression;
+            var ternary = v[1] as List?;
+            if (ternary == null) return base;
+            return ASTExpressionConditional(
+              base,
+              ternary[1] as ASTExpression,
+              ternary[3] as ASTExpression,
+            );
+          });
+
+  Parser<ASTExpression> expressionOperationChain() =>
       (ref0(expressionNoOperation) &
               (expressionOperator() & ref0(expressionNoOperation)).star())
           .map((v) {

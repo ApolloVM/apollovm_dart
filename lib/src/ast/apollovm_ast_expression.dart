@@ -817,6 +817,103 @@ class ASTExpressionNegative extends ASTExpression {
   }
 }
 
+/// [ASTExpression] for a conditional (ternary) expression:
+/// `condition ? valueIfTrue : valueIfFalse` in C-style languages, or
+/// `valueIfTrue if condition else valueIfFalse` in Python.
+///
+/// Only the selected branch is evaluated.
+class ASTExpressionConditional extends ASTExpression {
+  ASTExpression condition;
+  ASTExpression valueIfTrue;
+  ASTExpression valueIfFalse;
+
+  ASTExpressionConditional(this.condition, this.valueIfTrue, this.valueIfFalse);
+
+  @override
+  bool get isComplex => true;
+
+  @override
+  Iterable<ASTNode> get children => [condition, valueIfTrue, valueIfFalse];
+
+  @override
+  void resolveNode(ASTNode? parentNode) {
+    super.resolveNode(parentNode);
+
+    condition.resolveNode(this);
+    valueIfTrue.resolveNode(this);
+    valueIfFalse.resolveNode(this);
+  }
+
+  @override
+  FutureOr<ASTType> resolveType(VMContext? context) =>
+      ASTExpression.typeFromExpressions([
+        valueIfTrue,
+        valueIfFalse,
+      ], context: context);
+
+  @override
+  FutureOr<ASTValue> run(VMContext parentContext, ASTRunStatus runStatus) {
+    var context = defineRunContext(parentContext);
+
+    return condition.run(context, runStatus).resolveMapped((condVal) {
+      return condVal.getValue(context).resolveMapped((condResolved) {
+        if (condResolved is! bool) {
+          throw ApolloVMRuntimeError(
+            'A conditional (ternary) condition should return a boolean: '
+            '$condResolved',
+          );
+        }
+
+        var branch = condResolved ? valueIfTrue : valueIfFalse;
+        return branch.run(context, runStatus);
+      });
+    });
+  }
+
+  @override
+  String toString({bool asGroup = false}) {
+    var s = '$condition ? $valueIfTrue : $valueIfFalse';
+    return asGroup ? '($s)' : s;
+  }
+}
+
+/// [ASTExpression] for an anonymous function / lambda / closure literal, e.g.
+/// `(x) => x * 2`, `(x) { return x * 2; }` or Python's `lambda x: x * 2`.
+///
+/// Evaluating it yields an [ASTValueFunction] that captures the current scope,
+/// so the function body can read variables from the enclosing function
+/// (closure semantics).
+class ASTExpressionLiteralFunction extends ASTExpression {
+  final ASTFunctionDeclaration function;
+
+  ASTExpressionLiteralFunction(this.function);
+
+  @override
+  bool get isComplex => true;
+
+  @override
+  Iterable<ASTNode> get children => [function];
+
+  @override
+  void resolveNode(ASTNode? parentNode) {
+    super.resolveNode(parentNode);
+
+    function.resolveNode(parentNode);
+  }
+
+  @override
+  FutureOr<ASTType> resolveType(VMContext? context) => ASTTypeFunction();
+
+  @override
+  FutureOr<ASTValue> run(VMContext parentContext, ASTRunStatus runStatus) {
+    // Capture the defining scope so the body can reference enclosing variables.
+    return ASTValueFunction(ASTTypeFunction(), function, null, parentContext);
+  }
+
+  @override
+  String toString({bool asGroup = false}) => '$function';
+}
+
 /// [ASTExpression] that awaits another [expression] (`await x`).
 ///
 /// At runtime it resolves [expression] and, if the resolved value is a
@@ -1942,6 +2039,76 @@ class ASTExpressionLocalFunctionInvocation
 
   @override
   bool get isComplex => false;
+
+  @override
+  FutureOr<ASTType> resolveType(VMContext? context) {
+    if (context != null) {
+      var declared = context.getFunction(name, _getASTFunctionSignature());
+      if (declared == null) {
+        // The name refers to a variable holding a function value (closure or
+        // function-typed parameter); its return type isn't known statically.
+        var variable = context.getVariable(name, true);
+        return variable.resolveMapped((v) {
+          if (v == null) return super.resolveType(context);
+          // Use the function value's declared return type when available.
+          return v.getValue(context).resolveMapped((value) {
+            if (value is ASTValueFunction) {
+              return value.astFunction.returnType;
+            }
+            return ASTTypeDynamic.instance;
+          });
+        });
+      }
+    }
+    return super.resolveType(context);
+  }
+
+  @override
+  FutureOr<ASTValue> run(VMContext parentContext, ASTRunStatus runStatus) {
+    // A declared function (including named arrow functions) takes precedence.
+    var fSignature = _getASTFunctionSignature();
+    var declared = parentContext.getFunction(name, fSignature);
+    if (declared != null) {
+      return super.run(parentContext, runStatus);
+    }
+
+    // Otherwise the name may refer to a variable holding a function value: an
+    // anonymous closure assigned to a variable, or a function-typed parameter.
+    return parentContext.getVariable(name, true).resolveMapped((variable) {
+      if (variable != null) {
+        return variable.getValue(parentContext).resolveMapped((value) {
+          if (value is ASTValueFunction) {
+            return _invokeFunctionValue(parentContext, runStatus, value);
+          }
+          // Not a function value: let the declared-function path report the
+          // "can't find function" error.
+          return super.run(parentContext, runStatus);
+        });
+      }
+      return super.run(parentContext, runStatus);
+    });
+  }
+
+  FutureOr<ASTValue> _invokeFunctionValue(
+    VMContext parentContext,
+    ASTRunStatus runStatus,
+    ASTValueFunction value,
+  ) {
+    return _resolveArgumentsValues(
+      parentContext,
+      runStatus,
+      arguments,
+    ).resolveMapped((argumentsValues) {
+      var ret = value.call(
+        parentContext,
+        positionalParameters: argumentsValues,
+      );
+      if (!hasChainFunctionInvocation) return ret;
+      return ret.resolveMapped((prevObj) {
+        return _callChainFunction(parentContext, runStatus, prevObj);
+      });
+    });
+  }
 
   @override
   ASTInvocableDeclaration _getFunction(VMContext parentContext) {
