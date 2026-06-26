@@ -18,15 +18,15 @@ ApolloVM is a portable VM (native, JS/Web, Flutter) that can parse, translate, a
 
 ## Use Cases
 
-- **Cross-language translation / porting** — translate source between any supported languages.
-- **Embedded scripting** — run user logic inside Dart/Flutter apps, no redeploy.
-- **Business rules & formulas** — runtime-configurable logic in a real language, not a mini-DSL.
-- **Sandboxed execution** — run untrusted snippets isolated, via the interpreter or Wasm.
-- **On-the-fly Wasm** — compile loaded source to WebAssembly at runtime, no toolchain.
-- **Playgrounds & education** — multi-language runners/REPLs showing translated output.
-- **Reference implementations / test oracles** — write once, run/emit across languages to cross-check.
-- **Polyglot AST tooling** — one shared AST for analysis, transformation, and codegen.
-- **MCP tool for LLMs** — validate LLM-generated code (parse/run/check) and act as a sandboxed reasoning scratchpad.
+- **Cross-language translation / porting** — translate and regenerate source between any supported languages to prototype, migrate, or share logic across stacks.
+- **Embedded scripting** — let users write logic in a familiar language and run it inside a Dart/Flutter app at runtime, with no app-store redeploy.
+- **Business rules & formulas** — evaluate runtime-configurable logic (pricing, validation, workflows) authored in a real language instead of a bespoke mini-DSL.
+- **Sandboxed execution** — run untrusted, user-supplied snippets isolated from the host, via the interpreter or compiled Wasm.
+- **On-the-fly WebAssembly** — compile loaded source to portable Wasm modules at runtime (browser or native) without any external toolchain.
+- **Playgrounds & education** — build multi-language runners/REPLs that show the same program across languages and its translated output.
+- **Reference implementations / test oracles** — write an algorithm once, then run or emit it across language targets to cross-check behavior.
+- **Polyglot AST tooling** — parse multiple languages into one shared AST for analysis, transformation, and code generation.
+- **MCP tool for LLMs** — expose ApolloVM over MCP so an LLM can validate generated code (parse, run, check output) and use it as a sandboxed reasoning scratchpad.
 
 -----------------------------
 
