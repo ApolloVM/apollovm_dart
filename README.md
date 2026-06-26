@@ -19,7 +19,7 @@ ApolloVM is a portable VM (native, JS/Web, Flutter) that can parse, translate, a
 ## Use Cases
 
 - **Cross-language translation / porting** — translate and regenerate source between any supported languages to prototype, migrate, or share logic across stacks.
-- **Embedded scripting** — let users write logic in a familiar language and run it inside a Dart/Flutter app at runtime, with no app-store redeploy.
+- **Embedded scripting in Dart/Flutter** — ship logic, UIs, and behavior that update live at runtime, with no rebuild or app-store redeploy.
 - **Business rules & formulas** — evaluate runtime-configurable logic (pricing, validation, workflows) authored in a real language instead of a bespoke mini-DSL.
 - **Sandboxed execution** — run untrusted, user-supplied snippets isolated from the host, via the interpreter or compiled Wasm.
 - **On-the-fly WebAssembly** — compile loaded source to portable Wasm modules at runtime (browser or native) without any external toolchain.
