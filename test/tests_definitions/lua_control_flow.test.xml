@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="Lua control flow: break, repeat/until (do-while)">
+    <source language="lua">
+        <![CDATA[
+function run()
+  local total = 0
+  local i = 0
+  while i < 10 do
+    i = i + 1
+    if i == 6 then
+      break
+    end
+    total = total + i
+  end
+  local j = 0
+  repeat
+    total = total + 10
+    j = j + 1
+  until j >= 3
+  return total
+end
+        ]]>
+    </source>
+    <call function="run" return="45">
+        []
+    </call>
+    <output>
+        []
+    </output>
+
+    <source-generated language="lua"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+  function run()
+    local total = 0
+    local i = 0
+    while i < 10 do
+      i = i + 1
+      if i == 6 then
+          break
+      end
+      total = total + i
+    end
+    local j = 0
+    repeat
+      total = total + 10
+      j = j + 1
+    until j >= 3
+    return total
+  end
+
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+</test>

@@ -457,6 +457,50 @@ class ApolloCodeGeneratorKotlin extends ApolloCodeGenerator {
     return out;
   }
 
+  /// Kotlin uses `when` instead of `switch` (no fall-through).
+  @override
+  StringBuffer generateASTStatementSwitch(
+    ASTStatementSwitch statement, {
+    StringBuffer? out,
+    String indent = '',
+    bool headIndented = true,
+  }) {
+    out ??= newOutput();
+
+    if (headIndented) out.write(indent);
+
+    var indent2 = '$indent  ';
+
+    out.write('when (');
+    generateASTExpression(
+      statement.expression,
+      out: out,
+      indent: indent,
+      headIndented: false,
+    );
+    out.write(') {\n');
+
+    for (var c in statement.cases) {
+      out.write(indent2);
+      if (c.isDefault) {
+        out.write('else -> {\n');
+      } else {
+        generateASTExpression(c.value!, out: out, headIndented: false);
+        out.write(' -> {\n');
+      }
+      out.write(
+        generateASTBlock(c.block, indent: indent2, withBrackets: false),
+      );
+      out.write(indent2);
+      out.write('}\n');
+    }
+
+    out.write(indent);
+    out.write('}');
+
+    return out;
+  }
+
   @override
   StringBuffer generateASTStatementReturnValue(
     ASTStatementReturnValue statement, {

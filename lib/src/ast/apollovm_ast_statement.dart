@@ -1455,14 +1455,20 @@ class ASTSwitchCase {
 
 /// [ASTStatement] for `switch (exp) { case v: ... break; default: ... }`.
 ///
-/// Uses C-style fall-through: once a `case` matches, its block and the blocks of
-/// the following clauses run in order until a `break` (or `return`). If no
-/// `case` matches, the `default` clause (if present) runs.
+/// With [fallThrough] (the default, C-style `switch`): once a `case` matches,
+/// its block and the blocks of the following clauses run in order until a
+/// `break` (or `return`). With [fallThrough] `false` (e.g. Kotlin `when`,
+/// Python `match`): only the matched clause runs — there is no fall-through and
+/// `break` is implicit. If no `case` matches, the `default` clause (if present)
+/// runs.
 class ASTStatementSwitch extends ASTStatement {
   final ASTExpression expression;
   final List<ASTSwitchCase> cases;
 
-  ASTStatementSwitch(this.expression, this.cases);
+  /// Whether matched clauses fall through to the next clause (C-style).
+  final bool fallThrough;
+
+  ASTStatementSwitch(this.expression, this.cases, {this.fallThrough = true});
 
   @override
   Iterable<ASTNode> get children => [
@@ -1513,6 +1519,14 @@ class ASTStatementSwitch extends ASTStatement {
       }
 
       if (startIndex < 0) return ASTValueVoid.instance;
+
+      if (!fallThrough) {
+        // Only the matched clause runs (Kotlin `when` / Python `match`).
+        await cases[startIndex].block.run(context, runStatus);
+        // `break` is implicit here, so consume any that bubbled up.
+        if (runStatus.broke) runStatus.broke = false;
+        return ASTValueVoid.instance;
+      }
 
       // Fall-through: run from the matched clause onward until break/return.
       for (var i = startIndex; i < cases.length; ++i) {

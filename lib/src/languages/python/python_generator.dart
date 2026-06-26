@@ -463,6 +463,68 @@ class ApolloCodeGeneratorPython extends ApolloCodeGenerator {
   }
 
   @override
+  StringBuffer generateASTStatementBreak(
+    ASTStatementBreak statement, {
+    StringBuffer? out,
+    String indent = '',
+    bool headIndented = true,
+  }) {
+    out ??= newOutput();
+    if (headIndented) out.write(indent);
+    out.write('break\n');
+    return out;
+  }
+
+  @override
+  StringBuffer generateASTStatementContinue(
+    ASTStatementContinue statement, {
+    StringBuffer? out,
+    String indent = '',
+    bool headIndented = true,
+  }) {
+    out ??= newOutput();
+    if (headIndented) out.write(indent);
+    out.write('continue\n');
+    return out;
+  }
+
+  /// Python uses `match`/`case` (no fall-through); `case _:` is the default.
+  @override
+  StringBuffer generateASTStatementSwitch(
+    ASTStatementSwitch statement, {
+    StringBuffer? out,
+    String indent = '',
+    bool headIndented = true,
+  }) {
+    out ??= newOutput();
+    if (headIndented) out.write(indent);
+
+    out.write('match ');
+    generateASTExpression(
+      statement.expression,
+      out: out,
+      headIndented: false,
+    );
+    out.write(':\n');
+
+    var caseIndent = '$indent$_tab';
+    var bodyIndent = '$caseIndent$_tab';
+    for (var c in statement.cases) {
+      out.write(caseIndent);
+      if (c.isDefault) {
+        out.write('case _:\n');
+      } else {
+        out.write('case ');
+        generateASTExpression(c.value!, out: out, headIndented: false);
+        out.write(':\n');
+      }
+      _writeSuite(c.block, out, bodyIndent);
+    }
+
+    return out;
+  }
+
+  @override
   StringBuffer generateASTStatementReturnNull(
     ASTStatementReturnNull statement, {
     StringBuffer? out,

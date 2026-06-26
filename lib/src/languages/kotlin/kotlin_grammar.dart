@@ -286,13 +286,76 @@ class KotlinGrammarDefinition extends KotlinGrammarLexer {
   Parser<ASTStatement> statement() =>
       (statementTryCatch() |
               statementThrow() |
+              statementWhen() |
               branch() |
+              statementBreak() |
+              statementContinue() |
+              statementDoWhileLoop() |
               statementForEach() |
               statementWhileLoop() |
               statementReturn() |
               statementVariableDeclaration() |
               statementExpression())
           .cast<ASTStatement>();
+
+  Parser<ASTStatementBreak> statementBreak() =>
+      (string('break') &
+              ref0(identifierPartLexicalToken).not() &
+              char(';').trimHidden().optional())
+          .map((v) => ASTStatementBreak());
+
+  Parser<ASTStatementContinue> statementContinue() =>
+      (string('continue') &
+              ref0(identifierPartLexicalToken).not() &
+              char(';').trimHidden().optional())
+          .map((v) => ASTStatementContinue());
+
+  /// Kotlin `do { ... } while (cond)`.
+  Parser<ASTStatementDoWhileLoop> statementDoWhileLoop() =>
+      (string('do') &
+              ref0(identifierPartLexicalToken).not() &
+              codeBlock().trimHidden() &
+              whileToken().trimHidden() &
+              char('(').trimHidden() &
+              ref0(expression) &
+              char(')').trimHidden() &
+              char(';').trimHidden().optional())
+          .map((v) {
+            var block = v[2] as ASTBlock;
+            var cond = v[5] as ASTExpression;
+            return ASTStatementDoWhileLoop(block, cond);
+          });
+
+  /// Kotlin `when (exp) { v -> ...; else -> ... }` (no fall-through).
+  Parser<ASTStatementSwitch> statementWhen() =>
+      (string('when') &
+              ref0(identifierPartLexicalToken).not() &
+              char('(').trimHidden() &
+              ref0(expression) &
+              char(')').trimHidden() &
+              char('{').trimHidden() &
+              whenEntry().star() &
+              char('}').trimHidden())
+          .map((v) {
+            var exp = v[3] as ASTExpression;
+            var cases = (v[6] as List).cast<ASTSwitchCase>();
+            return ASTStatementSwitch(exp, cases, fallThrough: false);
+          });
+
+  Parser<ASTSwitchCase> whenEntry() =>
+      (whenEntryLabel() &
+              string('->').trimHidden() &
+              codeBlockOrSingleLineBlock())
+          .map((v) {
+            var value = v[0] as ASTExpression?;
+            var block = v[2] as ASTBlock;
+            return ASTSwitchCase(value, block);
+          });
+
+  Parser<ASTExpression?> whenEntryLabel() =>
+      ((elseToken().trimHidden()).map((v) => null) |
+              ref0(expression).map((v) => v as ASTExpression?))
+          .cast<ASTExpression?>();
 
   Parser<ASTStatementThrow> statementThrow() =>
       (throwToken().trimHidden() &
