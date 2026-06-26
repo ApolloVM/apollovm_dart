@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="C# enum value access (explicit values)">
+    <source language="csharp">
+        <![CDATA[
+enum Level {
+  Low = 1,
+  Medium = 5,
+  High = 10
+}
+
+class C {
+  static int run(){
+    int x = Level.Medium;
+    return x + Level.High;
+  }
+}
+        ]]>
+    </source>
+    <call class="C" function="run" return="15">
+        []
+    </call>
+    <output>
+        []
+    </output>
+    <source-generated language="csharp"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+enum Level {
+  Low = 1,
+  Medium = 5,
+  High = 10
+}
+class C {
+
+  static int run() {
+    int x = Level.Medium;
+    return x + Level.High;
+  }
+
+}
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+</test>

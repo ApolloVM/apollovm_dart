@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="C# generic class (declaration, type param field, instantiation)">
+    <source language="csharp">
+        <![CDATA[
+class Wrapper<T> {
+  T value;
+
+  Wrapper(T value){
+    this.value = value;
+  }
+}
+
+class Main {
+  static int run(){
+    Wrapper<int> wInt = new Wrapper<int>(10);
+    Wrapper<string> wStr = new Wrapper<string>("abc");
+    return wInt.value + 5;
+  }
+}
+        ]]>
+    </source>
+    <call class="Main" function="run" return="15">
+        []
+    </call>
+    <output>
+        []
+    </output>
+    <source-generated language="csharp"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+class Wrapper {
+
+  object value;
+
+  Wrapper(object value) {
+    this.value = value;
+  }
+
+}
+class Main {
+
+  static int run() {
+    Wrapper<int> wInt = Wrapper(10);
+    Wrapper<String> wStr = Wrapper("abc");
+    return wInt.value + 5;
+  }
+
+}
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+</test>

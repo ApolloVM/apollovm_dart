@@ -2778,6 +2778,41 @@ class ASTExpressionObjectGetterAccess extends ASTExpressionGetterAccess
     });
   }
 
+  /// If [variable] names an enum type, returns it; otherwise `null`.
+  ASTClassEnum? _enumClass() {
+    final v = variable;
+    if (v is! ASTScopeVariable) return null;
+    var node = getNodeIdentifier(v.name);
+    return node is ASTClassEnum ? node : null;
+  }
+
+  /// Resolves an enum entry reference (`EnumType.entry`) to its value: the
+  /// explicit value expression when present, otherwise the entry's ordinal
+  /// index. Returns `null` if this is not an enum entry reference.
+  FutureOr<ASTValue>? _resolveEnumEntry(
+    VMContext context,
+    ASTRunStatus runStatus,
+  ) {
+    var enumClass = _enumClass();
+    if (enumClass == null) return null;
+
+    var entries = enumClass.entries;
+    for (var i = 0; i < entries.length; ++i) {
+      if (entries[i].name == name) {
+        var value = entries[i].value;
+        if (value != null) return value.run(context, runStatus);
+        return ASTValueInt(i);
+      }
+    }
+    return null;
+  }
+
+  /// `true` if this access is an enum entry reference (`EnumType.entry`).
+  bool _isEnumEntry() {
+    var e = _enumClass();
+    return e != null && e.entries.any((entry) => entry.name == name);
+  }
+
   ASTClass? _getterClass;
 
   FutureOr<ASTClass> _getGetterClass(VMContext parentContext) {
@@ -2810,6 +2845,8 @@ class ASTExpressionObjectGetterAccess extends ASTExpressionGetterAccess
 
   @override
   FutureOr<ASTType> resolveType(VMContext? context) {
+    if (_isEnumEntry()) return ASTTypeInt.instance;
+
     if (context == null) {
       return super.resolveType(context);
     }
@@ -2834,6 +2871,8 @@ class ASTExpressionObjectGetterAccess extends ASTExpressionGetterAccess
     VMContext context,
     ASTNode? node,
   ) {
+    if (_isEnumEntry()) return ASTTypeInt.instance;
+
     return _getVariableValue(context).resolveMapped((obj) {
       if (obj is ASTClassInstance) {
         var classContext = obj.createContext(context);
@@ -2851,6 +2890,13 @@ class ASTExpressionObjectGetterAccess extends ASTExpressionGetterAccess
 
   @override
   FutureOr<ASTValue> run(VMContext parentContext, ASTRunStatus runStatus) {
+    var enumEntry = _resolveEnumEntry(parentContext, runStatus);
+    if (enumEntry != null) {
+      return enumEntry.resolveMapped(
+        (ret) => _callChainFunction(parentContext, runStatus, ret),
+      );
+    }
+
     return _getVariableValue(parentContext).resolveMapped((obj) {
       if (obj is ASTClassInstance) {
         var classContext = obj.createContext(parentContext);

@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="Java generic class (declaration, type param field, instantiation)">
+    <source language="java11">
+        <![CDATA[
+class Wrapper<T> {
+  T value;
+
+  Wrapper(T value){
+    this.value = value;
+  }
+
+  public String toString(){
+    return "<" + value + ">";
+  }
+}
+
+class Main {
+  static void run(){
+    Wrapper<Integer> wInt = new Wrapper<Integer>(10);
+    Wrapper<Double> wDouble = new Wrapper<Double>(10.23);
+    Wrapper<String> wString = new Wrapper<String>("abc");
+
+    print(wInt);
+    print(wDouble);
+    print(wString);
+  }
+}
+        ]]>
+    </source>
+    <call class="Main" function="run">
+        []
+    </call>
+    <output><![CDATA[["<10>", "<10.23>", "<abc>"]]]></output>
+    <source-generated language="java11"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+class Wrapper {
+
+  Object value;
+
+  Wrapper(Object value) {
+    this.value = value;
+  }
+
+  String toString() {
+    return "<" + value + ">";
+  }
+
+}
+class Main {
+
+  static void run() {
+    Wrapper<int> wInt = Wrapper(10);
+    Wrapper<double> wDouble = Wrapper(10.23);
+    Wrapper<String> wString = Wrapper("abc");
+    print(wInt);
+    print(wDouble);
+    print(wString);
+  }
+
+}
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+</test>

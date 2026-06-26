@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="TypeScript generic class (declaration, instantiation, value access)">
+    <source language="typescript">
+        <![CDATA[
+class Wrapper<T> {
+  value: T;
+
+  constructor(value: T){
+    this.value = value;
+  }
+}
+
+class Main {
+  run(): number {
+    let w: Wrapper<number> = new Wrapper<number>(10);
+    return w.value + 5;
+  }
+}
+        ]]>
+    </source>
+    <call class="Main" function="run" return="15">
+        []
+    </call>
+    <output>
+        []
+    </output>
+    <source-generated language="typescript"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+class Wrapper {
+
+  value;
+
+  constructor(value) {
+    this.value = value;
+  }
+
+}
+class Main {
+
+  run(): number {
+    let w: Wrapper<number> = Wrapper(10);
+    return w.value + 5;
+  }
+
+}
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+</test>

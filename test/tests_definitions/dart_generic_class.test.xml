@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="Dart generic class (declaration, type param field, instantiation)">
+    <source language="dart">
+        <![CDATA[
+class Wrapper<T> {
+  T value;
+
+  Wrapper(this.value);
+
+  String toString() => '<$value>';
+}
+
+void main() {
+  var wInt = Wrapper<int>(10);
+  var wDouble = Wrapper<double>(10.23);
+  var wString = Wrapper<String>('abc');
+
+  print(wInt);
+  print(wDouble);
+  print(wString);
+}
+        ]]>
+    </source>
+    <call function="main">
+        []
+    </call>
+    <output><![CDATA[["<10>", "<10.23>", "<abc>"]]]></output>
+    <source-generated language="dart"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+  void main() {
+    var wInt = Wrapper(10);
+    var wDouble = Wrapper(10.23);
+    var wString = Wrapper('abc');
+    print(wInt);
+    print(wDouble);
+    print(wString);
+  }
+
+class Wrapper {
+
+  dynamic value;
+
+  Wrapper(this.value);
+
+  String toString() {
+    return '<$value>';
+  }
+
+}
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+</test>

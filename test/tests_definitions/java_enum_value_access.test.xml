@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="Java enum value access (ordinal)">
+    <source language="java11">
+        <![CDATA[
+enum Day {
+  Mon,
+  Tue,
+  Wed
+}
+
+class C {
+  static int run(){
+    int d = Day.Wed;
+    return d;
+  }
+}
+        ]]>
+    </source>
+    <call class="C" function="run" return="2">
+        []
+    </call>
+    <output>
+        []
+    </output>
+    <source-generated language="java11"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+enum Day {
+  Mon,
+  Tue,
+  Wed
+}
+class C {
+
+  static int run() {
+    int d = Day.Wed;
+    return d;
+  }
+
+}
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+</test>
