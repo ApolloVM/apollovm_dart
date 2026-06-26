@@ -7,7 +7,7 @@ void main() async {
       
       class Foo {
       
-          int main(List<Object> args) {
+          static int main(List<Object> args) {
             var title = args[0];
             var a = args[1];
             var b = args[2] ~/ 2;

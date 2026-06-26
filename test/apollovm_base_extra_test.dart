@@ -1,4 +1,5 @@
 @TestOn('vm')
+@Tags(['dart', 'java'])
 library;
 
 import 'package:apollovm/apollovm.dart';
@@ -304,6 +305,7 @@ void main() {
         'Foo',
         'sum',
         positionalParameters: [3, 4],
+        classInstanceFields: const {},
       );
       expect(r.getValueNoContext(), equals(7));
     });
@@ -317,6 +319,7 @@ void main() {
         'Foo',
         'times',
         positionalParameters: [6, 7],
+        classInstanceFields: const {},
       );
       expect(r.getValueNoContext(), equals(42));
     });
@@ -364,7 +367,12 @@ class Foo {
       var runner = vm.createRunner('dart')!;
       var captured = [];
       runner.externalPrintFunction = (o) => captured.add(o);
-      await runner.executeClassMethod('', 'Foo', 'hello');
+      await runner.executeClassMethod(
+        '',
+        'Foo',
+        'hello',
+        classInstanceFields: const {},
+      );
       expect(captured, equals(['hi']));
     });
   });
@@ -426,6 +434,7 @@ class Foo {
         'Foo',
         'sum',
         positionalParameters: [2, 3],
+        classInstanceFields: const {},
       );
       expect(r.getValueNoContext(), equals(5));
     });
@@ -452,6 +461,7 @@ class Foo {
         'Foo',
         'sum',
         positionalParameters: [4, 5],
+        classInstanceFields: const {},
       );
       expect(r.getValueNoContext(), equals(9));
     });

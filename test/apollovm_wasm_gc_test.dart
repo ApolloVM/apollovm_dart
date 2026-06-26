@@ -1,5 +1,5 @@
 @TestOn('chrome')
-@Tags(['wasm-gc'])
+@Tags(['wasm', 'wasm-gc'])
 library;
 
 import 'dart:js_interop';

@@ -5,7 +5,7 @@ void main() async {
 
   var codeUnit = SourceCodeUnit('javascript', r'''
       class Foo {
-        main(title, a, b, c) {
+        static main(title, a, b, c) {
           let sumAB = a + b;
           let sumABC = a + b + c;
           print(title);

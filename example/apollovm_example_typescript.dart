@@ -5,7 +5,7 @@ void main() async {
 
   var codeUnit = SourceCodeUnit('typescript', r'''
       class Foo {
-        main(title: string, a: number, b: number, c: number): void {
+        static main(title: string, a: number, b: number, c: number): void {
           let sumAB: number = a + b;
           let sumABC: number = a + b + c;
           print(title);

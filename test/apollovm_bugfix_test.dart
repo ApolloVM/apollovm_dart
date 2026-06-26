@@ -1,4 +1,5 @@
 @TestOn('vm')
+@Tags(['dart'])
 library;
 
 import 'package:apollovm/apollovm.dart';
@@ -24,11 +25,14 @@ Future<({Object? value, List output})> _runDart(
   var output = [];
   runner.externalPrintFunction = (o) => output.add(o);
 
+  // The entry methods are declared non-static, so provide a (field-less)
+  // instance to run them — only `static` methods run without an instance.
   var astValue = await runner.executeClassMethod(
     '',
     className,
     method,
     positionalParameters: [args],
+    classInstanceFields: const {},
   );
 
   return (value: astValue.getValueNoContext(), output: output);

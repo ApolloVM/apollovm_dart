@@ -74,33 +74,39 @@ class ASTEntryPointBlock extends ASTBlock {
 
       if (!f.modifiers.isStatic) {
         if (this is ASTClass) {
-          var clazz = this as ASTClass;
-          var classContext = clazz.createContext(typeResolver, rootContext);
-          var obj = (await clazz.createInstance(
-            classContext,
-            ASTRunStatus.dummy,
-          ))!;
-
-          if (classInstanceObject != null) {
-            await clazz.setInstanceByVMObject(
+          // A non-static method needs a `this`. Only build/bind an instance when
+          // the caller supplied one; otherwise leave [context] as [rootContext]
+          // so the non-static guard in [ASTClassFunctionDeclaration.call] throws
+          // (only static methods may run without an instance).
+          if (classInstanceObject != null || classInstanceFields != null) {
+            var clazz = this as ASTClass;
+            var classContext = clazz.createContext(typeResolver, rootContext);
+            var obj = (await clazz.createInstance(
               classContext,
               ASTRunStatus.dummy,
-              obj,
-              classInstanceObject,
-            );
-          }
+            ))!;
 
-          if (classInstanceFields != null) {
-            await clazz.setInstanceByMap(
-              classContext,
-              ASTRunStatus.dummy,
-              obj,
-              classInstanceFields,
-            );
-          }
+            if (classInstanceObject != null) {
+              await clazz.setInstanceByVMObject(
+                classContext,
+                ASTRunStatus.dummy,
+                obj,
+                classInstanceObject,
+              );
+            }
 
-          classContext.setClassInstance(obj);
-          context = classContext;
+            if (classInstanceFields != null) {
+              await clazz.setInstanceByMap(
+                classContext,
+                ASTRunStatus.dummy,
+                obj,
+                classInstanceFields,
+              );
+            }
+
+            classContext.setClassInstance(obj);
+            context = classContext;
+          }
         } else {
           throw ApolloVMRuntimeError(
             "Can't call non-static function without a class context: $this",
@@ -1879,6 +1885,34 @@ class ASTClassFunctionDeclaration<T> extends ASTFunctionDeclaration<T> {
     objContext.setClassInstance(classInstance);
     return call(
       objContext,
+      positionalParameters: positionalParameters,
+      namedParameters: namedParameters,
+    );
+  }
+
+  /// Only `static` methods can run without a class instance. A non-static
+  /// method needs a `this`, so reject the call when no class instance is
+  /// reachable from [parent] (it walks parent scopes up to a [VMClassContext]).
+  ///
+  /// This is the single chokepoint for every invocation route: the entry-point
+  /// [ASTEntryPointBlock.execute], the receiver-qualified [objectCall] (which
+  /// sets the instance before calling), and unqualified internal calls. A
+  /// `static` method calling a non-static sibling without a receiver therefore
+  /// fails here instead of running against a missing `this`.
+  @override
+  FutureOr<ASTValue<T>> call(
+    VMContext parent, {
+    List? positionalParameters,
+    Map? namedParameters,
+  }) {
+    if (!modifiers.isStatic && parent.getClassInstance() == null) {
+      throw ApolloVMRuntimeError(
+        "Can't call non-static method '${clazz?.name}.$name' without a class "
+        "instance.",
+      );
+    }
+    return super.call(
+      parent,
       positionalParameters: positionalParameters,
       namedParameters: namedParameters,
     );

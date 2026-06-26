@@ -1,4 +1,14 @@
 @TestOn('vm')
+@Tags([
+  'dart',
+  'java',
+  'javascript',
+  'typescript',
+  'csharp',
+  'python',
+  'kotlin',
+  'lua',
+])
 library;
 
 import 'dart:io';

@@ -266,11 +266,14 @@ Future<void> _testCall(
   ASTValue executionReturn;
   if (callClass != null) {
     print('EXECUTING[$callIndex]: $callClass.$callFunction( $callParameters )');
+    // Definition entry methods are declared non-static, so run them against a
+    // (field-less) instance — only `static` methods run without an instance.
     executionReturn = await runner.executeClassMethod(
       '',
       callClass,
       callFunction,
       positionalParameters: callParameters,
+      classInstanceFields: const {},
     );
   } else {
     print('EXECUTING[$callIndex]: $callFunction( $callParameters )');

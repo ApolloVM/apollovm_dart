@@ -2,6 +2,9 @@
 // This code is governed by the Apache License, Version 2.0.
 // Please refer to the LICENSE and AUTHORS files for details.
 
+@Tags(['dart', 'kotlin', 'lua'])
+library;
+
 import 'package:apollovm/apollovm.dart';
 import 'package:test/test.dart';
 
@@ -26,11 +29,14 @@ Future<List<Object?>> _run(
   runner.externalPrintFunction = (o) => output.add(o);
 
   if (className != null) {
+    // Entry methods here are non-static, so run them against a (field-less)
+    // instance — only `static` methods run without an instance.
     await runner.executeClassMethod(
       '',
       className,
       function,
       positionalParameters: positionalParameters,
+      classInstanceFields: const {},
     );
   } else {
     await runner.executeFunction(

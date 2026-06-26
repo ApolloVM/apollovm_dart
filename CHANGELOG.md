@@ -1,3 +1,51 @@
+## 0.1.41
+
+### Wasm: static methods + boxed `Object`
+
+- The WebAssembly compiler now supports `static` class methods: each is
+  synthesized as an exported module function under the qualified `Class.method`
+  name (no `this`), generated like a top-level function. `ApolloRunnerWasm`
+  gains `executeClassMethod`, resolving the export by that name.
+- New boxed representation for `Object`/`dynamic` values: an i32 pointer to a
+  16-byte heap cell `[tag@0][typeId@4][payload@8]`. Concrete values flowing into
+  an `Object` slot are boxed, and `toString()` dispatches on the box tag
+  (int/double/bool/String, plus boxed instances by `typeId`). Enables
+  `List<Object>`/`List<dynamic>` literals and arguments with mixed element
+  types, marshalled host-side by `ApolloRunnerWasm`.
+- A *homogeneous* list literal initializing a `List<Object>`/`List<dynamic>`
+  variable (e.g. `List<Object> x = [1, 2, 3]`) now boxes its elements. The
+  literal infers a concrete element type (`List<int>`) and previously stored
+  unboxed values that the boxed read path misread (garbage output or an
+  out-of-bounds trap); the declared target element type is now honored.
+- Validated against both the AST interpreter and the compiled+executed Wasm
+  module.
+
+### Only static methods are callable without an instance
+
+- A non-static class method now requires a class instance to run. The
+  interpreter's `executeClassMethod` (and any internal call that reaches a
+  non-static method with no `this` in context, e.g. a `static` method calling an
+  instance sibling) throws `ApolloVMRuntimeError` instead of silently running
+  against an auto-created instance. Pass `classInstanceObject` /
+  `classInstanceFields` to run a non-static method, or mark the entry method
+  `static`. This matches the Wasm backend, where only static methods are
+  exported.
+- `ApolloRunnerWasm.executeClassMethod` now reports a clear error for a
+  non-static target (only static methods are exported) and rejects being given a
+  class instance (the Wasm backend has no instance-method entry points).
+- The Wasm generator rejects a receiver-less call to a non-static method (e.g. a
+  `static` method calling an instance sibling) with a clear `UnsupportedError`.
+- Examples and the README run entry methods as `static` where they hold no
+  instance state, or supply an instance otherwise.
+
+### Tests
+
+- Test files now carry `dart test` tags: a backend tag (`wasm`, plus
+  `wasm-gc`/`wasm-chrome` for browser-only Wasm tests) and per-source-language
+  tags (`dart`, `java`, `kotlin`, `javascript`, `typescript`, `lua`, `csharp`,
+  `python`). E.g. `dart test -t wasm`, `dart test -t kotlin`, or
+  `dart test -x wasm-gc` for the native `wasm_run` CI.
+
 ## 0.1.40
 
 ### Wasm: control flow + bitwise

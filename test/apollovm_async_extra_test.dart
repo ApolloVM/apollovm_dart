@@ -1,4 +1,5 @@
 @TestOn('vm')
+@Tags(['dart', 'javascript', 'kotlin'])
 library;
 
 import 'package:apollovm/apollovm.dart';
@@ -33,11 +34,14 @@ Future<({Object? value, List output})> _runDart(
             Future.delayed(Duration(milliseconds: ms as int), () => v as int),
       );
 
+  // The entry methods are declared non-static, so provide a (field-less)
+  // instance to run them — only `static` methods run without an instance.
   var astValue = await runner.executeClassMethod(
     '',
     className,
     method,
     positionalParameters: [args],
+    classInstanceFields: const {},
   );
   return (value: await astValue.getValueNoContext(), output: output);
 }
