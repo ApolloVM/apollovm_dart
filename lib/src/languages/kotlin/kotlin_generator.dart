@@ -279,6 +279,13 @@ class ApolloCodeGeneratorKotlin extends ApolloCodeGenerator {
 
     out.write(indent);
 
+    // Visibility modifier (Kotlin defaults to `public`, so only emit when set).
+    if (f.modifiers.isPrivate) {
+      out.write('private ');
+    } else if (f.modifiers.isPublic) {
+      out.write('public ');
+    }
+
     // Dart `async` maps to a Kotlin `suspend fun`; `Future<T>` collapses to `T`
     // (suspension is implicit in coroutines — see [generateASTExpressionAwait]).
     var returnType = f.returnType;

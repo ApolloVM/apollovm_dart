@@ -1,3 +1,36 @@
+## 0.1.40
+
+### Wasm: control flow + bitwise
+
+- The WebAssembly compiler now supports `do`/`while`, `switch`/`case` (integer,
+  C-style fall-through), `break`, `continue`, and the bitwise operators
+  `& | ^ << >>` and unary `~`. Loops now wrap their body in a `continue` block
+  and `WasmContext` tracks structured-control depth so `break`/`continue` emit
+  correct relative branch labels. Each construct is validated against both the
+  AST interpreter and the compiled+executed Wasm module.
+
+### Bitwise operators: Kotlin and Lua
+
+- **Kotlin**: infix `and`/`or`/`xor`/`shl`/`shr` and `x.inv()` (bitwise NOT).
+- **Lua**: `&`/`|`/`~` (xor)/`<<`/`>>` and unary `~`, leaving `~=` (not-equals)
+  and `^` (exponent) intact.
+
+### Kotlin member visibility
+
+- Parse and generate member modifiers (`private`/`public`/`internal`/
+  `protected`, plus `open`/`override`/`abstract`/`final`/`const`) on Kotlin
+  methods/fields/constructors; method visibility round-trips.
+
+### Fixes
+
+- **Java**: `private` members no longer fail with "Can't be private and public"
+  (the modifiers parser derived `isPublic` from `private`).
+
+### Docs
+
+- New "Supported Features" section in the README: per-language control-flow /
+  operator matrix (with a Wasm column) and a Classes/types/OOP matrix.
+
 ## 0.1.39
 
 ### enum runtime value access

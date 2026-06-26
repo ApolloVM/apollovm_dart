@@ -93,7 +93,7 @@ language but not implemented yet) · — not applicable (the language has no suc
 | Fields (with initializers)                                    | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ⚠️¹ | ✅ |
 | Constructors & instantiation (`new Foo(...)` / `Foo(...)`)    | ✅ | ✅ | ✅ | ✅ | 🚧 | ✅ | ⚠️¹ | 🚧² |
 | Methods                                                       | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Static / visibility modifiers                                 | ✅ | ✅ | ✅ | ✅ | ⚠️³ | ✅ | —  | —  |
+| Static / visibility modifiers                                 | ✅ | ✅ | ⚠️⁴ | ✅ | ⚠️³ | ✅ | —  | —  |
 | Inheritance (`extends`) / interfaces                          | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | —  | ✅ |
 | Enums (incl. runtime value access)                            | ✅ | ✅ | ✅ | ✅ | —  | ✅ | —  | ✅ |
 | Generics (generic classes + instantiation + type erasure)    | ✅ | ✅ | ✅ | ✅ | —  | ✅ | —  | —  |
@@ -105,6 +105,8 @@ are factory functions / `setmetatable` idioms; methods use `function Obj:method`
 implemented yet, so constructors aren't usable end-to-end. &nbsp;
 ³ JavaScript supports the `static` modifier but has no visibility keywords (privacy is by convention /
 closures). &nbsp;
+⁴ Kotlin member visibility modifiers (`private`/`public`/`internal`/`protected`) are supported; Kotlin
+has no `static` (it uses `companion object`, not yet supported). &nbsp;
 Generics are marked `—` for JS/Lua/Python because those languages have no static type syntax to
 parameterize.
 
