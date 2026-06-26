@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="Basic while loop">
+    <source language="csharp">
+        <![CDATA[
+
+            class Foo {
+
+              void test(int n) {
+                int i = 0;
+                int total = 0;
+                while (i < n) {
+                  total += i;
+                  i++;
+                }
+                print(total);
+              }
+            }
+
+        ]]>
+    </source>
+    <call class="Foo" function="test">
+        [ 4 ]
+    </call>
+    <output>
+        [6]
+    </output>
+    <source-generated language="csharp"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+class Foo {
+
+  void test(int n) {
+    int i = 0;
+    int total = 0;
+    while( i < n ) {
+      total += i;
+      i++;
+    }
+    print(total);
+  }
+
+}
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+
+    <source-generated language="dart"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+class Foo {
+
+  void test(int n) {
+    int i = 0;
+    int total = 0;
+    while( i < n ) {
+      total += i;
+      i++;
+    }
+    print(total);
+  }
+
+}
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+
+    <source-generated language="java11"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+class Foo {
+
+  void test(int n) {
+    int i = 0;
+    int total = 0;
+    while( i < n ) {
+      total += i;
+      i++;
+    }
+    print(total);
+  }
+
+}
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+
+</test>

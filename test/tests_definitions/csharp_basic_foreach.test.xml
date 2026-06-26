@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="Basic foreach over a List">
+    <source language="csharp">
+        <![CDATA[
+
+            class Foo {
+
+              void test() {
+                var list = new List<int>(){ 10, 20, 30 };
+                int total = 0;
+                foreach (int x in list) {
+                  total += x;
+                }
+                print(total);
+              }
+            }
+
+        ]]>
+    </source>
+    <call class="Foo" function="test">
+        [  ]
+    </call>
+    <output>
+        [60]
+    </output>
+    <source-generated language="csharp"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+class Foo {
+
+  void test() {
+    var list = new List<int>(){10, 20, 30};
+    int total = 0;
+    foreach (var x in list) {
+      total += x;
+    }
+    print(total);
+  }
+
+}
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+
+    <source-generated language="dart"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+class Foo {
+
+  void test() {
+    var list = <int>[10, 20, 30];
+    int total = 0;
+    for (var x in list) {
+      total += x;
+    }
+    print(total);
+  }
+
+}
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+
+</test>

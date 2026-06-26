@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="Try/catch/finally">
+    <source language="csharp">
+        <![CDATA[
+
+            class Foo {
+
+              void test() {
+                try {
+                  throw "boom";
+                } catch (Exception e) {
+                  print("caught");
+                } finally {
+                  print("done");
+                }
+              }
+            }
+
+        ]]>
+    </source>
+    <call class="Foo" function="test">
+        [  ]
+    </call>
+    <output>
+        ["caught","done"]
+    </output>
+    <source-generated language="csharp"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+class Foo {
+
+  void test() {
+    try {
+      throw "boom";
+    } catch (Exception e) {
+      print("caught");
+    } finally {
+      print("done");
+    }
+  }
+
+}
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+
+    <source-generated language="dart"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+class Foo {
+
+  void test() {
+    try {
+      throw 'boom';
+    } on Exception catch (e) {
+      print('caught');
+    } finally {
+      print('done');
+    }
+  }
+
+}
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+
+</test>

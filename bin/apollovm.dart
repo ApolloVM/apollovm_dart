@@ -13,7 +13,7 @@ void main(List<String> args) async {
   var commandRunner =
       CommandRunner<bool>(
           'apollovm',
-          'ApolloVM/${ApolloVM.VERSION} - A compact VM for Dart, Java, Kotlin, JavaScript, TypeScript, Lua and Python.',
+          'ApolloVM/${ApolloVM.VERSION} - A compact VM for Dart, Java, Kotlin, C#, JavaScript, TypeScript, Lua and Python.',
         )
         ..addCommand(CommandRun())
         ..addCommand(CommandTranslate());
