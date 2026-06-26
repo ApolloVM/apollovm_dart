@@ -61,16 +61,16 @@ The **Wasm** column shows what the on-the-fly WebAssembly compiler currently sup
 | `for` (C-style)                  | ✅ | ✅ | —  | ✅ | ✅ | ✅ | ⚠️¹ | — | ✅ |
 | `for-each` / `for-in`            | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | `while`                          | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| `do` / `while`                   | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ⚠️² | — | 🚧 |
-| `switch` / `case`                | ✅ | ✅ | ⚠️³ | ✅ | ✅ | ✅ | —  | ⚠️⁴ | 🚧 |
-| `break`                          | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 🚧 |
-| `continue`                       | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | —  | ✅ | 🚧 |
+| `do` / `while`                   | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ⚠️² | — | ✅ |
+| `switch` / `case`                | ✅ | ✅ | ⚠️³ | ✅ | ✅ | ✅ | —  | ⚠️⁴ | ✅ |
+| `break`                          | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `continue`                       | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | —  | ✅ | ✅ |
 | `try` / `catch` / `finally`      | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | —  | ✅ | ✅ |
 | `throw` / `raise`                | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | —  | ✅ | ✅ |
 | Ternary (`? :`)                  | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | —  | ✅ | ✅ |
 | Arithmetic (`+ - * / %`)         | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Comparison / logical             | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Bitwise (`& \| ^ << >> ~`)       | ✅ | ✅ | 🚧 | ✅ | ✅ | ✅ | 🚧 | ✅ | 🚧 |
+| Bitwise (`& \| ^ << >> ~`)       | ✅ | ✅ | ⚠️⁵ | ✅ | ✅ | ✅ | ⚠️⁶ | ✅ | ✅ |
 | `++` / `--`, compound assign     | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Lambdas / closures               | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | String interpolation / concat    | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
@@ -79,25 +79,34 @@ The **Wasm** column shows what the on-the-fly WebAssembly compiler currently sup
 
 ¹ Lua numeric-for (`for i = a, b do`). &nbsp; ² Lua `repeat … until`. &nbsp;
 ³ Kotlin `when`. &nbsp; ⁴ Python `match` / `case`. &nbsp;
-🚧 Kotlin/Lua bitwise use named/non-standard operators (Kotlin `and`/`or`/`shl`/`inv`,
-Lua 5.3 `~`); not implemented yet.
+⁵ Kotlin bitwise are infix functions: `and`/`or`/`xor`/`shl`/`shr` and `.inv()`. &nbsp;
+⁶ Lua bitwise use `&`/`|`/`~` (xor)/`<<`/`>>` and unary `~` (Lua 5.3).
 
 ### Classes, types & OOP
 
-- **Classes** with fields (including initializers), methods, and `static`/visibility
-  modifiers: `Dart`, `Java`, `Kotlin`, `C#`, `JavaScript`, `TypeScript`, `Python`
-  (`Lua` uses tables and functions).
-- **Constructors** and instantiation (`new Foo(...)` / `Foo(...)`): `Dart`, `Java`,
-  `Kotlin`, `C#`, `TypeScript`.
-- **Inheritance / interfaces** (`extends`, `implements`, base lists) are parsed and
-  carried through translation.
-- **Enums**, including runtime value access (`Color.red` → ordinal, or its explicit
-  value): `Dart`, `Java`, `Kotlin`, `C#`, `TypeScript`, `Python`.
-- **Generics**: generic class declarations, generic instantiation and generic type
-  annotations (`Wrapper<T>`, `new Wrapper<int>(10)`, `Map<String, int>`), with
-  type erasure at runtime: `Dart`, `Java`, `Kotlin`, `C#`, `TypeScript`.
-- **Types**: primitives (`int`, `double`/`num`, `bool`, `String`, `Object`/dynamic),
-  `var`/`val`/type inference, arrays (1D/2D/3D), maps, and function types.
+Legend: ✅ supported · ⚠️ supported via the language's idiom · 🚧 not yet supported (exists in the
+language but not implemented yet) · — not applicable (the language has no such construct).
+
+| Feature | Dart | Java | Kotlin | C# | JS | TS | Lua | Python |
+|---|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|
+| Classes                                                       | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | —  | ✅ |
+| Fields (with initializers)                                    | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ⚠️¹ | ✅ |
+| Constructors & instantiation (`new Foo(...)` / `Foo(...)`)    | ✅ | ✅ | ✅ | ✅ | 🚧 | ✅ | ⚠️¹ | 🚧² |
+| Methods                                                       | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Static / visibility modifiers                                 | ✅ | ✅ | ✅ | ✅ | ⚠️³ | ✅ | —  | —  |
+| Inheritance (`extends`) / interfaces                          | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | —  | ✅ |
+| Enums (incl. runtime value access)                            | ✅ | ✅ | ✅ | ✅ | —  | ✅ | —  | ✅ |
+| Generics (generic classes + instantiation + type erasure)    | ✅ | ✅ | ✅ | ✅ | —  | ✅ | —  | —  |
+| Type inference (`var` / `val` / `auto`)                       | ✅ | ✅ | ✅ | ✅ | —  | ✅ | —  | —  |
+
+¹ Lua is table-based (no class construct): "fields" are table entries (`obj.x`) and "constructors"
+are factory functions / `setmetatable` idioms; methods use `function Obj:method`. &nbsp;
+² Python declares constructors via `__init__`, but instance-field assignment (`self.x = ...`) is not
+implemented yet, so constructors aren't usable end-to-end. &nbsp;
+³ JavaScript supports the `static` modifier but has no visibility keywords (privacy is by convention /
+closures). &nbsp;
+Generics are marked `—` for JS/Lua/Python because those languages have no static type syntax to
+parameterize.
 
 > Per-language behavior is normalized to a shared AST, so types and constructs map
 > cleanly when translating between languages (e.g. C# `string` ⇄ Dart `String`,
@@ -863,10 +872,11 @@ ApolloVM can compile its AST tree to WebAssembly (Wasm). This means that parsed 
 on the fly, without the need for any third-party tools.
 
 - **Status:** *Wasm support is under active development. It already compiles a broad subset of
-the AST — functions, control flow (`if`/`for`/`for-each`/`while`/ternary), arithmetic/comparison/logical
-operators, `try`/`catch`/`throw`, classes, closures, lists/maps, and `async`/`await` (via Asyncify);
-see the [feature table](#supported-features). Some constructs (e.g. `switch`, `break`/`continue`,
-`do`/`while`, bitwise operators) are not yet compiled to Wasm.*
+the AST — functions, full control flow (`if`/`for`/`for-each`/`while`/`do-while`/`switch`/
+`break`/`continue`/ternary), arithmetic/comparison/logical/bitwise operators, `try`/`catch`/`throw`,
+classes, closures, lists/maps, and `async`/`await` (via Asyncify); see the
+[feature table](#supported-features). Constructs not yet compiled to Wasm are limited to a few
+higher-level features (e.g. non-integer `switch`).*
 
 Example of Dart code compiled to Wasm:
 ```dart
