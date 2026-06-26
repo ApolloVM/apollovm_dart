@@ -293,4 +293,120 @@ void main() {
       );
     });
   });
+
+  group('Wasm OPS: bitwise', () {
+    test('& | ^ << >> and unary ~', () async {
+      await _testWasm(
+        r'''
+        int bitOps(int a, int b) {
+          int r = a & b;
+          r = r + (a | b);
+          r = r + (a ^ b);
+          r = r + (a << 2);
+          r = r + (a >> 1);
+          r = r + (~a);
+          return r;
+        }
+      ''',
+        'bitOps',
+        {
+          // a=12 (1100), b=10 (1010): 8 + 14 + 6 + 48 + 6 + (-13) = 69
+          [12, 10]: 69,
+          // a=6 (0110), b=3 (0011): 2 + 7 + 5 + 24 + 3 + (-7) = 34
+          [6, 3]: 34,
+        },
+      );
+    });
+  });
+
+  group('Wasm control flow: do-while / break / continue / switch', () {
+    test('do-while runs body at least once', () async {
+      await _testWasm(
+        r'''
+        int dw(int n) {
+          int sum = 0;
+          int i = 0;
+          do {
+            sum = sum + i;
+            i = i + 1;
+          } while (i < n);
+          return sum;
+        }
+      ''',
+        'dw',
+        {
+          [3]: 3, // 0+1+2
+          [1]: 0, // body once with i=0
+          [0]: 0, // still runs once
+        },
+      );
+    });
+
+    test('break and continue in a for loop', () async {
+      await _testWasm(
+        r'''
+        int bc(int n) {
+          int sum = 0;
+          for (int i = 0; i < n; i++) {
+            if (i == 2) { continue; }
+            if (i == 5) { break; }
+            sum = sum + i;
+          }
+          return sum;
+        }
+      ''',
+        'bc',
+        {
+          [10]: 8, // 0+1+3+4 (skip 2, stop at 5)
+          [2]: 1, // 0 + (skip 1? no) -> i=0 sum0, i=1 sum1
+        },
+      );
+    });
+
+    test('switch with default', () async {
+      await _testWasm(
+        r'''
+        int sw(int x) {
+          int r = 0;
+          switch (x) {
+            case 1: { r = 10; break; }
+            case 2: { r = 20; break; }
+            default: { r = 99; break; }
+          }
+          return r;
+        }
+      ''',
+        'sw',
+        {
+          [1]: 10,
+          [2]: 20,
+          [7]: 99,
+        },
+      );
+    });
+
+    test('switch fall-through', () async {
+      await _testWasm(
+        r'''
+        int fall(int x) {
+          int r = 0;
+          switch (x) {
+            case 1: { r = r + 1; }
+            case 2: { r = r + 2; break; }
+            case 3: { r = r + 3; }
+            default: { r = r + 100; }
+          }
+          return r;
+        }
+      ''',
+        'fall',
+        {
+          [1]: 3, // 1 -> falls into 2 -> break
+          [2]: 2,
+          [3]: 103, // 3 -> falls into default
+          [9]: 100,
+        },
+      );
+    });
+  });
 }

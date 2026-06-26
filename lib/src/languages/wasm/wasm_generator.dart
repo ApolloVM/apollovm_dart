@@ -1168,10 +1168,12 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       description: "[OP] if ( $condition )",
     );
     context.stackDrop(_astTypeInt32);
+    context.controlDepth++;
 
     generateASTBlock(branch.block, out: out, context: context);
 
     out.writeByte(Wasm.end, description: "[OP] if end");
+    context.controlDepth--;
 
     return out;
   }
@@ -1202,6 +1204,7 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       description: "[OP] if ( $condition )",
     );
     context.stackDrop(_astTypeInt32);
+    context.controlDepth++;
 
     generateASTBlock(branch.blockIf, out: out, context: context);
 
@@ -1212,6 +1215,7 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     }
 
     out.writeByte(Wasm.end, description: "[OP] if else end");
+    context.controlDepth--;
 
     return out;
   }
@@ -1242,6 +1246,7 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       description: "[OP] if ( $condition )",
     );
     context.stackDrop(_astTypeInt32);
+    context.controlDepth++;
 
     generateASTBlock(branch.blockIf, out: out, context: context);
 
@@ -1287,6 +1292,7 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     }
 
     out.writeByte(Wasm.end, description: "[OP] if else end");
+    context.controlDepth--;
 
     return out;
   }
@@ -2355,6 +2361,37 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     return out;
   }
 
+  BytesOutput generateASTExpressionBitwiseNot(
+    ASTExpressionBitwiseNot expression, {
+    BytesOutput? out,
+    WasmContext? context,
+  }) {
+    out ??= newOutput();
+    context ??= WasmContext();
+
+    final stackLng0 = context.stackLength;
+
+    generateASTExpression(expression.expression, out: out, context: context);
+
+    context.assertStackLength(stackLng0 + 1, "After bitwise-not operand");
+
+    // No `i64.not` opcode: `~x == x ^ -1`.
+    out.write(
+      Wasm64.i64Const(-1),
+      description: "[OP] push constant(i64): -1 (bitwise-not)",
+    );
+    context.stackPush(_astTypeInt64, "bitwise-not -1");
+    out.writeByte(
+      Wasm64.i64BitwiseXor,
+      description: "[OP] operator: bitwise-not (i64.xor -1)",
+    );
+    context.stackOperationBinary(_astTypeInt64, "i64.xor (bitwise-not)");
+
+    context.assertStackLength(stackLng0 + 1, "After bitwise-not result");
+
+    return out;
+  }
+
   // The Wasm backend executes synchronously, so a `Future<T>` value is always
   // already available: `await expr` compiles to just `expr` (a value
   // pass-through), and an `async` function is compiled as a normal function
@@ -3019,6 +3056,51 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
           } else {
             _writeIntModulo(out, context);
           }
+        }
+      case ASTExpressionOperator.bitwiseAnd:
+        {
+          writeOperation(
+            opInt32 ? _astTypeInt32 : _astTypeInt64,
+            opInt32 ? Wasm32.i32BitwiseAnd : Wasm64.i64BitwiseAnd,
+            opInt32 ? "and(i32)" : "and(i64)",
+            opInt32 ? "i32.and" : "i64.and",
+          );
+        }
+      case ASTExpressionOperator.bitwiseOr:
+        {
+          writeOperation(
+            opInt32 ? _astTypeInt32 : _astTypeInt64,
+            opInt32 ? Wasm32.i32BitwiseOr : Wasm64.i64BitwiseOr,
+            opInt32 ? "or(i32)" : "or(i64)",
+            opInt32 ? "i32.or" : "i64.or",
+          );
+        }
+      case ASTExpressionOperator.bitwiseXor:
+        {
+          writeOperation(
+            opInt32 ? _astTypeInt32 : _astTypeInt64,
+            opInt32 ? Wasm32.i32BitwiseXor : Wasm64.i64BitwiseXor,
+            opInt32 ? "xor(i32)" : "xor(i64)",
+            opInt32 ? "i32.xor" : "i64.xor",
+          );
+        }
+      case ASTExpressionOperator.shiftLeft:
+        {
+          writeOperation(
+            opInt32 ? _astTypeInt32 : _astTypeInt64,
+            opInt32 ? Wasm32.i32ShiftLeft : Wasm64.i64ShiftLeft,
+            opInt32 ? "shl(i32)" : "shl(i64)",
+            opInt32 ? "i32.shl" : "i64.shl",
+          );
+        }
+      case ASTExpressionOperator.shiftRight:
+        {
+          writeOperation(
+            opInt32 ? _astTypeInt32 : _astTypeInt64,
+            opInt32 ? Wasm32.i32ShiftRightSigned : Wasm64.i64ShiftRightSigned,
+            opInt32 ? "shr_s(i32)" : "shr_s(i64)",
+            opInt32 ? "i32.shr_s" : "i64.shr_s",
+          );
         }
       default:
         // `and`/`or` are handled before operand evaluation (short-circuit).
@@ -6545,8 +6627,24 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       return generateASTStatementForLoop(statement, out: out, context: context);
     } else if (statement is ASTStatementForEach) {
       return generateASTStatementForEach(statement, out: out, context: context);
+    } else if (statement is ASTStatementDoWhileLoop) {
+      return generateASTStatementDoWhileLoop(
+        statement,
+        out: out,
+        context: context,
+      );
     } else if (statement is ASTStatementWhileLoop) {
       return generateASTStatementWhileLoop(
+        statement,
+        out: out,
+        context: context,
+      );
+    } else if (statement is ASTStatementSwitch) {
+      return generateASTStatementSwitch(statement, out: out, context: context);
+    } else if (statement is ASTStatementBreak) {
+      return generateASTStatementBreak(statement, out: out, context: context);
+    } else if (statement is ASTStatementContinue) {
+      return generateASTStatementContinue(
         statement,
         out: out,
         context: context,
@@ -6699,16 +6797,21 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     out.write(Wasm32.i32Const(0));
     out.write(Wasm.localSet(iScratch));
 
-    // block { loop { if (i >= len) break; e = data[i]; <body>; i++; continue } }
+    // block(break) { loop(repeat) { if (i >= len) break; e = data[i];
+    //   block(continue) { <body> }; i++; continue } }
     out.write(Wasm.block(WasmType.voidType));
+    context.controlDepth++;
+    final breakLevel = context.controlDepth;
     out.write(Wasm.loop(WasmType.voidType));
+    context.controlDepth++;
+    final repeatLevel = context.controlDepth;
 
-    // if (i >= len) br 1
+    // if (i >= len) br break
     out.write(Wasm.localGet(iScratch));
     out.write(Wasm.localGet(listScratch));
     out.write(Wasm32.i32Load(2, 0)); // length
     out.writeByte(Wasm32.i32GreaterThanOrEqualsUnsigned);
-    out.write(Wasm.brIf(1));
+    out.write(Wasm.brIf(context.controlDepth - breakLevel));
 
     // e = data[i*size]
     out.write(Wasm.localGet(dataScratch));
@@ -6719,8 +6822,18 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     _emitElemLoad(out, elemType, 0);
     out.write(Wasm.localSet(eLocal.index));
 
+    // continue target wrapping the body.
+    out.write(Wasm.block(WasmType.voidType));
+    context.controlDepth++;
+    final continueLevel = context.controlDepth;
+
     // body (a `return` inside emits `return` directly; no extra check needed)
+    context.pushLoopFrame(breakLevel: breakLevel, continueLevel: continueLevel);
     generateASTBlock(forEach.loopBlock, out: out, context: context);
+    context.popLoopFrame();
+
+    out.writeByte(Wasm.end); // continue block
+    context.controlDepth--;
 
     // i++
     out.write(Wasm.localGet(iScratch));
@@ -6728,13 +6841,172 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     out.writeByte(Wasm32.i32Add);
     out.write(Wasm.localSet(iScratch));
 
-    out.write(Wasm.br(0)); // continue
+    out.write(Wasm.br(context.controlDepth - repeatLevel)); // continue/repeat
     out.writeByte(Wasm.end); // loop
+    context.controlDepth--;
     out.writeByte(Wasm.end); // block
+    context.controlDepth--;
 
     // The body may leave phantom virtual-stack entries (assignments use
     // `local.set` without a matching virtual drop), like the for/while loops;
     // the real Wasm stack stays balanced, so no post-body assertion here.
+    return out;
+  }
+
+  BytesOutput generateASTStatementDoWhileLoop(
+    ASTStatementDoWhileLoop doWhileLoop, {
+    BytesOutput? out,
+    WasmContext? context,
+  }) {
+    out ??= newOutput();
+    context ??= WasmContext();
+
+    _generateLoop(
+      out: out,
+      context: context,
+      conditionExpression: doWhileLoop.conditionExpression,
+      loopBlock: doWhileLoop.loopBlock,
+      continueExpression: null,
+      description: "do-while",
+      conditionAfterBody: true,
+    );
+
+    return out;
+  }
+
+  BytesOutput generateASTStatementBreak(
+    ASTStatementBreak statement, {
+    BytesOutput? out,
+    WasmContext? context,
+  }) {
+    out ??= newOutput();
+    context ??= WasmContext();
+    out.write(Wasm.br(context.breakBranchLabel), description: "[OP] break");
+    return out;
+  }
+
+  BytesOutput generateASTStatementContinue(
+    ASTStatementContinue statement, {
+    BytesOutput? out,
+    WasmContext? context,
+  }) {
+    out ??= newOutput();
+    context ??= WasmContext();
+    out.write(
+      Wasm.br(context.continueBranchLabel),
+      description: "[OP] continue",
+    );
+    return out;
+  }
+
+  /// Integer `switch` (C-style fall-through). Encoded as nested blocks with an
+  /// inner dispatch that compares the value to each `case` and branches to the
+  /// matching case block; cases fall through to the next unless they `break`.
+  BytesOutput generateASTStatementSwitch(
+    ASTStatementSwitch statement, {
+    BytesOutput? out,
+    WasmContext? context,
+  }) {
+    out ??= newOutput();
+    context ??= WasmContext();
+
+    // Evaluate the switch value once into a scratch local (int only).
+    generateASTExpression(statement.expression, out: out, context: context);
+    var valueType = context.stackGet(0)!.type;
+    if (valueType != _astTypeInt64 && valueType != _astTypeInt) {
+      throw UnimplementedError(
+        "Wasm switch on $valueType is not supported (int only).",
+      );
+    }
+    var valueLocal = context.scratchLocal(_astTypeInt64, 17);
+    out.write(Wasm.localSet(valueLocal));
+    context.stackDrop();
+
+    final cases = statement.cases;
+    final n = cases.length;
+
+    // Outer `block` is the break/exit target.
+    out.write(
+      Wasm.block(WasmType.voidType),
+      description: "[OP] block (switch)",
+    );
+    context.controlDepth++;
+    final exitLevel = context.controlDepth;
+
+    // One `block` per case, in reverse source order, so falling out of case i's
+    // block lands in case i+1's code (fall-through).
+    final caseLevel = List<int>.filled(n, 0);
+    for (var i = n - 1; i >= 0; --i) {
+      out.write(
+        Wasm.block(WasmType.voidType),
+        description: "[OP] block (switch case $i)",
+      );
+      context.controlDepth++;
+      caseLevel[i] = context.controlDepth;
+    }
+
+    // Dispatch block: compare and branch to the matching case.
+    out.write(
+      Wasm.block(WasmType.voidType),
+      description: "[OP] block (switch dispatch)",
+    );
+    context.controlDepth++;
+    final dispatchLevel = context.controlDepth;
+
+    // Branching to a `block` lands *after* its `end`. Case i's code starts right
+    // after the `end` of the previous block, so the entry target for case i is
+    // the dispatch block (i == 0) or the previous case's block (i > 0).
+    int entryLevel(int i) => i == 0 ? dispatchLevel : caseLevel[i - 1];
+
+    int? defaultIndex;
+    for (var i = 0; i < n; ++i) {
+      var c = cases[i];
+      if (c.isDefault) {
+        defaultIndex = i;
+        continue;
+      }
+      out.write(Wasm.localGet(valueLocal));
+      context.stackPush(_astTypeInt64, "switch value");
+      generateASTExpression(c.value!, out: out, context: context);
+      out.writeByte(Wasm64.i64Equals, description: "[OP] switch case == ");
+      context.stackOperationBinary(_astTypeInt32, "i64.eq (switch)");
+      out.write(
+        Wasm.brIf(context.controlDepth - entryLevel(i)),
+        description: "[OP] switch br_if case $i",
+      );
+      context.stackDrop(_astTypeInt32);
+    }
+    // No case matched: go to `default` (if any), else exit the switch.
+    var fallbackLevel = defaultIndex != null
+        ? entryLevel(defaultIndex)
+        : exitLevel;
+    out.write(
+      Wasm.br(context.controlDepth - fallbackLevel),
+      description: "[OP] switch dispatch fallback",
+    );
+
+    out.writeByte(Wasm.end, description: "[OP] block end (switch dispatch)");
+    context.controlDepth--;
+
+    // Case bodies, emitted as the case blocks close (so they fall through).
+    context.pushSwitchFrame(breakLevel: exitLevel);
+    for (var i = 0; i < n; ++i) {
+      generateASTBlock(cases[i].block, out: out, context: context);
+      if (!statement.fallThrough) {
+        // Non-fall-through (`when`/`match`): jump to exit after the matched case.
+        out.write(
+          Wasm.br(context.controlDepth - exitLevel),
+          description: "[OP] switch case $i exit (no fall-through)",
+        );
+      }
+      out.writeByte(Wasm.end, description: "[OP] block end (switch case $i)");
+      context.controlDepth--;
+    }
+    context.popLoopFrame();
+
+    out.writeByte(Wasm.end, description: "[OP] block end (switch)");
+    context.controlDepth--;
+
     return out;
   }
 
@@ -6781,60 +7053,103 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     required ASTBlock loopBlock,
     required ASTExpression? continueExpression,
     required String description,
+    bool conditionAfterBody = false,
   }) {
+    // Structure (void blocks); the inner `block` is the `continue` target so
+    // `continue` still runs the post-step (increment / do-while condition):
+    //   block (break)
+    //     loop (repeat)
+    //       [pre-cond: eqz; br_if break]        ; while / for
+    //       block (continue) <body> end
+    //       [continueExpression]                ; for
+    //       [post-cond: br_if repeat] | br repeat
+    //     end
+    //   end
     out.write(
       Wasm.block(WasmType.voidType),
-      description: "[OP] block ($description loop)",
+      description: "[OP] block ($description break)",
     );
+    context.controlDepth++;
+    final breakLevel = context.controlDepth;
+
     out.write(
       Wasm.loop(WasmType.voidType),
-      description: "[OP] loop ($description loop)",
+      description: "[OP] loop ($description repeat)",
     );
+    context.controlDepth++;
+    final repeatLevel = context.controlDepth;
 
-    final stackLng0 = context.stackLength;
-
-    // Condition: pushes an i32 (boolean).
-    generateASTExpression(conditionExpression, out: out, context: context);
-
-    context.assertStackLength(
-      stackLng0 + 1,
-      "After $description loop condition",
-    );
-    var stackType = context.stackGet(0)!.type;
-    if (stackType != _astTypeInt32) {
-      throw StateError("Stack type error> not a boolean type: $stackType");
+    void writeCondition() {
+      final stackLng0 = context.stackLength;
+      generateASTExpression(conditionExpression, out: out, context: context);
+      context.assertStackLength(
+        stackLng0 + 1,
+        "After $description loop condition",
+      );
+      var stackType = context.stackGet(0)!.type;
+      if (stackType != _astTypeInt32) {
+        throw StateError("Stack type error> not a boolean type: $stackType");
+      }
     }
 
-    // Negate the condition: `i32.eqz` consumes 1 i32 and pushes 1 i32
-    // (net zero on the virtual stack).
-    out.writeByte(
-      Wasm32.i32EqualsToZero,
-      description: "[OP] i32.eqz ( !($conditionExpression) )",
+    // Pre-condition (while / for): break out of the loop when false.
+    if (!conditionAfterBody) {
+      writeCondition();
+      out.writeByte(
+        Wasm32.i32EqualsToZero,
+        description: "[OP] i32.eqz ( !($conditionExpression) )",
+      );
+      out.write(
+        Wasm.brIf(context.controlDepth - breakLevel),
+        description: "[OP] br_if ($description break)",
+      );
+      context.stackDrop(_astTypeInt32);
+    }
+
+    // `continue` target wrapping the body.
+    out.write(
+      Wasm.block(WasmType.voidType),
+      description: "[OP] block ($description continue)",
     );
+    context.controlDepth++;
+    final continueLevel = context.controlDepth;
 
-    // Break out of the `block` (label 1) when the condition is false:
-    out.write(Wasm.brIf(1), description: "[OP] br_if 1 ($description break)");
-    context.stackDrop(_astTypeInt32);
-
-    context.assertStackLength(
-      stackLng0,
-      "After $description loop condition br",
-    );
-
-    // Loop body:
+    context.pushLoopFrame(breakLevel: breakLevel, continueLevel: continueLevel);
     generateASTBlock(loopBlock, out: out, context: context);
+    context.popLoopFrame();
+
+    out.writeByte(
+      Wasm.end,
+      description: "[OP] block end ($description continue)",
+    );
+    context.controlDepth--;
 
     // Continue expression (for-loops only), e.g. `i++`:
     if (continueExpression != null) {
       generateASTExpression(continueExpression, out: out, context: context);
     }
 
-    // Jump back to the top of the `loop` (label 0). Any leaked operand-stack
-    // values are unwound by this branch (loop is void).
-    out.write(Wasm.br(0), description: "[OP] br 0 ($description continue)");
+    if (conditionAfterBody) {
+      // do-while: repeat while the condition is true.
+      writeCondition();
+      out.write(
+        Wasm.brIf(context.controlDepth - repeatLevel),
+        description: "[OP] br_if ($description repeat)",
+      );
+      context.stackDrop(_astTypeInt32);
+    } else {
+      // Jump back to the top of the `loop`. Any leaked operand-stack values are
+      // unwound by this branch (loop is void).
+      out.write(
+        Wasm.br(context.controlDepth - repeatLevel),
+        description: "[OP] br ($description repeat)",
+      );
+    }
 
     out.writeByte(Wasm.end, description: "[OP] loop end ($description)");
+    context.controlDepth--;
     out.writeByte(Wasm.end, description: "[OP] block end ($description)");
+    context.controlDepth--;
   }
 
   @override
@@ -7216,6 +7531,12 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       );
     } else if (expression is ASTExpressionNegative) {
       return generateASTExpressionNegative(
+        expression,
+        out: out,
+        context: context,
+      );
+    } else if (expression is ASTExpressionBitwiseNot) {
+      return generateASTExpressionBitwiseNot(
         expression,
         out: out,
         context: context,
@@ -8514,6 +8835,52 @@ class WasmContext {
   /// set, integer division emits a non-trapping guard that raises a catchable
   /// exception on a zero/overflowing divisor instead of trapping the module.
   bool exceptionMode = false;
+
+  /// Number of currently-open structured control instructions (`block`/`loop`/
+  /// `if`). A Wasm `br L` targets the structure `L` levels up from the innermost,
+  /// so the relative label for a target opened at depth `K` is `controlDepth - K`.
+  /// Maintained by the loop and `if`-branch generators so `break`/`continue` can
+  /// compute correct relative branch labels regardless of nesting.
+  int controlDepth = 0;
+
+  /// Stack of enclosing loops, innermost last. Each frame records the
+  /// [controlDepth] of the loop's break target (the outer `block`) and of its
+  /// continue target (the inner `block` wrapping the body).
+  final List<({int breakLevel, int continueLevel})> _loopFrames = [];
+
+  void pushLoopFrame({required int breakLevel, required int continueLevel}) {
+    _loopFrames.add((breakLevel: breakLevel, continueLevel: continueLevel));
+  }
+
+  /// Pushes a `switch` frame: `break` targets the switch exit ([breakLevel]),
+  /// but `continue` keeps targeting the enclosing loop (inherited from the
+  /// current innermost frame, if any).
+  void pushSwitchFrame({required int breakLevel}) {
+    var continueLevel = _loopFrames.isNotEmpty
+        ? _loopFrames.last.continueLevel
+        : -1;
+    _loopFrames.add((breakLevel: breakLevel, continueLevel: continueLevel));
+  }
+
+  void popLoopFrame() => _loopFrames.removeLast();
+
+  /// Relative branch label from the current [controlDepth] to the innermost
+  /// loop's break target, for a `break` statement.
+  int get breakBranchLabel {
+    if (_loopFrames.isEmpty) {
+      throw StateError("`break` outside of a loop/switch");
+    }
+    return controlDepth - _loopFrames.last.breakLevel;
+  }
+
+  /// Relative branch label to the innermost loop's continue target, for a
+  /// `continue` statement.
+  int get continueBranchLabel {
+    if (_loopFrames.isEmpty) {
+      throw StateError("`continue` outside of a loop");
+    }
+    return controlDepth - _loopFrames.last.continueLevel;
+  }
 
   /// Resolves the Wasm function index for a function with [name] and [arity].
   int? functionIndex(String name, int arity) =>
