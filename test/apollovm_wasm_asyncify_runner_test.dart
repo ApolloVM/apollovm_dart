@@ -647,5 +647,42 @@ void main() {
 
       expect(r.getValueNoContext(), equals(42));
     });
+
+    test('async fn awaiting module fns with print between awaits', () async {
+      // `print` (a host import) registered after a module-function call must not
+      // shift the import index space and corrupt the call's index.
+      var runner = await _wasmRunner(r'''
+        Future<int> doubleIt(int n) async {
+          return n * 2;
+        }
+
+        Future<int> increment(int n) async {
+          return n + 1;
+        }
+
+        Future<int> run(int x) async {
+          var doubled = await doubleIt(x);
+          print('doubled: $doubled');
+          var result = await increment(doubled);
+          print('incremented: $result');
+          return result;
+        }
+      ''');
+      if (runner == null) {
+        fail('Wasm runtime not supported.');
+      }
+
+      var out = <String>[];
+      runner.externalPrintFunction = (o) => out.add('$o');
+
+      var r = await runner.executeFunction(
+        '',
+        'run',
+        positionalParameters: [10],
+      );
+
+      expect(r.getValueNoContext(), equals(21));
+      expect(out, equals(['doubled: 20', 'incremented: 21']));
+    });
   });
 }

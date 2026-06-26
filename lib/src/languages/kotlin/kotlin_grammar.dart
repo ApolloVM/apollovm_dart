@@ -557,7 +557,8 @@ class KotlinGrammarDefinition extends KotlinGrammarLexer {
           });
 
   Parser<ASTExpression> expressionNoOperation() =>
-      (expressionNegate() |
+      (expressionLambda() |
+              expressionNegate() |
               expressionLiteral() |
               expressionGroupFunctionInvocation() |
               expressionGroup() |
@@ -909,6 +910,65 @@ class KotlinGrammarDefinition extends KotlinGrammarLexer {
       (identifier().trimHidden() & char(':').trimHidden() & type()).map((v) {
         return ASTFunctionParameterDeclaration(v[2], v[0], -1, false);
       });
+
+  /// Kotlin lambda used as an expression (a closure): `{ x -> x * 2 }`,
+  /// `{ x: Int, y: Int -> x + y }`, `{ 42 }` (no parameters). The last
+  /// expression is the implicit return value. Captures the enclosing scope.
+  Parser<ASTExpression> expressionLambda() =>
+      (char('{').trimHidden() &
+              (lambdaParameters() & string('->').trimHidden()).optional() &
+              ref0(statement).star() &
+              char('}').trimHidden())
+          .map((v) {
+            var paramsOpt = v[1] as List?;
+            var parameters = paramsOpt != null
+                ? paramsOpt[0] as ASTFunctionParametersDeclaration
+                : ASTFunctionParametersDeclaration(null, null, null);
+            var statements = (v[2] as List).cast<ASTStatement>().toList();
+            // Kotlin returns the last expression of the lambda body.
+            if (statements.isNotEmpty &&
+                statements.last is ASTStatementExpression) {
+              var last = statements.removeLast() as ASTStatementExpression;
+              statements.add(ASTStatementReturnWithExpression(last.expression));
+            }
+            var block = ASTBlock(null)..addAllStatements(statements);
+            var f = ASTFunctionDeclaration(
+              '',
+              parameters,
+              ASTTypeDynamic.instance,
+              block: block,
+              modifiers: ASTModifiers.modifierStatic,
+            );
+            return ASTExpressionLiteralFunction(f);
+          });
+
+  Parser<ASTFunctionParametersDeclaration> lambdaParameters() =>
+      (lambdaParameter() & (char(',').trimHidden() & lambdaParameter()).star())
+          .map((v) {
+            var params = <ASTFunctionParameterDeclaration>[
+              v[0] as ASTFunctionParameterDeclaration,
+            ];
+            for (var e in (v[1] as List)) {
+              params.add((e as List)[1] as ASTFunctionParameterDeclaration);
+            }
+            return ASTFunctionParametersDeclaration(params, null, null);
+          });
+
+  /// A lambda parameter: typed (`x: Int`) or untyped (`x`).
+  Parser<ASTFunctionParameterDeclaration> lambdaParameter() =>
+      (identifier().trimHidden() & (char(':').trimHidden() & type()).optional())
+          .map((v) {
+            var typeOpt = v[1] as List?;
+            var type = typeOpt != null
+                ? typeOpt[1] as ASTType
+                : ASTTypeDynamic.instance;
+            return ASTFunctionParameterDeclaration(
+              type,
+              v[0] as String,
+              -1,
+              false,
+            );
+          });
 
   Parser<ASTType> type() =>
       ((mapTyped() | arrayTyped() | simpleType()) & char('?').optional()).map((

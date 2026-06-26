@@ -83,13 +83,15 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     // the i32 index of its slot, dispatched via `call_indirect`). Wasm needs a
     // concrete signature, so rebuild each with the return/parameter types
     // inferred from the function-typed parameter it is passed to.
-    var anonClosures = _collectAnonymousClosures(baseFunctions);
+    var anon = _collectAnonymousClosures(baseFunctions);
+    var anonClosures = anon.closures;
 
     var functions = [...baseFunctions, ...anonClosures.map((c) => c.function)];
     var module = WasmModuleContext(functions, classLayouts: classLayouts);
     for (var c in anonClosures) {
       module.registerClosure(c);
     }
+    module.boxedVarsByFunction.addAll(anon.boxedVars);
 
     // A public function with a String or List parameter requires the host to
     // allocate the argument in module memory, so ensure `__alloc` is exported.
@@ -670,9 +672,11 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
   /// Collects anonymous functions (closures) and computes their Wasm layout:
   /// concrete return/parameter types (inferred from the function-typed
   /// parameter each is passed to) and the captured-variable environment.
-  List<WasmClosureInfo> _collectAnonymousClosures(
-    List<ASTFunctionDeclaration> baseFunctions,
-  ) {
+  ({
+    List<WasmClosureInfo> closures,
+    Map<ASTFunctionDeclaration, Map<String, ASTType>> boxedVars,
+  })
+  _collectAnonymousClosures(List<ASTFunctionDeclaration> baseFunctions) {
     var moduleFnNames = baseFunctions.map((f) => f.name).toSet();
 
     // Map each closure to the function type it is passed as, and to the
@@ -714,6 +718,7 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     }
 
     var result = <WasmClosureInfo>[];
+    var boxedVars = <ASTFunctionDeclaration, Map<String, ASTType>>{};
     var seen = <ASTFunctionDeclaration>{};
     for (var encl in baseFunctions) {
       for (var node in encl.descendantChildren) {
@@ -726,12 +731,24 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
           var paramTypes = _closureParamTypes(fn, funcType);
           var captures = _closureCaptures(fn, enclosingOf[fn], moduleFnNames);
 
-          // Env struct layout: i32 table slot at offset 0, then captures.
+          // Env struct layout: i32 table slot at offset 0, then one i32 box
+          // pointer per capture (capture-by-reference: the env holds pointers to
+          // shared heap cells, so mutations are visible across the closure and
+          // its enclosing scope).
           var offset = 4;
           var layout = <WasmCapture>[];
           for (var c in captures) {
             layout.add((name: c.name, type: c.type, offset: offset));
-            offset += _elemSize(c.type);
+            offset += 4;
+          }
+
+          // Each captured variable is boxed in its enclosing function.
+          var encloser = enclosingOf[fn];
+          if (encloser != null) {
+            var set = boxedVars.putIfAbsent(encloser, () => {});
+            for (var c in captures) {
+              set[c.name] = c.type;
+            }
           }
 
           result.add(
@@ -747,7 +764,7 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
         }
       }
     }
-    return result;
+    return (closures: result, boxedVars: boxedVars);
   }
 
   ASTFunctionDeclaration? _findModuleFunction(
@@ -979,14 +996,14 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
 
     // A function's call indices are `importCount + position`, but host imports
     // (`env.print`, `env.int_to_str`, …) are registered lazily as bodies are
-    // generated. With classes a function may call another that is generated
-    // later (and registers imports), so emit a discovery pass first to register
-    // all imports — making `importCount` final — before the real pass. Scoped
-    // to class modules so import-free / single-function modules stay byte-stable.
-    if (module.classLayouts.isNotEmpty) {
-      for (var f in module.functions) {
-        _generateModuleFunctionBody(f, module);
-      }
+    // generated. A function may call another (or itself) and register an import
+    // *after* that call is emitted, which would shift `importCount` and corrupt
+    // the already-emitted index. So emit a discovery pass first to register all
+    // imports — making `importCount` final — before the real pass. The discovery
+    // pass only mutates idempotent module state (imports, interned strings,
+    // synth functions), so import-free modules stay byte-identical.
+    for (var f in module.functions) {
+      _generateModuleFunctionBody(f, module);
     }
 
     var entries = module.functions
@@ -2605,11 +2622,15 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       description: "[OP] closure[0] = table slot ${info.slot}",
     );
 
-    // Store each captured variable's current value into the environment.
+    // Store each capture's box pointer (the shared heap cell) into the
+    // environment, so the closure reads/writes the variable by reference.
     for (var c in info.captures) {
       out.write(Wasm.localGet(ptrLocal));
-      _emitCapturedValueRead(out, context, c.name);
-      _emitElemStore(out, c.type, c.offset);
+      _emitBoxPointer(out, context, c.name);
+      out.write(
+        Wasm32.i32Store(2, c.offset),
+        description: "[OP] closure env[${c.offset}] = box of `${c.name}`",
+      );
     }
 
     // Leave the closure pointer on the stack as the result.
@@ -2621,36 +2642,6 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     context.assertStackLength(s0 + 1, "After closure value");
 
     return out;
-  }
-
-  /// Emits (untracked) the current value of [name] for storing into a closure
-  /// environment: a captured variable (nested closure), a class field, or a
-  /// local variable of the enclosing scope.
-  void _emitCapturedValueRead(
-    BytesOutput out,
-    WasmContext context,
-    String name,
-  ) {
-    if (context.isCapturedVariable(name)) {
-      var cap = context.capturedVariables[name]!;
-      out.write(Wasm.localGet(context.closureEnvLocalIndex));
-      _emitElemLoad(out, cap.type, cap.offset);
-      return;
-    }
-    if (context.isFieldAccess(name)) {
-      out.write(Wasm.localGet(context.thisLocalIndex));
-      _emitElemLoad(
-        out,
-        context.classLayout!.types[name]!,
-        context.classLayout!.offsets[name]!,
-      );
-      return;
-    }
-    var localVar = context.getLocalVariable(name);
-    if (localVar == null) {
-      throw StateError("Wasm: can't read captured value `$name`.");
-    }
-    out.write(Wasm.localGet(localVar.index));
   }
 
   @override
@@ -3146,20 +3137,14 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
 
     var name = expression.variable.name;
 
-    // A captured variable is read from the closure environment (`env + offset`).
-    if (context.isCapturedVariable(name)) {
+    // A captured variable (closure body) or a boxed variable (enclosing scope)
+    // lives in a shared heap cell — read it by dereferencing the box pointer.
+    if (context.isCapturedVariable(name) || context.isBoxedVariable(name)) {
       final s0 = context.stackLength;
-      var cap = context.capturedVariables[name]!;
-      out.write(
-        Wasm.localGet(context.closureEnvLocalIndex),
-        description: "[OP] closure env ptr",
-      );
-      _emitElemLoad(out, cap.type, cap.offset);
-      context.stackPush(
-        _elemStackType(cap.type),
-        "captured `$name` (env + ${cap.offset})",
-      );
-      context.assertStackLength(s0 + 1, "After captured `$name`");
+      var type = _emitBoxPointer(out, context, name);
+      _emitElemLoad(out, type, 0);
+      context.stackPush(_elemStackType(type), "boxed `$name` (deref)");
+      context.assertStackLength(s0 + 1, "After boxed read `$name`");
       return out;
     }
 
@@ -3200,6 +3185,11 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
 
     var variable = expression.variable;
     var name = variable.name;
+
+    // A captured/boxed variable stores into its shared heap cell.
+    if (context.isCapturedVariable(name) || context.isBoxedVariable(name)) {
+      return _emitBoxedStore(expression, out, context);
+    }
 
     // A bare name that is a class field (and not a local) stores to
     // `this + offset`.
@@ -3252,6 +3242,73 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       "After variable declaration:  ${localVar.index} \$$name",
     );
 
+    return out;
+  }
+
+  /// The scratch-local type matching a value of [t] on the Wasm stack:
+  /// i64 for `int`, f64 for `double`, otherwise i32 (`_astTypeString`).
+  ASTType _wasmLocalType(ASTType t) => t is ASTTypeInt
+      ? _astTypeInt64
+      : (t is ASTTypeDouble ? _astTypeDouble64 : _astTypeString);
+
+  /// Pushes (untracked) the i32 box pointer for a captured/boxed variable
+  /// [name], returning its value type. For a captured variable it is loaded
+  /// from the closure environment (`env[offset]`); for a boxed variable it is
+  /// the function's box local.
+  ASTType _emitBoxPointer(BytesOutput out, WasmContext context, String name) {
+    if (context.isCapturedVariable(name)) {
+      var cap = context.capturedVariables[name]!;
+      out.write(
+        Wasm.localGet(context.closureEnvLocalIndex),
+        description: "[OP] closure env ptr (box of `$name`)",
+      );
+      out.write(Wasm32.i32Load(2, cap.offset));
+      return cap.type;
+    }
+    var b = context.boxedVariables[name]!;
+    out.write(
+      Wasm.localGet(b.boxLocal),
+      description: "[OP] box ptr of `$name`",
+    );
+    return b.type;
+  }
+
+  /// Stores the assigned value into a captured/boxed variable's heap cell, then
+  /// leaves the value on the stack (assignment is an expression).
+  BytesOutput _emitBoxedStore(
+    ASTExpressionVariableAssignment expression,
+    BytesOutput out,
+    WasmContext context,
+  ) {
+    var name = expression.variable.name;
+    final s0 = context.stackLength;
+
+    // Box pointer (untracked) first — it must sit below the value for the store.
+    var type = _emitBoxPointer(out, context, name);
+
+    // Compute the value (plain assignment) or the compound-op result.
+    if (expression.operator == ASTAssignmentOperator.set) {
+      generateASTExpression(expression.expression, out: out, context: context);
+    } else {
+      generateASTExpressionOperation(
+        ASTExpressionOperation(
+          ASTExpressionVariableAccess(expression.variable),
+          expression.operator.asASTExpressionOperator!,
+          expression.expression,
+        ),
+        out: out,
+        context: context,
+      );
+    }
+    context.assertStackLength(s0 + 1, "After boxed store value `$name`");
+
+    // Keep the value (assignment result) while storing it into the cell.
+    var valLocal = context.scratchLocal(_wasmLocalType(type), 46);
+    out.write(Wasm.localTee(valLocal));
+    _emitElemStore(out, type, 0);
+    out.write(Wasm.localGet(valLocal));
+
+    context.assertStackLength(s0 + 1, "After boxed store `$name`");
     return out;
   }
 
@@ -4004,6 +4061,48 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     );
   }
 
+  /// Allocates a heap cell ("box") for each captured variable of [f] so it can
+  /// be shared by reference between the function and the closures that capture
+  /// it. Registers each in `context.boxedVariables`; for boxed *parameters*,
+  /// emits the entry code that copies the incoming value into the cell (boxed
+  /// *locals* are boxed at their declaration).
+  void _setupBoxedVariables(
+    ASTFunctionDeclaration f, {
+    required WasmContext context,
+    required BytesOutput entry,
+  }) {
+    var module = context.module;
+    var boxed = module?.boxedVarsByFunction[f];
+    if (module == null || boxed == null || boxed.isEmpty) return;
+
+    module.requiresMemory = true;
+    module.requiresHeapGlobal = true;
+
+    var paramNames = f.parameters.allParameters.map((p) => p.name).toSet();
+
+    var slot = 40;
+    for (var entryVar in boxed.entries) {
+      var name = entryVar.key;
+      var type = entryVar.value;
+      // The box local holds an i32 cell pointer (`_astTypeString` is the i32
+      // scratch type — `_astTypeInt32` lowers to i64).
+      var boxLocal = context.scratchLocal(_astTypeString, slot++);
+      context.boxedVariables[name] = (type: type, boxLocal: boxLocal);
+
+      if (paramNames.contains(name)) {
+        var paramLocal = context.getLocalVariable(name);
+        if (paramLocal == null) continue;
+        // box = alloc(size); *box = param value
+        entry.write(Wasm32.i32Const(_elemSize(type)));
+        _emitInlineAlloc(entry, context);
+        entry.write(Wasm.localSet(boxLocal));
+        entry.write(Wasm.localGet(boxLocal));
+        entry.write(Wasm.localGet(paramLocal.index));
+        _emitElemStore(entry, type, 0);
+      }
+    }
+  }
+
   @override
   BytesOutput generateASTFunctionDeclaration(
     ASTFunctionDeclaration f, {
@@ -4117,6 +4216,10 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     // allocate scratch locals (e.g. for `%`), which must be declared in the
     // preamble below.
     var bodyCode = newOutput();
+
+    // Box captured variables (capture-by-reference): boxed parameters are moved
+    // into a heap cell at entry; boxed locals are boxed at their declaration.
+    _setupBoxedVariables(f, context: context, entry: bodyCode);
 
     for (var stm in f.statements) {
       generateASTStatement(stm, out: bodyCode, context: context);
@@ -6817,7 +6920,12 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
 
     var stackLength0 = context.stackLength;
 
-    if (context.isFieldAccess(name)) {
+    if (context.isCapturedVariable(name) || context.isBoxedVariable(name)) {
+      // Captured/boxed variable: dereference the shared heap cell.
+      var type = _emitBoxPointer(out, context, name);
+      _emitElemLoad(out, type, 0);
+      context.stackPush(_elemStackType(type), 'boxed `$name` (return)');
+    } else if (context.isFieldAccess(name)) {
       _generateFieldGet(out, context, name);
     } else {
       var localVar = _getLocalVariable(context, name);
@@ -6976,6 +7084,26 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     }
 
     var name = statement.name;
+
+    // A boxed (captured-by-reference) local: allocate its heap cell, then store
+    // the initializer into it (leaving the value on the stack as the result).
+    if (context.isBoxedVariable(name)) {
+      final s0 = context.stackLength;
+      var b = context.boxedVariables[name]!;
+      out.write(Wasm32.i32Const(_elemSize(b.type)));
+      _emitInlineAlloc(out, context);
+      out.write(Wasm.localSet(b.boxLocal));
+
+      out.write(Wasm.localGet(b.boxLocal));
+      generateASTExpression(value, out: out, context: context);
+      var valLocal = context.scratchLocal(_wasmLocalType(b.type), 47);
+      out.write(Wasm.localTee(valLocal));
+      _emitElemStore(out, b.type, 0);
+      out.write(Wasm.localGet(valLocal));
+
+      context.assertStackLength(s0 + 1, "After boxed var decl `$name`");
+      return out;
+    }
 
     var localVar = _getLocalVariable(context, name);
 
@@ -7929,6 +8057,12 @@ class WasmModuleContext {
   /// Closure info per anonymous-function declaration.
   final Map<ASTFunctionDeclaration, WasmClosureInfo> closures = {};
 
+  /// Per enclosing function, the local/parameter variables captured by a
+  /// closure (so they must be "boxed" into a shared heap cell for
+  /// capture-by-reference), mapped to their type.
+  final Map<ASTFunctionDeclaration, Map<String, ASTType>> boxedVarsByFunction =
+      {};
+
   bool get requiresTable => tableFunctions.isNotEmpty;
 
   /// Registers an anonymous function (closure), returning its table slot.
@@ -8405,6 +8539,15 @@ class WasmContext {
   /// Whether [name] is a captured variable read from the closure environment.
   bool isCapturedVariable(String name) =>
       closureEnvLocalIndex >= 0 && capturedVariables.containsKey(name);
+
+  /// Variables captured by a closure of the *current* function, "boxed" into a
+  /// shared heap cell for capture-by-reference. Maps the variable name to its
+  /// value [type] and the i32 local holding the box (cell) pointer.
+  final Map<String, ({ASTType type, int boxLocal})> boxedVariables = {};
+
+  /// Whether [name] is a boxed (captured-by-reference) variable of the current
+  /// function (its local holds a pointer to a heap cell).
+  bool isBoxedVariable(String name) => boxedVariables.containsKey(name);
 
   /// Whether [name] resolves to a field of the current method's class (and is
   /// not shadowed by a local variable).
