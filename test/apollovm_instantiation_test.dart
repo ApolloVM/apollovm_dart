@@ -1,3 +1,4 @@
+@Tags(['dart'])
 library;
 
 import 'package:apollovm/apollovm.dart';

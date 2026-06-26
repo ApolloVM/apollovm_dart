@@ -1,4 +1,5 @@
 @TestOn('vm')
+@Tags(['dart', 'java'])
 library;
 
 import 'package:apollovm/apollovm.dart';

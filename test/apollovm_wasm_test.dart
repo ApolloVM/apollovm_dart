@@ -1,3 +1,6 @@
+@Tags(['wasm', 'dart'])
+library;
+
 import 'dart:typed_data';
 
 import 'package:apollovm/apollovm.dart';

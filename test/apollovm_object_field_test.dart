@@ -1,3 +1,4 @@
+@Tags(['dart', 'kotlin'])
 library;
 
 import 'package:apollovm/apollovm.dart';

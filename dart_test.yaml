@@ -1,14 +1,39 @@
 # Test platform / tag configuration.
 #
-# Tags:
-#   wasm-gc — tests that require the WebAssembly GC proposal. These only run on
-#            engines that support WasmGC (e.g. Chrome 119+). The native
-#            `wasm_run` runtime (wasmtime 14 / wasmi 0.31) does NOT support GC,
-#            so CI that relies on `wasm_run` must EXCLUDE this tag:
+# Backend / target tags:
+#   wasm       — tests of the WebAssembly compiler+runner (Dart -> Wasm). Run on
+#                the native `wasm_run` runtime (or Chrome).
+#   wasm-gc    — tests that require the WebAssembly GC proposal. These only run
+#                on engines that support WasmGC (e.g. Chrome 119+). The native
+#                `wasm_run` runtime (wasmtime 14 / wasmi 0.31) does NOT support
+#                GC, so CI that relies on `wasm_run` must EXCLUDE this tag.
+#   wasm-chrome — Wasm tests that must run in a browser (`-p chrome`), e.g.
+#                browser-only APIs or the WasmGC engine.
 #
-#              dart test -x wasm-gc            # native / wasm_run CI
-#              dart test -p chrome -t wasm-gc  # run only the GC tests in Chrome
+# Source-language tags (the language whose source a test loads / generates):
+#   dart, java, kotlin, javascript, typescript, lua, csharp, python
+#
+# Examples:
+#   dart test -x wasm-gc              # native / wasm_run CI (no GC engine)
+#   dart test -p chrome -t wasm-gc    # only the GC tests, in Chrome
+#   dart test -t wasm                 # only the Wasm backend tests
+#   dart test -t kotlin               # only tests exercising Kotlin
+#   dart test -x wasm -x wasm-chrome  # everything except the Wasm backend
 
 tags:
+  # Backend / target.
+  wasm:
+    # The WebAssembly compiler + runner (native `wasm_run` or Chrome).
   wasm-gc:
     # Requires a WasmGC-capable engine (Chrome). Excluded from wasm_run CI.
+  wasm-chrome:
+    # Must run in a browser (`-p chrome`).
+  # Source languages.
+  dart:
+  java:
+  kotlin:
+  javascript:
+  typescript:
+  lua:
+  csharp:
+  python:

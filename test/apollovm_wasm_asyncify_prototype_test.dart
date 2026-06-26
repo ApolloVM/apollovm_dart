@@ -1,4 +1,5 @@
 @TestOn('vm')
+@Tags(['wasm'])
 library;
 
 import 'dart:typed_data';

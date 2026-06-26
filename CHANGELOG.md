@@ -20,6 +20,14 @@
 - Validated against both the AST interpreter and the compiled+executed Wasm
   module.
 
+### Tests
+
+- Test files now carry `dart test` tags: a backend tag (`wasm`, plus
+  `wasm-gc`/`wasm-chrome` for browser-only Wasm tests) and per-source-language
+  tags (`dart`, `java`, `kotlin`, `javascript`, `typescript`, `lua`, `csharp`,
+  `python`). E.g. `dart test -t wasm`, `dart test -t kotlin`, or
+  `dart test -x wasm-gc` for the native `wasm_run` CI.
+
 ## 0.1.40
 
 ### Wasm: control flow + bitwise

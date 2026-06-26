@@ -2,6 +2,9 @@
 // This code is governed by the Apache License, Version 2.0.
 // Please refer to the LICENSE and AUTHORS files for details.
 
+@Tags(['dart', 'kotlin', 'lua'])
+library;
+
 import 'package:apollovm/apollovm.dart';
 import 'package:test/test.dart';
 

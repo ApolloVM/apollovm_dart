@@ -1,4 +1,8 @@
+@Tags(['dart'])
+library;
+
 import 'package:apollovm/apollovm.dart';
+import 'package:test/test.dart';
 
 import 'apollovm_languages_test_definition.dart';
 

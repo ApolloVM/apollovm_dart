@@ -1,4 +1,5 @@
 @TestOn('chrome')
+@Tags(['wasm', 'wasm-chrome', 'dart'])
 library;
 
 import 'package:apollovm/apollovm.dart';
