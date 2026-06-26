@@ -242,13 +242,11 @@ class ASTType<V> with ASTNode implements ASTTypedNode {
     var generics = this.generics;
     var typeGenerics = type.generics;
 
-    if (generics == null || generics.isEmpty) {
-      return typeGenerics == null || typeGenerics.isEmpty;
-    }
-
-    if (typeGenerics == null || typeGenerics.isEmpty) {
-      return false;
-    }
+    // Generic erasure: a raw type (no type arguments) is compatible with a
+    // parameterized one of the same name, and vice-versa — so `Wrapper`
+    // accepts `Wrapper<int>` and `Wrapper<int>` accepts `Wrapper`.
+    if (generics == null || generics.isEmpty) return true;
+    if (typeGenerics == null || typeGenerics.isEmpty) return true;
 
     if (generics.length != typeGenerics.length) return false;
 

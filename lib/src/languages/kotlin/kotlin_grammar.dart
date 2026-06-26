@@ -156,14 +156,42 @@ class KotlinGrammarDefinition extends KotlinGrammarLexer {
             );
           });
 
+  /// Type-parameter names of the class currently being parsed (e.g. `T` in
+  /// `class Wrapper<T>`). Used by [simpleType] to erase them to `dynamic`.
+  final Set<String> _classTypeParameters = <String>{};
+
   Parser<ASTClassNormal> classDeclaration() =>
-      (classToken().trimHidden() & identifier() & classCodeBlock()).map((v) {
-        var name = v[1] as String;
-        var block = v[2];
-        var clazz = ASTClassNormal(name, ASTType<VMObject>(name), null);
-        clazz.set(block);
-        return clazz;
-      });
+      (classToken().trimHidden().map((v) {
+                _classTypeParameters.clear();
+                return v;
+              }) &
+              identifier() &
+              typeParameters().optional() &
+              classCodeBlock())
+          .map((v) {
+            var name = v[1] as String;
+            var block = v[3];
+            var clazz = ASTClassNormal(name, ASTType<VMObject>(name), null);
+            clazz.set(block);
+            _classTypeParameters.clear();
+            return clazz;
+          });
+
+  /// Generic type parameters in a declaration: `<T>`, `<K, V>`. Records the
+  /// names so member types using them are erased to `dynamic`.
+  Parser<List<String>> typeParameters() =>
+      (char('<').trimHidden() &
+              identifier().trimHidden() &
+              (char(',').trimHidden() & identifier().trimHidden()).star() &
+              char('>').trimHidden())
+          .map((v) {
+            var names = <String>[v[1] as String];
+            for (var e in (v[2] as List)) {
+              names.add((e as List)[1] as String);
+            }
+            _classTypeParameters.addAll(names);
+            return names;
+          });
 
   Parser<ASTBlock> classCodeBlock() =>
       (char('{').trimHidden() &
@@ -718,6 +746,7 @@ class KotlinGrammarDefinition extends KotlinGrammarLexer {
   Parser<ASTExpressionFunctionInvocation> expressionFunctionInvocation() =>
       ((identifier() & char('.')).optional() &
               identifier() &
+              typeArguments().optional() &
               char('(').trimHidden() &
               ref0(expressionSequence).optional() &
               char(')').trimHidden() &
@@ -726,9 +755,10 @@ class KotlinGrammarDefinition extends KotlinGrammarLexer {
             var objOpt = v[0] as List?;
             var obj = objOpt != null ? objOpt[0] as String : null;
             var name = normalizeFunctionName(v[1] as String);
-            var args = v[3] as List<ASTExpression>?;
+            // v[2]: optional generic type arguments (`<Int>`), discarded.
+            var args = v[4] as List<ASTExpression>?;
             args ??= <ASTExpression>[];
-            var chainFunctions = (v[5] as List)
+            var chainFunctions = (v[6] as List)
                 .whereType<ASTExpressionChainFunctionInvocation>()
                 .toList();
 
@@ -1069,9 +1099,47 @@ class KotlinGrammarDefinition extends KotlinGrammarLexer {
         return v[0] as ASTType;
       });
 
-  Parser<ASTType> simpleType() => identifier().map((v) {
-    return getTypeByName(v);
-  });
+  Parser<ASTType> simpleType() =>
+      (identifier() & typeArguments().optional()).map((v) {
+        var name = v[0] as String;
+        if (_classTypeParameters.contains(name)) {
+          return ASTTypeDynamic.instance;
+        }
+        var generics = v[1] as List<ASTType>?;
+        if (generics == null || generics.isEmpty) {
+          return getTypeByName(name);
+        }
+        switch (name) {
+          case 'List':
+          case 'MutableList':
+          case 'Set':
+          case 'Array':
+          case 'Iterable':
+            return ASTTypeArray(generics.first);
+          case 'Map':
+          case 'MutableMap':
+            return ASTTypeMap(
+              generics[0],
+              generics.length > 1 ? generics[1] : ASTTypeDynamic.instance,
+            );
+          default:
+            return ASTType(name, generics: generics);
+        }
+      });
+
+  /// Generic type arguments on a usage/invocation: `<Int>`, `<String, Int>`.
+  Parser<List<ASTType>> typeArguments() =>
+      (char('<').trimHidden() &
+              ref0(type) &
+              (char(',').trimHidden() & ref0(type)).star() &
+              char('>').trimHidden())
+          .map((v) {
+            var list = <ASTType>[v[1] as ASTType];
+            for (var e in (v[2] as List)) {
+              list.add((e as List)[1] as ASTType);
+            }
+            return list;
+          });
 
   Parser<ASTTypeArray> arrayTyped() =>
       ((string('List') | string('MutableList') | string('Array')) &

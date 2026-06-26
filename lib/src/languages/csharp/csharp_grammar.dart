@@ -119,18 +119,43 @@ class CSharpGrammarDefinition extends CSharpGrammarLexer {
             return ASTEnumEntry(name, value);
           });
 
+  /// Type-parameter names of the class currently being parsed (e.g. `T` in
+  /// `class Wrapper<T>`). Used by [simpleType] to erase them to `dynamic`.
+  final Set<String> _classTypeParameters = <String>{};
+
   Parser<ASTClassNormal> classDeclaration() =>
       (classVisibilityModifier().star() &
-              string('class').trimHidden() &
+              string('class').trimHidden().map((v) {
+                _classTypeParameters.clear();
+                return v;
+              }) &
               identifier() &
+              typeParameters().optional() &
               classBaseList().optional() &
               classCodeBlock())
           .map((v) {
             var name = v[2] as String;
-            var block = v[4];
+            var block = v[5];
             var clazz = ASTClassNormal(name, ASTType<VMObject>(name), null);
             clazz.set(block);
+            _classTypeParameters.clear();
             return clazz;
+          });
+
+  /// Generic type parameters in a declaration: `<T>`, `<K, V>`. Records the
+  /// names so member types using them are erased to `dynamic`.
+  Parser<List<String>> typeParameters() =>
+      (char('<').trimHidden() &
+              identifier().trimHidden() &
+              (char(',').trimHidden() & identifier().trimHidden()).star() &
+              char('>').trimHidden())
+          .map((v) {
+            var names = <String>[v[1] as String];
+            for (var e in (v[2] as List)) {
+              names.add((e as List)[1] as String);
+            }
+            _classTypeParameters.addAll(names);
+            return names;
           });
 
   /// `class Foo : Base, IInterface` (parsed and ignored, like Java's
@@ -767,6 +792,7 @@ class CSharpGrammarDefinition extends CSharpGrammarLexer {
       (newToken().optional() &
               (identifier() & char('.')).optional() &
               identifier() &
+              genericArguments().optional() &
               char('(').trimHidden() &
               ref0(expressionSequence).optional() &
               char(')').trimHidden() &
@@ -775,9 +801,11 @@ class CSharpGrammarDefinition extends CSharpGrammarLexer {
             var objOpt = v[1] as List?;
             var obj = objOpt != null ? objOpt[0] as String : null;
             var name = v[2] as String;
-            var args = v[4] as List<ASTExpression>?;
+            // v[3]: optional generic type arguments (`<int>`), discarded — the
+            // constructor/function resolves by name.
+            var args = v[5] as List<ASTExpression>?;
             args ??= <ASTExpression>[];
-            var chainFunctions = (v[6] as List)
+            var chainFunctions = (v[7] as List)
                 .whereType<ASTExpressionChainFunctionInvocation>()
                 .toList();
 
@@ -1197,6 +1225,10 @@ class CSharpGrammarDefinition extends CSharpGrammarLexer {
         var name = v[0] as String;
         var generics = v[1] as List<ASTType>?;
         if (generics == null || generics.isEmpty) {
+          // A class type parameter (`T`) is erased to `dynamic`.
+          if (_classTypeParameters.contains(name)) {
+            return ASTTypeDynamic.instance;
+          }
           return getTypeByName(name);
         }
         return typeWithGenerics(name, generics);

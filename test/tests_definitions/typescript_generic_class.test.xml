@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="TypeScript generic class declaration">
+    <source language="typescript">
+        <![CDATA[
+class Box<T> {
+  wrap(x: T): T {
+    return x;
+  }
+}
+        ]]>
+    </source>
+    <source-generated language="typescript"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+class Box {
+
+  wrap(x) {
+    return x;
+  }
+
+}
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+</test>

@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="Kotlin generic class declaration">
+    <source language="kotlin">
+        <![CDATA[
+class Box<T> {
+  fun wrap(x: T): T {
+    return x
+  }
+}
+        ]]>
+    </source>
+    <source-generated language="kotlin"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+class Box {
+
+  fun wrap(x: Any): Any {
+    return x
+  }
+
+}
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+</test>

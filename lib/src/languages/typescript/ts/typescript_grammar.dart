@@ -95,8 +95,15 @@ class TypeScriptGrammarDefinition extends TypeScriptGrammarLexer {
       (identifier() & ref0(typeGenerics).optional()).map((v) {
         var name = v[0] as String;
         var generics = (v[1] as List<ASTType>?) ?? const <ASTType>[];
+        // A class type parameter (`T`) is erased to `dynamic`.
+        if (generics.isEmpty && _classTypeParameters.contains(name)) {
+          return ASTTypeDynamic.instance;
+        }
         if ((name == 'Array' || name == 'List') && generics.isNotEmpty) {
           return ASTTypeArray(generics.first);
+        }
+        if (generics.isNotEmpty) {
+          return ASTType(name, generics: generics);
         }
         return getTypeByName(name);
       });
@@ -198,20 +205,29 @@ class TypeScriptGrammarDefinition extends TypeScriptGrammarLexer {
             );
           });
 
+  /// Type-parameter names of the class currently being parsed (e.g. `T` in
+  /// `class Wrapper<T>`). Used by [genericOrSimpleType] to erase them to
+  /// `dynamic`.
+  final Set<String> _classTypeParameters = <String>{};
+
   Parser<ASTClassNormal> classDeclaration() =>
       (abstractToken().trimHidden().optional() &
-              classToken().trimHidden() &
+              classToken().trimHidden().map((v) {
+                _classTypeParameters.clear();
+                return v;
+              }) &
               identifier() &
+              typeParameters().optional() &
               (extendsToken().trimHidden() & identifier()).optional() &
               implementsClause().optional() &
               classCodeBlock())
           .map((v) {
             var isAbstract = v[0] != null;
             var name = v[2] as String;
-            var extendsOpt = v[3] as List?;
+            var extendsOpt = v[4] as List?;
             var superName = extendsOpt != null ? extendsOpt[1] as String : null;
-            var interfaces = (v[4] as List<String>?) ?? const <String>[];
-            var block = v[5] as ASTBlock;
+            var interfaces = (v[5] as List<String>?) ?? const <String>[];
+            var block = v[6] as ASTBlock;
             var clazz = ASTClassNormal(
               name,
               ASTType<VMObject>(name),
@@ -223,7 +239,24 @@ class TypeScriptGrammarDefinition extends TypeScriptGrammarLexer {
               implementsTypes: interfaces.isEmpty ? null : interfaces,
             );
             clazz.set(block);
+            _classTypeParameters.clear();
             return clazz;
+          });
+
+  /// Generic type parameters in a declaration: `<T>`, `<K, V>`. Records the
+  /// names so member types using them are erased to `dynamic`.
+  Parser<List<String>> typeParameters() =>
+      (char('<').trimHidden() &
+              identifier().trimHidden() &
+              (char(',').trimHidden() & identifier().trimHidden()).star() &
+              char('>').trimHidden())
+          .map((v) {
+            var names = <String>[v[1] as String];
+            for (var e in (v[2] as List)) {
+              names.add((e as List)[1] as String);
+            }
+            _classTypeParameters.addAll(names);
+            return names;
           });
 
   /// `implements A, B, C`.
@@ -981,18 +1014,25 @@ class TypeScriptGrammarDefinition extends TypeScriptGrammarLexer {
           });
 
   Parser<ASTExpressionFunctionInvocation> expressionFunctionInvocation() =>
-      ((identifier() & char('.')).optional() &
+      // Optional `new` prefix for class instantiation (`new Wrapper<T>(…)`);
+      // consumed and discarded — the constructor resolves by name.
+      ((string('new') & ref0(identifierPartLexicalToken).not())
+                  .trimHidden()
+                  .optional() &
+              (identifier() & char('.')).optional() &
               identifier() &
+              ref0(typeGenerics).optional() &
               char('(').trimHidden() &
               ref0(expressionSequence).optional() &
               char(')').trimHidden() &
               expressionChainFunctionInvocation().star())
           .map((v) {
-            var objOpt = v[0] as List?;
+            var objOpt = v[1] as List?;
             var obj = objOpt != null ? objOpt[0] as String : null;
-            var name = v[1] as String;
-            var args = (v[3] as List<ASTExpression>?) ?? <ASTExpression>[];
-            var chainFunctions = (v[5] as List)
+            var name = v[2] as String;
+            // v[3]: optional generic type arguments (`<number>`), discarded.
+            var args = (v[5] as List<ASTExpression>?) ?? <ASTExpression>[];
+            var chainFunctions = (v[7] as List)
                 .whereType<ASTExpressionChainFunctionInvocation>()
                 .toList();
 

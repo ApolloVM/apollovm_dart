@@ -89,14 +89,48 @@ class Java11GrammarDefinition extends Java11GrammarLexer {
   Parser<ASTEnumEntry> enumEntry() =>
       identifier().trimHidden().map((v) => ASTEnumEntry(v));
 
+  /// Type-parameter names of the class currently being parsed (e.g. `T` in
+  /// `class Wrapper<T>`). Used by [simpleType] to erase them to `dynamic`.
+  final Set<String> _classTypeParameters = <String>{};
+
   Parser<ASTClassNormal> classDeclaration() =>
-      (string('class').trimHidden() & identifier() & classCodeBlock()).map((v) {
-        var name = v[1] as String;
-        var block = v[2];
-        var clazz = ASTClassNormal(name, ASTType<VMObject>(name), null);
-        clazz.set(block);
-        return clazz;
-      });
+      (string('class').trimHidden().map((v) {
+                _classTypeParameters.clear();
+                return v;
+              }) &
+              identifier() &
+              typeParameters().optional() &
+              classCodeBlock())
+          .map((v) {
+            var name = v[1] as String;
+            var block = v[3];
+            var clazz = ASTClassNormal(name, ASTType<VMObject>(name), null);
+            clazz.set(block);
+            _classTypeParameters.clear();
+            return clazz;
+          });
+
+  /// Generic type parameters in a declaration: `<T>`, `<K, V>` (names only;
+  /// bounds like `<T extends Foo>` keep just the name). Records the names so
+  /// member types using them are erased to `dynamic`.
+  Parser<List<String>> typeParameters() =>
+      (char('<').trimHidden() &
+              typeParameter() &
+              (char(',').trimHidden() & typeParameter()).star() &
+              char('>').trimHidden())
+          .map((v) {
+            var names = <String>[v[1] as String];
+            for (var e in (v[2] as List)) {
+              names.add((e as List)[1] as String);
+            }
+            _classTypeParameters.addAll(names);
+            return names;
+          });
+
+  Parser<String> typeParameter() =>
+      (identifier().trimHidden() &
+              (string('extends').trimHidden() & ref0(type)).optional())
+          .map((v) => v[0] as String);
 
   Parser<ASTBlock> classCodeBlock() =>
       (char('{').trimHidden() &
@@ -716,6 +750,7 @@ class Java11GrammarDefinition extends Java11GrammarLexer {
       (newToken().optional() &
               (identifier() & char('.')).optional() &
               identifier() &
+              genericArguments().optional() &
               char('(').trimHidden() &
               ref0(expressionSequence).optional() &
               char(')').trimHidden() &
@@ -724,9 +759,11 @@ class Java11GrammarDefinition extends Java11GrammarLexer {
             var objOpt = v[1] as List?;
             var obj = objOpt != null ? objOpt[0] as String : null;
             var name = v[2] as String;
-            var args = v[4] as List<ASTExpression>?;
+            // v[3]: optional generic type arguments (`<Integer>`), discarded —
+            // the constructor/function resolves by name.
+            var args = v[5] as List<ASTExpression>?;
             args ??= <ASTExpression>[];
-            var chainFunctions = (v[6] as List)
+            var chainFunctions = (v[7] as List)
                 .whereType<ASTExpressionChainFunctionInvocation>()
                 .toList();
 
@@ -1136,6 +1173,10 @@ class Java11GrammarDefinition extends Java11GrammarLexer {
         var name = v[0] as String;
         var generics = v[1] as List<ASTType>?;
         if (generics == null || generics.isEmpty) {
+          // A class type parameter (`T`) is erased to `dynamic`.
+          if (_classTypeParameters.contains(name)) {
+            return ASTTypeDynamic.instance;
+          }
           return getTypeByName(name);
         }
         return typeWithGenerics(name, generics);

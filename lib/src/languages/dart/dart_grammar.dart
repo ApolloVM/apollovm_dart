@@ -125,10 +125,20 @@ class DartGrammarDefinition extends DartGrammarLexer {
             return ASTStatementImport(path);
           });
 
+  /// Type-parameter names of the class currently being parsed (e.g. `T` in
+  /// `class Wrapper<T>`). Used by [simpleType] to erase them to `dynamic`.
+  final Set<String> _classTypeParameters = <String>{};
+
   Parser<ASTClassNormal> classDeclaration() =>
       (abstractToken().trimHidden().optional() &
-              string('class').trimHidden() &
+              string('class').trimHidden().map((v) {
+                // Reset at each class head; type parameters (if any) are added
+                // next, before the body is parsed.
+                _classTypeParameters.clear();
+                return v;
+              }) &
               identifier() &
+              typeParameters().optional() &
               (extendsToken().trimHidden() & identifier()).optional() &
               (implementsToken().trimHidden() &
                       identifier() &
@@ -139,10 +149,10 @@ class DartGrammarDefinition extends DartGrammarLexer {
             var isAbstract = v[0] != null;
             var name = v[2] as String;
 
-            var extendsOpt = v[3] as List?;
+            var extendsOpt = v[4] as List?;
             var superName = extendsOpt != null ? extendsOpt[1] as String : null;
 
-            var implementsOpt = v[4] as List?;
+            var implementsOpt = v[5] as List?;
             var interfaces = <String>[];
             if (implementsOpt != null) {
               interfaces.add(implementsOpt[1] as String);
@@ -151,7 +161,7 @@ class DartGrammarDefinition extends DartGrammarLexer {
               }
             }
 
-            var block = v[5];
+            var block = v[6];
             var clazz = ASTClassNormal(
               name,
               ASTType<VMObject>(name),
@@ -163,7 +173,44 @@ class DartGrammarDefinition extends DartGrammarLexer {
               implementsTypes: interfaces.isEmpty ? null : interfaces,
             );
             clazz.set(block);
+            _classTypeParameters.clear();
             return clazz;
+          });
+
+  /// Generic type parameters in a declaration: `<T>`, `<K, V>` (names only;
+  /// bounds like `<T extends Foo>` keep just the name). Records the names so
+  /// member types using them are erased to `dynamic`.
+  Parser<List<String>> typeParameters() =>
+      (char('<').trimHidden() &
+              typeParameter() &
+              (char(',').trimHidden() & typeParameter()).star() &
+              char('>').trimHidden())
+          .map((v) {
+            var names = <String>[v[1] as String];
+            for (var e in (v[2] as List)) {
+              names.add((e as List)[1] as String);
+            }
+            _classTypeParameters.addAll(names);
+            return names;
+          });
+
+  Parser<String> typeParameter() =>
+      (identifier().trimHidden() &
+              (extendsToken().trimHidden() & ref0(type)).optional())
+          .map((v) => v[0] as String);
+
+  /// Generic type arguments on a usage/invocation: `<int>`, `<String, int>`.
+  Parser<List<ASTType>> typeArguments() =>
+      (char('<').trimHidden() &
+              ref0(type) &
+              (char(',').trimHidden() & ref0(type)).star() &
+              char('>').trimHidden())
+          .map((v) {
+            var list = <ASTType>[v[1] as ASTType];
+            for (var e in (v[2] as List)) {
+              list.add((e as List)[1] as ASTType);
+            }
+            return list;
           });
 
   Parser<ASTClassEnum> enumDeclaration() =>
@@ -1004,6 +1051,7 @@ class DartGrammarDefinition extends DartGrammarLexer {
       (newToken().optional() &
               (identifier() & char('.')).optional() &
               identifier() &
+              ref0(typeArguments).optional() &
               char('(').trimHidden() &
               ref0(expressionSequence).optional() &
               char(')').trimHidden() &
@@ -1012,9 +1060,11 @@ class DartGrammarDefinition extends DartGrammarLexer {
             var objOpt = v[1] as List?;
             var obj = objOpt != null ? objOpt[0] as String : null;
             var name = v[2] as String;
-            var args = v[4] as List<ASTExpression>?;
+            // v[3]: optional generic type arguments (`<int>`), discarded — the
+            // constructor/function resolves by name.
+            var args = v[5] as List<ASTExpression>?;
             args ??= <ASTExpression>[];
-            var chainFunctions = (v[6] as List)
+            var chainFunctions = (v[7] as List)
                 .whereType<ASTExpressionChainFunctionInvocation>()
                 .toList();
 
@@ -1425,7 +1475,12 @@ class DartGrammarDefinition extends DartGrammarLexer {
       // (so `await x;` parses as an await expression, not a `await x` variable
       // declaration).
       (awaitToken().not() & identifier()).map((v) {
-        return getTypeByName(v[1] as String);
+        var name = v[1] as String;
+        // A class type parameter (`T`) is erased to `dynamic`.
+        if (_classTypeParameters.contains(name)) {
+          return ASTTypeDynamic.instance;
+        }
+        return getTypeByName(name);
       });
 
   Parser<ASTTypeArray> arrayTyped() =>
