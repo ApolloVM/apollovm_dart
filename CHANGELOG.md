@@ -22,6 +22,14 @@
 - Fixes `async`/`await` functions that call other functions and `print` between
   awaits, which now run identically on the interpreter and Wasm.
 
+### Wasm: closures capture variables by reference
+
+- Captured variables are now "boxed" into shared heap cells: the closure
+  environment holds pointers to the cells (not copied values), so a variable
+  mutated after a closure is created — or mutated *by* the closure — is visible
+  on both sides, matching the interpreter. Each closure instance still gets its
+  own cell (e.g. two counters created from the same factory are independent).
+
 ## 0.1.36
 
 ### Ternary / conditional expressions
