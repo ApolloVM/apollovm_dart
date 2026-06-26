@@ -341,7 +341,8 @@ class TypeScriptGrammarDefinition extends TypeScriptGrammarLexer {
 
   Parser<ASTBlock> classCodeBlock() =>
       (char('{').trimHidden() &
-              (ref0(classFunctionDeclaration) |
+              (ref0(classConstructorDeclaration) |
+                      ref0(classFunctionDeclaration) |
                       ref0(classFieldDeclarationWithValue) |
                       ref0(classFieldDeclaration))
                   .star() &
@@ -349,15 +350,56 @@ class TypeScriptGrammarDefinition extends TypeScriptGrammarLexer {
           .map((v) {
             var list = v[1] as List;
             var fields = list.whereType<ASTClassField>().toList();
+            var constructors = list
+                .whereType<ASTClassConstructorDeclaration>()
+                .toList();
             var functions = list.whereType<ASTFunctionDeclaration>().toList();
 
             var block = ASTClassNormal('?', ASTType<VMObject>('?'), null);
 
             block.addAllFields(fields);
+            block.addAllConstructors(constructors);
             block.addAllFunctions(functions);
 
             return block;
           });
+
+  /// TypeScript `constructor(params) { ... }` — a real constructor (not a
+  /// method), so `new Foo(...)` resolves and runs it. The class type is filled
+  /// in from the enclosing class at resolution time.
+  Parser<ASTClassConstructorDeclaration> classConstructorDeclaration() =>
+      (memberModifiers() &
+              string('constructor') &
+              ref0(identifierPartLexicalToken).not() &
+              functionParametersDeclaration().trimHidden() &
+              typeAnnotation().optional() &
+              codeBlock())
+          .map((v) {
+            var fnParams = v[3] as ASTFunctionParametersDeclaration;
+            var block = v[5] as ASTBlock;
+            return ASTClassConstructorDeclaration(
+              ASTType(''),
+              '',
+              _toConstructorParameters(fnParams),
+              block: block,
+            );
+          });
+
+  ASTConstructorParametersDeclaration _toConstructorParameters(
+    ASTFunctionParametersDeclaration fn,
+  ) {
+    var positional = fn.positionalParameters
+        ?.map(
+          (p) => ASTConstructorParameterDeclaration(
+            p.type,
+            p.name,
+            p.index,
+            p.optional,
+          ),
+        )
+        .toList();
+    return ASTConstructorParametersDeclaration(positional, null, null);
+  }
 
   /// `[modifiers] name[: type];` — a class/interface field.
   Parser<ASTClassField> classFieldDeclaration() =>

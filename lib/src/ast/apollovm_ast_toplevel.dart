@@ -2368,7 +2368,16 @@ class ASTClassConstructorDeclaration<T>
   }
 
   @override
-  ASTType resolveType(VMContext? context) => classType;
+  ASTType resolveType(VMContext? context) {
+    // Languages whose constructor syntax omits the class name (Kotlin/TS
+    // `constructor(...)`) create the declaration with an empty [classType];
+    // fall back to the enclosing class so instantiation resolves the real type.
+    if (classType.name.isEmpty) {
+      var parentClass = this.parentClass;
+      if (parentClass != null) return parentClass.type;
+    }
+    return classType;
+  }
 
   @override
   FutureOr<ASTClassInstance<ASTValue<T>>> initializeVariables(

@@ -1,3 +1,39 @@
+## 0.1.39
+
+### enum runtime value access
+
+- `EnumType.entry` now resolves at runtime to the entry's value: its explicit
+  value when present (C# `Level.Medium` → `5`), otherwise its ordinal index
+  (Dart `Color.blue` → `2`). `ASTRoot.getNodeIdentifier` resolves user
+  classes/enums by name; enum entry access short-circuits in
+  `ASTExpressionObjectGetterAccess`.
+
+### Generics
+
+- Parse generic type annotations in Java and C# (`List<Integer>`,
+  `Map<String,Integer> m`, `Box<T>`); well-known collections map to the shared
+  array/map types, other generic types keep their type arguments and round-trip.
+- Support generic class declarations and instantiation across the languages that
+  have generics: `class Wrapper<T> { T value; … }` plus `new Wrapper<int>(10)` /
+  `Wrapper<int>(10)`. Class type parameters are erased to `dynamic` in member
+  types; generic type arguments on calls are parsed. Runs end-to-end in Dart,
+  Java, C#, Kotlin and TypeScript.
+- Type system: generic erasure in `ASTType.acceptsType` — a raw type and a
+  parameterized one of the same name are mutually compatible (so a `Wrapper`
+  instance binds to a `Wrapper<int>` variable).
+
+### Fixes
+
+- Java for-each now generates the colon form `for (Type x : coll)` instead of the
+  invalid `for (var x in coll)`, so generated Java re-parses.
+- Kotlin `val`/`var` keywords now require a word boundary, so identifiers like
+  `value` are no longer mangled (e.g. a constructor parameter `value` was read as
+  `ue`).
+- Kotlin and TypeScript class instantiation/constructors now execute: a
+  constructor with an omitted class name (`constructor(...)`) resolves its type
+  from the enclosing class, and TypeScript `constructor(...)` is parsed as a real
+  constructor so `new Foo(...)` works.
+
 ## 0.1.38
 
 ### Language: C# — lambda parsing

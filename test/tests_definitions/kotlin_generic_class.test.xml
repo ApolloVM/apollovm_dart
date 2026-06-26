@@ -1,21 +1,46 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<test title="Kotlin generic class declaration">
+<test title="Kotlin generic class (declaration, instantiation, value access)">
     <source language="kotlin">
         <![CDATA[
-class Box<T> {
-  fun wrap(x: T): T {
-    return x
+class Wrapper<T> {
+  var value: T
+
+  constructor(value: T){
+    this.value = value
+  }
+}
+
+class Main {
+  fun run(): Int {
+    val w = Wrapper<Int>(10)
+    return w.value + 5
   }
 }
         ]]>
     </source>
+    <call class="Main" function="run" return="15">
+        []
+    </call>
+    <output>
+        []
+    </output>
     <source-generated language="kotlin"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
 <<<< NAMESPACE="" >>>>
 <<<< CODE_UNIT_START="/test" >>>>
-class Box {
+class Wrapper {
 
-  fun wrap(x: Any): Any {
-    return x
+  var value: Any
+
+  constructor(value: Any) {
+    this.value = value
+  }
+
+}
+class Main {
+
+  fun run(): Int {
+    val w = Wrapper(10)
+    return w.value + 5
   }
 
 }
