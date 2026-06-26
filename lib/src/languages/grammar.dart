@@ -106,6 +106,16 @@ abstract class BaseGrammarLexer extends GrammarDefinition {
       ASTExpressionOperator.subtract,
     });
 
+    // Bitwise precedence (tighter than comparisons): shift, then AND, XOR, OR.
+    _reduceOps(block, {
+      ASTExpressionOperator.shiftLeft,
+      ASTExpressionOperator.shiftRight,
+    });
+
+    _reduceOps(block, {ASTExpressionOperator.bitwiseAnd});
+    _reduceOps(block, {ASTExpressionOperator.bitwiseXor});
+    _reduceOps(block, {ASTExpressionOperator.bitwiseOr});
+
     // Final left-to-right fallback
     while (block.length >= 3) {
       var e1 = block.removeAt(0);

@@ -29,6 +29,27 @@
 - New golden tests under `test/tests_definitions/*_control_flow*.test.xml` for
   all eight languages.
 
+### Bitwise operators
+
+- New operators `&`, `|`, `^`, `<<`, `>>` (binary) and `~` (unary complement),
+  with shared AST/runtime evaluation (`int` operands) and precedence (shift,
+  then AND/XOR/OR, between arithmetic and comparison).
+- Parsed and generated in **Dart, Java, C#, JavaScript, TypeScript, Python**.
+  Java additionally gains the previously-missing `%`, `&&` and `||` operators.
+- Not added for Kotlin (bitwise are infix functions `and`/`or`/`shl`/`inv`) or
+  Lua (`~` is xor and `^` is exponentiation) — their non-symbolic forms need
+  bespoke handling.
+- New golden tests `test/tests_definitions/*_bitwise.test.xml`.
+
+### enum (Java, C#, Kotlin, Python)
+
+- Enum declaration parsing + generation extended to **Java** (`enum E { … }`),
+  **C#** (`enum E { A = 1, … }`), **Kotlin** (`enum class E { … }`) and
+  **Python** (`class E(Enum): …`), joining the existing Dart/TypeScript support.
+- Declaration + round-trip only (matching the prior Dart/TS level); runtime
+  enum-value access is a separate future enhancement.
+- New golden tests `test/tests_definitions/*_enum.test.xml`.
+
 ## 0.1.37
 
 ### Language: C#

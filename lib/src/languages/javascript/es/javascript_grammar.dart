@@ -641,6 +641,8 @@ class JavaScriptGrammarDefinition extends JavaScriptGrammarLexer {
               string('!==') |
               string('==') |
               string('!=') |
+              string('<<') |
+              string('>>') |
               string('>=') |
               string('<=') |
               string('&&') |
@@ -651,7 +653,10 @@ class JavaScriptGrammarDefinition extends JavaScriptGrammarLexer {
               char('/') |
               char('>') |
               char('<') |
-              char('%'))
+              char('%') |
+              char('&') |
+              char('|') |
+              char('^'))
           .trimHidden()
           .map((v) {
             switch (v) {
@@ -670,6 +675,7 @@ class JavaScriptGrammarDefinition extends JavaScriptGrammarLexer {
   Parser<ASTExpression> expressionNoOperation() =>
       (expressionArrowFunction() |
               expressionNegate() |
+              expressionBitwiseNot() |
               expressionLiteral() |
               expressionGroupFunctionInvocation() |
               expressionGroup() |
@@ -695,6 +701,11 @@ class JavaScriptGrammarDefinition extends JavaScriptGrammarLexer {
       (char('-').trimHidden() &
               (ref0(expressionNoOperation) | ref0(expressionGroup)))
           .map((v) => ASTExpressionNegative(v[1] as ASTExpression));
+
+  Parser<ASTExpressionBitwiseNot> expressionBitwiseNot() =>
+      (char('~').trimHidden() &
+              (ref0(expressionNoOperation) | ref0(expressionGroup)))
+          .map((v) => ASTExpressionBitwiseNot(v[1] as ASTExpression));
 
   Parser<ASTExpression> expressionGroup() =>
       (char('(').trimHidden() & ref0(expression) & char(')').trimHidden()).map(

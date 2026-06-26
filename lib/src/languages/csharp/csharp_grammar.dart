@@ -83,7 +83,41 @@ class CSharpGrammarDefinition extends CSharpGrammarLexer {
       (char('.').trimHidden() & identifier()).star() &
       char(';').trimHidden());
 
-  Parser topLevelDefinition() => (classDeclaration());
+  Parser topLevelDefinition() => (enumDeclaration() | classDeclaration());
+
+  Parser<ASTClassEnum> enumDeclaration() =>
+      (classVisibilityModifier().star() &
+              string('enum') &
+              ref0(identifierPartLexicalToken).not() &
+              identifier().trimHidden() &
+              char('{').trimHidden() &
+              enumEntry() &
+              (char(',').trimHidden() & enumEntry()).star() &
+              char(',').trimHidden().optional() &
+              char('}').trimHidden())
+          .map((v) {
+            var name = v[3] as String;
+            var entries = <ASTEnumEntry>[v[5] as ASTEnumEntry];
+            for (var e in (v[6] as List)) {
+              entries.add(e[1] as ASTEnumEntry);
+            }
+            return ASTClassEnum(
+              name,
+              ASTType<VMObject>(name),
+              null,
+              entries: entries,
+            );
+          });
+
+  Parser<ASTEnumEntry> enumEntry() =>
+      (identifier().trimHidden() &
+              (char('=').trimHidden() & ref0(expression)).optional())
+          .map((v) {
+            var name = v[0] as String;
+            var valueOpt = v[1] as List?;
+            var value = valueOpt != null ? valueOpt[1] as ASTExpression : null;
+            return ASTEnumEntry(name, value);
+          });
 
   Parser<ASTClassNormal> classDeclaration() =>
       (classVisibilityModifier().star() &
@@ -632,12 +666,17 @@ class CSharpGrammarDefinition extends CSharpGrammarLexer {
               char('%') |
               string('==') |
               string('!=') |
+              string('<<') |
+              string('>>') |
               string('<=') |
               string('>=') |
               string('&&') |
               string('||') |
               char('<') |
-              char('>'))
+              char('>') |
+              char('&') |
+              char('|') |
+              char('^'))
           .trimHidden()
           .map((v) {
             return getASTExpressionOperator(v);
@@ -646,6 +685,7 @@ class CSharpGrammarDefinition extends CSharpGrammarLexer {
   Parser<ASTExpression> expressionNoOperation() =>
       (expressionLambda() |
               expressionNegate() |
+              expressionBitwiseNot() |
               expressionLiteral() |
               expressionGroupFunctionInvocation() |
               expressionGroup() |
@@ -679,6 +719,14 @@ class CSharpGrammarDefinition extends CSharpGrammarLexer {
           .map((v) {
             var exp = v[1] as ASTExpression;
             return ASTExpressionNegative(exp);
+          });
+
+  Parser<ASTExpressionBitwiseNot> expressionBitwiseNot() =>
+      (char('~').trimHidden() &
+              (ref0(expressionNoOperation) | ref0(expressionGroup)))
+          .map((v) {
+            var exp = v[1] as ASTExpression;
+            return ASTExpressionBitwiseNot(exp);
           });
 
   Parser<ASTExpression> expressionGroup() =>

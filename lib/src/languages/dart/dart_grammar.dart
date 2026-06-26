@@ -892,13 +892,18 @@ class DartGrammarDefinition extends DartGrammarLexer {
               string('~/') |
               string('==') |
               string('!=') |
+              string('<<') |
+              string('>>') |
               string('>=') |
               string('<=') |
               char('>') |
               char('<') |
               char('%') |
               string('&&') |
-              string('||'))
+              string('||') |
+              char('&') |
+              char('|') |
+              char('^'))
           .trimHidden()
           .map((v) {
             var op = getASTExpressionOperator(v);
@@ -916,6 +921,7 @@ class DartGrammarDefinition extends DartGrammarLexer {
       (expressionAwait() |
               expressionAnonymousFunction() |
               expressionNegate() |
+              expressionBitwiseNot() |
               expressionLiteral() |
               expressionGroupFunctionInvocation() |
               expressionGroup() |
@@ -950,6 +956,14 @@ class DartGrammarDefinition extends DartGrammarLexer {
           .map((v) {
             var exp = v[1] as ASTExpression;
             return ASTExpressionNegative(exp);
+          });
+
+  Parser<ASTExpressionBitwiseNot> expressionBitwiseNot() =>
+      (char('~').trimHidden() &
+              (ref0(expressionNoOperation) | ref0(expressionGroup)))
+          .map((v) {
+            var exp = v[1] as ASTExpression;
+            return ASTExpressionBitwiseNot(exp);
           });
 
   Parser<ASTExpression> expressionGroup() =>

@@ -102,10 +102,39 @@ class KotlinGrammarDefinition extends KotlinGrammarLexer {
           });
 
   Parser topLevelDefinition() =>
-      (functionDeclaration() |
+      (enumDeclaration() |
+              functionDeclaration() |
               classDeclaration() |
               statementVariableDeclaration())
           .plus();
+
+  /// Kotlin `enum class Name { A, B, C }`.
+  Parser<ASTClassEnum> enumDeclaration() =>
+      (string('enum') &
+              ref0(identifierPartLexicalToken).not() &
+              classToken().trimHidden() &
+              identifier().trimHidden() &
+              char('{').trimHidden() &
+              enumEntry() &
+              (char(',').trimHidden() & enumEntry()).star() &
+              char(',').trimHidden().optional() &
+              char('}').trimHidden())
+          .map((v) {
+            var name = v[3] as String;
+            var entries = <ASTEnumEntry>[v[5] as ASTEnumEntry];
+            for (var e in (v[6] as List)) {
+              entries.add(e[1] as ASTEnumEntry);
+            }
+            return ASTClassEnum(
+              name,
+              ASTType<VMObject>(name),
+              null,
+              entries: entries,
+            );
+          });
+
+  Parser<ASTEnumEntry> enumEntry() =>
+      identifier().trimHidden().map((v) => ASTEnumEntry(v));
 
   Parser<ASTFunctionDeclaration> functionDeclaration() =>
       (funToken().trimHidden() &

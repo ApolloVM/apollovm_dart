@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="C# enum declaration">
+    <source language="csharp">
+        <![CDATA[
+enum Color {
+  Red = 1,
+  Green = 2,
+  Blue = 3
+}
+        ]]>
+    </source>
+    <source-generated language="csharp"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+enum Color {
+  Red = 1,
+  Green = 2,
+  Blue = 3
+}
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+</test>

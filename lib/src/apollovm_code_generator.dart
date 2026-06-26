@@ -1342,6 +1342,13 @@ abstract class ApolloCodeGenerator
         indent: indent,
         headIndented: headIndented,
       );
+    } else if (expression is ASTExpressionBitwiseNot) {
+      return generateASTExpressionBitwiseNot(
+        expression,
+        out: out,
+        indent: indent,
+        headIndented: headIndented,
+      );
     } else if (expression is ASTExpressionAwait) {
       return generateASTExpressionAwait(
         expression,
@@ -1705,6 +1712,29 @@ abstract class ApolloCodeGenerator
 
     // Parenthesize a complex operand so `!(a > b)` is not emitted as `!a > b`
     // (which would re-parse as `(!a) > b`).
+    final inner = expression.expression;
+    final group = inner.isComplex;
+
+    if (group) out.write('(');
+    generateASTExpression(inner, out: out, indent: indent, headIndented: false);
+    if (group) out.write(')');
+
+    return out;
+  }
+
+  StringBuffer generateASTExpressionBitwiseNot(
+    ASTExpressionBitwiseNot expression, {
+    StringBuffer? out,
+    String indent = '',
+    bool headIndented = true,
+  }) {
+    out ??= newOutput();
+
+    if (headIndented) out.write(indent);
+
+    out.write('~');
+
+    // Parenthesize a complex operand so `~(a + b)` is not emitted as `~a + b`.
     final inner = expression.expression;
     final group = inner.isComplex;
 

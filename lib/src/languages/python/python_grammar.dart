@@ -92,7 +92,42 @@ class PythonGrammarDefinition extends PythonGrammarLexer {
       });
 
   Parser topLevelDefinition() =>
-      (functionDeclaration() | classDeclaration() | ref0(statement)).plus();
+      (enumDeclaration() |
+              functionDeclaration() |
+              classDeclaration() |
+              ref0(statement))
+          .plus();
+
+  /// Python enum: `class Name(Enum): NEWLINE INDENT (NAME = value)+ DEDENT`.
+  Parser<ASTClassEnum> enumDeclaration() =>
+      (classToken().trimHidden() &
+              identifier() &
+              char('(').trimHidden() &
+              string('Enum') &
+              ref0(identifierPartLexicalToken).not() &
+              char(')').trimHidden() &
+              char(':').trimHidden() &
+              newlineToken() &
+              indentToken() &
+              enumEntry().plus() &
+              dedentToken())
+          .map((v) {
+            var name = v[1] as String;
+            var entries = (v[9] as List).cast<ASTEnumEntry>();
+            return ASTClassEnum(
+              name,
+              ASTType<VMObject>(name),
+              null,
+              entries: entries,
+            );
+          });
+
+  Parser<ASTEnumEntry> enumEntry() =>
+      (identifier().trimHidden() &
+              char('=').trimHidden() &
+              ref0(expression) &
+              newlineToken())
+          .map((v) => ASTEnumEntry(v[0] as String, v[2] as ASTExpression));
 
   // ---------------------------------------------------------------------------
   // Imports: `import x [as y]` and `from x import y`.
@@ -568,6 +603,8 @@ class PythonGrammarDefinition extends PythonGrammarLexer {
       ((string('//') |
                       string('==') |
                       string('!=') |
+                      string('<<') |
+                      string('>>') |
                       string('>=') |
                       string('<=') |
                       char('+') |
@@ -576,7 +613,10 @@ class PythonGrammarDefinition extends PythonGrammarLexer {
                       char('/') |
                       char('>') |
                       char('<') |
-                      char('%'))
+                      char('%') |
+                      char('&') |
+                      char('|') |
+                      char('^'))
                   .trimHidden()
                   .map((v) {
                     switch (v) {
@@ -596,6 +636,7 @@ class PythonGrammarDefinition extends PythonGrammarLexer {
   Parser<ASTExpression> expressionNoOperation() =>
       (expressionLambda() |
               expressionNegate() |
+              expressionBitwiseNot() |
               expressionLiteral() |
               expressionGroupFunctionInvocation() |
               expressionGroup() |
@@ -671,6 +712,11 @@ class PythonGrammarDefinition extends PythonGrammarLexer {
       (char('-').trimHidden() &
               (ref0(expressionNoOperation) | ref0(expressionGroup)))
           .map((v) => ASTExpressionNegative(v[1] as ASTExpression));
+
+  Parser<ASTExpressionBitwiseNot> expressionBitwiseNot() =>
+      (char('~').trimHidden() &
+              (ref0(expressionNoOperation) | ref0(expressionGroup)))
+          .map((v) => ASTExpressionBitwiseNot(v[1] as ASTExpression));
 
   Parser<ASTExpression> expressionGroup() =>
       (char('(').trimHidden() & ref0(expression) & char(')').trimHidden()).map(

@@ -108,6 +108,10 @@ class ApolloCodeGeneratorCSharp extends ApolloCodeGenerator {
   }) {
     out ??= newOutput();
 
+    if (clazz is ASTClassEnum) {
+      return generateASTClassEnum(clazz, out: out, indent: indent);
+    }
+
     var code = generateASTBlock(
       clazz,
       withBrackets: true,
@@ -118,6 +122,37 @@ class ApolloCodeGeneratorCSharp extends ApolloCodeGenerator {
     out.write(clazz.name);
     out.write(' ');
     out.write(code);
+
+    return out;
+  }
+
+  /// Generates a C# `enum` declaration (with optional `= value` entries).
+  StringBuffer generateASTClassEnum(
+    ASTClassEnum clazz, {
+    StringBuffer? out,
+    String indent = '',
+  }) {
+    out ??= newOutput();
+
+    out.write(indent);
+    out.write('enum ');
+    out.write(clazz.name);
+    out.write(' {\n');
+
+    var entries = clazz.entries;
+    for (var i = 0; i < entries.length; ++i) {
+      var e = entries[i];
+      out.write('$indent  ');
+      out.write(e.name);
+      if (e.value != null) {
+        out.write(' = ');
+        generateASTExpression(e.value!, out: out, headIndented: false);
+      }
+      if (i < entries.length - 1) out.write(',');
+      out.write('\n');
+    }
+
+    out.write('$indent}\n');
 
     return out;
   }

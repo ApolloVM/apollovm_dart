@@ -156,6 +156,10 @@ class ApolloCodeGeneratorKotlin extends ApolloCodeGenerator {
   }) {
     out ??= newOutput();
 
+    if (clazz is ASTClassEnum) {
+      return generateASTClassEnum(clazz, out: out, indent: indent);
+    }
+
     var code = generateASTBlock(
       clazz,
       withBrackets: true,
@@ -166,6 +170,32 @@ class ApolloCodeGeneratorKotlin extends ApolloCodeGenerator {
     out.write(clazz.name);
     out.write(' ');
     out.write(code);
+
+    return out;
+  }
+
+  /// Generates a Kotlin `enum class` declaration.
+  StringBuffer generateASTClassEnum(
+    ASTClassEnum clazz, {
+    StringBuffer? out,
+    String indent = '',
+  }) {
+    out ??= newOutput();
+
+    out.write(indent);
+    out.write('enum class ');
+    out.write(clazz.name);
+    out.write(' {\n');
+
+    var entries = clazz.entries;
+    for (var i = 0; i < entries.length; ++i) {
+      out.write('$indent  ');
+      out.write(entries[i].name);
+      if (i < entries.length - 1) out.write(',');
+      out.write('\n');
+    }
+
+    out.write('$indent}\n');
 
     return out;
   }
