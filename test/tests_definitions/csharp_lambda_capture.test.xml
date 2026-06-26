@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="C# lambda capturing an enclosing variable">
+    <source language="csharp">
+        <![CDATA[
+class C {
+  static Func makeAdder(int n){ return (x) => x + n; }
+  static int run(){ var add10 = makeAdder(10); return add10(5); }
+}
+        ]]>
+    </source>
+    <call class="C" function="run" return="15">
+        []
+    </call>
+    <output>
+        []
+    </output>
+
+    <source-generated language="csharp"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+class C {
+
+  static Function makeAdder(int n) {
+    return (object x) => x + n;
+  }
+
+  static int run() {
+    var add10 = makeAdder(10);
+    return add10(5);
+  }
+
+}
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+</test>

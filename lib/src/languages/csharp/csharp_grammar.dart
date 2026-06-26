@@ -44,6 +44,11 @@ class CSharpGrammarDefinition extends CSharpGrammarLexer {
         return ASTTypeString.instance;
       case 'List':
         return ASTTypeArray(ASTTypeDynamic.instance);
+      case 'Func':
+      case 'Action':
+      case 'Delegate':
+      case 'Function':
+        return ASTTypeFunction();
       case 'var':
         return ASTTypeVar();
       case 'dynamic':
@@ -570,7 +575,8 @@ class CSharpGrammarDefinition extends CSharpGrammarLexer {
           });
 
   Parser<ASTExpression> expressionNoOperation() =>
-      (expressionNegate() |
+      (expressionLambda() |
+              expressionNegate() |
               expressionLiteral() |
               expressionGroupFunctionInvocation() |
               expressionGroup() |
@@ -956,6 +962,88 @@ class CSharpGrammarDefinition extends CSharpGrammarLexer {
   Parser<ASTScopeVariable> scopeVariable() => (identifier()).map((v) {
     return ASTScopeVariable(v);
   });
+
+  /// C# lambda used as an expression (a closure): `(a, b) => expr`,
+  /// `(int a) => { ... }`, `x => x * 2`, `() => 0`. Captures the enclosing scope.
+  Parser<ASTExpression> expressionLambda() =>
+      (lambdaParameters() & string('=>').trimHidden() & lambdaBody()).map((v) {
+        var parameters = v[0] as ASTFunctionParametersDeclaration;
+        var block = v[2] as ASTBlock;
+        var f = ASTFunctionDeclaration(
+          '',
+          parameters,
+          ASTTypeDynamic.instance,
+          block: block,
+          modifiers: ASTModifiers.modifierStatic,
+        );
+        return ASTExpressionLiteralFunction(f);
+      });
+
+  Parser<ASTBlock> lambdaBody() =>
+      (codeBlock() | lambdaExpressionBody()).cast<ASTBlock>();
+
+  Parser<ASTBlock> lambdaExpressionBody() => ref0(expression).map(
+    (e) => ASTBlock(null)..addStatement(ASTStatementReturnWithExpression(e)),
+  );
+
+  Parser<ASTFunctionParametersDeclaration> lambdaParameters() =>
+      (lambdaParenParameters() | lambdaSingleParameter())
+          .cast<ASTFunctionParametersDeclaration>();
+
+  Parser<ASTFunctionParametersDeclaration> lambdaSingleParameter() =>
+      identifier().trim().map(
+        (name) => ASTFunctionParametersDeclaration(
+          [
+            ASTFunctionParameterDeclaration(
+              ASTTypeDynamic.instance,
+              name,
+              -1,
+              false,
+            ),
+          ],
+          null,
+          null,
+        ),
+      );
+
+  Parser<ASTFunctionParametersDeclaration> lambdaParenParameters() =>
+      (char('(').trimHidden() &
+              (lambdaParameter() &
+                      (char(',').trimHidden() & lambdaParameter()).star())
+                  .optional() &
+              char(')').trimHidden())
+          .map((v) {
+            var first = v[1];
+            if (first == null) {
+              return ASTFunctionParametersDeclaration(null, null, null);
+            }
+            var params = <ASTFunctionParameterDeclaration>[
+              (first as List)[0] as ASTFunctionParameterDeclaration,
+            ];
+            for (var e in (first[1] as List)) {
+              params.add((e as List)[1] as ASTFunctionParameterDeclaration);
+            }
+            return ASTFunctionParametersDeclaration(params, null, null);
+          });
+
+  /// A lambda parameter: typed (`int a`) or untyped (`a`).
+  Parser<ASTFunctionParameterDeclaration> lambdaParameter() =>
+      ((type().trim() & identifier()) | identifier().trim()).map((v) {
+        if (v is List) {
+          return ASTFunctionParameterDeclaration(
+            v[0] as ASTType,
+            v[1] as String,
+            -1,
+            false,
+          );
+        }
+        return ASTFunctionParameterDeclaration(
+          ASTTypeDynamic.instance,
+          v,
+          -1,
+          false,
+        );
+      });
 
   Parser<ASTFunctionParametersDeclaration> functionParametersDeclaration() =>
       (functionEmptyParametersDeclaration() |
