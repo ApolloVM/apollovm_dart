@@ -395,7 +395,10 @@ void main() {
         r'''
         class Foo {
           static void demo() {
-            List<Object> x = [1.5, 2.5, 3.0];
+            // Non-integral doubles: `3.0.toString()` is '3' on the web
+            // (dart2js) but '3.0' on the VM, so avoid integral values to keep
+            // this test platform-agnostic (it also runs under `-p chrome`).
+            List<Object> x = [1.5, 2.5, 3.25];
             print('${x[0]}/${x[1]}/${x[2]}');
           }
         }
@@ -403,7 +406,7 @@ void main() {
         'Foo',
         'demo',
         const [],
-        ['1.5/2.5/3.0'],
+        ['1.5/2.5/3.25'],
       );
     });
 
