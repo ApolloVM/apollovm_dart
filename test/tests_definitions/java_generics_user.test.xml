@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="Java user generic type preserved">
+    <source language="java11">
+        <![CDATA[
+class C {
+  static int unwrap(Box<Integer> b){
+    return 0;
+  }
+}
+        ]]>
+    </source>
+    <source-generated language="java11"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+class C {
+
+  static int unwrap(Box<int> b) {
+    return 0;
+  }
+
+}
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+</test>

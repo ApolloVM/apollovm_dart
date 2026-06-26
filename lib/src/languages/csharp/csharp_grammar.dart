@@ -1192,9 +1192,50 @@ class CSharpGrammarDefinition extends CSharpGrammarLexer {
 
   Parser<ASTType> type() => (arrayType() | simpleType()).cast<ASTType>();
 
-  Parser<ASTType> simpleType() => identifier().map((v) {
-    return getTypeByName(v);
-  });
+  Parser<ASTType> simpleType() =>
+      (identifier() & genericArguments().optional()).map((v) {
+        var name = v[0] as String;
+        var generics = v[1] as List<ASTType>?;
+        if (generics == null || generics.isEmpty) {
+          return getTypeByName(name);
+        }
+        return typeWithGenerics(name, generics);
+      });
+
+  /// Generic type arguments: `<T>`, `<K, V>`, `<List<int>>`, … (recursive).
+  Parser<List<ASTType>> genericArguments() =>
+      (char('<').trimHidden() &
+              ref0(type) &
+              (char(',').trimHidden() & ref0(type)).star() &
+              char('>').trimHidden())
+          .map((v) {
+            var list = <ASTType>[v[1] as ASTType];
+            for (var e in (v[2] as List)) {
+              list.add((e as List)[1] as ASTType);
+            }
+            return list;
+          });
+
+  /// Maps a generic type usage to the shared AST type: well-known collections
+  /// become [ASTTypeArray]/[ASTTypeMap]; anything else keeps its [generics].
+  static ASTType typeWithGenerics(String name, List<ASTType> generics) {
+    switch (name) {
+      case 'List':
+      case 'IList':
+      case 'IEnumerable':
+      case 'ICollection':
+      case 'HashSet':
+        return ASTTypeArray(generics.first);
+      case 'Dictionary':
+      case 'IDictionary':
+        return ASTTypeMap(
+          generics[0],
+          generics.length > 1 ? generics[1] : ASTTypeDynamic.instance,
+        );
+      default:
+        return ASTType(name, generics: generics);
+    }
+  }
 
   Parser<ASTTypeArray> arrayType() =>
       (identifier() & string('[]').plus()).map((v) {

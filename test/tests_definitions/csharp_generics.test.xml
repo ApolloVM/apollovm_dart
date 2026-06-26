@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="C# generic type annotations">
+    <source language="csharp">
+        <![CDATA[
+class C {
+  static int run(){
+    List<int> xs = new List<int>(){ 10, 20, 12 };
+    int total = 0;
+    foreach (int x in xs) {
+      total = total + x;
+    }
+    return total;
+  }
+}
+        ]]>
+    </source>
+    <call class="C" function="run" return="42">
+        []
+    </call>
+    <output>
+        []
+    </output>
+    <source-generated language="csharp"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+class C {
+
+  static int run() {
+    int[] xs = new List<int>(){10, 20, 12};
+    int total = 0;
+    foreach (var x in xs) {
+      total = total + x;
+    }
+    return total;
+  }
+
+}
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+</test>
