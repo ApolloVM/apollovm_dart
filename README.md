@@ -27,6 +27,7 @@ ApolloVM is a portable VM (native, JS/Web, Flutter) that can parse, translate, a
 - 🎓 **Playgrounds & education** — build multi-language runners/REPLs that show the same program across languages and its translated output.
 - 🧪 **Reference implementations / test oracles** — write an algorithm once, then run or emit it across language targets to cross-check behavior.
 - 🌳 **Polyglot AST tooling** — parse multiple languages into one shared AST for analysis, transformation, and code generation.
+- 🪶 **Small, multi-platform VM** — runs on native, web/JS, and Flutter; the CLI compiles to a self-contained native binary under 10 MB with all features included.
 
 -----------------------------
 
