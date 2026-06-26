@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="Python lambda passed as a callback">
+    <source language="python">
+        <![CDATA[
+def apply(f, x):
+    return f(x)
+
+def main():
+    return apply(lambda a: a * 2, 5)
+        ]]>
+    </source>
+    <call function="main" return="10">
+        []
+    </call>
+    <output>
+        []
+    </output>
+
+    <source-generated language="python"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+def apply(f, x):
+    return f(x)
+
+def main():
+    return apply(lambda a: a * 2, 5)
+
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+</test>

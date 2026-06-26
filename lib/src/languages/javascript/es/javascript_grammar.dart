@@ -386,6 +386,23 @@ class JavaScriptGrammarDefinition extends JavaScriptGrammarLexer {
   Parser<ASTStatementFunctionDeclaration> statementArrowFunction() =>
       arrowNamedFunction().map((f) => ASTStatementFunctionDeclaration(f));
 
+  /// Anonymous arrow function used as an expression (a closure), e.g.
+  /// `(a, b) => a + b`, `x => x * x`, `() => { ... }`. Captures the enclosing
+  /// scope at runtime and can be passed as a callback or stored in a variable.
+  Parser<ASTExpression> expressionArrowFunction() =>
+      (arrowParameters() & string('=>').trimHidden() & arrowBody()).map((v) {
+        var parameters = v[0] as ASTFunctionParametersDeclaration;
+        var block = v[2] as ASTBlock;
+        var f = ASTFunctionDeclaration(
+          '',
+          parameters,
+          inferReturnType(block),
+          block: block,
+          modifiers: ASTModifiers.modifierStatic,
+        );
+        return ASTExpressionLiteralFunction(f);
+      });
+
   /// Arrow parameters: `(a, b)`, `()`, or a single bare identifier `a`.
   Parser<ASTFunctionParametersDeclaration> arrowParameters() =>
       (functionParametersDeclaration() | arrowSingleParameter())
@@ -516,6 +533,24 @@ class JavaScriptGrammarDefinition extends JavaScriptGrammarLexer {
   Parser<ASTExpression> parseExpressionInString() => ref0(expression);
 
   Parser<ASTExpression> expression() =>
+      (ref0(expressionOperationChain) &
+              (char('?').trimHidden() &
+                      ref0(expression) &
+                      char(':').trimHidden() &
+                      ref0(expression))
+                  .optional())
+          .map((v) {
+            var base = v[0] as ASTExpression;
+            var ternary = v[1] as List?;
+            if (ternary == null) return base;
+            return ASTExpressionConditional(
+              base,
+              ternary[1] as ASTExpression,
+              ternary[3] as ASTExpression,
+            );
+          });
+
+  Parser<ASTExpression> expressionOperationChain() =>
       (ref0(expressionNoOperation) &
               (expressionOperator() & ref0(expressionNoOperation)).star())
           .map((v) {
@@ -564,7 +599,8 @@ class JavaScriptGrammarDefinition extends JavaScriptGrammarLexer {
           });
 
   Parser<ASTExpression> expressionNoOperation() =>
-      (expressionNegate() |
+      (expressionArrowFunction() |
+              expressionNegate() |
               expressionLiteral() |
               expressionGroupFunctionInvocation() |
               expressionGroup() |

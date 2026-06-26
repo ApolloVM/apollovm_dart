@@ -567,6 +567,68 @@ class DartGrammarDefinition extends DartGrammarLexer {
         return ASTStatementExpression(v[0]);
       });
 
+  /// Anonymous function / closure used as an expression: `(params) => expr` or
+  /// `(params) { body }`. Parameters may be typed (`(int a)`) or untyped
+  /// (`(a)`). Captures the enclosing scope at runtime.
+  Parser<ASTExpression> expressionAnonymousFunction() =>
+      (anonFunctionParameters() & (anonArrowBody() | codeBlock())).map((v) {
+        var parameters = v[0] as ASTFunctionParametersDeclaration;
+        var block = v[1] as ASTBlock;
+        var f = ASTFunctionDeclaration(
+          '',
+          parameters,
+          ASTTypeDynamic.instance,
+          block: block,
+          modifiers: ASTModifiers.modifierStatic,
+        );
+        return ASTExpressionLiteralFunction(f);
+      });
+
+  /// `=> expr` body for an anonymous function (no trailing `;`, unlike a
+  /// declaration's [arrowBody]).
+  Parser<ASTBlock> anonArrowBody() =>
+      (string('=>').trimHidden() & ref0(expression)).map((v) {
+        return ASTBlock(null)
+          ..addAllStatements([_returnStatementForExpression(v[1])]);
+      });
+
+  Parser<ASTFunctionParametersDeclaration> anonFunctionParameters() =>
+      (functionEmptyParametersDeclaration() | anonPositionalParameters())
+          .cast<ASTFunctionParametersDeclaration>();
+
+  Parser<ASTFunctionParametersDeclaration> anonPositionalParameters() =>
+      (char('(').trimHidden() &
+              anonParameter() &
+              (char(',').trimHidden() & anonParameter()).star() &
+              char(',').optional() &
+              char(')').trimHidden())
+          .map((v) {
+            var params = <ASTFunctionParameterDeclaration>[v[1]];
+            for (var e in (v[2] as List)) {
+              params.add((e as List)[1] as ASTFunctionParameterDeclaration);
+            }
+            return ASTFunctionParametersDeclaration(params, null, null);
+          });
+
+  /// A single anonymous-function parameter: typed (`int a`) or untyped (`a`).
+  Parser<ASTFunctionParameterDeclaration> anonParameter() =>
+      ((type().trim() & identifier()) | identifier().trim()).map((v) {
+        if (v is List) {
+          return ASTFunctionParameterDeclaration(
+            v[0] as ASTType,
+            v[1] as String,
+            -1,
+            false,
+          );
+        }
+        return ASTFunctionParameterDeclaration(
+          ASTTypeDynamic.instance,
+          v as String,
+          -1,
+          false,
+        );
+      });
+
   Parser<ASTStatementBlock> statementBlock() =>
       (codeBlock()).map((v) => ASTStatementBlock(v));
 
@@ -719,6 +781,24 @@ class DartGrammarDefinition extends DartGrammarLexer {
       expression().map((e) => ParsedString.expression(e));
 
   Parser<ASTExpression> expression() =>
+      (ref0(expressionOperationChain) &
+              (char('?').trimHidden() &
+                      ref0(expression) &
+                      char(':').trimHidden() &
+                      ref0(expression))
+                  .optional())
+          .map((v) {
+            var base = v[0] as ASTExpression;
+            var ternary = v[1] as List?;
+            if (ternary == null) return base;
+            return ASTExpressionConditional(
+              base,
+              ternary[1] as ASTExpression,
+              ternary[3] as ASTExpression,
+            );
+          });
+
+  Parser<ASTExpression> expressionOperationChain() =>
       (ref0(expressionNoOperation) &
               (expressionOperator() & ref0(expressionNoOperation)).star())
           .map((v) {
@@ -765,6 +845,7 @@ class DartGrammarDefinition extends DartGrammarLexer {
 
   Parser<ASTExpression> expressionNoOperation() =>
       (expressionAwait() |
+              expressionAnonymousFunction() |
               expressionNegate() |
               expressionLiteral() |
               expressionGroupFunctionInvocation() |
@@ -1188,6 +1269,11 @@ class DartGrammarDefinition extends DartGrammarLexer {
           });
 
   Parser<ASTType> type() =>
+      (functionType() | typeNonFunction()).cast<ASTType>();
+
+  /// Any type except a function type (used as the return type of a function
+  /// type, and as the fallback when there is no trailing `Function(...)`).
+  Parser<ASTType> typeNonFunction() =>
       (futureTyped() |
               arrayTyped() |
               arrayTypeDynamic() |
@@ -1195,6 +1281,51 @@ class DartGrammarDefinition extends DartGrammarLexer {
               mapTypeDynamic() |
               simpleType())
           .cast<ASTType>();
+
+  /// A function type: `[returnType] Function(<paramType> [name], ...)`, e.g.
+  /// `int Function(int n)`, `void Function()`, or `Function(int n)` (return
+  /// type omitted → `dynamic`).
+  Parser<ASTType> functionType() =>
+      (functionTypeWithReturn() | functionTypeNoReturn()).cast<ASTType>();
+
+  Parser<ASTType> functionTypeWithReturn() =>
+      (ref0(typeNonFunction) &
+              string('Function').trim() &
+              char('(').trimHidden() &
+              functionTypeParameters().optional() &
+              char(')').trimHidden())
+          .map((v) {
+            var returnType = v[0] as ASTType;
+            var parameters = v[3] as List<ASTType>?;
+            return ASTTypeFunction(returnType, parameters);
+          });
+
+  Parser<ASTType> functionTypeNoReturn() =>
+      (string('Function').trim() &
+              char('(').trimHidden() &
+              functionTypeParameters().optional() &
+              char(')').trimHidden())
+          .map((v) {
+            var parameters = v[2] as List<ASTType>?;
+            return ASTTypeFunction(ASTTypeDynamic.instance, parameters);
+          });
+
+  Parser<List<ASTType>> functionTypeParameters() =>
+      (functionTypeParameter() &
+              (char(',').trimHidden() & functionTypeParameter()).star() &
+              char(',').optional())
+          .map((v) {
+            var params = <ASTType>[v[0] as ASTType];
+            for (var e in (v[1] as List)) {
+              params.add((e as List)[1] as ASTType);
+            }
+            return params;
+          });
+
+  /// A single function-type parameter: a type with an optional (ignored) name,
+  /// e.g. `int` or `int n`.
+  Parser<ASTType> functionTypeParameter() =>
+      (ref0(type) & identifier().trim().optional()).map((v) => v[0] as ASTType);
 
   Parser<ASTTypeFuture> futureTyped() =>
       (string('Future') &

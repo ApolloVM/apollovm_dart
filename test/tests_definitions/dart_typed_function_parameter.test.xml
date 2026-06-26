@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="Typed function parameter with anonymous function argument">
+    <source language="dart">
+        <![CDATA[
+int f1(int Function(int n) f) {
+  var a = f(10);
+  var b = f(20);
+  return a + b;
+}
+
+int run() {
+  return f1((int n) => n * 10);
+}
+        ]]>
+    </source>
+    <call function="run" return="300">
+        []
+    </call>
+    <output>
+        []
+    </output>
+
+    <source-generated language="dart"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+  int f1(int Function(int) f) {
+    var a = f(10);
+    var b = f(20);
+    return a + b;
+  }
+
+  int run() {
+    return f1((int n) => n * 10);
+  }
+
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+
+    <source-generated language="javascript"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+  function f1(f) {
+    let a = f(10);
+    let b = f(20);
+    return a + b;
+  }
+
+  function run() {
+    return f1((n) => n * 10);
+  }
+
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+</test>

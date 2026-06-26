@@ -28,8 +28,8 @@ class Foo:
         return a * 10
 
     def test(self, a) -> None:
-        b = m10(a)
-        c = m10(b)
+        b = self.m10(a)
+        c = self.m10(b)
         s: str = f'a: {a} ; b: {b} ; c: {c}'
         print(s)
 

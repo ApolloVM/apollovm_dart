@@ -370,13 +370,8 @@ List<dynamic> calculate(int x, int y) {
   }
 
   List<dynamic> calculate(int x, int y) {
-    void log(String label, dynamic value) {
-      print('$label: $x, $y -> $value');
-      out.add(value);
-    }
-
     var out = <dynamic>[];
-        void log(String label, dynamic value) {
+    void log(String label, dynamic value) {
       print('$label: $x, $y -> $value');
       out.add(value);
     }
@@ -1441,26 +1436,8 @@ import 'dart:math';
       return ((endValue / startValue) - 1.0) * 100.0;
     }
 
+
     double calculateAverage(List<double> data) {
-      double sum = 0.0;
-      for (int i = 0; i < data.length ; i++) {
-        sum = sum + data[i];
-      }
-      return sum / data.length;
-    }
-
-        double calculateChange(List<double> data) {
-      if (data.length < 2) {
-          return 0.0;
-      }
-
-      double startValue = data[0];
-      double endValue = data[data.length - 1];
-      return ((endValue / startValue) - 1.0) * 100.0;
-    }
-
-
-        double calculateAverage(List<double> data) {
       double sum = 0.0;
       for (int i = 0; i < data.length ; i++) {
         sum = sum + data[i];

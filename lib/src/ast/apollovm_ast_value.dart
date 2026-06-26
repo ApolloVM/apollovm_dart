@@ -1623,14 +1623,24 @@ class ASTValueFuture<T extends ASTType<V>, V> extends ASTValue<Future<V>> {
 class ASTValueFunction<F extends Function> extends ASTValue<F> {
   final ASTFunctionDeclaration astFunction;
 
+  /// The scope where this function was defined, captured for closure
+  /// semantics. When set, it is used as the parent context for calls, so the
+  /// function body can read variables from its enclosing scope. `null` for
+  /// plain (non-closure) function references.
+  final VMContext? closureContext;
+
   F? function;
 
-  ASTValueFunction(ASTType type, this.astFunction, [this.function])
-    : super(
-        type is ASTTypeFunction
-            ? type as ASTTypeFunction<F>
-            : ASTTypeFunction<F>(),
-      );
+  ASTValueFunction(
+    ASTType type,
+    this.astFunction, [
+    this.function,
+    this.closureContext,
+  ]) : super(
+         type is ASTTypeFunction
+             ? type as ASTTypeFunction<F>
+             : ASTTypeFunction<F>(),
+       );
 
   @override
   Iterable<ASTNode> get children => [];
@@ -1654,7 +1664,9 @@ class ASTValueFunction<F extends Function> extends ASTValue<F> {
     Map? namedParameters,
   }) async {
     return astFunction.call(
-      parent,
+      // For a closure, run the body in the scope where it was defined so it
+      // can capture enclosing variables; otherwise use the caller's context.
+      closureContext ?? parent,
       positionalParameters: positionalParameters,
       namedParameters: namedParameters,
     );

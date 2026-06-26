@@ -482,6 +482,26 @@ class PythonGrammarDefinition extends PythonGrammarLexer {
   Parser<ASTExpression> parseExpressionInString() => ref0(expression);
 
   Parser<ASTExpression> expression() =>
+      (ref0(expressionOperationChain) &
+              (ifToken().trimHidden() &
+                      ref0(expressionOperationChain) &
+                      elseToken().trimHidden() &
+                      ref0(expression))
+                  .optional())
+          .map((v) {
+            var base = v[0] as ASTExpression;
+            var ternary = v[1] as List?;
+            if (ternary == null) return base;
+            // Python's conditional expression:
+            // `valueIfTrue if condition else valueIfFalse`.
+            return ASTExpressionConditional(
+              ternary[1] as ASTExpression,
+              base,
+              ternary[3] as ASTExpression,
+            );
+          });
+
+  Parser<ASTExpression> expressionOperationChain() =>
       (ref0(expressionNoOperation) &
               (expressionOperator() & ref0(expressionNoOperation)).star())
           .map((v) {
@@ -524,7 +544,8 @@ class PythonGrammarDefinition extends PythonGrammarLexer {
           .cast<ASTExpressionOperator>();
 
   Parser<ASTExpression> expressionNoOperation() =>
-      (expressionNegate() |
+      (expressionLambda() |
+              expressionNegate() |
               expressionLiteral() |
               expressionGroupFunctionInvocation() |
               expressionGroup() |
@@ -540,6 +561,54 @@ class PythonGrammarDefinition extends PythonGrammarLexer {
               expressionVariableAccess() |
               expressionNegative())
           .cast<ASTExpression>();
+
+  /// Python anonymous function: `lambda [params]: expr` (single-expression
+  /// body). Captures the enclosing scope at runtime (closure).
+  Parser<ASTExpression> expressionLambda() =>
+      (lambdaToken().trimHidden() &
+              _lambdaParameters() &
+              char(':').trimHidden() &
+              ref0(expression))
+          .map((v) {
+            var parameters = v[1] as ASTFunctionParametersDeclaration;
+            var body = v[3] as ASTExpression;
+            var block = ASTBlock(null)
+              ..addStatement(ASTStatementReturnWithExpression(body));
+            var f = ASTFunctionDeclaration(
+              '',
+              parameters,
+              inferReturnType(block),
+              block: block,
+              modifiers: ASTModifiers.modifierStatic,
+            );
+            return ASTExpressionLiteralFunction(f);
+          });
+
+  Parser<ASTFunctionParametersDeclaration> _lambdaParameters() =>
+      (identifier().trimHidden() &
+              (char(',').trimHidden() & identifier().trimHidden()).star())
+          .optional()
+          .map((v) {
+            if (v == null) {
+              return ASTFunctionParametersDeclaration(null, null, null);
+            }
+            var names = <String>[v[0] as String];
+            for (var e in (v[1] as List)) {
+              names.add((e as List)[1] as String);
+            }
+            var params = <ASTFunctionParameterDeclaration>[];
+            for (var i = 0; i < names.length; ++i) {
+              params.add(
+                ASTFunctionParameterDeclaration(
+                  ASTTypeDynamic.instance,
+                  names[i],
+                  i,
+                  false,
+                ),
+              );
+            }
+            return ASTFunctionParametersDeclaration(params, null, null);
+          });
 
   Parser<ASTExpressionNegation> expressionNegate() =>
       (notToken() & (ref0(expressionNoOperation) | ref0(expressionGroup))).map((
@@ -598,23 +667,27 @@ class PythonGrammarDefinition extends PythonGrammarLexer {
                 .whereType<ASTExpressionChainFunctionInvocation>()
                 .toList();
 
-            if (obj != null && obj != 'self' && obj != 'this') {
-              var variable = ASTScopeVariable(obj);
-              return ASTExpressionObjectFunctionInvocation(
-                variable,
-                name,
-                args,
-                chainFunctions,
-              );
-            } else {
-              // `self.method(...)`/`this.method(...)` resolve to the class
-              // method (local invocation), mirroring Dart/Java `this`.
+            if (obj == null) {
               return ASTExpressionLocalFunctionInvocation(
                 name,
                 args,
                 chainFunctions,
               );
             }
+
+            // `self.method(...)`/`this.method(...)` invoke on the current
+            // instance; `obj.method(...)` on the named variable's instance.
+            // Keep the receiver so the call round-trips (Python needs the
+            // explicit `self.`), mirroring the Dart/Java grammars.
+            ASTVariable variable = (obj == 'self' || obj == 'this')
+                ? ASTThisVariable()
+                : ASTScopeVariable(obj);
+            return ASTExpressionObjectFunctionInvocation(
+              variable,
+              name,
+              args,
+              chainFunctions,
+            );
           });
 
   Parser<ASTExpression> expressionGetterAccess() =>
@@ -622,22 +695,23 @@ class PythonGrammarDefinition extends PythonGrammarLexer {
               identifier().trimHidden() &
               expressionChainFunctionInvocation().star())
           .map((v) {
-            var obj = (v[0] as List)[0] as String;
-            var name = v[1] as String;
-            var chainFunctions = (v[2] as List)
+            var obj = v[0] as String;
+            var name = v[2] as String;
+            var chainFunctions = (v[3] as List)
                 .whereType<ASTExpressionChainFunctionInvocation>()
                 .toList();
 
-            if (obj != 'self' && obj != 'this') {
-              var variable = ASTScopeVariable(obj);
-              return ASTExpressionObjectGetterAccess(
-                variable,
-                name,
-                chainFunctions,
-              );
-            } else {
-              return ASTExpressionLocalGetterAccess(name, chainFunctions);
-            }
+            // `self.field`/`this.field` reads from the current instance;
+            // `obj.field` from the named variable's instance. Keep the receiver
+            // so the access round-trips, mirroring the Dart/Java grammars.
+            ASTVariable variable = (obj == 'self' || obj == 'this')
+                ? ASTThisVariable()
+                : ASTScopeVariable(obj);
+            return ASTExpressionObjectGetterAccess(
+              variable,
+              name,
+              chainFunctions,
+            );
           });
 
   Parser<List<ASTExpression>> expressionSequence() =>
@@ -957,28 +1031,42 @@ class PythonGrammarDefinition extends PythonGrammarLexer {
     for (var stm in statements) {
       if (stm is ASTStatementVariableDeclaration) {
         var name = stm.name;
-        if (declared.contains(name)) {
-          var value = stm.value;
-          if (value != null) {
-            result.add(
-              ASTStatementExpression(
-                ASTExpressionVariableAssignment(
-                  ASTScopeVariable(name),
-                  ASTAssignmentOperator.set,
-                  value,
-                ),
-              ),
-            );
-            continue;
-          }
-        } else {
+        var value = stm.value;
+
+        // A first binding whose value references the name being bound (e.g.
+        // `s = s + 1`) can't be a real declaration-with-initializer — the name
+        // must already exist in an enclosing scope (a parameter or an outer
+        // binding). Treat it (and any later binding) as a plain assignment;
+        // otherwise it becomes a self-referential declaration that recurses
+        // forever during type resolution / code generation.
+        if (value != null &&
+            (declared.contains(name) || _valueReferences(value, name))) {
           declared.add(name);
+          result.add(
+            ASTStatementExpression(
+              ASTExpressionVariableAssignment(
+                ASTScopeVariable(name),
+                ASTAssignmentOperator.set,
+                value,
+              ),
+            ),
+          );
+          continue;
         }
+
+        declared.add(name);
       }
       result.add(stm);
     }
 
     return result;
+  }
+
+  /// Whether [value] reads the variable [name] anywhere in its expression tree.
+  static bool _valueReferences(ASTExpression value, String name) {
+    bool isRef(ASTNode n) => n is ASTVariable && n.name == name;
+    if (isRef(value)) return true;
+    return value.descendantChildren.any(isRef);
   }
 
   static List _expandListDeeply(List l) {

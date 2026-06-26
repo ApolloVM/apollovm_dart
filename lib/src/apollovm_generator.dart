@@ -274,12 +274,26 @@ abstract class ApolloGenerator<
       return generateASTExpressionGroupFunctionInvocation(expression, out: out);
     } else if (expression is ASTExpressionOperation) {
       return generateASTExpressionOperation(expression, out: out);
+    } else if (expression is ASTExpressionConditional) {
+      return generateASTExpressionConditional(expression, out: out);
+    } else if (expression is ASTExpressionLiteralFunction) {
+      return generateASTExpressionLiteralFunction(expression, out: out);
     }
 
     throw UnsupportedError("Can't generate expression: $expression");
   }
 
   O generateASTExpressionOperation(ASTExpressionOperation expression, {O? out});
+
+  O generateASTExpressionConditional(
+    ASTExpressionConditional expression, {
+    O? out,
+  });
+
+  O generateASTExpressionLiteralFunction(
+    ASTExpressionLiteralFunction expression, {
+    O? out,
+  });
 
   String resolveASTExpressionOperatorText(
     ASTExpressionOperator operator,

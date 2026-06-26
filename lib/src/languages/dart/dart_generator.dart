@@ -223,6 +223,69 @@ class ApolloCodeGeneratorDart extends ApolloCodeGenerator {
     return _generateASTFunctionDeclarationImpl(f, out, indent);
   }
 
+  @override
+  StringBuffer generateASTTypeFunction(
+    ASTTypeFunction type, {
+    StringBuffer? out,
+    String indent = '',
+  }) {
+    out ??= newOutput();
+
+    var generics = type.generics;
+    if (generics == null || generics.isEmpty) {
+      out.write('Function');
+      return out;
+    }
+
+    // generics[0] is the return type; the rest are parameter types:
+    // `<returnType> Function(<paramType>, ...)`. A `dynamic` return type is
+    // implicit in Dart, so it is omitted: `Function(<paramType>, ...)`.
+    var returnType = generics.first;
+    if (returnType is! ASTTypeDynamic) {
+      out.write(generateASTType(returnType));
+      out.write(' ');
+    }
+    out.write('Function(');
+    var params = generics.skip(1).toList();
+    for (var i = 0; i < params.length; ++i) {
+      if (i > 0) out.write(', ');
+      out.write(generateASTType(params[i]));
+    }
+    out.write(')');
+    return out;
+  }
+
+  @override
+  StringBuffer generateASTExpressionLiteralFunction(
+    ASTExpressionLiteralFunction expression, {
+    StringBuffer? out,
+    String indent = '',
+    bool headIndented = true,
+  }) {
+    out ??= newOutput();
+    if (headIndented) out.write(indent);
+
+    var f = expression.function;
+    generateFunctionParametersNames(f, out: out);
+
+    // Dart anonymous functions: `(params) => expr` or `(params) { body }`
+    // (no `=>` before a block body, unlike JavaScript).
+    var single = singleReturnExpression(f);
+    if (single != null) {
+      out.write(' => ');
+      generateASTExpression(single, out: out, headIndented: false);
+    } else {
+      out.write(' ');
+      var blockCode = generateASTBlock(f, indent: indent, withBrackets: false);
+      out.write('{\n');
+      out.write(blockCode);
+      out.write(indent);
+      out.write('}');
+    }
+
+    return out;
+  }
+
   StringBuffer _generateASTFunctionDeclarationImpl(
     ASTFunctionDeclaration f,
     StringBuffer? out,

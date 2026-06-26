@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="Anonymous function with an untyped parameter (inferred)">
+    <source language="dart">
+        <![CDATA[
+int f1(int Function(int n) f) {
+  var a = f(10);
+  var b = f(20);
+  return a + b;
+}
+
+int run() {
+  return f1((n) => n * 10);
+}
+        ]]>
+    </source>
+    <call function="run" return="300">
+        []
+    </call>
+    <output>
+        []
+    </output>
+
+    <source-generated language="dart"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+  int f1(int Function(int) f) {
+    var a = f(10);
+    var b = f(20);
+    return a + b;
+  }
+
+  int run() {
+    return f1((dynamic n) => n * 10);
+  }
+
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+</test>

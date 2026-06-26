@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="Self-referential bindings: parameter reassignment and loop accumulation">
+    <source language="python">
+        <![CDATA[
+def inc(x):
+    x = x + 1
+    return x
+
+def accumulate(items):
+    total = 0
+    for i in items:
+        total = total + i
+    return total
+        ]]>
+    </source>
+    <call function="inc" return="11">
+        [10]
+    </call>
+    <output>
+        []
+    </output>
+    <call function="accumulate" return="10">
+        [[1, 2, 3, 4]]
+    </call>
+    <output>
+        []
+    </output>
+
+    <source-generated language="python"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+def inc(x):
+    x = x + 1
+    return x
+
+def accumulate(items):
+    total: int = 0
+    for i in items:
+        total = total + i
+    return total
+
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+</test>

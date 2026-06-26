@@ -705,6 +705,80 @@ loaded AST. Object-oriented code uses the conventional table + metatable form
 (`Name = {}`, `Name.__index = Name`, `function Name:method(...)`), so classes round-trip
 to and from Dart, Java, Kotlin, JavaScript and TypeScript.
 
+### Language: `Python`
+
+Loading Python source code, executing it, and then converting it to Dart:
+
+```dart
+import 'package:apollovm/apollovm.dart';
+
+void main() async {
+  var vm = ApolloVM();
+
+  var codeUnit = SourceCodeUnit(
+          'python',
+          r'''
+            class Foo:
+                def greet(self, name, count):
+                    msg = f'Hello {name}, you have {count} messages.'
+                    print(msg)
+          ''',
+          id: 'test');
+
+  var loadOK = await vm.loadCodeUnit(codeUnit);
+
+  if (!loadOK) {
+    throw StateError('Error parsing Python code!');
+  }
+
+  var pyRunner = vm.createRunner('python')!;
+
+  // Map the `print` function in the VM:
+  pyRunner.externalPrintFunction = (o) => print("» $o");
+
+  await pyRunner.executeClassMethod('', 'Foo', 'greet',
+      positionalParameters: ['World', 3]);
+
+  print('---------------------------------------');
+
+  // Regenerate code in Dart:
+  var codeStorageDart = vm.generateAllCodeIn('dart');
+  var allSourcesDart = await codeStorageDart.writeAllSources();
+  print(allSourcesDart.toString());
+}
+```
+
+*Note: the parsed function `print` was mapped as an external function.*
+
+Output:
+```text
+» Hello World, you have 3 messages.
+---------------------------------------
+<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+class Foo {
+
+  void greet(dynamic name, dynamic count) {
+    var msg = 'Hello ${name}, you have ${count} messages.';
+    print(msg);
+  }
+
+}
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+```
+
+Python is bidirectional: ApolloVM parses `.py`/`python` source into the AST, executes it,
+and generates strict, idiomatic Python 3. Indentation-significant blocks are handled by an
+INDENT/DEDENT/NEWLINE pre-tokenizer, and generation emits PEP-484 type hints when the AST
+type is statically known (`def f(x: int) -> int:`, `x: str = ...`, `List[T]`/`Dict[K, V]`)
+with a dynamic fallback. Supported constructs include functions, `self`-based methods and
+`class` declarations, `if`/`elif`/`else`, `while`, `for ... in`, `try`/`except`/`finally`
+with `raise`, lists & dicts, f-string interpolation, `//` integer division,
+`and`/`or`/`not`, `True`/`False`/`None`, and `import`/`from ... import` — all
+cross-translatable with Dart, Java, Kotlin, JavaScript, TypeScript and Lua.
+
 ## Wasm Support
 
 ApolloVM can compile its AST tree to WebAssembly (Wasm). This means that parsed code loaded into the VM can be compiled
@@ -919,7 +993,7 @@ Any help from the open-source community is always welcome and needed:
 
 ## TODO
 
-- JavaScript: extended support (anonymous arrow callbacks/closures, destructuring, spread, async/await, `this.x` constructor parameters, full ESM modules). *Named arrow functions (`const f = (a, b) => a + b;`) are already supported.*
+- JavaScript: extended support (destructuring, spread, async/await, `this.x` constructor parameters, full ESM modules). *Named arrow functions (`const f = (a, b) => a + b;`), anonymous arrow callbacks/closures (`(x) => x * 2`), and the ternary operator (`c ? a : b`) are already supported.*
   - *See the [JavaScript implementation (at "lib/src/languages/javascript/es")](https://github.com/ApolloVM/apollovm_dart/tree/master/lib/src/languages/javascript/es).*
 
 
@@ -931,7 +1005,8 @@ Any help from the open-source community is always welcome and needed:
   - *See the [Lua implementation (at "lib/src/languages/lua")](https://github.com/ApolloVM/apollovm_dart/tree/master/lib/src/languages/lua).*
 
 
-- Python support.
+- Python: extended support (comprehensions, decorators, `with` statements, `*args`/`**kwargs`, multiple assignment/returns). *Functions, classes/`self`-methods, `if`/`elif`/`else`, `while`, `for ... in`, `try`/`except`/`finally` + `raise`, lists & dicts, f-strings, keyword arguments, `lambda` expressions, conditional expressions (`a if c else b`), and `import`/`from ... import` are already supported.*
+  - *See the [Python implementation (at "lib/src/languages/python")](https://github.com/ApolloVM/apollovm_dart/tree/master/lib/src/languages/python).*
 
 
 - Package Importer.

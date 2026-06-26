@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="Local function is not duplicated after execution">
+    <source language="javascript">
+        <![CDATA[
+function f(a) {
+  const g = (x) => x * 2;
+  return g(a);
+}
+        ]]>
+    </source>
+    <call function="f" return="8">
+        [4]
+    </call>
+    <output>
+        []
+    </output>
+
+    <source-generated language="javascript"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+  function f(a) {
+    function g(x) {
+      return x * 2;
+    }
+
+
+    return g(a);
+  }
+
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+</test>

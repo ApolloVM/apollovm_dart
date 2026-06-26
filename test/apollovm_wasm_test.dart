@@ -1026,6 +1026,124 @@ void main() async {
     );
 
     test(
+      'ternaryConditional',
+      () => _testWasm(
+        language: 'dart',
+        code: r'''
+
+          int ternaryConditional(int a) {
+            return a > 0 ? 10 : 20;
+          }
+
+        ''',
+        functionName: 'ternaryConditional',
+        executions: {
+          [5]: 10,
+          [-5]: 20,
+          [0]: 20,
+        },
+      ),
+    );
+
+    test(
+      'closureCallback',
+      () => _testWasm(
+        language: 'dart',
+        code: r'''
+
+          int f1(int Function(int n) f) {
+            var a = f(10);
+            var b = f(20);
+            return a + b;
+          }
+
+          int run() {
+            return f1((int n) => n * 10);
+          }
+
+        ''',
+        functionName: 'run',
+        executions: {
+          []: 300,
+        },
+      ),
+    );
+
+    test(
+      'closureUntypedParam',
+      () => _testWasm(
+        language: 'dart',
+        code: r'''
+
+          int f1(int Function(int n) f) {
+            var a = f(10);
+            var b = f(20);
+            return a + b;
+          }
+
+          int run() {
+            return f1((n) => n * 10);
+          }
+
+        ''',
+        functionName: 'run',
+        executions: {
+          []: 300,
+        },
+      ),
+    );
+
+    test(
+      'closureCapture',
+      () => _testWasm(
+        language: 'dart',
+        code: r'''
+
+          int apply(int Function(int x) f, int v) {
+            return f(v);
+          }
+
+          int makeAndRun(int n) {
+            return apply((int x) => x + n, 5);
+          }
+
+          int run() {
+            return makeAndRun(100);
+          }
+
+        ''',
+        functionName: 'run',
+        executions: {
+          []: 105,
+        },
+      ),
+    );
+
+    test(
+      'closureReturned',
+      () => _testWasm(
+        language: 'dart',
+        code: r'''
+
+          int Function(int) makeAdder(int n) {
+            return (int x) => x + n;
+          }
+
+          int run() {
+            var a = makeAdder(100);
+            var b = makeAdder(1000);
+            return a(5) + b(7);
+          }
+
+        ''',
+        functionName: 'run',
+        executions: {
+          []: 1112,
+        },
+      ),
+    );
+
+    test(
       'multiIntParams',
       () => _testWasm(
         language: 'dart',

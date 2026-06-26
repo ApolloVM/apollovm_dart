@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="Closure returned through a concrete Function return type">
+    <source language="dart">
+        <![CDATA[
+int Function(int) makeAdder(int n) {
+  return (int x) => x + n;
+}
+
+int run() {
+  var add = makeAdder(100);
+  return add(5);
+}
+        ]]>
+    </source>
+    <call function="run" return="105">
+        []
+    </call>
+    <output>
+        []
+    </output>
+
+    <source-generated language="dart"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+  int Function(int) makeAdder(int n) {
+    return (int x) => x + n;
+  }
+
+  int run() {
+    var add = makeAdder(100);
+    return add(5);
+  }
+
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+</test>

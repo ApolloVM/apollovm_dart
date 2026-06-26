@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="Closure capturing an enclosing variable">
+    <source language="dart">
+        <![CDATA[
+Function makeAdder(int n) {
+  return (x) => x + n;
+}
+
+int main() {
+  var add10 = makeAdder(10);
+  return add10(5);
+}
+        ]]>
+    </source>
+    <call function="main" return="15">
+        []
+    </call>
+    <output>
+        []
+    </output>
+
+    <source-generated language="dart"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+  Function makeAdder(int n) {
+    return (dynamic x) => x + n;
+  }
+
+  int main() {
+    var add10 = makeAdder(10);
+    return add10(5);
+  }
+
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+
+    <source-generated language="javascript"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+  function makeAdder(n) {
+    return (x) => x + n;
+  }
+
+  function main() {
+    let add10 = makeAdder(10);
+    return add10(5);
+  }
+
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+
+    <source-generated language="python"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+def makeAdder(n: int) -> Function:
+    return lambda x: x + n
+
+def main() -> int:
+    add10: Function = makeAdder(10)
+    return add10(5)
+
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+</test>
