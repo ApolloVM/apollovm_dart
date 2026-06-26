@@ -370,9 +370,7 @@ class CSharpGrammarDefinition extends CSharpGrammarLexer {
       });
 
   Parser<ASTExpression?> switchCaseLabel() =>
-      ((string('case').trimHidden() &
-                      ref0(expression) &
-                      char(':').trimHidden())
+      ((string('case').trimHidden() & ref0(expression) & char(':').trimHidden())
                   .map((v) => v[1] as ASTExpression?) |
               (string('default').trimHidden() & char(':').trimHidden()).map(
                 (v) => null,

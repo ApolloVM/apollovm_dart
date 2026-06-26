@@ -722,7 +722,9 @@ abstract class ApolloCodeGenerator
         out.write(': {\n');
       }
 
-      out.write(generateASTBlock(c.block, indent: indent2, withBrackets: false));
+      out.write(
+        generateASTBlock(c.block, indent: indent2, withBrackets: false),
+      );
       out.write(indent2);
       out.write('}\n');
     }

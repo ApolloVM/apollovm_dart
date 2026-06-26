@@ -1471,10 +1471,7 @@ class ASTStatementSwitch extends ASTStatement {
   ASTStatementSwitch(this.expression, this.cases, {this.fallThrough = true});
 
   @override
-  Iterable<ASTNode> get children => [
-    expression,
-    ...cases.map((e) => e.block),
-  ];
+  Iterable<ASTNode> get children => [expression, ...cases.map((e) => e.block)];
 
   @override
   void resolveNode(ASTNode? parentNode) {

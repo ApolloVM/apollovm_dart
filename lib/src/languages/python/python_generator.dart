@@ -500,11 +500,7 @@ class ApolloCodeGeneratorPython extends ApolloCodeGenerator {
     if (headIndented) out.write(indent);
 
     out.write('match ');
-    generateASTExpression(
-      statement.expression,
-      out: out,
-      headIndented: false,
-    );
+    generateASTExpression(statement.expression, out: out, headIndented: false);
     out.write(':\n');
 
     var caseIndent = '$indent$_tab';

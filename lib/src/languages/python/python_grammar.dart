@@ -335,9 +335,9 @@ class PythonGrammarDefinition extends PythonGrammarLexer {
 
   /// A `case` pattern: `_` (wildcard/default) or a value expression.
   Parser<ASTExpression?> matchPattern() =>
-      ((char('_') & ref0(identifierPartLexicalToken).not())
-                  .trimHidden()
-                  .map((v) => null) |
+      ((char('_') & ref0(identifierPartLexicalToken).not()).trimHidden().map(
+                (v) => null,
+              ) |
               ref0(expression).map((v) => v as ASTExpression?))
           .cast<ASTExpression?>();
 
