@@ -827,11 +827,7 @@ class ASTExpressionConditional extends ASTExpression {
   ASTExpression valueIfTrue;
   ASTExpression valueIfFalse;
 
-  ASTExpressionConditional(
-    this.condition,
-    this.valueIfTrue,
-    this.valueIfFalse,
-  );
+  ASTExpressionConditional(this.condition, this.valueIfTrue, this.valueIfFalse);
 
   @override
   bool get isComplex => true;

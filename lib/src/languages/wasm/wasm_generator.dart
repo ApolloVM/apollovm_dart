@@ -85,10 +85,7 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     // inferred from the function-typed parameter it is passed to.
     var anonClosures = _collectAnonymousClosures(baseFunctions);
 
-    var functions = [
-      ...baseFunctions,
-      ...anonClosures.map((c) => c.function),
-    ];
+    var functions = [...baseFunctions, ...anonClosures.map((c) => c.function)];
     var module = WasmModuleContext(functions, classLayouts: classLayouts);
     for (var c in anonClosures) {
       module.registerClosure(c);
@@ -594,7 +591,10 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
 
   /// Table section: a single `funcref` table holding the module's function
   /// values (closures), sized to the number of table functions.
-  BytesOutput generateSectionTable(WasmModuleContext module, {BytesOutput? out}) {
+  BytesOutput generateSectionTable(
+    WasmModuleContext module, {
+    BytesOutput? out,
+  }) {
     out ??= newOutput();
 
     var size = module.tableFunctions.length;
@@ -1958,7 +1958,10 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       ...paramTypes.map((t) => t.wasmCode),
     ];
     var resultCode = returnType.isVoid ? null : returnType.wasmCode;
-    var typeIndex = context.module!.typeIndexForSignature(paramCodes, resultCode);
+    var typeIndex = context.module!.typeIndexForSignature(
+      paramCodes,
+      resultCode,
+    );
     if (typeIndex < 0) {
       throw StateError(
         "Wasm: no function type matches the indirect-call signature of "
@@ -1986,7 +1989,10 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       } else {
         resultType = returnType;
       }
-      context.stackPush(resultType, "call_indirect `${expression.name}` result");
+      context.stackPush(
+        resultType,
+        "call_indirect `${expression.name}` result",
+      );
     }
 
     context.assertStackLength(
@@ -7978,10 +7984,7 @@ class WasmModuleContext {
       // Closures take a hidden env pointer (i32) as their first parameter and
       // use their inferred (concrete) parameter types.
       var params = info != null
-          ? [
-              WasmType.i32Type.value,
-              ...info.paramTypes.map((t) => t.wasmCode),
-            ]
+          ? [WasmType.i32Type.value, ...info.paramTypes.map((t) => t.wasmCode)]
           : f.parametersTypesWasmCode;
       var key = _sigKey(params, rt.isVoid ? null : rt.wasmCode);
       if (key == want) return index;

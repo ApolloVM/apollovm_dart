@@ -1063,9 +1063,7 @@ void main() async {
 
         ''',
         functionName: 'run',
-        executions: {
-          []: 300,
-        },
+        executions: {[]: 300},
       ),
     );
 
@@ -1087,9 +1085,7 @@ void main() async {
 
         ''',
         functionName: 'run',
-        executions: {
-          []: 300,
-        },
+        executions: {[]: 300},
       ),
     );
 
@@ -1113,9 +1109,7 @@ void main() async {
 
         ''',
         functionName: 'run',
-        executions: {
-          []: 105,
-        },
+        executions: {[]: 105},
       ),
     );
 
@@ -1137,9 +1131,7 @@ void main() async {
 
         ''',
         functionName: 'run',
-        executions: {
-          []: 1112,
-        },
+        executions: {[]: 1112},
       ),
     );
 

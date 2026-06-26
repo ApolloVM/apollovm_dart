@@ -20,8 +20,7 @@ enum WasmType {
   const WasmType(this.name, this.value);
 
   /// The [WasmType] whose [value] byte is [v].
-  static WasmType fromValue(int v) =>
-      values.firstWhere((t) => t.value == v);
+  static WasmType fromValue(int v) => values.firstWhere((t) => t.value == v);
 }
 
 enum FloatAlign { align1, align2, align3 }
