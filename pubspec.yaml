@@ -1,6 +1,6 @@
 name: apollovm
 description: ApolloVM, a Multilingual portable VM (native, JS/Web, Flutter) for Dart, Java, Kotlin, JavaScript, TypeScript, Lua and Python with on-the-fly Wasm compilation.
-version: 0.1.36
+version: 0.1.37
 repository: https://github.com/ApolloVM/apollovm_dart
 issue_tracker: https://github.com/ApolloVM/apollovm_dart/issues
 

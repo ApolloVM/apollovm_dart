@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="Kotlin lambda input">
+    <source language="kotlin">
+        <![CDATA[
+class C {
+  fun run(): Int {
+    val f = { x: Int -> x * 2 }
+    return f(21)
+  }
+}
+        ]]>
+    </source>
+    <call class="C" function="run" return="42">
+        []
+    </call>
+    <output>
+        []
+    </output>
+
+    <source-generated language="kotlin"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+class C {
+
+  fun run(): Int {
+    val f = { x: Int -> x * 2 }
+    return f(21)
+  }
+
+}
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+</test>

@@ -156,6 +156,26 @@ class LuaGrammarDefinition extends LuaGrammarLexer {
             );
           });
 
+  /// An anonymous function used as an expression (a closure):
+  /// `function(params) ... end`. Captures the enclosing scope.
+  Parser<ASTExpression> expressionAnonymousFunction() =>
+      (functionToken().trimHidden() &
+              functionParametersDeclaration() &
+              ref0(block) &
+              endToken().trimHidden())
+          .map((v) {
+            var parameters = v[1] as ASTFunctionParametersDeclaration;
+            var body = v[2] as ASTBlock;
+            var f = ASTFunctionDeclaration(
+              '',
+              parameters,
+              _inferReturnType(body),
+              block: body,
+              modifiers: ASTModifiers.modifierStatic,
+            );
+            return ASTExpressionLiteralFunction(f);
+          });
+
   Parser<ASTFunctionDeclaration> localFunctionDeclaration() =>
       (localToken().trimHidden() &
               functionToken().trimHidden() &
@@ -501,7 +521,8 @@ class LuaGrammarDefinition extends LuaGrammarLexer {
           .cast<ASTExpressionOperator>();
 
   Parser<ASTExpression> expressionNoOperation() =>
-      (ref0(expressionNegate) |
+      (ref0(expressionAnonymousFunction) |
+              ref0(expressionNegate) |
               ref0(expressionLiteral) |
               ref0(expressionGroup) |
               ref0(expressionTableLiteral) |

@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="Lua anonymous function input">
+    <source language="lua">
+        <![CDATA[
+function run()
+  local f = function(x) return x * 2 end
+  return f(21)
+end
+        ]]>
+    </source>
+    <call function="run" return="42">
+        []
+    </call>
+    <output>
+        []
+    </output>
+
+    <source-generated language="lua"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+  function run()
+    local f = function(x) return x * 2 end
+    return f(21)
+  end
+
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+</test>

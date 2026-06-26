@@ -979,14 +979,14 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
 
     // A function's call indices are `importCount + position`, but host imports
     // (`env.print`, `env.int_to_str`, …) are registered lazily as bodies are
-    // generated. With classes a function may call another that is generated
-    // later (and registers imports), so emit a discovery pass first to register
-    // all imports — making `importCount` final — before the real pass. Scoped
-    // to class modules so import-free / single-function modules stay byte-stable.
-    if (module.classLayouts.isNotEmpty) {
-      for (var f in module.functions) {
-        _generateModuleFunctionBody(f, module);
-      }
+    // generated. A function may call another (or itself) and register an import
+    // *after* that call is emitted, which would shift `importCount` and corrupt
+    // the already-emitted index. So emit a discovery pass first to register all
+    // imports — making `importCount` final — before the real pass. The discovery
+    // pass only mutates idempotent module state (imports, interned strings,
+    // synth functions), so import-free modules stay byte-identical.
+    for (var f in module.functions) {
+      _generateModuleFunctionBody(f, module);
     }
 
     var entries = module.functions
