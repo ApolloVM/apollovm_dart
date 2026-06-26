@@ -296,6 +296,10 @@ class ApolloCodeGeneratorPython extends ApolloCodeGenerator {
   }) {
     out ??= newOutput();
 
+    if (clazz is ASTClassEnum) {
+      return generateASTClassEnum(clazz, out: out, indent: indent);
+    }
+
     out.write(indent);
     out.write('class ');
     out.write(clazz.name);
@@ -328,6 +332,43 @@ class ApolloCodeGeneratorPython extends ApolloCodeGenerator {
       out.write('pass\n');
     }
 
+    out.write('\n');
+
+    return out;
+  }
+
+  /// Generates a Python enum: `class Name(Enum):` with `NAME = value` members.
+  /// Members without an explicit value get their ordinal index.
+  StringBuffer generateASTClassEnum(
+    ASTClassEnum clazz, {
+    StringBuffer? out,
+    String indent = '',
+  }) {
+    out ??= newOutput();
+
+    out.write(indent);
+    out.write('class ');
+    out.write(clazz.name);
+    out.write('(Enum):\n');
+
+    var bodyIndent = '$indent$_tab';
+    var entries = clazz.entries;
+    if (entries.isEmpty) {
+      out.write(bodyIndent);
+      out.write('pass\n');
+    }
+    for (var i = 0; i < entries.length; ++i) {
+      var e = entries[i];
+      out.write(bodyIndent);
+      out.write(e.name);
+      out.write(' = ');
+      if (e.value != null) {
+        generateASTExpression(e.value!, out: out, headIndented: false);
+      } else {
+        out.write('$i');
+      }
+      out.write('\n');
+    }
     out.write('\n');
 
     return out;
@@ -459,6 +500,64 @@ class ApolloCodeGeneratorPython extends ApolloCodeGenerator {
     out ??= newOutput();
     if (headIndented) out.write(indent);
     out.write('return\n');
+    return out;
+  }
+
+  @override
+  StringBuffer generateASTStatementBreak(
+    ASTStatementBreak statement, {
+    StringBuffer? out,
+    String indent = '',
+    bool headIndented = true,
+  }) {
+    out ??= newOutput();
+    if (headIndented) out.write(indent);
+    out.write('break\n');
+    return out;
+  }
+
+  @override
+  StringBuffer generateASTStatementContinue(
+    ASTStatementContinue statement, {
+    StringBuffer? out,
+    String indent = '',
+    bool headIndented = true,
+  }) {
+    out ??= newOutput();
+    if (headIndented) out.write(indent);
+    out.write('continue\n');
+    return out;
+  }
+
+  /// Python uses `match`/`case` (no fall-through); `case _:` is the default.
+  @override
+  StringBuffer generateASTStatementSwitch(
+    ASTStatementSwitch statement, {
+    StringBuffer? out,
+    String indent = '',
+    bool headIndented = true,
+  }) {
+    out ??= newOutput();
+    if (headIndented) out.write(indent);
+
+    out.write('match ');
+    generateASTExpression(statement.expression, out: out, headIndented: false);
+    out.write(':\n');
+
+    var caseIndent = '$indent$_tab';
+    var bodyIndent = '$caseIndent$_tab';
+    for (var c in statement.cases) {
+      out.write(caseIndent);
+      if (c.isDefault) {
+        out.write('case _:\n');
+      } else {
+        out.write('case ');
+        generateASTExpression(c.value!, out: out, headIndented: false);
+        out.write(':\n');
+      }
+      _writeSuite(c.block, out, bodyIndent);
+    }
+
     return out;
   }
 

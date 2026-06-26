@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="C# lambda input">
+    <source language="csharp">
+        <![CDATA[
+class C {
+  static int apply(Func f, int v){ return f(v); }
+  static int run(){ return apply((x) => x * 2, 21); }
+}
+        ]]>
+    </source>
+    <call class="C" function="run" return="42">
+        []
+    </call>
+    <output>
+        []
+    </output>
+
+    <source-generated language="csharp"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+class C {
+
+  static int apply(Function f, int v) {
+    return f(v);
+  }
+
+  static int run() {
+    return apply((object x) => x * 2, 21);
+  }
+
+}
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+</test>

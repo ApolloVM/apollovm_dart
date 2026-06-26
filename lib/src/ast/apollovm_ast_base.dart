@@ -109,6 +109,21 @@ class ASTRunStatus {
 
   /// Returns true if some statement demands loop interruption (break).
   bool broke = false;
+
+  /// Signals a `continue` (skip to the next loop iteration).
+  ASTValueVoid markContinue() {
+    continued = true;
+    return ASTValueVoid.instance;
+  }
+
+  /// Signals a `break` (interrupt the enclosing loop or switch).
+  ASTValueVoid markBreak() {
+    broke = true;
+    return ASTValueVoid.instance;
+  }
+
+  /// `true` if any control-flow flag interrupts normal block execution.
+  bool get interrupted => returned || broke || continued;
 }
 
 abstract class ASTTypedNode {

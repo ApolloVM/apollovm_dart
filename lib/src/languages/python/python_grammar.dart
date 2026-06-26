@@ -92,7 +92,42 @@ class PythonGrammarDefinition extends PythonGrammarLexer {
       });
 
   Parser topLevelDefinition() =>
-      (functionDeclaration() | classDeclaration() | ref0(statement)).plus();
+      (enumDeclaration() |
+              functionDeclaration() |
+              classDeclaration() |
+              ref0(statement))
+          .plus();
+
+  /// Python enum: `class Name(Enum): NEWLINE INDENT (NAME = value)+ DEDENT`.
+  Parser<ASTClassEnum> enumDeclaration() =>
+      (classToken().trimHidden() &
+              identifier() &
+              char('(').trimHidden() &
+              string('Enum') &
+              ref0(identifierPartLexicalToken).not() &
+              char(')').trimHidden() &
+              char(':').trimHidden() &
+              newlineToken() &
+              indentToken() &
+              enumEntry().plus() &
+              dedentToken())
+          .map((v) {
+            var name = v[1] as String;
+            var entries = (v[9] as List).cast<ASTEnumEntry>();
+            return ASTClassEnum(
+              name,
+              ASTType<VMObject>(name),
+              null,
+              entries: entries,
+            );
+          });
+
+  Parser<ASTEnumEntry> enumEntry() =>
+      (identifier().trimHidden() &
+              char('=').trimHidden() &
+              ref0(expression) &
+              newlineToken())
+          .map((v) => ASTEnumEntry(v[0] as String, v[2] as ASTExpression));
 
   // ---------------------------------------------------------------------------
   // Imports: `import x [as y]` and `from x import y`.
@@ -283,6 +318,7 @@ class PythonGrammarDefinition extends PythonGrammarLexer {
 
   Parser<ASTStatement> statement() =>
       (statementTryCatch() |
+              statementMatch() |
               branch() |
               statementForEach() |
               statementWhileLoop() |
@@ -291,13 +327,62 @@ class PythonGrammarDefinition extends PythonGrammarLexer {
 
   /// A simple (single-line) statement terminated by NEWLINE.
   Parser<ASTStatement> simpleStatementLine() =>
-      ((statementReturn() |
+      ((statementBreak() |
+                      statementContinue() |
+                      statementReturn() |
                       statementRaise() |
                       statementVariableDeclaration() |
                       statementExpression())
                   .cast<ASTStatement>() &
               newlineToken())
           .map((v) => v[0] as ASTStatement);
+
+  Parser<ASTStatementBreak> statementBreak() =>
+      breakToken().trimHidden().map((_) => ASTStatementBreak());
+
+  Parser<ASTStatementContinue> statementContinue() =>
+      continueToken().trimHidden().map((_) => ASTStatementContinue());
+
+  /// Python `match exp: NEWLINE INDENT (case <pattern>: suite)+ DEDENT`
+  /// (no fall-through). `case _:` is the default clause.
+  Parser<ASTStatementSwitch> statementMatch() =>
+      (matchKeyword() &
+              ref0(expression) &
+              char(':').trimHidden() &
+              newlineToken() &
+              indentToken() &
+              matchCase().plus() &
+              dedentToken())
+          .map((v) {
+            var exp = v[1] as ASTExpression;
+            var cases = (v[5] as List).cast<ASTSwitchCase>();
+            return ASTStatementSwitch(exp, cases, fallThrough: false);
+          });
+
+  Parser<ASTSwitchCase> matchCase() =>
+      (caseKeyword() & matchPattern() & char(':').trimHidden() & suite()).map((
+        v,
+      ) {
+        var value = v[1] as ASTExpression?;
+        var block = v[3] as ASTBlock;
+        return ASTSwitchCase(value, block);
+      });
+
+  /// A `case` pattern: `_` (wildcard/default) or a value expression.
+  Parser<ASTExpression?> matchPattern() =>
+      ((char('_') & ref0(identifierPartLexicalToken).not()).trimHidden().map(
+                (v) => null,
+              ) |
+              ref0(expression).map((v) => v as ASTExpression?))
+          .cast<ASTExpression?>();
+
+  /// Soft keyword `match` (only at a statement head).
+  Parser matchKeyword() =>
+      (string('match') & ref0(identifierPartLexicalToken).not()).trimHidden();
+
+  /// Soft keyword `case`.
+  Parser caseKeyword() =>
+      (string('case') & ref0(identifierPartLexicalToken).not()).trimHidden();
 
   Parser<ASTStatementThrow> statementRaise() =>
       (raiseToken().trimHidden() & ref0(expression)).map((v) {
@@ -518,6 +603,8 @@ class PythonGrammarDefinition extends PythonGrammarLexer {
       ((string('//') |
                       string('==') |
                       string('!=') |
+                      string('<<') |
+                      string('>>') |
                       string('>=') |
                       string('<=') |
                       char('+') |
@@ -526,7 +613,10 @@ class PythonGrammarDefinition extends PythonGrammarLexer {
                       char('/') |
                       char('>') |
                       char('<') |
-                      char('%'))
+                      char('%') |
+                      char('&') |
+                      char('|') |
+                      char('^'))
                   .trimHidden()
                   .map((v) {
                     switch (v) {
@@ -546,6 +636,7 @@ class PythonGrammarDefinition extends PythonGrammarLexer {
   Parser<ASTExpression> expressionNoOperation() =>
       (expressionLambda() |
               expressionNegate() |
+              expressionBitwiseNot() |
               expressionLiteral() |
               expressionGroupFunctionInvocation() |
               expressionGroup() |
@@ -621,6 +712,11 @@ class PythonGrammarDefinition extends PythonGrammarLexer {
       (char('-').trimHidden() &
               (ref0(expressionNoOperation) | ref0(expressionGroup)))
           .map((v) => ASTExpressionNegative(v[1] as ASTExpression));
+
+  Parser<ASTExpressionBitwiseNot> expressionBitwiseNot() =>
+      (char('~').trimHidden() &
+              (ref0(expressionNoOperation) | ref0(expressionGroup)))
+          .map((v) => ASTExpressionBitwiseNot(v[1] as ASTExpression));
 
   Parser<ASTExpression> expressionGroup() =>
       (char('(').trimHidden() & ref0(expression) & char(')').trimHidden()).map(

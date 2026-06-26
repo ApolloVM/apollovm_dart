@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="Python control flow: match, break, continue">
+    <source language="python">
+        <![CDATA[
+def run():
+    total = 0
+    i = 0
+    while i < 10:
+        i = i + 1
+        if i == 3:
+            continue
+        if i == 6:
+            break
+        total = total + i
+    match i:
+        case 6:
+            total = total + 100
+        case _:
+            total = total + 1
+    return total
+        ]]>
+    </source>
+    <call function="run" return="112">
+        []
+    </call>
+    <output>
+        []
+    </output>
+
+    <source-generated language="python"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+def run():
+    total: int = 0
+    i: int = 0
+    while i < 10:
+        i = i + 1
+        if i == 3:
+            continue
+        if i == 6:
+            break
+        total = total + i
+    match i:
+        case 6:
+            total = total + 100
+        case _:
+            total = total + 1
+    return total
+
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+</test>

@@ -61,7 +61,33 @@ class Java11GrammarDefinition extends Java11GrammarLexer {
   Parser importDirective() =>
       (string('import') & literalString() & char(';').trimHidden());
 
-  Parser topLevelDefinition() => (classDeclaration());
+  Parser topLevelDefinition() => (enumDeclaration() | classDeclaration());
+
+  Parser<ASTClassEnum> enumDeclaration() =>
+      (string('enum') &
+              ref0(identifierPartLexicalToken).not() &
+              identifier().trimHidden() &
+              char('{').trimHidden() &
+              enumEntry() &
+              (char(',').trimHidden() & enumEntry()).star() &
+              char(',').trimHidden().optional() &
+              char('}').trimHidden())
+          .map((v) {
+            var name = v[2] as String;
+            var entries = <ASTEnumEntry>[v[4] as ASTEnumEntry];
+            for (var e in (v[5] as List)) {
+              entries.add(e[1] as ASTEnumEntry);
+            }
+            return ASTClassEnum(
+              name,
+              ASTType<VMObject>(name),
+              null,
+              entries: entries,
+            );
+          });
+
+  Parser<ASTEnumEntry> enumEntry() =>
+      identifier().trimHidden().map((v) => ASTEnumEntry(v));
 
   Parser<ASTClassNormal> classDeclaration() =>
       (string('class').trimHidden() & identifier() & classCodeBlock()).map((v) {
@@ -267,14 +293,83 @@ class Java11GrammarDefinition extends Java11GrammarLexer {
   Parser<ASTStatement> statement() =>
       (statementTryCatch() |
               statementThrow() |
+              statementSwitch() |
               branch() |
+              statementBreak() |
+              statementContinue() |
               statementReturn() |
+              statementDoWhileLoop() |
               statementForLoop() |
               statementForEach() |
               statementWhileLoop() |
               statementVariableDeclaration() |
               statementExpression())
           .cast<ASTStatement>();
+
+  Parser<ASTStatementBreak> statementBreak() =>
+      (string('break') &
+              ref0(identifierPartLexicalToken).not() &
+              char(';').trimHidden())
+          .map((v) => ASTStatementBreak());
+
+  Parser<ASTStatementContinue> statementContinue() =>
+      (string('continue') &
+              ref0(identifierPartLexicalToken).not() &
+              char(';').trimHidden())
+          .map((v) => ASTStatementContinue());
+
+  Parser<ASTStatementDoWhileLoop> statementDoWhileLoop() =>
+      (string('do').trimHidden() &
+              codeBlock() &
+              string('while').trimHidden() &
+              char('(').trimHidden() &
+              ref0(expression) &
+              char(')').trimHidden() &
+              char(';').trimHidden())
+          .map((v) {
+            var block = v[1] as ASTBlock;
+            var cond = v[4] as ASTExpression;
+            return ASTStatementDoWhileLoop(block, cond);
+          });
+
+  Parser<ASTStatementSwitch> statementSwitch() =>
+      (string('switch').trimHidden() &
+              char('(').trimHidden() &
+              ref0(expression) &
+              char(')').trimHidden() &
+              char('{').trimHidden() &
+              switchCase().star() &
+              char('}').trimHidden())
+          .map((v) {
+            var exp = v[2] as ASTExpression;
+            var cases = (v[5] as List).cast<ASTSwitchCase>();
+            return ASTStatementSwitch(exp, cases);
+          });
+
+  Parser<ASTSwitchCase> switchCase() =>
+      (switchCaseLabel() & switchCaseBody()).map((v) {
+        var value = v[0] as ASTExpression?;
+        var block = v[1] as ASTBlock;
+        return ASTSwitchCase(value, block);
+      });
+
+  Parser<ASTExpression?> switchCaseLabel() =>
+      ((string('case').trimHidden() & ref0(expression) & char(':').trimHidden())
+                  .map((v) => v[1] as ASTExpression?) |
+              (string('default').trimHidden() & char(':').trimHidden()).map(
+                (v) => null,
+              ))
+          .cast<ASTExpression?>();
+
+  /// A `case`/`default` body: a braced block (`{ ... }`) or a bare run of
+  /// statements up to the next `case`/`default`/`}`.
+  Parser<ASTBlock> switchCaseBody() =>
+      (codeBlock() | switchCaseStatements()).cast<ASTBlock>();
+
+  Parser<ASTBlock> switchCaseStatements() => ref0(statement).star().map((v) {
+    var statements = v.cast<ASTStatement>();
+    return ASTBlock(null)..addAllStatements(statements);
+  });
 
   Parser<ASTStatementThrow> statementThrow() =>
       (string('throw').trimHidden() & ref0(expression) & char(';').trimHidden())
@@ -517,12 +612,20 @@ class Java11GrammarDefinition extends Java11GrammarLexer {
               char('-') |
               char('*') |
               char('/') |
+              char('%') |
               string('==') |
               string('!=') |
+              string('<<') |
+              string('>>') |
               string('<=') |
               string('>=') |
+              string('&&') |
+              string('||') |
               char('<') |
-              char('>'))
+              char('>') |
+              char('&') |
+              char('|') |
+              char('^'))
           .trimHidden()
           .map((v) {
             return getASTExpressionOperator(v);
@@ -531,6 +634,7 @@ class Java11GrammarDefinition extends Java11GrammarLexer {
   Parser<ASTExpression> expressionNoOperation() =>
       (expressionLambda() |
               expressionNegate() |
+              expressionBitwiseNot() |
               expressionLiteral() |
               expressionGroupFunctionInvocation() |
               expressionGroup() |
@@ -564,6 +668,14 @@ class Java11GrammarDefinition extends Java11GrammarLexer {
           .map((v) {
             var exp = v[1] as ASTExpression;
             return ASTExpressionNegative(exp);
+          });
+
+  Parser<ASTExpressionBitwiseNot> expressionBitwiseNot() =>
+      (char('~').trimHidden() &
+              (ref0(expressionNoOperation) | ref0(expressionGroup)))
+          .map((v) {
+            var exp = v[1] as ASTExpression;
+            return ASTExpressionBitwiseNot(exp);
           });
 
   Parser<ASTExpression> expressionGroup() =>

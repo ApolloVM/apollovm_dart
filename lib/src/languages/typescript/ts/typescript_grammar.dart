@@ -423,7 +423,11 @@ class TypeScriptGrammarDefinition extends TypeScriptGrammarLexer {
   Parser<ASTStatement> statement() =>
       (statementTryCatch() |
               statementThrow() |
+              statementSwitch() |
               branch() |
+              statementBreak() |
+              statementContinue() |
+              statementDoWhileLoop() |
               statementForLoop() |
               statementForEach() |
               statementWhileLoop() |
@@ -434,6 +438,71 @@ class TypeScriptGrammarDefinition extends TypeScriptGrammarLexer {
               statementBlock() |
               statementExpression())
           .cast<ASTStatement>();
+
+  Parser<ASTStatementBreak> statementBreak() =>
+      (string('break') &
+              ref0(identifierPartLexicalToken).not() &
+              char(';').trimHidden().optional())
+          .map((v) => ASTStatementBreak());
+
+  Parser<ASTStatementContinue> statementContinue() =>
+      (string('continue') &
+              ref0(identifierPartLexicalToken).not() &
+              char(';').trimHidden().optional())
+          .map((v) => ASTStatementContinue());
+
+  Parser<ASTStatementDoWhileLoop> statementDoWhileLoop() =>
+      (string('do').trimHidden() &
+              codeBlock() &
+              string('while').trimHidden() &
+              char('(').trimHidden() &
+              ref0(expression) &
+              char(')').trimHidden() &
+              char(';').trimHidden().optional())
+          .map((v) {
+            var block = v[1] as ASTBlock;
+            var cond = v[4] as ASTExpression;
+            return ASTStatementDoWhileLoop(block, cond);
+          });
+
+  Parser<ASTStatementSwitch> statementSwitch() =>
+      (string('switch').trimHidden() &
+              char('(').trimHidden() &
+              ref0(expression) &
+              char(')').trimHidden() &
+              char('{').trimHidden() &
+              switchCase().star() &
+              char('}').trimHidden())
+          .map((v) {
+            var exp = v[2] as ASTExpression;
+            var cases = (v[5] as List).cast<ASTSwitchCase>();
+            return ASTStatementSwitch(exp, cases);
+          });
+
+  Parser<ASTSwitchCase> switchCase() =>
+      (switchCaseLabel() & switchCaseBody()).map((v) {
+        var value = v[0] as ASTExpression?;
+        var block = v[1] as ASTBlock;
+        return ASTSwitchCase(value, block);
+      });
+
+  Parser<ASTExpression?> switchCaseLabel() =>
+      ((string('case').trimHidden() & ref0(expression) & char(':').trimHidden())
+                  .map((v) => v[1] as ASTExpression?) |
+              (string('default').trimHidden() & char(':').trimHidden()).map(
+                (v) => null,
+              ))
+          .cast<ASTExpression?>();
+
+  /// A `case`/`default` body: a braced block (`{ ... }`) or a bare run of
+  /// statements up to the next `case`/`default`/`}`.
+  Parser<ASTBlock> switchCaseBody() =>
+      (codeBlock() | switchCaseStatements()).cast<ASTBlock>();
+
+  Parser<ASTBlock> switchCaseStatements() => ref0(statement).star().map((v) {
+    var statements = v.cast<ASTStatement>();
+    return ASTBlock(null)..addAllStatements(statements);
+  });
 
   Parser<ASTStatementThrow> statementThrow() =>
       (throwToken().trimHidden() &
@@ -815,6 +884,8 @@ class TypeScriptGrammarDefinition extends TypeScriptGrammarLexer {
               string('!==') |
               string('==') |
               string('!=') |
+              string('<<') |
+              string('>>') |
               string('>=') |
               string('<=') |
               string('&&') |
@@ -825,7 +896,10 @@ class TypeScriptGrammarDefinition extends TypeScriptGrammarLexer {
               char('/') |
               char('>') |
               char('<') |
-              char('%'))
+              char('%') |
+              char('&') |
+              char('|') |
+              char('^'))
           .trimHidden()
           .map((v) {
             switch (v) {
@@ -844,6 +918,7 @@ class TypeScriptGrammarDefinition extends TypeScriptGrammarLexer {
   Parser<ASTExpression> expressionNoOperation() =>
       (expressionArrowFunction() |
               expressionNegate() |
+              expressionBitwiseNot() |
               expressionLiteral() |
               expressionGroupFunctionInvocation() |
               expressionGroup() |
@@ -869,6 +944,11 @@ class TypeScriptGrammarDefinition extends TypeScriptGrammarLexer {
       (char('-').trimHidden() &
               (ref0(expressionNoOperation) | ref0(expressionGroup)))
           .map((v) => ASTExpressionNegative(v[1] as ASTExpression));
+
+  Parser<ASTExpressionBitwiseNot> expressionBitwiseNot() =>
+      (char('~').trimHidden() &
+              (ref0(expressionNoOperation) | ref0(expressionGroup)))
+          .map((v) => ASTExpressionBitwiseNot(v[1] as ASTExpression));
 
   Parser<ASTExpression> expressionGroup() =>
       (char('(').trimHidden() & ref0(expression) & char(')').trimHidden()).map(

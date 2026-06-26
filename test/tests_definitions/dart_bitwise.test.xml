@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="Dart bitwise operators">
+    <source language="dart">
+        <![CDATA[
+int run() {
+  int r = 12 & 10;
+  r = r + (12 | 10);
+  r = r + (12 ^ 10);
+  r = r + (1 << 4);
+  r = r + (32 >> 2);
+  r = r + (~5);
+  return r;
+}
+        ]]>
+    </source>
+    <call function="run" return="46">
+        []
+    </call>
+    <output>
+        []
+    </output>
+    <source-generated language="dart"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+  int run() {
+    int r = 12 & 10;
+    r = r + (12 | 10);
+    r = r + (12 ^ 10);
+    r = r + (1 << 4);
+    r = r + (32 >> 2);
+    r = r + (~5);
+    return r;
+  }
+
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+</test>

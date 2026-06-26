@@ -1,3 +1,55 @@
+## 0.1.38
+
+### Language: C# — lambda parsing
+
+- Parse C# lambda expressions (`x => x * 2`, `(a, b) => a + b`, `(int a) => { ... }`,
+  `() => 0`); previously C# could only *generate* lambda syntax, not read it.
+- Delegate type names (`Func`, `Action`, `Delegate`, `Function`) map to the shared
+  function type, so a lambda value binds to a delegate-typed parameter.
+
+### Control flow: `switch`/`case`, `break`, `continue`, `do`/`while`
+
+- New shared AST/runtime nodes (`ASTStatementBreak`, `ASTStatementContinue`,
+  `ASTStatementDoWhileLoop`, `ASTStatementSwitch`/`ASTSwitchCase`). `break`/
+  `continue` propagate through `ASTBlock` and are consumed by the enclosing
+  loop/switch; `for` still runs its increment on `continue`.
+- `switch` uses C-style fall-through (`break` ends a case; `default` runs when no
+  case matches). An `ASTStatementSwitch.fallThrough` flag disables fall-through
+  for languages whose construct has none.
+- Parsing + code generation added to the C-style languages: **Dart, Java, C#,
+  JavaScript, TypeScript** (each `case` body accepts a braced block or a bare run
+  of statements).
+- Mapped to each non-C-style language's idiom:
+  - **Kotlin**: `break`/`continue`, `do { } while (c)`, and `when (e) { v -> …;
+    else -> … }` (no fall-through).
+  - **Python**: `break`/`continue`, and `match`/`case` (`case _:` is the
+    default; no fall-through). Python has no `do`/`while`.
+  - **Lua**: `break`, and `repeat … until <cond>` mapped to a do-while (the
+    condition is negated; the generator unwraps it to emit `until <cond>`).
+- New golden tests under `test/tests_definitions/*_control_flow*.test.xml` for
+  all eight languages.
+
+### Bitwise operators
+
+- New operators `&`, `|`, `^`, `<<`, `>>` (binary) and `~` (unary complement),
+  with shared AST/runtime evaluation (`int` operands) and precedence (shift,
+  then AND/XOR/OR, between arithmetic and comparison).
+- Parsed and generated in **Dart, Java, C#, JavaScript, TypeScript, Python**.
+  Java additionally gains the previously-missing `%`, `&&` and `||` operators.
+- Not added for Kotlin (bitwise are infix functions `and`/`or`/`shl`/`inv`) or
+  Lua (`~` is xor and `^` is exponentiation) — their non-symbolic forms need
+  bespoke handling.
+- New golden tests `test/tests_definitions/*_bitwise.test.xml`.
+
+### enum (Java, C#, Kotlin, Python)
+
+- Enum declaration parsing + generation extended to **Java** (`enum E { … }`),
+  **C#** (`enum E { A = 1, … }`), **Kotlin** (`enum class E { … }`) and
+  **Python** (`class E(Enum): …`), joining the existing Dart/TypeScript support.
+- Declaration + round-trip only (matching the prior Dart/TS level); runtime
+  enum-value access is a separate future enhancement.
+- New golden tests `test/tests_definitions/*_enum.test.xml`.
+
 ## 0.1.37
 
 ### Language: C#

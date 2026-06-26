@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="Kotlin control flow: when, break, continue, do-while">
+    <source language="kotlin">
+        <![CDATA[
+class C {
+  fun run(): Int {
+    var sum = 0
+    var i = 0
+    while (i < 10) {
+      i = i + 1
+      if (i == 3) { continue }
+      if (i == 6) { break }
+      sum = sum + i
+    }
+    var j = 0
+    do {
+      sum = sum + 10
+      j = j + 1
+    } while (j < 3)
+    when (j) {
+      3 -> { sum = sum + 100 }
+      else -> { sum = sum + 1 }
+    }
+    return sum
+  }
+}
+        ]]>
+    </source>
+    <call class="C" function="run" return="142">
+        []
+    </call>
+    <output>
+        []
+    </output>
+
+    <source-generated language="kotlin"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+class C {
+
+  fun run(): Int {
+    var sum = 0
+    var i = 0
+    while( i < 10 ) {
+      i = i + 1
+      if (i == 3) {
+          continue;
+      }
+
+      if (i == 6) {
+          break;
+      }
+
+      sum = sum + i
+    }
+    var j = 0
+    do {
+      sum = sum + 10
+      j = j + 1
+    } while (j < 3);
+    when (j) {
+      3 -> {
+        sum = sum + 100
+      }
+      else -> {
+        sum = sum + 1
+      }
+    }
+    return sum
+  }
+
+}
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+</test>

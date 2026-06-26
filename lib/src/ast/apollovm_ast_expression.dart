@@ -631,6 +631,11 @@ enum ASTExpressionOperator {
   remainder,
   and,
   or,
+  bitwiseAnd,
+  bitwiseOr,
+  bitwiseXor,
+  shiftLeft,
+  shiftRight,
 }
 
 ASTExpressionOperator getASTExpressionOperator(String op) {
@@ -664,6 +669,16 @@ ASTExpressionOperator getASTExpressionOperator(String op) {
       return ASTExpressionOperator.and;
     case '||':
       return ASTExpressionOperator.or;
+    case '&':
+      return ASTExpressionOperator.bitwiseAnd;
+    case '|':
+      return ASTExpressionOperator.bitwiseOr;
+    case '^':
+      return ASTExpressionOperator.bitwiseXor;
+    case '<<':
+      return ASTExpressionOperator.shiftLeft;
+    case '>>':
+      return ASTExpressionOperator.shiftRight;
     default:
       throw UnsupportedError(op);
   }
@@ -700,6 +715,16 @@ String getASTExpressionOperatorText(ASTExpressionOperator op) {
       return '&&';
     case ASTExpressionOperator.or:
       return '||';
+    case ASTExpressionOperator.bitwiseAnd:
+      return '&';
+    case ASTExpressionOperator.bitwiseOr:
+      return '|';
+    case ASTExpressionOperator.bitwiseXor:
+      return '^';
+    case ASTExpressionOperator.shiftLeft:
+      return '<<';
+    case ASTExpressionOperator.shiftRight:
+      return '>>';
   }
 }
 
@@ -813,6 +838,49 @@ class ASTExpressionNegative extends ASTExpression {
   @override
   String toString({bool asGroup = false}) {
     var s = '-$expression';
+    return asGroup ? '($s)' : s;
+  }
+}
+
+/// [ASTExpression] for the bitwise complement (`~expression`).
+class ASTExpressionBitwiseNot extends ASTExpression {
+  ASTExpression expression;
+
+  ASTExpressionBitwiseNot(this.expression);
+
+  @override
+  bool get isComplex => true;
+
+  @override
+  Iterable<ASTNode> get children => [expression];
+
+  @override
+  FutureOr<ASTType> resolveType(VMContext? context) => ASTTypeInt.instance;
+
+  @override
+  FutureOr<ASTValue> run(VMContext parentContext, ASTRunStatus runStatus) {
+    var context = defineRunContext(parentContext);
+
+    var retVal = expression.run(context, runStatus);
+
+    return retVal.resolveMapped((val) {
+      var t = val.type;
+      if (t is ASTTypeInt) {
+        var v1 = val.getValue(context) as int;
+        return ASTValueInt(~v1);
+      }
+
+      var message = "Can't perform bitwise-not operation with type: $t";
+      if (t is ASTTypeNull) {
+        throw ApolloVMNullPointerException(message);
+      }
+      throw UnsupportedError(message);
+    });
+  }
+
+  @override
+  String toString({bool asGroup = false}) {
+    var s = '~$expression';
     return asGroup ? '($s)' : s;
   }
 }
@@ -1007,6 +1075,11 @@ class ASTExpressionOperation extends ASTExpression {
           );
         }
       case ASTExpressionOperator.divideAsInt:
+      case ASTExpressionOperator.bitwiseAnd:
+      case ASTExpressionOperator.bitwiseOr:
+      case ASTExpressionOperator.bitwiseXor:
+      case ASTExpressionOperator.shiftLeft:
+      case ASTExpressionOperator.shiftRight:
         return ASTTypeInt.instance;
       case ASTExpressionOperator.divideAsDouble:
         return ASTTypeDouble.instance;
@@ -1040,6 +1113,11 @@ class ASTExpressionOperation extends ASTExpression {
           );
         }
       case ASTExpressionOperator.divideAsInt:
+      case ASTExpressionOperator.bitwiseAnd:
+      case ASTExpressionOperator.bitwiseOr:
+      case ASTExpressionOperator.bitwiseXor:
+      case ASTExpressionOperator.shiftLeft:
+      case ASTExpressionOperator.shiftRight:
         return ASTTypeInt.instance;
       case ASTExpressionOperator.divideAsDouble:
         return ASTTypeDouble.instance;
@@ -1198,6 +1276,16 @@ class ASTExpressionOperation extends ASTExpression {
               return operatorAnd(parentContext, c1, c2);
             case ASTExpressionOperator.or:
               return operatorOr(parentContext, c1, c2);
+            case ASTExpressionOperator.bitwiseAnd:
+              return operatorBitwiseAnd(parentContext, c1, c2);
+            case ASTExpressionOperator.bitwiseOr:
+              return operatorBitwiseOr(parentContext, c1, c2);
+            case ASTExpressionOperator.bitwiseXor:
+              return operatorBitwiseXor(parentContext, c1, c2);
+            case ASTExpressionOperator.shiftLeft:
+              return operatorShiftLeft(parentContext, c1, c2);
+            case ASTExpressionOperator.shiftRight:
+              return operatorShiftRight(parentContext, c1, c2);
           }
         });
       });
@@ -1531,6 +1619,64 @@ class ASTExpressionOperation extends ASTExpression {
       var val = a || b;
       return ASTValueBool(val);
     });
+  }
+
+  /// Reads an operand as an `int` for a bitwise operation, or throws.
+  int _bitwiseOperand(VMContext context, ASTValue val, String op) {
+    if (val.type is ASTTypeInt) {
+      return val.getValue(context) as int;
+    }
+    throwOperationError(op, val.type, val.type);
+  }
+
+  FutureOr<ASTValue> operatorBitwiseAnd(
+    VMContext context,
+    ASTValue val1,
+    ASTValue val2,
+  ) {
+    var v1 = _bitwiseOperand(context, val1, '&');
+    var v2 = _bitwiseOperand(context, val2, '&');
+    return ASTValueInt(v1 & v2);
+  }
+
+  FutureOr<ASTValue> operatorBitwiseOr(
+    VMContext context,
+    ASTValue val1,
+    ASTValue val2,
+  ) {
+    var v1 = _bitwiseOperand(context, val1, '|');
+    var v2 = _bitwiseOperand(context, val2, '|');
+    return ASTValueInt(v1 | v2);
+  }
+
+  FutureOr<ASTValue> operatorBitwiseXor(
+    VMContext context,
+    ASTValue val1,
+    ASTValue val2,
+  ) {
+    var v1 = _bitwiseOperand(context, val1, '^');
+    var v2 = _bitwiseOperand(context, val2, '^');
+    return ASTValueInt(v1 ^ v2);
+  }
+
+  FutureOr<ASTValue> operatorShiftLeft(
+    VMContext context,
+    ASTValue val1,
+    ASTValue val2,
+  ) {
+    var v1 = _bitwiseOperand(context, val1, '<<');
+    var v2 = _bitwiseOperand(context, val2, '<<');
+    return ASTValueInt(v1 << v2);
+  }
+
+  FutureOr<ASTValue> operatorShiftRight(
+    VMContext context,
+    ASTValue val1,
+    ASTValue val2,
+  ) {
+    var v1 = _bitwiseOperand(context, val1, '>>');
+    var v2 = _bitwiseOperand(context, val2, '>>');
+    return ASTValueInt(v1 >> v2);
   }
 
   FutureOr<bool> _toBoolean(ASTValue val, VMContext context) {

@@ -280,12 +280,33 @@ class LuaGrammarDefinition extends LuaGrammarLexer {
   Parser<ASTStatement> statement() =>
       (ref0(branch) |
               ref0(statementWhileLoop) |
+              ref0(statementRepeatUntil) |
               ref0(statementForNumeric) |
               ref0(statementForEach) |
+              ref0(statementBreak) |
               ref0(statementReturn) |
               ref0(statementVariableDeclaration) |
               ref0(statementExpression))
           .cast<ASTStatement>();
+
+  Parser<ASTStatementBreak> statementBreak() =>
+      breakToken().trimHidden().map((_) => ASTStatementBreak());
+
+  /// Lua `repeat <block> until <cond>` — a do-while that loops while the
+  /// condition is false, i.e. `do { } while (not cond)`.
+  Parser<ASTStatementDoWhileLoop> statementRepeatUntil() =>
+      (repeatToken().trimHidden() &
+              ref0(block) &
+              untilToken().trimHidden() &
+              ref0(expression))
+          .map((v) {
+            var loopBlock = v[1] as ASTBlock;
+            var untilCond = v[3] as ASTExpression;
+            return ASTStatementDoWhileLoop(
+              loopBlock,
+              ASTExpressionNegation(untilCond),
+            );
+          });
 
   Parser<ASTStatementVariableDeclaration> statementVariableDeclaration() =>
       (localToken().trimHidden() &

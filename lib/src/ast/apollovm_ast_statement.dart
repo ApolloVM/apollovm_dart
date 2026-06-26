@@ -300,6 +300,12 @@ class ASTBlock extends ASTStatement {
         return (runStatus.returnedFutureValue ?? runStatus.returnedValue)!;
       }
 
+      // A `break`/`continue` interrupts this block and propagates up to the
+      // enclosing loop/switch, which consumes the corresponding flag.
+      if (runStatus.broke || runStatus.continued) {
+        return ret;
+      }
+
       returnValue = ret;
     }
 
@@ -1096,6 +1102,93 @@ class ASTStatementWhileLoop extends ASTStatement {
         VMContext.setCurrent(context);
 
         if (runStatus.returned) break;
+        if (runStatus.broke) {
+          runStatus.broke = false;
+          break;
+        }
+        if (runStatus.continued) {
+          runStatus.continued = false;
+          continue;
+        }
+      }
+    } finally {
+      VMContext.setCurrent(prevContext);
+    }
+
+    return ASTValueVoid.instance;
+  }
+
+  @override
+  ASTType resolveType(VMContext? context) => ASTTypeVoid.instance;
+}
+
+/// [ASTStatement] for a `do { } while (cond)` loop: the body runs at least once.
+class ASTStatementDoWhileLoop extends ASTStatement {
+  final ASTBlock loopBlock;
+
+  final ASTExpression conditionExpression;
+
+  ASTStatementDoWhileLoop(this.loopBlock, this.conditionExpression);
+
+  @override
+  Iterable<ASTNode> get children => [loopBlock, conditionExpression];
+
+  @override
+  void resolveNode(ASTNode? parentNode) {
+    super.resolveNode(parentNode);
+
+    loopBlock.resolveNode(parentNode);
+    conditionExpression.resolveNode(parentNode);
+  }
+
+  @override
+  VMContext defineRunContext(VMContext parentContext) {
+    return parentContext;
+  }
+
+  @override
+  FutureOr<ASTValue> run(
+    VMContext parentContext,
+    ASTRunStatus runStatus,
+  ) async {
+    var context = VMScopeContext(parentContext.block, parent: parentContext);
+
+    var prevContext = VMContext.setCurrent(context);
+    try {
+      while (true) {
+        var loopContext = VMScopeContext(parentContext.block, parent: context);
+
+        VMContext.setCurrent(loopContext);
+
+        await loopBlock.run(loopContext, runStatus);
+
+        VMContext.setCurrent(context);
+
+        if (runStatus.returned) break;
+        if (runStatus.broke) {
+          runStatus.broke = false;
+          break;
+        }
+        if (runStatus.continued) {
+          runStatus.continued = false;
+          // Falls through to the condition check below.
+        }
+
+        var cond = await conditionExpression.run(context, runStatus);
+
+        if (cond is ASTValueBool) {
+          if (!cond.value) break;
+        } else {
+          var condOK = await cond.getValue(context);
+
+          if (condOK is bool) {
+            if (!condOK) break;
+          } else {
+            throw ApolloVMRuntimeError(
+              'Condition not returning a boolean: $condOK',
+            );
+          }
+        }
       }
     } finally {
       VMContext.setCurrent(prevContext);
@@ -1185,6 +1278,14 @@ class ASTStatementForLoop extends ASTStatement {
         VMContext.setCurrent(context);
 
         if (runStatus.returned) break;
+        if (runStatus.broke) {
+          runStatus.broke = false;
+          break;
+        }
+        // `continue` still runs the loop's continue/increment expression below.
+        if (runStatus.continued) {
+          runStatus.continued = false;
+        }
 
         await continueExpression.run(context, runStatus);
       }
@@ -1281,6 +1382,14 @@ class ASTStatementForEach extends ASTStatement {
         VMContext.setCurrent(context);
 
         if (runStatus.returned) break;
+        if (runStatus.broke) {
+          runStatus.broke = false;
+          break;
+        }
+        if (runStatus.continued) {
+          runStatus.continued = false;
+          continue;
+        }
       }
     } finally {
       VMContext.setCurrent(prevContext);
@@ -1291,6 +1400,163 @@ class ASTStatementForEach extends ASTStatement {
 
   @override
   ASTType resolveType(VMContext? context) => ASTTypeVoid.instance;
+}
+
+/// [ASTStatement] for `break;` — interrupts the enclosing loop or switch.
+class ASTStatementBreak extends ASTStatement {
+  @override
+  Iterable<ASTNode> get children => [];
+
+  @override
+  FutureOr<ASTValue> run(VMContext parentContext, ASTRunStatus runStatus) {
+    return runStatus.markBreak();
+  }
+
+  @override
+  ASTType resolveType(VMContext? context) => ASTTypeVoid.instance;
+
+  @override
+  String toString() => 'break;';
+}
+
+/// [ASTStatement] for `continue;` — skips to the next loop iteration.
+class ASTStatementContinue extends ASTStatement {
+  @override
+  Iterable<ASTNode> get children => [];
+
+  @override
+  FutureOr<ASTValue> run(VMContext parentContext, ASTRunStatus runStatus) {
+    return runStatus.markContinue();
+  }
+
+  @override
+  ASTType resolveType(VMContext? context) => ASTTypeVoid.instance;
+
+  @override
+  String toString() => 'continue;';
+}
+
+/// A single `case <value>:` (or `default:`) clause of an [ASTStatementSwitch].
+///
+/// A [value] of `null` marks the `default` clause.
+class ASTSwitchCase {
+  final ASTExpression? value;
+  final ASTBlock block;
+
+  ASTSwitchCase(this.value, this.block);
+
+  bool get isDefault => value == null;
+
+  void resolveNode(ASTNode? parentNode) {
+    value?.resolveNode(parentNode);
+    block.resolveNode(parentNode);
+  }
+}
+
+/// [ASTStatement] for `switch (exp) { case v: ... break; default: ... }`.
+///
+/// With [fallThrough] (the default, C-style `switch`): once a `case` matches,
+/// its block and the blocks of the following clauses run in order until a
+/// `break` (or `return`). With [fallThrough] `false` (e.g. Kotlin `when`,
+/// Python `match`): only the matched clause runs — there is no fall-through and
+/// `break` is implicit. If no `case` matches, the `default` clause (if present)
+/// runs.
+class ASTStatementSwitch extends ASTStatement {
+  final ASTExpression expression;
+  final List<ASTSwitchCase> cases;
+
+  /// Whether matched clauses fall through to the next clause (C-style).
+  final bool fallThrough;
+
+  ASTStatementSwitch(this.expression, this.cases, {this.fallThrough = true});
+
+  @override
+  Iterable<ASTNode> get children => [expression, ...cases.map((e) => e.block)];
+
+  @override
+  void resolveNode(ASTNode? parentNode) {
+    super.resolveNode(parentNode);
+
+    expression.resolveNode(parentNode);
+    for (var c in cases) {
+      c.resolveNode(parentNode);
+    }
+  }
+
+  @override
+  VMContext defineRunContext(VMContext parentContext) => parentContext;
+
+  @override
+  FutureOr<ASTValue> run(
+    VMContext parentContext,
+    ASTRunStatus runStatus,
+  ) async {
+    var context = VMScopeContext(parentContext.block, parent: parentContext);
+    var prevContext = VMContext.setCurrent(context);
+
+    try {
+      var switchValue = await expression.run(context, runStatus);
+      var rawSwitch = await switchValue.getValue(context);
+
+      // Find the matching case, or fall back to `default`.
+      var startIndex = -1;
+      for (var i = 0; i < cases.length; ++i) {
+        var c = cases[i];
+        if (c.isDefault) continue;
+        var caseValue = await c.value!.run(context, runStatus);
+        var rawCase = await caseValue.getValue(context);
+        if (rawSwitch == rawCase) {
+          startIndex = i;
+          break;
+        }
+      }
+
+      if (startIndex < 0) {
+        startIndex = cases.indexWhere((c) => c.isDefault);
+      }
+
+      if (startIndex < 0) return ASTValueVoid.instance;
+
+      if (!fallThrough) {
+        // Only the matched clause runs (Kotlin `when` / Python `match`).
+        await cases[startIndex].block.run(context, runStatus);
+        // `break` is implicit here, so consume any that bubbled up.
+        if (runStatus.broke) runStatus.broke = false;
+        return ASTValueVoid.instance;
+      }
+
+      // Fall-through: run from the matched clause onward until break/return.
+      for (var i = startIndex; i < cases.length; ++i) {
+        await cases[i].block.run(context, runStatus);
+
+        // `return`/`continue` propagate up (e.g. `continue` of an enclosing
+        // loop); `break` is consumed here as it targets this switch.
+        if (runStatus.returned || runStatus.continued) break;
+        if (runStatus.broke) {
+          runStatus.broke = false;
+          break;
+        }
+      }
+    } finally {
+      VMContext.setCurrent(prevContext);
+    }
+
+    return ASTValueVoid.instance;
+  }
+
+  @override
+  ASTType resolveType(VMContext? context) => ASTTypeVoid.instance;
+
+  @override
+  String toString() {
+    var str = StringBuffer('switch ( $expression ) {\n');
+    for (var c in cases) {
+      str.write(c.isDefault ? 'default: ' : 'case ${c.value}: ');
+      str.write('${c.block}\n');
+    }
+    str.write('}');
+    return str.toString();
+  }
 }
 
 /// [ASTStatement] for `throw <expression>;`.

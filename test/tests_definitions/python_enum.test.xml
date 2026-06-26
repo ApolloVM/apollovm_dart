@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="Python enum declaration">
+    <source language="python">
+        <![CDATA[
+class Color(Enum):
+    RED = 1
+    GREEN = 2
+    BLUE = 3
+        ]]>
+    </source>
+    <source-generated language="python"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+class Color(Enum):
+    RED = 1
+    GREEN = 2
+    BLUE = 3
+
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+</test>

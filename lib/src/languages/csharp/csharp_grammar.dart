@@ -44,6 +44,11 @@ class CSharpGrammarDefinition extends CSharpGrammarLexer {
         return ASTTypeString.instance;
       case 'List':
         return ASTTypeArray(ASTTypeDynamic.instance);
+      case 'Func':
+      case 'Action':
+      case 'Delegate':
+      case 'Function':
+        return ASTTypeFunction();
       case 'var':
         return ASTTypeVar();
       case 'dynamic':
@@ -78,7 +83,41 @@ class CSharpGrammarDefinition extends CSharpGrammarLexer {
       (char('.').trimHidden() & identifier()).star() &
       char(';').trimHidden());
 
-  Parser topLevelDefinition() => (classDeclaration());
+  Parser topLevelDefinition() => (enumDeclaration() | classDeclaration());
+
+  Parser<ASTClassEnum> enumDeclaration() =>
+      (classVisibilityModifier().star() &
+              string('enum') &
+              ref0(identifierPartLexicalToken).not() &
+              identifier().trimHidden() &
+              char('{').trimHidden() &
+              enumEntry() &
+              (char(',').trimHidden() & enumEntry()).star() &
+              char(',').trimHidden().optional() &
+              char('}').trimHidden())
+          .map((v) {
+            var name = v[3] as String;
+            var entries = <ASTEnumEntry>[v[5] as ASTEnumEntry];
+            for (var e in (v[6] as List)) {
+              entries.add(e[1] as ASTEnumEntry);
+            }
+            return ASTClassEnum(
+              name,
+              ASTType<VMObject>(name),
+              null,
+              entries: entries,
+            );
+          });
+
+  Parser<ASTEnumEntry> enumEntry() =>
+      (identifier().trimHidden() &
+              (char('=').trimHidden() & ref0(expression)).optional())
+          .map((v) {
+            var name = v[0] as String;
+            var valueOpt = v[1] as List?;
+            var value = valueOpt != null ? valueOpt[1] as ASTExpression : null;
+            return ASTEnumEntry(name, value);
+          });
 
   Parser<ASTClassNormal> classDeclaration() =>
       (classVisibilityModifier().star() &
@@ -304,14 +343,83 @@ class CSharpGrammarDefinition extends CSharpGrammarLexer {
   Parser<ASTStatement> statement() =>
       (statementTryCatch() |
               statementThrow() |
+              statementSwitch() |
               branch() |
+              statementBreak() |
+              statementContinue() |
               statementReturn() |
+              statementDoWhileLoop() |
               statementForLoop() |
               statementForEach() |
               statementWhileLoop() |
               statementVariableDeclaration() |
               statementExpression())
           .cast<ASTStatement>();
+
+  Parser<ASTStatementBreak> statementBreak() =>
+      (string('break') &
+              ref0(identifierPartLexicalToken).not() &
+              char(';').trimHidden())
+          .map((v) => ASTStatementBreak());
+
+  Parser<ASTStatementContinue> statementContinue() =>
+      (string('continue') &
+              ref0(identifierPartLexicalToken).not() &
+              char(';').trimHidden())
+          .map((v) => ASTStatementContinue());
+
+  Parser<ASTStatementDoWhileLoop> statementDoWhileLoop() =>
+      (string('do').trimHidden() &
+              codeBlock() &
+              string('while').trimHidden() &
+              char('(').trimHidden() &
+              ref0(expression) &
+              char(')').trimHidden() &
+              char(';').trimHidden())
+          .map((v) {
+            var block = v[1] as ASTBlock;
+            var cond = v[4] as ASTExpression;
+            return ASTStatementDoWhileLoop(block, cond);
+          });
+
+  Parser<ASTStatementSwitch> statementSwitch() =>
+      (string('switch').trimHidden() &
+              char('(').trimHidden() &
+              ref0(expression) &
+              char(')').trimHidden() &
+              char('{').trimHidden() &
+              switchCase().star() &
+              char('}').trimHidden())
+          .map((v) {
+            var exp = v[2] as ASTExpression;
+            var cases = (v[5] as List).cast<ASTSwitchCase>();
+            return ASTStatementSwitch(exp, cases);
+          });
+
+  Parser<ASTSwitchCase> switchCase() =>
+      (switchCaseLabel() & switchCaseBody()).map((v) {
+        var value = v[0] as ASTExpression?;
+        var block = v[1] as ASTBlock;
+        return ASTSwitchCase(value, block);
+      });
+
+  Parser<ASTExpression?> switchCaseLabel() =>
+      ((string('case').trimHidden() & ref0(expression) & char(':').trimHidden())
+                  .map((v) => v[1] as ASTExpression?) |
+              (string('default').trimHidden() & char(':').trimHidden()).map(
+                (v) => null,
+              ))
+          .cast<ASTExpression?>();
+
+  /// A `case`/`default` body: a braced block (`{ ... }`) or a bare run of
+  /// statements up to the next `case`/`default`/`}`.
+  Parser<ASTBlock> switchCaseBody() =>
+      (codeBlock() | switchCaseStatements()).cast<ASTBlock>();
+
+  Parser<ASTBlock> switchCaseStatements() => ref0(statement).star().map((v) {
+    var statements = v.cast<ASTStatement>();
+    return ASTBlock(null)..addAllStatements(statements);
+  });
 
   Parser<ASTStatementThrow> statementThrow() =>
       (string('throw').trimHidden() & ref0(expression) & char(';').trimHidden())
@@ -558,19 +666,26 @@ class CSharpGrammarDefinition extends CSharpGrammarLexer {
               char('%') |
               string('==') |
               string('!=') |
+              string('<<') |
+              string('>>') |
               string('<=') |
               string('>=') |
               string('&&') |
               string('||') |
               char('<') |
-              char('>'))
+              char('>') |
+              char('&') |
+              char('|') |
+              char('^'))
           .trimHidden()
           .map((v) {
             return getASTExpressionOperator(v);
           });
 
   Parser<ASTExpression> expressionNoOperation() =>
-      (expressionNegate() |
+      (expressionLambda() |
+              expressionNegate() |
+              expressionBitwiseNot() |
               expressionLiteral() |
               expressionGroupFunctionInvocation() |
               expressionGroup() |
@@ -604,6 +719,14 @@ class CSharpGrammarDefinition extends CSharpGrammarLexer {
           .map((v) {
             var exp = v[1] as ASTExpression;
             return ASTExpressionNegative(exp);
+          });
+
+  Parser<ASTExpressionBitwiseNot> expressionBitwiseNot() =>
+      (char('~').trimHidden() &
+              (ref0(expressionNoOperation) | ref0(expressionGroup)))
+          .map((v) {
+            var exp = v[1] as ASTExpression;
+            return ASTExpressionBitwiseNot(exp);
           });
 
   Parser<ASTExpression> expressionGroup() =>
@@ -956,6 +1079,88 @@ class CSharpGrammarDefinition extends CSharpGrammarLexer {
   Parser<ASTScopeVariable> scopeVariable() => (identifier()).map((v) {
     return ASTScopeVariable(v);
   });
+
+  /// C# lambda used as an expression (a closure): `(a, b) => expr`,
+  /// `(int a) => { ... }`, `x => x * 2`, `() => 0`. Captures the enclosing scope.
+  Parser<ASTExpression> expressionLambda() =>
+      (lambdaParameters() & string('=>').trimHidden() & lambdaBody()).map((v) {
+        var parameters = v[0] as ASTFunctionParametersDeclaration;
+        var block = v[2] as ASTBlock;
+        var f = ASTFunctionDeclaration(
+          '',
+          parameters,
+          ASTTypeDynamic.instance,
+          block: block,
+          modifiers: ASTModifiers.modifierStatic,
+        );
+        return ASTExpressionLiteralFunction(f);
+      });
+
+  Parser<ASTBlock> lambdaBody() =>
+      (codeBlock() | lambdaExpressionBody()).cast<ASTBlock>();
+
+  Parser<ASTBlock> lambdaExpressionBody() => ref0(expression).map(
+    (e) => ASTBlock(null)..addStatement(ASTStatementReturnWithExpression(e)),
+  );
+
+  Parser<ASTFunctionParametersDeclaration> lambdaParameters() =>
+      (lambdaParenParameters() | lambdaSingleParameter())
+          .cast<ASTFunctionParametersDeclaration>();
+
+  Parser<ASTFunctionParametersDeclaration> lambdaSingleParameter() =>
+      identifier().trim().map(
+        (name) => ASTFunctionParametersDeclaration(
+          [
+            ASTFunctionParameterDeclaration(
+              ASTTypeDynamic.instance,
+              name,
+              -1,
+              false,
+            ),
+          ],
+          null,
+          null,
+        ),
+      );
+
+  Parser<ASTFunctionParametersDeclaration> lambdaParenParameters() =>
+      (char('(').trimHidden() &
+              (lambdaParameter() &
+                      (char(',').trimHidden() & lambdaParameter()).star())
+                  .optional() &
+              char(')').trimHidden())
+          .map((v) {
+            var first = v[1];
+            if (first == null) {
+              return ASTFunctionParametersDeclaration(null, null, null);
+            }
+            var params = <ASTFunctionParameterDeclaration>[
+              (first as List)[0] as ASTFunctionParameterDeclaration,
+            ];
+            for (var e in (first[1] as List)) {
+              params.add((e as List)[1] as ASTFunctionParameterDeclaration);
+            }
+            return ASTFunctionParametersDeclaration(params, null, null);
+          });
+
+  /// A lambda parameter: typed (`int a`) or untyped (`a`).
+  Parser<ASTFunctionParameterDeclaration> lambdaParameter() =>
+      ((type().trim() & identifier()) | identifier().trim()).map((v) {
+        if (v is List) {
+          return ASTFunctionParameterDeclaration(
+            v[0] as ASTType,
+            v[1] as String,
+            -1,
+            false,
+          );
+        }
+        return ASTFunctionParameterDeclaration(
+          ASTTypeDynamic.instance,
+          v,
+          -1,
+          false,
+        );
+      });
 
   Parser<ASTFunctionParametersDeclaration> functionParametersDeclaration() =>
       (functionEmptyParametersDeclaration() |

@@ -316,6 +316,68 @@ class ApolloCodeGeneratorLua extends ApolloCodeGenerator {
     return out;
   }
 
+  /// Lua `break` (no statement terminator).
+  @override
+  StringBuffer generateASTStatementBreak(
+    ASTStatementBreak statement, {
+    StringBuffer? out,
+    String indent = '',
+    bool headIndented = true,
+  }) {
+    out ??= newOutput();
+    if (headIndented) out.write(indent);
+    out.write('break');
+    return out;
+  }
+
+  /// Lua has no do-while; it is emitted as `repeat <block> until <not cond>`.
+  @override
+  StringBuffer generateASTStatementDoWhileLoop(
+    ASTStatementDoWhileLoop doWhileLoop, {
+    StringBuffer? out,
+    String indent = '',
+    bool headIndented = true,
+  }) {
+    out ??= newOutput();
+
+    if (headIndented) out.write(indent);
+
+    out.write('repeat\n');
+
+    var blockCode = generateASTBlock(
+      doWhileLoop.loopBlock,
+      indent: indent,
+      withBrackets: false,
+    );
+
+    out.write(blockCode);
+    out.write(indent);
+    out.write('until ');
+
+    // do-while loops while `cond`; Lua's `repeat` loops until its condition is
+    // true (i.e. while false), so emit the negation of `cond`. When `cond` is
+    // already a negation (the common round-trip case), unwrap it.
+    var cond = doWhileLoop.conditionExpression;
+    if (cond is ASTExpressionNegation) {
+      generateASTExpression(
+        cond.expression,
+        out: out,
+        indent: indent,
+        headIndented: false,
+      );
+    } else {
+      out.write('not ');
+      generateASTExpression(
+        cond,
+        out: out,
+        indent: indent,
+        headIndented: false,
+      );
+    }
+
+    return out;
+  }
+
   @override
   StringBuffer generateASTStatementForEach(
     ASTStatementForEach forEach, {

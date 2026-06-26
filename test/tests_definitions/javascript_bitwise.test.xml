@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="JavaScript bitwise operators">
+    <source language="javascript">
+        <![CDATA[
+class C {
+  run() {
+    let r = 12 & 10;
+    r = r + (12 | 10);
+    r = r + (12 ^ 10);
+    r = r + (1 << 4);
+    r = r + (32 >> 2);
+    r = r + (~5);
+    return r;
+  }
+}
+        ]]>
+    </source>
+    <call class="C" function="run" return="46">
+        []
+    </call>
+    <output>
+        []
+    </output>
+    <source-generated language="javascript"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+class C {
+
+  run() {
+    let r = 12 & 10;
+    r = r + (12 | 10);
+    r = r + (12 ^ 10);
+    r = r + (1 << 4);
+    r = r + (32 >> 2);
+    r = r + (~5);
+    return r;
+  }
+
+}
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+</test>

@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="Java enum declaration">
+    <source language="java11">
+        <![CDATA[
+enum Color {
+  Red,
+  Green,
+  Blue
+}
+        ]]>
+    </source>
+    <source-generated language="java11"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+enum Color {
+  Red,
+  Green,
+  Blue
+}
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+</test>
