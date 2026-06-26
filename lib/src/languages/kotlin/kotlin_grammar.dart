@@ -658,7 +658,8 @@ class KotlinGrammarDefinition extends KotlinGrammarLexer {
           });
 
   Parser<ASTExpressionOperator> expressionOperator() =>
-      (char('+') |
+      (ref0(bitwiseInfixOperator) |
+              char('+') |
               char('-') |
               char('*') |
               char('/') |
@@ -673,7 +674,39 @@ class KotlinGrammarDefinition extends KotlinGrammarLexer {
               string('||'))
           .trimHidden()
           .map((v) {
-            return getASTExpressionOperator(v);
+            // Word-operators ([bitwiseInfixOperator]) already yield the enum;
+            // symbol-operators yield a [String] to be mapped.
+            if (v is ASTExpressionOperator) return v;
+            return getASTExpressionOperator(v as String);
+          });
+
+  /// Kotlin has no `&`/`|`/`^`/`<<`/`>>` symbols; bitwise operations use named
+  /// infix functions instead: `a and b`, `a or b`, `a xor b`, `a shl b`,
+  /// `a shr b`. Matched as whole words (via the [identifierPartLexicalToken]
+  /// negative-lookahead) so identifiers like `android` or `order` are not
+  /// mis-parsed as operators.
+  Parser<ASTExpressionOperator> bitwiseInfixOperator() =>
+      ((string('and') |
+                  string('or') |
+                  string('xor') |
+                  string('shl') |
+                  string('shr')) &
+              ref0(identifierPartLexicalToken).not())
+          .map((v) {
+            switch (v[0] as String) {
+              case 'and':
+                return ASTExpressionOperator.bitwiseAnd;
+              case 'or':
+                return ASTExpressionOperator.bitwiseOr;
+              case 'xor':
+                return ASTExpressionOperator.bitwiseXor;
+              case 'shl':
+                return ASTExpressionOperator.shiftLeft;
+              case 'shr':
+                return ASTExpressionOperator.shiftRight;
+              default:
+                throw UnsupportedError(v[0] as String);
+            }
           });
 
   Parser<ASTExpression> expressionNoOperation() =>

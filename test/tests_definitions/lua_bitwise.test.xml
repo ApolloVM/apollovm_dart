@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="Lua bitwise operators: &amp; | ~ (xor) &lt;&lt; &gt;&gt; and unary ~">
+    <source language="lua">
+        <![CDATA[
+function run()
+  local a = 12
+  local b = 10
+  local andv = a & b
+  local orv = a | b
+  local xorv = a ~ b
+  local shl = a << 2
+  local shr = a >> 1
+  local notv = ~a
+  return andv + orv + xorv + shl + shr + notv
+end
+        ]]>
+    </source>
+    <call function="run" return="69">
+        []
+    </call>
+    <output>
+        []
+    </output>
+
+    <source-generated language="lua"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+  function run()
+    local a = 12
+    local b = 10
+    local andv = a & b
+    local orv = a | b
+    local xorv = a ~ b
+    local shl = a << 2
+    local shr = a >> 1
+    local notv = ~a
+    return ((((andv + orv) + xorv) + shl) + shr) + notv
+  end
+
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+</test>

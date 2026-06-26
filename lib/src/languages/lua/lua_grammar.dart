@@ -526,7 +526,12 @@ class LuaGrammarDefinition extends LuaGrammarLexer {
   Parser<ASTExpressionOperator> expressionOperator() =>
       (string('..').map((_) => ASTExpressionOperator.add) |
               string('==').map((_) => ASTExpressionOperator.equals) |
+              // `~=` (not-equals) MUST be matched before the single-char `~`
+              // (bitwise xor) so the binary `~` never swallows the `=`.
               string('~=').map((_) => ASTExpressionOperator.notEquals) |
+              // `<<`/`>>` (shifts) MUST be matched before single `<`/`>`.
+              string('<<').map((_) => ASTExpressionOperator.shiftLeft) |
+              string('>>').map((_) => ASTExpressionOperator.shiftRight) |
               string('<=').map((_) => ASTExpressionOperator.lowerOrEq) |
               string('>=').map((_) => ASTExpressionOperator.greaterOrEq) |
               andToken().map((_) => ASTExpressionOperator.and) |
@@ -536,6 +541,10 @@ class LuaGrammarDefinition extends LuaGrammarLexer {
               char('*').map((_) => ASTExpressionOperator.multiply) |
               char('/').map((_) => ASTExpressionOperator.divide) |
               char('%').map((_) => ASTExpressionOperator.remainder) |
+              char('&').map((_) => ASTExpressionOperator.bitwiseAnd) |
+              char('|').map((_) => ASTExpressionOperator.bitwiseOr) |
+              // In Lua, binary `~` is bitwise XOR (not `^`, which is exponent).
+              char('~').map((_) => ASTExpressionOperator.bitwiseXor) |
               char('<').map((_) => ASTExpressionOperator.lower) |
               char('>').map((_) => ASTExpressionOperator.greater))
           .trimHidden()
@@ -544,6 +553,7 @@ class LuaGrammarDefinition extends LuaGrammarLexer {
   Parser<ASTExpression> expressionNoOperation() =>
       (ref0(expressionAnonymousFunction) |
               ref0(expressionNegate) |
+              ref0(expressionBitwiseNot) |
               ref0(expressionLiteral) |
               ref0(expressionGroup) |
               ref0(expressionTableLiteral) |
@@ -568,6 +578,15 @@ class LuaGrammarDefinition extends LuaGrammarLexer {
               (ref0(expressionNoOperation) | ref0(expressionGroup)))
           .map((v) {
             return ASTExpressionNegative(v[1] as ASTExpression);
+          });
+
+  /// Unary prefix `~expr` — Lua's bitwise NOT. Prefix position only, so it
+  /// never conflicts with binary `~` (xor) or `~=` (not-equals).
+  Parser<ASTExpressionBitwiseNot> expressionBitwiseNot() =>
+      (char('~').trimHidden() &
+              (ref0(expressionNoOperation) | ref0(expressionGroup)))
+          .map((v) {
+            return ASTExpressionBitwiseNot(v[1] as ASTExpression);
           });
 
   Parser<ASTExpression> expressionGroup() =>
