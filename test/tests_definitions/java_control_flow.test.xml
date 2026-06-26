@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="Java control flow: switch, break, continue, do-while">
+    <source language="java11">
+        <![CDATA[
+class C {
+  static int run(){
+    int sum = 0;
+    for (int i = 0; i < 10; i++) {
+      if (i == 2) { continue; }
+      if (i == 5) { break; }
+      sum = sum + i;
+    }
+    int j = 0;
+    do {
+      sum = sum + 10;
+      j++;
+    } while (j < 3);
+    switch (j) {
+      case 3: { sum = sum + 100; break; }
+      default: { sum = sum + 1; break; }
+    }
+    return sum;
+  }
+}
+        ]]>
+    </source>
+    <call class="C" function="run" return="138">
+        []
+    </call>
+    <output>
+        []
+    </output>
+
+    <source-generated language="java11"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+class C {
+
+  static int run() {
+    int sum = 0;
+    for (int i = 0; i < 10 ; i++) {
+      if (i == 2) {
+          continue;
+      }
+
+      if (i == 5) {
+          break;
+      }
+
+      sum = sum + i;
+    }
+    int j = 0;
+    do {
+      sum = sum + 10;
+      j++;
+    } while (j < 3);
+    switch (j) {
+      case 3: {
+        sum = sum + 100;
+        break;
+      }
+      default: {
+        sum = sum + 1;
+        break;
+      }
+    }
+    return sum;
+  }
+
+}
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+</test>

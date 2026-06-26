@@ -404,8 +404,36 @@ abstract class ApolloCodeGenerator
         indent: indent,
         headIndented: headIndented,
       );
+    } else if (statement is ASTStatementDoWhileLoop) {
+      return generateASTStatementDoWhileLoop(
+        statement,
+        out: out,
+        indent: indent,
+        headIndented: headIndented,
+      );
     } else if (statement is ASTStatementWhileLoop) {
       return generateASTStatementWhileLoop(
+        statement,
+        out: out,
+        indent: indent,
+        headIndented: headIndented,
+      );
+    } else if (statement is ASTStatementSwitch) {
+      return generateASTStatementSwitch(
+        statement,
+        out: out,
+        indent: indent,
+        headIndented: headIndented,
+      );
+    } else if (statement is ASTStatementBreak) {
+      return generateASTStatementBreak(
+        statement,
+        out: out,
+        indent: indent,
+        headIndented: headIndented,
+      );
+    } else if (statement is ASTStatementContinue) {
+      return generateASTStatementContinue(
         statement,
         out: out,
         indent: indent,
@@ -625,6 +653,112 @@ abstract class ApolloCodeGenerator
     out.write(blockCode);
     out.write(indent);
     out.write('}');
+
+    return out;
+  }
+
+  StringBuffer generateASTStatementDoWhileLoop(
+    ASTStatementDoWhileLoop doWhileLoop, {
+    StringBuffer? out,
+    String indent = '',
+    bool headIndented = true,
+  }) {
+    out ??= newOutput();
+
+    if (headIndented) out.write(indent);
+
+    out.write('do {\n');
+
+    var blockCode = generateASTBlock(
+      doWhileLoop.loopBlock,
+      indent: indent,
+      withBrackets: false,
+    );
+
+    out.write(blockCode);
+    out.write(indent);
+    out.write('} while (');
+
+    generateASTExpression(
+      doWhileLoop.conditionExpression,
+      out: out,
+      indent: indent,
+      headIndented: false,
+    );
+
+    out.write(');');
+
+    return out;
+  }
+
+  StringBuffer generateASTStatementSwitch(
+    ASTStatementSwitch statement, {
+    StringBuffer? out,
+    String indent = '',
+    bool headIndented = true,
+  }) {
+    out ??= newOutput();
+
+    if (headIndented) out.write(indent);
+
+    var indent2 = '$indent  ';
+
+    out.write('switch (');
+    generateASTExpression(
+      statement.expression,
+      out: out,
+      indent: indent,
+      headIndented: false,
+    );
+    out.write(') {\n');
+
+    for (var c in statement.cases) {
+      out.write(indent2);
+      if (c.isDefault) {
+        out.write('default: {\n');
+      } else {
+        out.write('case ');
+        generateASTExpression(c.value!, out: out, headIndented: false);
+        out.write(': {\n');
+      }
+
+      out.write(generateASTBlock(c.block, indent: indent2, withBrackets: false));
+      out.write(indent2);
+      out.write('}\n');
+    }
+
+    out.write(indent);
+    out.write('}');
+
+    return out;
+  }
+
+  StringBuffer generateASTStatementBreak(
+    ASTStatementBreak statement, {
+    StringBuffer? out,
+    String indent = '',
+    bool headIndented = true,
+  }) {
+    out ??= newOutput();
+
+    if (headIndented) out.write(indent);
+
+    out.write('break;');
+
+    return out;
+  }
+
+  StringBuffer generateASTStatementContinue(
+    ASTStatementContinue statement, {
+    StringBuffer? out,
+    String indent = '',
+    bool headIndented = true,
+  }) {
+    out ??= newOutput();
+
+    if (headIndented) out.write(indent);
+
+    out.write('continue;');
 
     return out;
   }
