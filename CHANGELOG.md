@@ -20,6 +20,24 @@
 - Validated against both the AST interpreter and the compiled+executed Wasm
   module.
 
+### Only static methods are callable without an instance
+
+- A non-static class method now requires a class instance to run. The
+  interpreter's `executeClassMethod` (and any internal call that reaches a
+  non-static method with no `this` in context, e.g. a `static` method calling an
+  instance sibling) throws `ApolloVMRuntimeError` instead of silently running
+  against an auto-created instance. Pass `classInstanceObject` /
+  `classInstanceFields` to run a non-static method, or mark the entry method
+  `static`. This matches the Wasm backend, where only static methods are
+  exported.
+- `ApolloRunnerWasm.executeClassMethod` now reports a clear error for a
+  non-static target (only static methods are exported) and rejects being given a
+  class instance (the Wasm backend has no instance-method entry points).
+- The Wasm generator rejects a receiver-less call to a non-static method (e.g. a
+  `static` method calling an instance sibling) with a clear `UnsupportedError`.
+- Examples and the README run entry methods as `static` where they hold no
+  instance state, or supply an instance otherwise.
+
 ### Tests
 
 - Test files now carry `dart test` tags: a backend tag (`wasm`, plus

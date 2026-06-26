@@ -19,7 +19,14 @@ Future<List<String>> _runPrints(
   var runner = vm.createRunner(language)!;
   var out = <String>[];
   runner.externalPrintFunction = (o) => out.add('$o');
-  await runner.executeClassMethod('', className, methodName);
+  // Entry methods are non-static, so run them against a (field-less) instance —
+  // only `static` methods run without an instance.
+  await runner.executeClassMethod(
+    '',
+    className,
+    methodName,
+    classInstanceFields: const {},
+  );
   return out;
 }
 

@@ -499,12 +499,17 @@ class ApolloRunnerWasm extends ApolloRunner {
     return astValue;
   }
 
-  /// Executes the compiled [methodName] of [className].
+  /// Executes the compiled `static` [methodName] of [className].
   ///
   /// ApolloVM's Wasm backend compiles a class method to a module export named
   /// `Class.method` (the class itself is not represented in the Wasm AST), so
   /// this resolves and runs it by that name via [executeFunction] — keeping the
   /// same call shape as the interpreted runner's [executeClassMethod].
+  ///
+  /// Only **static** methods are exported, so only they are callable here.
+  /// Instance methods are compiled private (they take a `this` and aren't
+  /// reachable as an entry point), so an instance can't be supplied and a
+  /// non-static target isn't found — both throw an [ApolloVMRuntimeError].
   @override
   Future<ASTValue> executeClassMethod(
     String namespace,
@@ -514,14 +519,36 @@ class ApolloRunnerWasm extends ApolloRunner {
     Map? namedParameters,
     VMObject? classInstanceObject,
     Map<String, ASTValue>? classInstanceFields,
-  }) {
-    return executeFunction(
-      namespace,
-      '$className.$methodName',
-      positionalParameters: positionalParameters,
-      namedParameters: namedParameters,
-      allowClassMethod: true,
-    );
+  }) async {
+    if (classInstanceObject != null || classInstanceFields != null) {
+      throw ApolloVMRuntimeError(
+        "Can't call '$className.$methodName' with a class instance: the Wasm "
+        "backend has no instance-method entry points (only static methods are "
+        "exported).",
+      );
+    }
+
+    try {
+      return await executeFunction(
+        namespace,
+        '$className.$methodName',
+        positionalParameters: positionalParameters,
+        namedParameters: namedParameters,
+        allowClassMethod: true,
+      );
+    } on StateError catch (e) {
+      // `executeFunction` throws "Can't find function" when the export
+      // `Class.method` is absent. In a compiled Wasm module only static methods
+      // are exported, so this means the method is non-static (compiled private,
+      // callable only with an instance) or doesn't exist — neither is callable
+      // without an instance. Other `StateError`s are re-thrown unchanged.
+      if (!e.message.contains('find function')) rethrow;
+      throw ApolloVMRuntimeError(
+        "Can't call '$className.$methodName' without a class instance: only "
+        "static methods are callable in a compiled Wasm module (non-static "
+        "methods aren't exported).",
+      );
+    }
   }
 
   // Reads/writes a little-endian 64-bit int via BigInt, so it works on both the

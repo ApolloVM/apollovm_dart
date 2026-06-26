@@ -29,11 +29,14 @@ Future<List<Object?>> _run(
   runner.externalPrintFunction = (o) => output.add(o);
 
   if (className != null) {
+    // Entry methods here are non-static, so run them against a (field-less)
+    // instance — only `static` methods run without an instance.
     await runner.executeClassMethod(
       '',
       className,
       function,
       positionalParameters: positionalParameters,
+      classInstanceFields: const {},
     );
   } else {
     await runner.executeFunction(

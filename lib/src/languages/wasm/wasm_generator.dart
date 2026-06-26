@@ -1914,6 +1914,19 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
         );
       }
 
+      // Only static methods are callable without a receiver. A receiver-less
+      // call that matches a non-static method (e.g. a `static` method calling an
+      // instance sibling, where no `this` is in scope) needs an instance.
+      var instanceMethod = context.module?.instanceMethodQualifiedName(
+        name,
+        argsCount,
+      );
+      if (instanceMethod != null) {
+        throw UnsupportedError(
+          "Can't call non-static method '$instanceMethod' without an instance.",
+        );
+      }
+
       throw StateError(
         "Can't resolve local function `$name` with $argsCount argument(s) "
         "in the Wasm function index table.",
@@ -8783,6 +8796,21 @@ class WasmModuleContext {
           f.method.name == methodName &&
           f.method.parameters.size == arity) {
         return importCount + i;
+      }
+    }
+    return null;
+  }
+
+  /// The qualified `Class.method` name of a compiled **non-static** (instance)
+  /// method whose declared name is [methodName] and arity is [arity], or null if
+  /// none. Used to reject a receiver-less call to a non-static method (e.g. a
+  /// `static` method calling an instance sibling) with a clear error.
+  String? instanceMethodQualifiedName(String methodName, int arity) {
+    for (var f in functions) {
+      if (f is _WasmMethodFunction &&
+          f.method.name == methodName &&
+          f.method.parameters.size == arity) {
+        return '${f.clazz.name}.${f.method.name}';
       }
     }
     return null;

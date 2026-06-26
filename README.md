@@ -287,7 +287,7 @@ void main() async {
       
       class Foo {
       
-          int main(List<Object> args) {
+          static int main(List<Object> args) {
             var title = args[0];
             var a = args[1];
             var b = args[2] ~/ 2;
@@ -378,7 +378,7 @@ Result: 145
 <<<< CODE_UNIT_START="/test" >>>>
 class Foo {
 
-  int main(Object[] args) {
+  static int main(Object[] args) {
     var title = args[0];
     var a = args[1];
     var b = args[2] / 2;
@@ -541,8 +541,10 @@ void main() async {
   // Map the `print` function in the VM:
   kotlinRunner.externalPrintFunction = (o) => print("» $o");
 
+  // `greet` is an instance method (not `static`), so it needs a class instance;
+  // `classInstanceFields` provides one (here with no fields).
   await kotlinRunner.executeClassMethod('', 'Foo', 'greet',
-      positionalParameters: ['World', 3]);
+      positionalParameters: ['World', 3], classInstanceFields: const {});
 
   print('---------------------------------------');
 
@@ -593,7 +595,7 @@ void main() async {
           'javascript',
           r'''
             class Foo {
-              greet(name, count) {
+              static greet(name, count) {
                 let msg = `Hello ${name}, you have ${count} messages.`;
                 print(msg);
               }
@@ -635,7 +637,7 @@ Output:
 <<<< CODE_UNIT_START="/test" >>>>
 class Foo {
 
-  void greet(dynamic name, dynamic count) {
+  static void greet(dynamic name, dynamic count) {
     var msg = 'Hello ${name}, you have ${count} messages.';
     print(msg);
   }
@@ -669,7 +671,7 @@ void main() async {
           'typescript',
           r'''
             class Foo {
-              greet(name: string, count: number): void {
+              static greet(name: string, count: number): void {
                 let msg: string = `Hello ${name}, you have ${count} messages.`;
                 print(msg);
               }
@@ -711,7 +713,7 @@ Output:
 <<<< CODE_UNIT_START="/test" >>>>
 class Foo {
 
-  void greet(String name, num count) {
+  static void greet(String name, num count) {
     String msg = 'Hello ${name}, you have ${count} messages.';
     print(msg);
   }
@@ -764,8 +766,10 @@ void main() async {
   // Map the `print` function in the VM:
   luaRunner.externalPrintFunction = (o) => print("» $o");
 
+  // `Foo:main` is an instance method (uses `self`), so it needs a class
+  // instance; `classInstanceFields` provides one (here with no fields).
   await luaRunner.executeClassMethod('', 'Foo', 'main',
-      positionalParameters: ['Sums:', 10, 20, 30]);
+      positionalParameters: ['Sums:', 10, 20, 30], classInstanceFields: const {});
 
   print('---------------------------------------');
 
@@ -840,8 +844,10 @@ void main() async {
   // Map the `print` function in the VM:
   pyRunner.externalPrintFunction = (o) => print("» $o");
 
+  // `greet` is an instance method (takes `self`), so it needs a class instance;
+  // `classInstanceFields` provides one (here with no fields).
   await pyRunner.executeClassMethod('', 'Foo', 'greet',
-      positionalParameters: ['World', 3]);
+      positionalParameters: ['World', 3], classInstanceFields: const {});
 
   print('---------------------------------------');
 

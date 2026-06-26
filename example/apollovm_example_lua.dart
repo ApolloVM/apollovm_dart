@@ -30,11 +30,14 @@ void main() async {
   // Map the `print` function in the VM:
   luaRunner.externalPrintFunction = (o) => print("» $o");
 
+  // `Foo:main` is an instance method (uses `self`), so it needs a class
+  // instance to run; `classInstanceFields` provides one (here with no fields).
   await luaRunner.executeClassMethod(
     '',
     'Foo',
     'main',
     positionalParameters: ['Sums:', 10, 20, 30],
+    classInstanceFields: const {},
   );
 
   print('---------------------------------------');

@@ -29,11 +29,14 @@ void main() async {
   // Map the `print` function in the VM:
   kotlinRunner.externalPrintFunction = (o) => print("» $o");
 
+  // `Foo.main` is an instance method (not `static`), so it needs a class
+  // instance to run; `classInstanceFields` provides one (here with no fields).
   await kotlinRunner.executeClassMethod(
     '',
     'Foo',
     'main',
     positionalParameters: ['Sums:', 10, 20, 30],
+    classInstanceFields: const {},
   );
 
   print('---------------------------------------');

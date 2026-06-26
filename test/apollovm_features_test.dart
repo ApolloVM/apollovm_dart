@@ -25,11 +25,14 @@ Future<({Object? value, List output})> runDart(
   var output = [];
   runner.externalPrintFunction = (o) => output.add(o);
 
+  // The entry methods are declared non-static, so provide a (field-less)
+  // instance to run them — only `static` methods run without an instance.
   var astValue = await runner.executeClassMethod(
     '',
     className,
     method,
     positionalParameters: [args],
+    classInstanceFields: const {},
   );
 
   return (value: astValue.getValueNoContext(), output: output);
@@ -336,6 +339,7 @@ void main() {
         positionalParameters: [
           [1, 4],
         ],
+        classInstanceFields: const {},
       );
       expect(astValue.getValueNoContext(), equals(10));
     });
