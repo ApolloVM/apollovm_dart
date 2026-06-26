@@ -1021,6 +1021,11 @@ class ASTRoot extends ASTEntryPointBlock {
     var identifier = super.getNodeIdentifier(name, requester: requester);
     if (identifier != null) return identifier;
 
+    // A user-defined class/enum referenced by name (e.g. `Color` in
+    // `Color.Red`).
+    var userClass = getClass(name);
+    if (userClass != null) return userClass;
+
     var clazz = ApolloVMCore.getClass(name);
     if (clazz != null) return clazz;
 

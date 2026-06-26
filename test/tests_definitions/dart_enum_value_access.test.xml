@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="Dart enum value access (ordinal)">
+    <source language="dart">
+        <![CDATA[
+enum Color {
+  red,
+  green,
+  blue
+}
+
+int run() {
+  int a = Color.red;
+  int b = Color.green;
+  int c = Color.blue;
+  int total = a + b + c;
+  if (Color.green == 1) {
+    total = total + 100;
+  }
+  return total;
+}
+        ]]>
+    </source>
+    <call function="run" return="103">
+        []
+    </call>
+    <output>
+        []
+    </output>
+    <source-generated language="dart"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+  int run() {
+    int a = Color.red;
+    int b = Color.green;
+    int c = Color.blue;
+    int total = (a + b) + c;
+    if (Color.green == 1) {
+        total = total + 100;
+    }
+
+    return total;
+  }
+
+enum Color {
+  red,
+  green,
+  blue
+}
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+</test>
