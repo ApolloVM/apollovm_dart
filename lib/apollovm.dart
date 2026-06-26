@@ -24,6 +24,8 @@ export 'src/ast/apollovm_ast_toplevel.dart';
 export 'src/ast/apollovm_ast_type.dart';
 export 'src/ast/apollovm_ast_value.dart';
 export 'src/ast/apollovm_ast_variable.dart';
+export 'src/languages/csharp/csharp_parser.dart';
+export 'src/languages/csharp/csharp_runner.dart';
 export 'src/languages/dart/dart_parser.dart';
 export 'src/languages/dart/dart_runner.dart';
 export 'src/languages/java/java11/java11_parser.dart';

@@ -22,6 +22,9 @@ import 'ast/apollovm_ast_type.dart';
 import 'ast/apollovm_ast_value.dart';
 import 'ast/apollovm_ast_variable.dart';
 import 'core/apollovm_core_base.dart';
+import 'languages/csharp/csharp_generator.dart';
+import 'languages/csharp/csharp_parser.dart';
+import 'languages/csharp/csharp_runner.dart';
 import 'languages/dart/dart_generator.dart';
 import 'languages/dart/dart_parser.dart';
 import 'languages/dart/dart_runner.dart';
@@ -50,7 +53,7 @@ import 'languages/wasm/wasm_runner.dart';
 /// The Apollo VM.
 class ApolloVM implements VMTypeResolver {
   // ignore: non_constant_identifier_names
-  static final String VERSION = '0.1.36';
+  static final String VERSION = '0.1.37';
 
   static int _idCount = 0;
 
@@ -72,6 +75,10 @@ class ApolloVM implements VMTypeResolver {
         return ApolloParserTypeScript.instance as ApolloCodeParser<T>;
       case 'kotlin':
         return ApolloParserKotlin.instance as ApolloCodeParser<T>;
+      case 'cs':
+      case 'c#':
+      case 'csharp':
+        return ApolloParserCSharp.instance as ApolloCodeParser<T>;
       case 'lua':
         return ApolloParserLua.instance as ApolloCodeParser<T>;
       case 'python':
@@ -222,6 +229,13 @@ class ApolloVM implements VMTypeResolver {
           this,
           importCorePackageMath: importCorePackageMath,
         );
+      case 'cs':
+      case 'c#':
+      case 'csharp':
+        return ApolloRunnerCSharp(
+          this,
+          importCorePackageMath: importCorePackageMath,
+        );
       case 'lua':
         return ApolloRunnerLua(
           this,
@@ -269,6 +283,10 @@ class ApolloVM implements VMTypeResolver {
         return ApolloCodeGeneratorTypeScript(codeStorage);
       case 'kotlin':
         return ApolloCodeGeneratorKotlin(codeStorage);
+      case 'cs':
+      case 'c#':
+      case 'csharp':
+        return ApolloCodeGeneratorCSharp(codeStorage);
       case 'lua':
         return ApolloCodeGeneratorLua(codeStorage);
       case 'python':

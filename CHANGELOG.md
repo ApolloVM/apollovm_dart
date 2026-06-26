@@ -1,3 +1,24 @@
+## 0.1.37
+
+### Language: C#
+
+- New self-contained C# language support (`csharp`, also accepting `cs` and
+  `c#`) able to parse, run and translate, at the same level of compatibility as
+  Dart and Java: classes, fields (incl. initial values), constructors, methods
+  and modifiers (`public`/`private`/`static`/`readonly`/…), `using` directives,
+  variable declarations (`var` and typed), the full expression set
+  (arithmetic/comparison/logical operators, ternary `?:`, `++`/`--`, negation),
+  string concatenation, `if`/`else if`/`else`, `for`, `foreach (T x in coll)`,
+  `while`, `try`/`catch`/`finally`, `throw`, lambdas (`=>`), and `List<T>` /
+  `Dictionary<K,V>` collection initializers.
+- C# types map to the shared AST (`int`/`long`/`short` → int, `double`/`float`/
+  `decimal` → double, `bool`, `string`, `object`, …) so code translates
+  cleanly to/from every other supported language.
+- Registered in `ApolloVM` (`getParser`, `createRunner`, `createCodeGenerator`)
+  and exported from `apollovm.dart`; `.cs` files resolve to the `csharp`
+  language.
+- New golden tests under `test/tests_definitions/csharp_*.test.xml`.
+
 ## 0.1.36
 
 ### Ternary / conditional expressions
