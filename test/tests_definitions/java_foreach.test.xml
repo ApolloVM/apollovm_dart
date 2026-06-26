@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="Java for-each round-trip">
+    <source language="java11">
+        <![CDATA[
+class C {
+  static int run(){
+    List<Integer> xs = new ArrayList<Integer>(){{ add(10); add(20); add(12); }};
+    int total = 0;
+    for (Integer x : xs) {
+      total = total + x;
+    }
+    return total;
+  }
+}
+        ]]>
+    </source>
+    <call class="C" function="run" return="42">
+        []
+    </call>
+    <output>
+        []
+    </output>
+    <source-generated language="java11"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+class C {
+
+  static int run() {
+    int[] xs = new ArrayList<int>(){{
+      add(10);
+      add(20);
+      add(12);
+    }};
+    int total = 0;
+    for (int x : xs) {
+      total = total + x;
+    }
+    return total;
+  }
+
+}
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+</test>

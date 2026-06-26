@@ -102,6 +102,54 @@ class ApolloCodeGeneratorJava11 extends ApolloCodeGenerator {
     return out;
   }
 
+  /// Java for-each uses `for (Type x : coll)` (colon), not the default
+  /// `for (var x in coll)`.
+  @override
+  StringBuffer generateASTStatementForEach(
+    ASTStatementForEach forEach, {
+    StringBuffer? out,
+    String indent = '',
+    bool headIndented = true,
+  }) {
+    out ??= newOutput();
+
+    if (headIndented) out.write(indent);
+
+    out.write('for (');
+
+    var t = forEach.variableType;
+    if (t is ASTTypeDynamic || t is ASTTypeVar) {
+      out.write('var ');
+    } else {
+      generateASTType(t, out: out);
+      out.write(' ');
+    }
+    out.write(forEach.variableName);
+
+    out.write(' : ');
+
+    generateASTExpression(
+      forEach.iterableExpression,
+      out: out,
+      indent: indent,
+      headIndented: false,
+    );
+
+    out.write(') {\n');
+
+    var blockCode = generateASTBlock(
+      forEach.loopBlock,
+      indent: indent,
+      withBrackets: false,
+    );
+
+    out.write(blockCode);
+    out.write(indent);
+    out.write('}');
+
+    return out;
+  }
+
   @override
   StringBuffer generateASTClass(
     ASTClassNormal clazz, {
