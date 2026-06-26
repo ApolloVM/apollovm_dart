@@ -167,6 +167,133 @@ void main() {
         ['123'],
       );
     });
+
+    test('static with direct primitive params (int/String/bool)', () async {
+      await _testStaticPrints(
+        r'''
+        class Foo {
+          static void show(int a, String b, bool c) {
+            print('$a / $b / $c');
+          }
+        }
+        ''',
+        'Foo',
+        'show',
+        [9, 'hi', true],
+        ['9 / hi / true'],
+      );
+    });
+
+    test('static with a for-loop accumulating', () async {
+      await _testStaticPrints(
+        r'''
+        class Foo {
+          static void run(int n) {
+            var sum = 0;
+            for (var i = 1; i <= n; i = i + 1) { sum = sum + i; }
+            print(sum);
+          }
+        }
+        ''',
+        'Foo',
+        'run',
+        const [5],
+        ['15'],
+      );
+    });
+
+    test('static with an if/else branch', () async {
+      await _testStaticPrints(
+        r'''
+        class Foo {
+          static void run(int n) {
+            if (n > 0) { print('pos'); } else { print('nonpos'); }
+          }
+        }
+        ''',
+        'Foo',
+        'run',
+        const [-1],
+        ['nonpos'],
+      );
+    });
+
+    test('static with negative-result arithmetic', () async {
+      await _testStaticPrints(
+        r'''
+        class Foo {
+          static void run(int a, int b) {
+            print(a - b);
+            print(a * b);
+          }
+        }
+        ''',
+        'Foo',
+        'run',
+        const [3, 10],
+        ['-7', '30'],
+      );
+    });
+
+    test(
+      'static builds an instance and calls a mutating method twice',
+      () async {
+        await _testStaticPrints(
+          r'''
+        class Counter {
+          int n;
+          Counter(this.n);
+          int inc() { n = n + 1; return n; }
+          static void run() {
+            var c = Counter(0);
+            print(c.inc());
+            print(c.inc());
+          }
+        }
+        ''',
+          'Counter',
+          'run',
+          const [],
+          ['1', '2'],
+        );
+      },
+    );
+
+    test('static with a List<Object> arg of double/bool elements', () async {
+      await _testStaticPrints(
+        r'''
+        class Foo {
+          static void run(List<Object> args) {
+            print('a=${args[0]} b=${args[1]}');
+          }
+        }
+        ''',
+        'Foo',
+        'run',
+        [
+          [1.5, false],
+        ],
+        ['a=1.5 b=false'],
+      );
+    });
+
+    test('static prints a List<Object> arg element directly', () async {
+      await _testStaticPrints(
+        r'''
+        class Foo {
+          static void run(List<Object> args) {
+            print(args[0]);
+          }
+        }
+        ''',
+        'Foo',
+        'run',
+        [
+          [777],
+        ],
+        ['777'],
+      );
+    });
   });
 
   group('Wasm: in-code List<Object> boxing', () {
@@ -191,6 +318,25 @@ void main() {
         );
       },
     );
+
+    test('mixed-primitive List<dynamic> literal indexed', () async {
+      await _testStaticPrints(
+        r'''
+        class Foo {
+          static void demo() {
+            List<dynamic> x = [10, 'z', false, 2.5];
+            for (var i = 0; i < 4; i = i + 1) {
+              print('${x[i]}');
+            }
+          }
+        }
+        ''',
+        'Foo',
+        'demo',
+        const [],
+        ['10', 'z', 'false', '2.5'],
+      );
+    });
 
     test('boxed instance in List<Object> dispatches toString', () async {
       // The AST interpreter does not invoke `toString()` when interpolating a
