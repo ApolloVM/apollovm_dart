@@ -12,6 +12,11 @@
   (int/double/bool/String, plus boxed instances by `typeId`). Enables
   `List<Object>`/`List<dynamic>` literals and arguments with mixed element
   types, marshalled host-side by `ApolloRunnerWasm`.
+- A *homogeneous* list literal initializing a `List<Object>`/`List<dynamic>`
+  variable (e.g. `List<Object> x = [1, 2, 3]`) now boxes its elements. The
+  literal infers a concrete element type (`List<int>`) and previously stored
+  unboxed values that the boxed read path misread (garbage output or an
+  out-of-bounds trap); the declared target element type is now honored.
 - Validated against both the AST interpreter and the compiled+executed Wasm
   module.
 

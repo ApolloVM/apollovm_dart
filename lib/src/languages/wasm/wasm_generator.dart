@@ -1755,6 +1755,7 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     ASTExpressionListLiteral expression, {
     BytesOutput? out,
     WasmContext? context,
+    ASTType? elementTypeOverride,
   }) {
     out ??= newOutput();
     context ??= WasmContext();
@@ -1771,6 +1772,15 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       elemType = rt is ASTTypeArray
           ? rt.componentType
           : ASTTypeDynamic.instance;
+    }
+    // When the literal flows into a `List<Object>`/`List<dynamic>` slot, the
+    // consumer reads boxed i32 elements regardless of the literal's own inferred
+    // element type. Honor that target so a *homogeneous* literal (e.g. the
+    // inferred `List<int>` of `[1, 2, 3]`) boxes its elements instead of storing
+    // unboxed 8-byte values the reader would misread (stride/representation
+    // mismatch -> garbage or an out-of-bounds trap).
+    if (elementTypeOverride != null && _isObjectType(elementTypeOverride)) {
+      elemType = elementTypeOverride;
     }
     // `List<Object>`/`List<dynamic>` literals box each element (mixed types);
     // other element types must compile to a direct storage slot.
@@ -7456,6 +7466,28 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
 
     var name = statement.name;
 
+    final ASTExpression initValue = value;
+    final BytesOutput initOut = out;
+    final WasmContext initContext = context;
+    // Emits the initializer, boxing a homogeneous list literal when it is
+    // declared as a `List<Object>`/`List<dynamic>` (the declared type is read
+    // back as boxed i32 elements, so the literal must store boxes too).
+    void emitInitializer() {
+      var declType = statement.type;
+      if (initValue is ASTExpressionListLiteral &&
+          declType is ASTTypeArray &&
+          _isObjectType(declType.componentType)) {
+        generateASTExpressionListLiteral(
+          initValue,
+          out: initOut,
+          context: initContext,
+          elementTypeOverride: ASTTypeObject.instance,
+        );
+      } else {
+        generateASTExpression(initValue, out: initOut, context: initContext);
+      }
+    }
+
     // A boxed (captured-by-reference) local: allocate its heap cell, then store
     // the initializer into it (leaving the value on the stack as the result).
     if (context.isBoxedVariable(name)) {
@@ -7466,7 +7498,7 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       out.write(Wasm.localSet(b.boxLocal));
 
       out.write(Wasm.localGet(b.boxLocal));
-      generateASTExpression(value, out: out, context: context);
+      emitInitializer();
       var valLocal = context.scratchLocal(_wasmLocalType(b.type), 47);
       out.write(Wasm.localTee(valLocal));
       _emitElemStore(out, b.type, 0);
@@ -7480,7 +7512,7 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
 
     final stackLng0 = context.stackLength;
 
-    generateASTExpression(value, out: out, context: context);
+    emitInitializer();
 
     final stackLng1 = context.assertStackLength(
       stackLng0 + 1,

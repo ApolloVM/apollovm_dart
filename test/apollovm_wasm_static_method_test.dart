@@ -365,4 +365,113 @@ void main() {
       );
     });
   });
+
+  // A *homogeneous* list literal infers a concrete element type (e.g.
+  // `[1, 2, 3]` -> `List<int>`), but when it initializes a `List<Object>`/
+  // `List<dynamic>` variable the elements must be boxed so the (boxed) read path
+  // sees them correctly. Regression coverage for that primitive -> `Object`
+  // conversion, per primitive element type.
+  group('Wasm: homogeneous primitive literal -> List<Object> boxing', () {
+    test('all-int literal', () async {
+      await _testStaticPrints(
+        r'''
+        class Foo {
+          static void demo() {
+            List<Object> x = [1, 2, 3];
+            print('${x[0]}-${x[1]}-${x[2]}');
+          }
+        }
+        ''',
+        'Foo',
+        'demo',
+        const [],
+        ['1-2-3'],
+      );
+    });
+
+    test('all-double literal', () async {
+      await _testStaticPrints(
+        r'''
+        class Foo {
+          static void demo() {
+            List<Object> x = [1.5, 2.5, 3.0];
+            print('${x[0]}/${x[1]}/${x[2]}');
+          }
+        }
+        ''',
+        'Foo',
+        'demo',
+        const [],
+        ['1.5/2.5/3.0'],
+      );
+    });
+
+    test('all-String literal', () async {
+      await _testStaticPrints(
+        r'''
+        class Foo {
+          static void demo() {
+            List<Object> x = ['a', 'b', 'c'];
+            print('${x[0]}${x[1]}${x[2]}');
+          }
+        }
+        ''',
+        'Foo',
+        'demo',
+        const [],
+        ['abc'],
+      );
+    });
+
+    test('all-bool literal', () async {
+      await _testStaticPrints(
+        r'''
+        class Foo {
+          static void demo() {
+            List<Object> x = [true, false, true];
+            print('${x[0]},${x[1]},${x[2]}');
+          }
+        }
+        ''',
+        'Foo',
+        'demo',
+        const [],
+        ['true,false,true'],
+      );
+    });
+
+    test('all-int literal -> List<dynamic>', () async {
+      await _testStaticPrints(
+        r'''
+        class Foo {
+          static void demo() {
+            List<dynamic> x = [10, 20];
+            print('${x[0]}+${x[1]}');
+          }
+        }
+        ''',
+        'Foo',
+        'demo',
+        const [],
+        ['10+20'],
+      );
+    });
+
+    test('all-int List<Object> indexed in a loop', () async {
+      await _testStaticPrints(
+        r'''
+        class Foo {
+          static void demo() {
+            List<Object> x = [1, 2, 3, 4];
+            for (var i = 0; i < 4; i = i + 1) { print('${x[i]}'); }
+          }
+        }
+        ''',
+        'Foo',
+        'demo',
+        const [],
+        ['1', '2', '3', '4'],
+      );
+    });
+  });
 }
