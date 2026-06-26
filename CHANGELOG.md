@@ -1,3 +1,20 @@
+## 0.1.41
+
+### Wasm: static methods + boxed `Object`
+
+- The WebAssembly compiler now supports `static` class methods: each is
+  synthesized as an exported module function under the qualified `Class.method`
+  name (no `this`), generated like a top-level function. `ApolloRunnerWasm`
+  gains `executeClassMethod`, resolving the export by that name.
+- New boxed representation for `Object`/`dynamic` values: an i32 pointer to a
+  16-byte heap cell `[tag@0][typeId@4][payload@8]`. Concrete values flowing into
+  an `Object` slot are boxed, and `toString()` dispatches on the box tag
+  (int/double/bool/String, plus boxed instances by `typeId`). Enables
+  `List<Object>`/`List<dynamic>` literals and arguments with mixed element
+  types, marshalled host-side by `ApolloRunnerWasm`.
+- Validated against both the AST interpreter and the compiled+executed Wasm
+  module.
+
 ## 0.1.40
 
 ### Wasm: control flow + bitwise

@@ -131,6 +131,21 @@ class ApolloRunnerWasm extends ApolloRunner {
         strPtrs = [for (var v in list) allocAndWriteString(v as String)];
       }
 
+      // `Object`/`dynamic` elements are boxed: pre-allocate one 16-byte box per
+      // element (plus a string block for String values), then store the box
+      // pointer as the i32 element. All allocations happen before the data/
+      // header allocs so the final memory view stays valid.
+      List<int>? boxPtrs;
+      List<int?>? boxStrPtrs;
+      if (elemTag == _tagObject) {
+        boxPtrs = [];
+        boxStrPtrs = [];
+        for (var v in list) {
+          boxStrPtrs.add(v is String ? allocAndWriteString(v) : null);
+          boxPtrs.add(m.invokeExport('__alloc', [_boxSize]) as int);
+        }
+      }
+
       var dataPtr = m.invokeExport('__alloc', [n * elemSize]) as int;
       var header = m.invokeExport('__alloc', [12]) as int;
 
@@ -143,7 +158,13 @@ class ApolloRunnerWasm extends ApolloRunner {
       bd.setInt32(header + 8, dataPtr, Endian.little);
 
       for (var i = 0; i < n; ++i) {
-        _writeElem(bd, dataPtr + i * elemSize, elemTag, list[i], strPtrs?[i]);
+        if (elemTag == _tagObject) {
+          var box = boxPtrs![i];
+          _writeBox(bd, box, list[i], boxStrPtrs![i]);
+          bd.setInt32(dataPtr + i * elemSize, box, Endian.little);
+        } else {
+          _writeElem(bd, dataPtr + i * elemSize, elemTag, list[i], strPtrs?[i]);
+        }
       }
       return header;
     }
@@ -478,6 +499,31 @@ class ApolloRunnerWasm extends ApolloRunner {
     return astValue;
   }
 
+  /// Executes the compiled [methodName] of [className].
+  ///
+  /// ApolloVM's Wasm backend compiles a class method to a module export named
+  /// `Class.method` (the class itself is not represented in the Wasm AST), so
+  /// this resolves and runs it by that name via [executeFunction] — keeping the
+  /// same call shape as the interpreted runner's [executeClassMethod].
+  @override
+  Future<ASTValue> executeClassMethod(
+    String namespace,
+    String className,
+    String methodName, {
+    List? positionalParameters,
+    Map? namedParameters,
+    VMObject? classInstanceObject,
+    Map<String, ASTValue>? classInstanceFields,
+  }) {
+    return executeFunction(
+      namespace,
+      '$className.$methodName',
+      positionalParameters: positionalParameters,
+      namedParameters: namedParameters,
+      allowClassMethod: true,
+    );
+  }
+
   // Reads/writes a little-endian 64-bit int via BigInt, so it works on both the
   // Dart VM and dart2js (where `ByteData.get/setInt64` throw). Values beyond the
   // web's 2^53 safe-integer range lose precision on `toInt()` — inherent to web
@@ -525,6 +571,36 @@ class ApolloRunnerWasm extends ApolloRunner {
     }
   }
 
+  /// Writes a boxed `Object` value into the 16-byte cell at [boxPtr]
+  /// (`[tag@0][typeId@4][payload@8]`). `String` values use the pre-allocated
+  /// [strPtr]. The host has no module instances to box, so only primitives and
+  /// `String` are supported. `bool` is checked before `int` (in Dart `bool` is
+  /// not an `int`, but the order documents intent).
+  static void _writeBox(ByteData bd, int boxPtr, Object? value, int? strPtr) {
+    bd.setInt32(boxPtr + 4, 0, Endian.little); // typeId (unused for primitives)
+    if (value is bool) {
+      bd.setInt32(boxPtr + 0, _boxTagBool, Endian.little);
+      bd.setInt32(boxPtr + 8, value ? 1 : 0, Endian.little);
+    } else if (value is BigInt) {
+      bd.setInt32(boxPtr + 0, _boxTagInt, Endian.little);
+      _writeI64(bd, boxPtr + 8, value.toInt());
+    } else if (value is int) {
+      bd.setInt32(boxPtr + 0, _boxTagInt, Endian.little);
+      _writeI64(bd, boxPtr + 8, value);
+    } else if (value is double) {
+      bd.setInt32(boxPtr + 0, _boxTagDouble, Endian.little);
+      bd.setFloat64(boxPtr + 8, value, Endian.little);
+    } else if (value is String) {
+      bd.setInt32(boxPtr + 0, _boxTagString, Endian.little);
+      bd.setInt32(boxPtr + 8, strPtr!, Endian.little);
+    } else {
+      throw StateError(
+        "Can't box value of type ${value.runtimeType} into a List<Object>: "
+        "$value",
+      );
+    }
+  }
+
   /// Reads a collection element of [tag] at [addr].
   static Object? _readElem(
     ByteData bd,
@@ -541,8 +617,34 @@ class ApolloRunnerWasm extends ApolloRunner {
         return bd.getInt32(addr, Endian.little) != 0;
       case _tagString:
         return decodeString(bd.getInt32(addr, Endian.little));
+      case _tagObject:
+        return _readBox(bd, bd.getInt32(addr, Endian.little), decodeString);
       default:
         throw StateError("Unsupported Wasm element tag: $tag");
+    }
+  }
+
+  /// Decodes a boxed `Object` cell at [boxPtr] back into a Dart value. A boxed
+  /// instance can't be reconstructed host-side, so its raw pointer is returned.
+  static Object? _readBox(
+    ByteData bd,
+    int boxPtr,
+    String Function(int) decodeString,
+  ) {
+    var tag = bd.getInt32(boxPtr + 0, Endian.little);
+    switch (tag) {
+      case _boxTagInt:
+        return _readI64(bd, boxPtr + 8);
+      case _boxTagDouble:
+        return bd.getFloat64(boxPtr + 8, Endian.little);
+      case _boxTagBool:
+        return bd.getInt32(boxPtr + 8, Endian.little) != 0;
+      case _boxTagString:
+        return decodeString(bd.getInt32(boxPtr + 8, Endian.little));
+      case _boxTagInstance:
+        return bd.getInt32(boxPtr + 8, Endian.little);
+      default:
+        throw StateError("Unsupported Wasm Object box tag: $tag");
     }
   }
 
@@ -553,6 +655,7 @@ class ApolloRunnerWasm extends ApolloRunner {
     if (t is ASTTypeDouble) return _tagDouble;
     if (t is ASTTypeBool) return _tagBool;
     if (t is ASTTypeString) return _tagString;
+    if (t is ASTTypeObject || t is ASTTypeDynamic) return _tagObject;
     return -1;
   }
 
@@ -561,8 +664,18 @@ class ApolloRunnerWasm extends ApolloRunner {
   static const int _tagDouble = 2;
   static const int _tagBool = 3;
   static const int _tagString = 4;
+  static const int _tagObject = 5; // `Object`/`dynamic` element: a boxed value.
   static const int _tagList = 6;
   static const int _tagMap = 7;
+
+  // Boxed-`Object` cell layout (16 bytes): `[tag:i32 @0][typeId:i32 @4]
+  // [payload:8 @8]`. Tags must match `wasm_generator.dart`'s `_boxTag*`.
+  static const int _boxTagInt = 1;
+  static const int _boxTagDouble = 2;
+  static const int _boxTagBool = 3;
+  static const int _boxTagString = 4;
+  static const int _boxTagInstance = 5;
+  static const int _boxSize = 16;
 
   /// Per-module signature cache, keyed by the wasm binary's identity.
   final Map<Uint8List, ({Map<String, _WasmSig> sigs, Set<String> asyncFns})>

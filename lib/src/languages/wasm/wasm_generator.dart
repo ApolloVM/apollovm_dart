@@ -226,7 +226,33 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     for (var fnSet in clazz.functions) {
       for (var fn in fnSet.functions) {
         if (fn is! ASTClassFunctionDeclaration) continue;
-        if (fn.modifiers.isStatic) continue; // statics not supported this slice
+
+        if (fn.modifiers.isStatic) {
+          // Static method: no `this`. Synthesized as an exported module function
+          // under the qualified `Class.method` name, generated like a top-level
+          // function (see [_WasmStaticMethodFunction]).
+          var staticParams = fn.parameters.allParameters
+              .map(
+                (p) => ASTFunctionParameterDeclaration(
+                  p.type,
+                  p.name,
+                  p.index,
+                  p.optional,
+                ),
+              )
+              .toList();
+          result.add(
+            _WasmStaticMethodFunction(
+              clazz,
+              fn,
+              '${clazz.name}.${fn.name}',
+              ASTFunctionParametersDeclaration(staticParams),
+              fn.returnType,
+              block: fn,
+            ),
+          );
+          continue;
+        }
 
         var params = <ASTFunctionParameterDeclaration>[
           ASTFunctionParameterDeclaration(clazz.type, 'this', 0, false),
@@ -1045,6 +1071,9 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     } else if (f is _WasmMethodFunction) {
       return _generateClassMethodFunction(f, module: module);
     }
+    // A `_WasmStaticMethodFunction` has no `this`; it is generated with a fresh
+    // context (no `thisLocalIndex`/`classLayout`), exactly like a top-level
+    // function — params become locals 0..n-1.
     return generateASTFunctionDeclaration(f, module: module);
   }
 
@@ -1652,6 +1681,25 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
   /// A class-instance reference: an i32 pointer to a heap struct.
   bool _isWasmObjectRef(ASTType t) => t is ASTType<VMObject>;
 
+  /// The static `Object`/`dynamic` type (the root types). Such a value has no
+  /// single Wasm representation, so it is *boxed*: an i32 pointer to a 16-byte
+  /// heap cell `[tag:i32 @0][typeId:i32 @4][payload:8 @8]` (see [_boxTagInt] ..
+  /// [_boxTagInstance]). A concrete class type stays a bare instance pointer.
+  bool _isObjectType(ASTType t) => t is ASTTypeObject || t is ASTTypeDynamic;
+
+  // Boxed-`Object` tags (must match `wasm_runner.dart`'s `_boxTag*`).
+  static const int _boxTagInt = 1;
+  static const int _boxTagDouble = 2;
+  static const int _boxTagBool = 3;
+  static const int _boxTagString = 4;
+  static const int _boxTagInstance = 5;
+
+  // Boxed-`Object` cell layout (16 bytes).
+  static const int _boxSize = 16;
+  static const int _boxTagOffset = 0;
+  static const int _boxTypeIdOffset = 4;
+  static const int _boxPayloadOffset = 8;
+
   void _emitElemStore(BytesOutput out, ASTType elemType, int offset) {
     if (elemType is ASTTypeInt) {
       out.write(Wasm64.i64Store(3, offset));
@@ -1661,6 +1709,7 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
         elemType is ASTTypeBool ||
         elemType is ASTTypeArray ||
         elemType is ASTTypeMap ||
+        _isObjectType(elemType) ||
         _isWasmObjectRef(elemType)) {
       out.write(Wasm32.i32Store(2, offset));
     } else {
@@ -1677,6 +1726,7 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
         elemType is ASTTypeBool ||
         elemType is ASTTypeArray ||
         elemType is ASTTypeMap ||
+        _isObjectType(elemType) ||
         _isWasmObjectRef(elemType)) {
       out.write(Wasm32.i32Load(2, offset));
     } else {
@@ -1722,7 +1772,10 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
           ? rt.componentType
           : ASTTypeDynamic.instance;
     }
-    if (!_isSupportedElemType(elemType)) {
+    // `List<Object>`/`List<dynamic>` literals box each element (mixed types);
+    // other element types must compile to a direct storage slot.
+    var boxElements = _isObjectType(elemType);
+    if (!boxElements && !_isSupportedElemType(elemType)) {
       throw UnimplementedError(
         "Wasm list literal of element type $elemType is not supported yet.",
       );
@@ -1762,6 +1815,9 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     for (var i = 0; i < n; ++i) {
       out.write(Wasm.localGet(dataLocal)); // store base address
       generateASTExpression(values[i], out: out, context: context);
+      if (boxElements) {
+        _emitBoxValue(out, context); // concrete value -> Object box ptr
+      }
       context.stackDrop(); // value consumed by the store
       _emitElemStore(out, elemType, i * size);
     }
@@ -7980,6 +8036,8 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       _emitBoolToString(out, context);
     } else if (type is ASTTypeInt || type is ASTTypeDouble) {
       _emitNumberToString(out, context, type);
+    } else if (_isObjectType(type)) {
+      _emitBoxToString(out, context);
     } else if (_isWasmObjectRef(type)) {
       _emitInstanceToString(out, context, type);
     } else {
@@ -8013,6 +8071,198 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     );
     context.stackDrop();
     context.stackPush(_astTypeString, "$className.toString() result");
+  }
+
+  /// Converts the boxed `Object` pointer on top of the stack to an i32 string
+  /// handle by branching on the box `tag` (`[tag@0][typeId@4][payload@8]`):
+  /// int/double via the host `int_to_str`/`double_to_str` imports, bool by
+  /// `select`ing the interned `"true"`/`"false"` literals, a boxed instance by
+  /// dispatching on its `typeId` to the matching `Class.toString`, and a boxed
+  /// String by returning its payload pointer directly.
+  void _emitBoxToString(BytesOutput out, WasmContext context) {
+    var module = context.module;
+    if (module == null) {
+      throw StateError(
+        "Can't convert a boxed Object to String without a "
+        "module.",
+      );
+    }
+    module.requiresMemory = true;
+
+    var boxLocal = context.scratchLocal(_astTypeString, 40); // i32
+    var tagLocal = context.scratchLocal(_astTypeString, 41); // i32
+
+    out.write(
+      Wasm.localSet(boxLocal),
+      description: "[OP] stash Object box ptr",
+    );
+    out.write(Wasm.localGet(boxLocal));
+    out.write(
+      Wasm32.i32Load(2, _boxTagOffset),
+      description: "[OP] load Object box tag",
+    );
+    out.write(Wasm.localSet(tagLocal));
+
+    var intToStr = module.registerImportedFunction(
+      'env',
+      'int_to_str',
+      const [WasmType.i64Type],
+      const [WasmType.i32Type],
+    );
+    var doubleToStr = module.registerImportedFunction(
+      'env',
+      'double_to_str',
+      const [WasmType.f64Type],
+      const [WasmType.i32Type],
+    );
+    var truePtr = module.internStringLiteral('true');
+    var falsePtr = module.internStringLiteral('false');
+
+    // if (tag == int)
+    out.write(Wasm.localGet(tagLocal));
+    out.write(Wasm32.i32Const(_boxTagInt));
+    out.writeByte(Wasm32.i32Equals);
+    out.write(Wasm.ifInstruction(WasmType.i32Type));
+    out.write(Wasm.localGet(boxLocal));
+    out.write(Wasm64.i64Load(3, _boxPayloadOffset));
+    out.write(Wasm.call(intToStr), description: "[OP] box int -> string");
+    out.writeByte(Wasm.elseInstruction);
+
+    // else if (tag == double)
+    out.write(Wasm.localGet(tagLocal));
+    out.write(Wasm32.i32Const(_boxTagDouble));
+    out.writeByte(Wasm32.i32Equals);
+    out.write(Wasm.ifInstruction(WasmType.i32Type));
+    out.write(Wasm.localGet(boxLocal));
+    out.write(Wasm64.f64Load(FloatAlign.align3, _boxPayloadOffset));
+    out.write(Wasm.call(doubleToStr), description: "[OP] box double -> string");
+    out.writeByte(Wasm.elseInstruction);
+
+    // else if (tag == bool): select between interned "true"/"false".
+    out.write(Wasm.localGet(tagLocal));
+    out.write(Wasm32.i32Const(_boxTagBool));
+    out.writeByte(Wasm32.i32Equals);
+    out.write(Wasm.ifInstruction(WasmType.i32Type));
+    out.write(Wasm32.i32Const(truePtr));
+    out.write(Wasm32.i32Const(falsePtr));
+    out.write(Wasm.localGet(boxLocal));
+    out.write(Wasm32.i32Load(2, _boxPayloadOffset));
+    out.writeByte(Wasm.select, description: "[OP] box bool -> string");
+    out.writeByte(Wasm.elseInstruction);
+
+    // else: tag is String (payload is the string ptr) or instance (dispatch on
+    // typeId to the matching `Class.toString`). Boxed instances carry a 1-based
+    // typeId; String boxes carry typeId 0 and fall through to the payload ptr.
+    var toStringClasses = <({int typeId, int methodIdx})>[];
+    var typeId = 0;
+    for (var className in module.classLayouts.keys) {
+      typeId++;
+      var mi = module.methodIndex(className, 'toString', 0);
+      if (mi != null) toStringClasses.add((typeId: typeId, methodIdx: mi));
+    }
+    for (var cls in toStringClasses) {
+      out.write(Wasm.localGet(boxLocal));
+      out.write(Wasm32.i32Load(2, _boxTypeIdOffset));
+      out.write(Wasm32.i32Const(cls.typeId));
+      out.writeByte(Wasm32.i32Equals);
+      out.write(Wasm.ifInstruction(WasmType.i32Type));
+      out.write(Wasm.localGet(boxLocal));
+      out.write(Wasm32.i32Load(2, _boxPayloadOffset));
+      out.write(
+        Wasm.call(cls.methodIdx),
+        description: "[OP] box instance(typeId ${cls.typeId}) -> toString",
+      );
+      out.writeByte(Wasm.elseInstruction);
+    }
+    // Innermost else / String fallback: the payload is already a string handle.
+    out.write(Wasm.localGet(boxLocal));
+    out.write(
+      Wasm32.i32Load(2, _boxPayloadOffset),
+      description: "[OP] box String -> payload ptr",
+    );
+    for (var _ in toStringClasses) {
+      out.writeByte(Wasm.end);
+    }
+
+    out.writeByte(Wasm.end); // bool
+    out.writeByte(Wasm.end); // double
+    out.writeByte(Wasm.end); // int
+
+    context.stackDrop(); // box ptr consumed
+    context.stackPush(_astTypeString, "Object box to string");
+  }
+
+  /// Boxes the concrete value on top of the stack into a 16-byte `Object` cell
+  /// (`[tag@0][typeId@4][payload@8]`), leaving the box pointer on the stack
+  /// (stack type `Object`). The reverse of [_emitBoxToString]; used when a
+  /// concrete value flows into an `Object` slot (e.g. a `List<Object>` literal).
+  /// A value already typed `Object` is left unchanged.
+  void _emitBoxValue(BytesOutput out, WasmContext context) {
+    var module = context.module;
+    if (module == null) {
+      throw StateError("Can't box a value without a module.");
+    }
+    var type = context.stackGet(0)!.type;
+    if (_isObjectType(type)) return; // already a box
+
+    module.requiresMemory = true;
+    module.requiresHeapGlobal = true;
+
+    int tag;
+    var typeId = 0;
+    ASTType valLocalType;
+    if (type is ASTTypeBool || identical(type, _astTypeInt32)) {
+      // bool (and the i32 singleton) — checked before `ASTTypeInt`.
+      tag = _boxTagBool;
+      valLocalType = _astTypeString; // i32
+    } else if (type is ASTTypeInt) {
+      tag = _boxTagInt;
+      valLocalType = _astTypeInt64; // i64
+    } else if (type is ASTTypeDouble) {
+      tag = _boxTagDouble;
+      valLocalType = _astTypeDouble64; // f64
+    } else if (type is ASTTypeString) {
+      tag = _boxTagString;
+      valLocalType = _astTypeString; // i32 string ptr
+    } else if (_isWasmObjectRef(type)) {
+      tag = _boxTagInstance;
+      typeId = module.typeIdOf(type.name);
+      valLocalType = _astTypeString; // i32 instance ptr
+    } else {
+      throw UnimplementedError("Wasm boxing of type $type is not supported.");
+    }
+
+    var valLocal = context.scratchLocal(valLocalType, 42);
+    var boxLocal = context.scratchLocal(_astTypeString, 43);
+
+    out.write(Wasm.localSet(valLocal), description: "[OP] stash value to box");
+    out.write(Wasm32.i32Const(_boxSize));
+    _emitInlineAlloc(out, context);
+    out.write(Wasm.localSet(boxLocal));
+
+    out.write(Wasm.localGet(boxLocal));
+    out.write(Wasm32.i32Const(tag));
+    out.write(Wasm32.i32Store(2, _boxTagOffset), description: "[OP] box tag");
+    out.write(Wasm.localGet(boxLocal));
+    out.write(Wasm32.i32Const(typeId));
+    out.write(
+      Wasm32.i32Store(2, _boxTypeIdOffset),
+      description: "[OP] box typeId",
+    );
+    out.write(Wasm.localGet(boxLocal));
+    out.write(Wasm.localGet(valLocal));
+    if (tag == _boxTagInt) {
+      out.write(Wasm64.i64Store(3, _boxPayloadOffset));
+    } else if (tag == _boxTagDouble) {
+      out.write(Wasm64.f64Store(FloatAlign.align3, _boxPayloadOffset));
+    } else {
+      out.write(Wasm32.i32Store(2, _boxPayloadOffset));
+    }
+
+    out.write(Wasm.localGet(boxLocal), description: "[OP] boxed Object ptr");
+
+    context.stackDrop();
+    context.stackPush(ASTTypeObject.instance, "boxed Object");
   }
 
   /// Converts the i32 boolean on top of the stack to an i32 string handle:
@@ -8351,6 +8601,26 @@ class _WasmMethodFunction extends ASTFunctionDeclaration {
        );
 }
 
+/// A synthesized module function wrapping a `static` class method. Unlike
+/// [_WasmMethodFunction] it does NOT take a `this` parameter and is left
+/// non-private, so it is exported (under the qualified `Class.method` name) and
+/// callable directly by the host. Its body is generated by the generic
+/// [WasmGenerator.generateASTFunctionDeclaration] path (no `this`/`classLayout`
+/// in scope).
+class _WasmStaticMethodFunction extends ASTFunctionDeclaration {
+  final ASTClassNormal clazz;
+  final ASTClassFunctionDeclaration method;
+
+  _WasmStaticMethodFunction(
+    this.clazz,
+    this.method,
+    String name,
+    ASTFunctionParametersDeclaration parameters,
+    ASTType returnType, {
+    ASTBlock? block,
+  }) : super(name, parameters, returnType, block: block);
+}
+
 /// Module-level Wasm codegen state shared across all functions: the function
 /// index space (imports + defined functions) and the static data region
 /// (interned string literals).
@@ -8458,6 +8728,18 @@ class WasmModuleContext {
 
   static String _sigKey(List<int> paramCodes, int? resultCode) =>
       '${paramCodes.join(',')}>${resultCode ?? ''}';
+
+  /// Stable 1-based id for a class, by class-layout insertion order (0 = not a
+  /// known class). Stamped into a boxed `Object` cell (`typeId@4`) when an
+  /// instance is boxed, so its `toString()` can be dispatched at runtime.
+  int typeIdOf(String className) {
+    var id = 0;
+    for (var name in classLayouts.keys) {
+      id++;
+      if (name == className) return id;
+    }
+    return 0;
+  }
 
   /// Resolves the Wasm function index of class [className]'s method
   /// [methodName] taking [arity] declared arguments (excluding `this`).
@@ -9210,6 +9492,9 @@ extension _ASTTypeExtension on ASTType {
       return WasmType.i32Type;
     } else if (this is ASTTypeFunction) {
       // A function value is an i32 index into the module's function table.
+      return WasmType.i32Type;
+    } else if (this is ASTTypeObject || this is ASTTypeDynamic) {
+      // A boxed `Object`/`dynamic` is an i32 pointer to its 16-byte box cell.
       return WasmType.i32Type;
     } else if (this is ASTTypeVoid) {
       return WasmType.voidType;
