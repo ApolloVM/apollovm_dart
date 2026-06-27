@@ -1903,6 +1903,10 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       generateASTExpression(values[i], out: out, context: context);
       if (boxElements) {
         _emitBoxValue(out, context); // concrete value -> Object box ptr
+      } else {
+        // A boxed `Object` element flowing into a typed numeric list must be
+        // unboxed to match the i64/f64 slot.
+        _coerceBoxedToNumberSlot(out, context, elemType);
       }
       context.stackDrop(); // value consumed by the store
       _emitElemStore(out, elemType, i * size);
@@ -2589,11 +2593,13 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       // keys[i] = key
       out.write(Wasm.localGet(keysLocal));
       generateASTExpression(entries[i].key, out: out, context: context);
+      _coerceBoxedToNumberSlot(out, context, keyType);
       context.stackDrop();
       _emitElemStore(out, keyType, i * keySize);
       // vals[i] = value
       out.write(Wasm.localGet(valsLocal));
       generateASTExpression(entries[i].value, out: out, context: context);
+      _coerceBoxedToNumberSlot(out, context, valueType);
       context.stackDrop();
       _emitElemStore(out, valueType, i * valSize);
     }
@@ -3054,6 +3060,81 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     return out;
   }
 
+  /// Appends, to [buf], bytes that unbox the boxed `Object` pointer currently
+  /// on top of the stack into a concrete number of type [target] (`int`→i64 or
+  /// `double`→f64), dispatching on the runtime box tag
+  /// (`[tag@0][typeId@4][payload@8]`). A box whose tag disagrees with [target]
+  /// is converted (`i64.trunc_f64_s` / `f64.convert_i64_s`) so the result type
+  /// is always [target]. Used when a dynamic value (e.g. a `List<Object>`
+  /// element) flows into arithmetic. Net stack effect: replaces the i32 box
+  /// pointer with one [target] value.
+  void _emitUnboxNumberInto(
+    BytesOutput buf,
+    WasmContext context,
+    ASTType target,
+  ) {
+    var module = context.module;
+    if (module == null) {
+      throw StateError("Can't unbox an Object without a module.");
+    }
+    module.requiresMemory = true;
+
+    var wantDouble = target == _astTypeDouble64 || target == _astTypeDouble;
+    var resultType = wantDouble ? WasmType.f64Type : WasmType.i64Type;
+    var boxTmp = context.scratchLocal(_astTypeString, 56); // i32
+
+    buf.write(
+      Wasm.localSet(boxTmp),
+      description: "[OP] unbox Object: stash box ptr",
+    );
+    buf.write(Wasm.localGet(boxTmp));
+    buf.write(Wasm32.i32Load(2, _boxTagOffset));
+    buf.write(Wasm32.i32Const(_boxTagInt));
+    buf.writeByte(Wasm32.i32Equals);
+    buf.write(Wasm.ifInstruction(resultType));
+    // tag == int: payload is i64.
+    buf.write(Wasm.localGet(boxTmp));
+    buf.write(Wasm64.i64Load(3, _boxPayloadOffset));
+    if (wantDouble) {
+      buf.writeByte(
+        Wasm64.i64ConvertToF64Signed,
+        description: "[OP] unbox int -> f64",
+      );
+    }
+    buf.writeByte(Wasm.elseInstruction);
+    // else: payload is f64 (double box).
+    buf.write(Wasm.localGet(boxTmp));
+    buf.write(Wasm64.f64Load(FloatAlign.align3, _boxPayloadOffset));
+    if (!wantDouble) {
+      buf.writeByte(
+        Wasm64.f64TruncateToI64Signed,
+        description: "[OP] unbox double -> i64",
+      );
+    }
+    buf.writeByte(Wasm.end);
+  }
+
+  /// If the value on top of the stack is a boxed `Object` but [slotType] is a
+  /// concrete number (`int`/`double`), unboxes it (via [_emitUnboxNumberInto])
+  /// so it can be stored into a typed numeric element/field slot. No-op
+  /// otherwise. Does not touch the virtual stack (the caller drops the value).
+  void _coerceBoxedToNumberSlot(
+    BytesOutput out,
+    WasmContext context,
+    ASTType slotType,
+  ) {
+    var vt = context.stackGet(0)?.type;
+    if (vt != null &&
+        _isObjectType(vt) &&
+        (slotType is ASTTypeInt || slotType is ASTTypeDouble)) {
+      _emitUnboxNumberInto(
+        out,
+        context,
+        slotType is ASTTypeDouble ? _astTypeDouble64 : _astTypeInt64,
+      );
+    }
+  }
+
   @override
   BytesOutput generateASTExpressionOperation(
     ASTExpressionOperation expression, {
@@ -3140,6 +3221,36 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       _emitStringConcat2(out, context);
       context.assertStackLength(stackLng0 + 1, "After string concat");
       return out;
+    }
+
+    // A boxed `Object`/`dynamic` operand (e.g. an element read from a
+    // `List<Object>`, which the interpreter treats dynamically) carries an i32
+    // box pointer, not a number. Unbox it to a concrete numeric value before
+    // arithmetic/comparison; otherwise the box pointer would flow straight into
+    // `i64.add`/`f64.div` and produce invalid Wasm. Division always computes in
+    // f64; otherwise the target follows the other (numeric) operand, defaulting
+    // to int. (String operands are handled by the concatenation branch above.)
+    if (_isObjectType(stackType1) || _isObjectType(stackType2)) {
+      var op = expression.operator;
+      var isDivide =
+          op == ASTExpressionOperator.divide ||
+          op == ASTExpressionOperator.divideAsInt ||
+          op == ASTExpressionOperator.divideAsDouble;
+      bool isDouble(ASTType t) => t == _astTypeDouble || t == _astTypeDouble64;
+      ASTType target =
+          (isDivide || isDouble(stackType1) || isDouble(stackType2))
+          ? _astTypeDouble64
+          : _astTypeInt64;
+      if (_isObjectType(stackType1)) {
+        _emitUnboxNumberInto(exp1Out, context, target);
+        stackType1 = target;
+        context.stackReplaceAt(1, target, "unbox Object operand 1 -> $target");
+      }
+      if (_isObjectType(stackType2)) {
+        _emitUnboxNumberInto(exp2Out, context, target);
+        stackType2 = target;
+        context.stackReplace(target, "unbox Object operand 2 -> $target");
+      }
     }
 
     var operationType = _getOperationType(expression, stackType1, stackType2);
@@ -8668,6 +8779,10 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       _emitNumberToString(out, context, type);
     } else if (_isObjectType(type)) {
       _emitBoxToString(out, context);
+    } else if (type is ASTTypeMap) {
+      _emitMapToString(out, context, type);
+    } else if (type is ASTTypeArray) {
+      _emitListToString(out, context, type);
     } else if (_isWasmObjectRef(type)) {
       _emitInstanceToString(out, context, type);
     } else {
@@ -8701,6 +8816,277 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     );
     context.stackDrop();
     context.stackPush(_astTypeString, "$className.toString() result");
+  }
+
+  /// Appends, at runtime, the string handle produced by [emitPiece] onto the
+  /// accumulator string in local [accLocal]: `acc = concat(acc, piece)`.
+  /// [emitPiece] must leave exactly one i32 string handle on the stack (and
+  /// push it on the virtual stack), e.g. an interned literal or an element
+  /// coerced via [_emitToStringHandle]. Net virtual-stack effect: zero.
+  void _emitConcatInto(
+    BytesOutput out,
+    WasmContext context,
+    int accLocal,
+    void Function() emitPiece,
+  ) {
+    out.write(Wasm.localGet(accLocal));
+    context.stackPush(_astTypeString, "collection toString acc");
+    emitPiece();
+    _emitStringConcat2(out, context);
+    out.write(Wasm.localSet(accLocal));
+    context.stackDrop();
+  }
+
+  /// Loads element `i` (counter in [iLocal]) from the buffer based at
+  /// [basePtrLocal] with stride [size] and coerces it to a string handle.
+  /// Nested collections are rejected: they would re-enter [_emitMapToString]/
+  /// [_emitListToString] and clobber the shared scratch locals.
+  void _emitCollectionElement(
+    BytesOutput out,
+    WasmContext context,
+    ASTType elemType,
+    int basePtrLocal,
+    int iLocal,
+    int size,
+  ) {
+    if (elemType is ASTTypeMap || elemType is ASTTypeArray) {
+      throw UnimplementedError(
+        "Wasm string coercion of a nested collection ($elemType) inside a "
+        "Map/List is not supported yet.",
+      );
+    }
+    // addr = base + i*size
+    out.write(Wasm.localGet(basePtrLocal));
+    out.write(Wasm.localGet(iLocal));
+    out.write(Wasm32.i32Const(size));
+    out.writeByte(Wasm32.i32Multiply);
+    out.writeByte(Wasm32.i32Add);
+    _emitElemLoad(out, elemType, 0);
+    context.stackPush(_elemStackType(elemType), "collection element");
+    _emitToStringHandle(out, context, elemType);
+  }
+
+  /// Pushes an interned string literal as an i32 handle (and tracks it on the
+  /// virtual stack).
+  void _emitStringLiteralHandle(
+    BytesOutput out,
+    WasmContext context,
+    String s,
+  ) {
+    out.write(Wasm32.i32Const(context.module!.internStringLiteral(s)));
+    context.stackPush(_astTypeString, "collection toString literal '$s'");
+  }
+
+  /// Converts the `Map` header pointer on top of the stack to an i32 string
+  /// handle in Dart's `{k0: v0, k1: v1}` form. Scans the parallel key/value
+  /// buffers (`[len@0][cap@4][keysPtr@8][valuesPtr@12]`) at runtime, coercing
+  /// each key and value through [_emitToStringHandle] and joining with `, `.
+  void _emitMapToString(BytesOutput out, WasmContext context, ASTTypeMap type) {
+    var module = context.module;
+    if (module == null) {
+      throw StateError("Can't convert a Map to String without a module.");
+    }
+    module.requiresMemory = true;
+    module.requiresHeapGlobal = true;
+
+    var keyType = type.keyType;
+    var valueType = type.valueType;
+    var keySize = _mapKeySize(keyType);
+    var valSize = _elemSize(valueType);
+
+    // i32 scratch locals (slots 50+ avoid the string-concat slots 0..2 reused
+    // by `_emitStringConcat2` on every entry).
+    var hdr = context.scratchLocal(_astTypeString, 50);
+    var keysPtr = context.scratchLocal(_astTypeString, 51);
+    var valsPtr = context.scratchLocal(_astTypeString, 52);
+    var iLoc = context.scratchLocal(_astTypeString, 53);
+    var lenLoc = context.scratchLocal(_astTypeString, 54);
+    var acc = context.scratchLocal(_astTypeString, 55);
+
+    // Consume the Map header pointer (top of stack) into `hdr`.
+    out.write(
+      Wasm.localSet(hdr),
+      description: "[OP] Map -> String: stash header",
+    );
+    context.stackDrop();
+
+    // acc = "{"
+    _emitStringLiteralHandle(out, context, '{');
+    out.write(Wasm.localSet(acc));
+    context.stackDrop();
+
+    // len = hdr[0] ; keysPtr = hdr[8] ; valsPtr = hdr[12] ; i = 0
+    out.write(Wasm.localGet(hdr));
+    out.write(Wasm32.i32Load(2, 0));
+    out.write(Wasm.localSet(lenLoc));
+    out.write(Wasm.localGet(hdr));
+    out.write(Wasm32.i32Load(2, 8));
+    out.write(Wasm.localSet(keysPtr));
+    out.write(Wasm.localGet(hdr));
+    out.write(Wasm32.i32Load(2, 12));
+    out.write(Wasm.localSet(valsPtr));
+    out.write(Wasm32.i32Const(0));
+    out.write(Wasm.localSet(iLoc));
+
+    out.write(Wasm.block(WasmType.voidType));
+    out.write(Wasm.loop(WasmType.voidType));
+
+    // if (i >= len) break the block
+    out.write(Wasm.localGet(iLoc));
+    out.write(Wasm.localGet(lenLoc));
+    out.writeByte(Wasm32.i32GreaterThanOrEqualsUnsigned);
+    out.write(Wasm.brIf(1));
+
+    // if (i > 0) acc += ", "  (i is non-negative, so `i` itself is the test)
+    out.write(Wasm.localGet(iLoc));
+    out.write(Wasm.ifInstruction(WasmType.voidType));
+    _emitConcatInto(
+      out,
+      context,
+      acc,
+      () => _emitStringLiteralHandle(out, context, ', '),
+    );
+    out.writeByte(Wasm.end);
+
+    // acc += key ; acc += ": " ; acc += value
+    _emitConcatInto(
+      out,
+      context,
+      acc,
+      () =>
+          _emitCollectionElement(out, context, keyType, keysPtr, iLoc, keySize),
+    );
+    _emitConcatInto(
+      out,
+      context,
+      acc,
+      () => _emitStringLiteralHandle(out, context, ': '),
+    );
+    _emitConcatInto(
+      out,
+      context,
+      acc,
+      () => _emitCollectionElement(
+        out,
+        context,
+        valueType,
+        valsPtr,
+        iLoc,
+        valSize,
+      ),
+    );
+
+    // i++ ; continue
+    out.write(Wasm.localGet(iLoc));
+    out.write(Wasm32.i32Const(1));
+    out.writeByte(Wasm32.i32Add);
+    out.write(Wasm.localSet(iLoc));
+    out.write(Wasm.br(0));
+
+    out.writeByte(Wasm.end); // loop
+    out.writeByte(Wasm.end); // block
+
+    // acc += "}"
+    _emitConcatInto(
+      out,
+      context,
+      acc,
+      () => _emitStringLiteralHandle(out, context, '}'),
+    );
+
+    out.write(Wasm.localGet(acc));
+    context.stackPush(_astTypeString, "Map to string");
+  }
+
+  /// Converts the `List` header pointer on top of the stack to an i32 string
+  /// handle in Dart's `[e0, e1]` form. Scans the element buffer
+  /// (`[len@0][cap@4][dataPtr@8]`) at runtime, coercing each element through
+  /// [_emitToStringHandle] and joining with `, `.
+  void _emitListToString(
+    BytesOutput out,
+    WasmContext context,
+    ASTTypeArray type,
+  ) {
+    var module = context.module;
+    if (module == null) {
+      throw StateError("Can't convert a List to String without a module.");
+    }
+    module.requiresMemory = true;
+    module.requiresHeapGlobal = true;
+
+    var elemType = type.componentType;
+    var size = _elemSize(elemType);
+
+    var hdr = context.scratchLocal(_astTypeString, 50);
+    var dataPtr = context.scratchLocal(_astTypeString, 51);
+    var iLoc = context.scratchLocal(_astTypeString, 53);
+    var lenLoc = context.scratchLocal(_astTypeString, 54);
+    var acc = context.scratchLocal(_astTypeString, 55);
+
+    out.write(
+      Wasm.localSet(hdr),
+      description: "[OP] List -> String: stash header",
+    );
+    context.stackDrop();
+
+    // acc = "["
+    _emitStringLiteralHandle(out, context, '[');
+    out.write(Wasm.localSet(acc));
+    context.stackDrop();
+
+    // len = hdr[0] ; dataPtr = hdr[8] ; i = 0
+    out.write(Wasm.localGet(hdr));
+    out.write(Wasm32.i32Load(2, 0));
+    out.write(Wasm.localSet(lenLoc));
+    out.write(Wasm.localGet(hdr));
+    out.write(Wasm32.i32Load(2, 8));
+    out.write(Wasm.localSet(dataPtr));
+    out.write(Wasm32.i32Const(0));
+    out.write(Wasm.localSet(iLoc));
+
+    out.write(Wasm.block(WasmType.voidType));
+    out.write(Wasm.loop(WasmType.voidType));
+
+    out.write(Wasm.localGet(iLoc));
+    out.write(Wasm.localGet(lenLoc));
+    out.writeByte(Wasm32.i32GreaterThanOrEqualsUnsigned);
+    out.write(Wasm.brIf(1));
+
+    out.write(Wasm.localGet(iLoc));
+    out.write(Wasm.ifInstruction(WasmType.voidType));
+    _emitConcatInto(
+      out,
+      context,
+      acc,
+      () => _emitStringLiteralHandle(out, context, ', '),
+    );
+    out.writeByte(Wasm.end);
+
+    _emitConcatInto(
+      out,
+      context,
+      acc,
+      () => _emitCollectionElement(out, context, elemType, dataPtr, iLoc, size),
+    );
+
+    out.write(Wasm.localGet(iLoc));
+    out.write(Wasm32.i32Const(1));
+    out.writeByte(Wasm32.i32Add);
+    out.write(Wasm.localSet(iLoc));
+    out.write(Wasm.br(0));
+
+    out.writeByte(Wasm.end); // loop
+    out.writeByte(Wasm.end); // block
+
+    _emitConcatInto(
+      out,
+      context,
+      acc,
+      () => _emitStringLiteralHandle(out, context, ']'),
+    );
+
+    out.write(Wasm.localGet(acc));
+    context.stackPush(_astTypeString, "List to string");
   }
 
   /// Converts the boxed `Object` pointer on top of the stack to an i32 string

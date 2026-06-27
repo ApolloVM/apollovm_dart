@@ -52,6 +52,50 @@ Future<void> _testWasmReturn(
   expect(wasmRet.getValueNoContext(), expectedReturn, reason: 'Wasm');
 }
 
+/// Runs [functionName] (with [args]) via the AST interpreter AND the compiled
+/// Wasm module, capturing `print` output from each, and asserts both equal
+/// [expectedPrints].
+Future<void> _testWasmPrints(
+  String code,
+  String functionName,
+  List args,
+  List<String> expectedPrints,
+) async {
+  var vm = ApolloVM();
+  var ok = await vm.loadCodeUnit(SourceCodeUnit('dart', code, id: 'test'));
+  expect(ok, isTrue, reason: "Can't load Dart source");
+
+  var astRunner = vm.createRunner('dart')!;
+  var astOut = <String>[];
+  astRunner.externalPrintFunction = (o) => astOut.add('$o');
+  await astRunner.executeFunction('', functionName, positionalParameters: args);
+  expect(astOut, equals(expectedPrints), reason: 'interpreter print output');
+
+  var storageWasm = vm.generateAllIn<BytesOutput>('wasm');
+  var wasmModules = await storageWasm.allEntries();
+  BytesOutput? compiled;
+  for (var ns in wasmModules.entries) {
+    for (var m in ns.value.entries) {
+      compiled ??= m.value;
+    }
+  }
+  expect(compiled, isNotNull, reason: 'No compiled Wasm module');
+
+  var vmWasm = ApolloVM();
+  await vmWasm.loadCodeUnit(
+    BinaryCodeUnit('wasm', compiled!.output(), id: 'test.wasm', namespace: ''),
+  );
+  var wasmRunner = vmWasm.createRunner('wasm')!;
+  var wasmOut = <String>[];
+  wasmRunner.externalPrintFunction = (o) => wasmOut.add('$o');
+  await wasmRunner.executeFunction(
+    '',
+    functionName,
+    positionalParameters: args,
+  );
+  expect(wasmOut, equals(expectedPrints), reason: 'Wasm print output');
+}
+
 void main() {
   group('Wasm maps: int keys — literal + index get', () {
     test('get by constant key', () async {
@@ -803,6 +847,242 @@ void main() {
         [],
         3,
       );
+    });
+  });
+
+  group('Wasm maps: Map/List -> String coercion (print/interpolation)', () {
+    test('Map<String,int> interpolated', () async {
+      await _testWasmPrints(
+        '''
+        void f() {
+          Map<String,int> m = {'a': 10, 'b': 25, 'c': 90};
+          print('Map: \$m');
+        }
+        ''',
+        'f',
+        [],
+        ['Map: {a: 10, b: 25, c: 90}'],
+      );
+    });
+
+    test('Map<int,String> interpolated', () async {
+      await _testWasmPrints(
+        '''
+        void f() {
+          Map<int,String> m = {1: 'x', 2: 'y'};
+          print('\$m');
+        }
+        ''',
+        'f',
+        [],
+        ['{1: x, 2: y}'],
+      );
+    });
+
+    test('empty Map interpolated', () async {
+      await _testWasmPrints(
+        '''
+        void f() {
+          Map<String,int> m = {};
+          print('\$m');
+        }
+        ''',
+        'f',
+        [],
+        ['{}'],
+      );
+    });
+
+    test('List<int> interpolated', () async {
+      await _testWasmPrints(
+        '''
+        void f() {
+          List<int> l = [10, 20, 30];
+          print('List: \$l');
+        }
+        ''',
+        'f',
+        [],
+        ['List: [10, 20, 30]'],
+      );
+    });
+
+    test('List<String> interpolated', () async {
+      await _testWasmPrints(
+        '''
+        void f() {
+          List<String> l = ['a', 'b'];
+          print('\$l');
+        }
+        ''',
+        'f',
+        [],
+        ['[a, b]'],
+      );
+    });
+  });
+
+  group('Wasm: arithmetic on boxed Object values (List<Object>)', () {
+    // A `List<Object>` element is a boxed value; the interpreter treats it
+    // dynamically. The Wasm backend must unbox it before arithmetic instead of
+    // feeding the box pointer into i64.add / f64.div.
+    test('add a boxed Object and an int', () async {
+      await _testWasmPrints(
+        '''
+        void f(List<Object> args) {
+          var a = args[0];
+          print(a + 5);
+        }
+        ''',
+        'f',
+        [
+          [10],
+        ],
+        ['15'],
+      );
+    });
+
+    test('integer-divide and multiply boxed Objects', () async {
+      await _testWasmPrints(
+        '''
+        void f(List<Object> args) {
+          var b = args[0] ~/ 2;
+          var c = args[1] * 3;
+          print(b);
+          print(c);
+        }
+        ''',
+        'f',
+        [
+          [50, 30],
+        ],
+        ['25', '90'],
+      );
+    });
+
+    test('compare a boxed Object', () async {
+      await _testWasmPrints(
+        '''
+        void f(List<Object> args) {
+          var c = args[0] * 3;
+          if (c > 120) { c = 120; }
+          print(c);
+        }
+        ''',
+        'f',
+        [
+          [50],
+        ],
+        ['120'],
+      );
+    });
+
+    test('boxed Object stored into a typed-int Map value', () async {
+      await _testWasmPrints(
+        '''
+        void f(List<Object> args) {
+          var a = args[0];
+          var m = <String,int>{'a': a};
+          print('\$m');
+          print('a=\${m['a']}');
+        }
+        ''',
+        'f',
+        [
+          [10],
+        ],
+        ['{a: 10}', 'a=10'],
+      );
+    });
+  });
+
+  group('Wasm: the motivating program (boxed args + Map print)', () {
+    test('Foo.main', () async {
+      const code = '''
+class Foo {
+  static void main(List<Object> args) {
+    var title = args[0];
+    var a = args[1];
+    var b = args[2] ~/ 2;
+    var c = args[3] * 3;
+
+    if (c > 120) {
+      c = 120 ;
+    }
+
+    var str = 'variables> a: \$a ; b: \$b ; c: \$c' ;
+    var sumAB = a + b ;
+    var sumABC = a + b + c;
+
+    print(str);
+    print(title);
+    print(sumAB);
+    print(sumABC);
+
+    var map = <String,int>{
+    'a': a,
+    'b': b,
+    'c': c,
+    };
+
+    print('Map: \$map');
+    print('Map `b`: \${map['b']}');
+  }
+}
+''';
+      final args = ['Title', 10, 50, 30];
+      final expected = [
+        'variables> a: 10 ; b: 25 ; c: 90',
+        'Title',
+        '35',
+        '125',
+        'Map: {a: 10, b: 25, c: 90}',
+        'Map `b`: 25',
+      ];
+
+      var vm = ApolloVM();
+      var ok = await vm.loadCodeUnit(SourceCodeUnit('dart', code, id: 'test'));
+      expect(ok, isTrue, reason: "Can't load Dart source");
+
+      var astRunner = vm.createRunner('dart')!;
+      var astOut = <String>[];
+      astRunner.externalPrintFunction = (o) => astOut.add('$o');
+      await astRunner.executeClassMethod(
+        '',
+        'Foo',
+        'main',
+        positionalParameters: [args],
+      );
+      expect(astOut, equals(expected), reason: 'interpreter');
+
+      var storageWasm = vm.generateAllIn<BytesOutput>('wasm');
+      var wasmModules = await storageWasm.allEntries();
+      BytesOutput? compiled;
+      for (var ns in wasmModules.entries) {
+        for (var m in ns.value.entries) {
+          compiled ??= m.value;
+        }
+      }
+      expect(compiled, isNotNull, reason: 'No compiled Wasm module');
+
+      var vmWasm = ApolloVM();
+      await vmWasm.loadCodeUnit(
+        BinaryCodeUnit(
+          'wasm',
+          compiled!.output(),
+          id: 'test.wasm',
+          namespace: '',
+        ),
+      );
+      var wasmRunner = vmWasm.createRunner('wasm')!;
+      var wasmOut = <String>[];
+      wasmRunner.externalPrintFunction = (o) => wasmOut.add('$o');
+      await wasmRunner.executeFunction(
+        '',
+        'Foo.main',
+        positionalParameters: [args],
+      );
+      expect(wasmOut, equals(expected), reason: 'Wasm');
     });
   });
 }

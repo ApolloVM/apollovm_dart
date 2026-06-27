@@ -1,3 +1,22 @@
+## 0.1.45
+
+### Wasm backend: collection-to-String + dynamic arithmetic on boxed values
+
+- **`Map`/`List` → `String` coercion** in `print(...)` / string interpolation
+  (e.g. `print('Map: $m')`, `'$list'`). Renders Dart's `{k: v, …}` / `[e, …]`
+  form by scanning the runtime key/value (or element) buffers and coercing each
+  entry through the existing string-coercion path. (Nested collections inside a
+  `Map`/`List` `toString` still throw a clear `UnimplementedError`.)
+- **Arithmetic and comparison on boxed `Object`/`dynamic` operands**, such as
+  values read from a `List<Object>` (`args[1] + 5`, `args[2] ~/ 2`,
+  `args[3] * 3`, `c > 120`). These carry a box pointer, not a number; they are
+  now unboxed to a concrete numeric value (dispatching on the runtime box tag:
+  `int`→i64, `double`→f64) before the operation, instead of feeding the pointer
+  into `i64.add`/`f64.div` (which produced invalid Wasm).
+- A boxed `Object` value flowing into a typed numeric `Map`/`List` slot (e.g.
+  `<String,int>{'a': a}` where `a` is dynamic) is unboxed to match the slot's
+  `i64`/`f64` width.
+
 ## 0.1.44
 
 ### Wasm backend: rich-enum field/method reads in a `print` context
