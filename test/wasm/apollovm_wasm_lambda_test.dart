@@ -123,7 +123,7 @@ class Foo {
     test('two lambda vars, combined', () async {
       await _testWasmReturn(
         'int f(int x) { var twice = (int n) => n * 2; '
-        'var inc = (int n) => n + 1; return twice(x) + inc(x); }',
+            'var inc = (int n) => n + 1; return twice(x) + inc(x); }',
         'f',
         [5],
         16,
@@ -201,10 +201,26 @@ class Foo {
       var compiled = await _compile(vm);
       var dump = compiled.toString();
       // The closure is called directly: no table dispatch and no heap env.
-      expect(dump.contains('call_indirect'), isFalse, reason: 'no call_indirect');
-      expect(dump.contains('closure env size'), isFalse, reason: 'no env alloc');
-      expect(dump.contains('Section: Table'), isFalse, reason: 'no table section');
-      expect(dump.contains('direct call closure'), isTrue, reason: 'direct call');
+      expect(
+        dump.contains('call_indirect'),
+        isFalse,
+        reason: 'no call_indirect',
+      );
+      expect(
+        dump.contains('closure env size'),
+        isFalse,
+        reason: 'no env alloc',
+      );
+      expect(
+        dump.contains('Section: Table'),
+        isFalse,
+        reason: 'no table section',
+      );
+      expect(
+        dump.contains('direct call closure'),
+        isTrue,
+        reason: 'direct call',
+      );
     });
   });
 }
