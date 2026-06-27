@@ -685,5 +685,44 @@ void main() {
       expect(r.getValueNoContext(), equals(21));
       expect(out, equals(['doubled: 20', 'incremented: 21']));
     });
+
+    // BUG #4: a NAMED call whose arguments contain awaits goes through the
+    // async-hoisting transform (`_hoistExpr`). Before the fix, that rebuilt the
+    // invocation from the positional args only, silently dropping the named
+    // args. Here both args of `compute` are passed by name with an awaited
+    // value, so dropping them would call `compute` with no args (wrong/invalid).
+    test(
+      'named call with awaited named args keeps its named bindings',
+      () async {
+        var runner = await _wasmRunner(r'''
+        int compute(int a, int b) {
+          return a * 10 + b;
+        }
+
+        Future<int> run(int n) async {
+          return compute(b: await hostId(2), a: await hostId(1));
+        }
+      ''');
+        if (runner == null) {
+          fail('Wasm runtime not supported.');
+        }
+
+        runner.mapWasmAsyncFunction('hostId', const [WasmValueType.i64], (
+          args,
+        ) async {
+          await Future<void>.delayed(const Duration(milliseconds: 1));
+          return _asInt(args[0]);
+        });
+
+        var r = await runner.executeFunction(
+          '',
+          'run',
+          positionalParameters: [0],
+        );
+
+        // a=1, b=2 -> 1*10 + 2 = 12 (distinct from a=2,b=1 -> 21).
+        expect(r.getValueNoContext(), equals(12));
+      },
+    );
   });
 }

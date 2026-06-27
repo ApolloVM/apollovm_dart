@@ -2225,6 +2225,11 @@ abstract class ASTInvocableDeclaration<
     List? positionalParameters,
     Map? namedParameters,
   ) {
+    // Parameters that a named argument will supply: their default value must NOT
+    // be evaluated (it would be computed then immediately overwritten, firing
+    // any side effects and wasting work).
+    var suppliedNames = _suppliedParameterNames(namedParameters);
+
     if (positionalParameters != null) {
       var ret = _initializePositionalParameters(
         positionalParameters,
@@ -2235,14 +2240,31 @@ abstract class ASTInvocableDeclaration<
         return _declareRemainingParameters(
           i,
           context,
+          suppliedNames,
         ).resolveWith(() => _applyNamedArguments(namedParameters, context));
       });
     } else {
       return _declareRemainingParameters(
         0,
         context,
+        suppliedNames,
       ).resolveWith(() => _applyNamedArguments(namedParameters, context));
     }
+  }
+
+  /// The declared names of the parameters that [namedParameters] will fill,
+  /// resolved through [getParameterByName] (so an argument's key maps to the
+  /// parameter's canonical name). Empty when there are no named arguments.
+  Set<String> _suppliedParameterNames(Map? namedParameters) {
+    if (namedParameters == null || namedParameters.isEmpty) {
+      return const <String>{};
+    }
+    var names = <String>{};
+    for (var key in namedParameters.keys) {
+      var p = getParameterByName('$key');
+      if (p != null) names.add(p.name);
+    }
+    return names;
   }
 
   FutureOr<int> _initializePositionalParameters(
@@ -2332,16 +2354,13 @@ abstract class ASTInvocableDeclaration<
     return positionalParameters2;
   }
 
-  Map? normalizeNamedParameters(
-    Map? namedParameters, {
-    bool ignoreCase = true,
-  }) {
+  Map? normalizeNamedParameters(Map? namedParameters) {
     if (namedParameters == null || namedParameters.isEmpty) return null;
 
-    // Each named argument is matched to its parameter by name — whether it is an
-    // explicit named-parameter declaration (Dart `{...}`) or an ordinary
-    // positional parameter passed by name (Kotlin/C#/Python). Unknown names are
-    // dropped.
+    // Each named argument is matched to its parameter by name (case-sensitive,
+    // consistent with [_applyNamedArguments]) — whether it is an explicit
+    // named-parameter declaration (Dart `{...}`) or an ordinary positional
+    // parameter passed by name (Kotlin/C#/Python). Unknown names are dropped.
     var normalized = <String, dynamic>{};
 
     for (var entry in namedParameters.entries) {
@@ -2365,11 +2384,15 @@ abstract class ASTInvocableDeclaration<
   /// [ASTParameterDeclaration.defaultValue] when present, otherwise `null`.
   /// Named arguments are applied afterwards by [_applyNamedArguments],
   /// overwriting these defaults when the argument is supplied.
-  FutureOr<void> _declareRemainingParameters(int i, VMContext context) {
+  FutureOr<void> _declareRemainingParameters(
+    int i,
+    VMContext context,
+    Set<String> suppliedNames,
+  ) {
     FutureOr<void>? prevFuture;
 
     void declare(ASTParameterDeclaration fParam) {
-      var future = _declareParameterDefault(fParam, context);
+      var future = _declareParameterDefault(fParam, context, suppliedNames);
       prevFuture = prevFuture == null
           ? future
           : prevFuture!.resolveWith(() => future);
@@ -2393,13 +2416,19 @@ abstract class ASTInvocableDeclaration<
     return prevFuture;
   }
 
-  /// Declares [fParam] with its evaluated default value (when it has one),
-  /// otherwise with `null`.
+  /// Declares [fParam] with its evaluated default value (when it has one and is
+  /// not being supplied by a named argument), otherwise with `null`.
+  ///
+  /// A parameter in [suppliedNames] is declared as a `null` placeholder and its
+  /// default is left unevaluated — [_applyNamedArguments] overwrites it with the
+  /// supplied value, so evaluating the default here would be wasted work (and
+  /// would wrongly fire any side effects in the default expression).
   FutureOr<void> _declareParameterDefault(
     ASTParameterDeclaration fParam,
     VMContext context,
+    Set<String> suppliedNames,
   ) {
-    if (fParam.defaultValue == null) {
+    if (fParam.defaultValue == null || suppliedNames.contains(fParam.name)) {
       context.declareVariableWithValue(
         fParam.type,
         fParam.name,

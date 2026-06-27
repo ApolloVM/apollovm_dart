@@ -762,6 +762,7 @@ class KotlinGrammarDefinition extends KotlinGrammarLexer {
   Parser<ParsedString> parseExpressionInString() =>
       expression().map((e) => ParsedString.expression(e));
 
+  @override
   Parser<ASTExpression> expression() =>
       (ref0(ifExpression) | ref0(expressionOperationChain))
           .cast<ASTExpression>();
@@ -1021,50 +1022,10 @@ class KotlinGrammarDefinition extends KotlinGrammarLexer {
             return expressions;
           });
 
-  /// Parses a call-site argument list mixing positional and named (`name = value`)
-  /// arguments, e.g. `1, 2`, `a = 1, b = 2`, `1, b = 2`.
-  Parser<({List<ASTExpression> positional, Map<String, ASTExpression>? named})>
-  callArguments() =>
-      (ref0(callArgument) &
-              (char(',').trimHidden() & ref0(callArgument)).star() &
-              char(',').trimHidden().optional())
-          .map((v) {
-            var args = <({String? name, ASTExpression expr})>[
-              v[0] as ({String? name, ASTExpression expr}),
-              ...(v[1] as List).map(
-                (e) => (e as List)[1] as ({String? name, ASTExpression expr}),
-              ),
-            ];
-
-            var positional = <ASTExpression>[];
-            Map<String, ASTExpression>? named;
-
-            for (var a in args) {
-              final name = a.name;
-              if (name != null) {
-                (named ??= {})[name] = a.expr;
-              } else {
-                positional.add(a.expr);
-              }
-            }
-
-            return (positional: positional, named: named);
-          });
-
-  /// A single call argument: either `name = expression` (named) or `expression`
-  /// (positional). The `name =` prefix is only matched when an identifier is
-  /// immediately followed by a single `=` (not `==`), so the equality operator
-  /// in a positional argument (`a == b`) is not misparsed as a named arg.
-  Parser<({String? name, ASTExpression expr})> callArgument() =>
-      ((identifier().trim() & (char('=') & char('=').not()).trimHidden())
-                  .optional() &
-              ref0(expression))
-          .map((v) {
-            var nameOpt = v[0] as List?;
-            var name = nameOpt != null ? nameOpt[0] as String : null;
-            var expr = v[1] as ASTExpression;
-            return (name: name, expr: expr);
-          });
+  /// Kotlin uses `=` (not `==`) to separate a named argument's name from its
+  /// value, e.g. `f(a = 1)`.
+  @override
+  Parser namedArgumentSeparatorParser() => char('=') & char('=').not();
 
   Parser<ASTExpressionNullValue> expressionNullValue() =>
       (nullToken()).map((v) {
@@ -1285,14 +1246,6 @@ class KotlinGrammarDefinition extends KotlinGrammarLexer {
             return ASTFunctionParameterDeclaration(v[2], v[0], -1, false)
               ..defaultValue = v[3] as ASTExpression?;
           });
-
-  /// A parameter default value: `= <expression>`. Kotlin's default-argument
-  /// syntax is `name: Type = expr`, so this follows the parameter type. The
-  /// `char('=') & char('=').not()` guard avoids matching the `==` operator.
-  Parser<ASTExpression> parameterDefaultValue() =>
-      ((char('=') & char('=').not()).trimHidden() & ref0(expression)).map(
-        (v) => v[1] as ASTExpression,
-      );
 
   /// Kotlin lambda used as an expression (a closure): `{ x -> x * 2 }`,
   /// `{ x: Int, y: Int -> x + y }`, `{ 42 }` (no parameters). The last

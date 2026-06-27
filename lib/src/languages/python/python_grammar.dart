@@ -621,6 +621,7 @@ class PythonGrammarDefinition extends PythonGrammarLexer {
   @override
   Parser<ASTExpression> parseExpressionInString() => ref0(expression);
 
+  @override
   Parser<ASTExpression> expression() =>
       (ref0(expressionOperationChain) &
               (ifToken().trimHidden() &
@@ -893,47 +894,10 @@ class PythonGrammarDefinition extends PythonGrammarLexer {
             return list.whereType<ASTExpression>().toList();
           });
 
-  /// Parses a call-site argument list mixing positional and keyword
-  /// (`name=value`) arguments, e.g. `1, 2`, `a=1, b=2`, `1, b=2`.
-  Parser<({List<ASTExpression> positional, Map<String, ASTExpression>? named})>
-  callArguments() =>
-      (ref0(callArgument) &
-              (char(',').trimHidden() & ref0(callArgument)).star() &
-              char(',').trimHidden().optional())
-          .map((v) {
-            var args = <({String? name, ASTExpression expr})>[
-              v[0] as ({String? name, ASTExpression expr}),
-              ...(v[1] as List).map(
-                (e) => (e as List)[1] as ({String? name, ASTExpression expr}),
-              ),
-            ];
-            var positional = <ASTExpression>[];
-            Map<String, ASTExpression>? named;
-            for (var a in args) {
-              final name = a.name;
-              if (name != null) {
-                (named ??= {})[name] = a.expr;
-              } else {
-                positional.add(a.expr);
-              }
-            }
-            return (positional: positional, named: named);
-          });
-
-  /// A single call argument: either `name=value` (keyword) or `expression`
-  /// (positional). The keyword separator is `=`; the `char('=') & char('=').not()`
-  /// guard prevents an equality `==` inside a positional argument (e.g.
-  /// `foo(a == b)`) from being misparsed as a keyword separator.
-  Parser<({String? name, ASTExpression expr})> callArgument() =>
-      ((identifier().trim() & (char('=') & char('=').not()).trimHidden())
-                  .optional() &
-              ref0(expression))
-          .map((v) {
-            var nameOpt = v[0] as List?;
-            var name = nameOpt != null ? nameOpt[0] as String : null;
-            var expr = v[1] as ASTExpression;
-            return (name: name, expr: expr);
-          });
+  /// Python uses `=` (not `==`) to separate a keyword argument's name from its
+  /// value, e.g. `f(a=1)`.
+  @override
+  Parser namedArgumentSeparatorParser() => char('=') & char('=').not();
 
   Parser<ASTExpressionNullValue> expressionNoneValue() =>
       (noneToken()).map((v) => ASTExpressionNullValue());
@@ -1187,13 +1151,6 @@ class PythonGrammarDefinition extends PythonGrammarLexer {
             return ASTFunctionParameterDeclaration(type, name, -1, false)
               ..defaultValue = v[2] as ASTExpression?;
           });
-
-  /// A parameter default value: `= <expression>` (e.g. `a=5`). The
-  /// `char('=') & char('=').not()` guard prevents matching `==`.
-  Parser<ASTExpression> parameterDefaultValue() =>
-      ((char('=') & char('=').not()).trimHidden() & ref0(expression)).map(
-        (v) => v[1] as ASTExpression,
-      );
 
   // ---------------------------------------------------------------------------
   // Types.

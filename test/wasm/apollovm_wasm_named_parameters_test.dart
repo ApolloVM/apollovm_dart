@@ -71,6 +71,57 @@ void main() async {
         executions: {[]: 123},
       ),
     );
+
+    // BUG #2: an int literal bound to an f64 (`double`) NAMED-declared
+    // parameter must still be type-converted (i64 -> f64). Before the fix the
+    // conversion was keyed by `getParameterByIndex(i)`, which returns null for
+    // named-declared slots, so the convert was skipped -> invalid module.
+    test(
+      'int literal bound to a double named param is converted (function)',
+      () => _testWasm(
+        language: 'dart',
+        code: r'''
+
+          double area(double w, {double h = 1.0}) {
+            return w * h;
+          }
+
+          double main() {
+            return area(3.0, h: 4);
+          }
+
+        ''',
+        functionName: 'main',
+        // h: 4 (int literal) -> converted to 4.0 ; 3.0 * 4.0 = 12.0.
+        executions: {[]: 12.0},
+      ),
+    );
+
+    test(
+      'int literal bound to a double named param is converted (method)',
+      () => _testWasm(
+        language: 'dart',
+        code: r'''
+
+          class Rect {
+            double scale;
+            Rect(this.scale);
+            double area(double w, {double h = 1.0}) {
+              return scale * w * h;
+            }
+          }
+
+          double main() {
+            var r = Rect(2.0);
+            return r.area(3.0, h: 4);
+          }
+
+        ''',
+        functionName: 'main',
+        // scale=2.0, w=3.0, h: 4 -> 4.0 ; 2.0 * 3.0 * 4.0 = 24.0.
+        executions: {[]: 24.0},
+      ),
+    );
   });
 }
 

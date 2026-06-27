@@ -238,6 +238,44 @@ void main() {
         expect(await runFunction(regen, 'run'), equals(125));
       });
 
+      test('default is NOT evaluated when the argument is supplied', () async {
+        // The default expression `probe()` has an observable side effect; it
+        // must run only when the argument is omitted, never when supplied.
+        var src = r'''
+        int probe() {
+          print('default-evaluated');
+          return 99;
+        }
+        int f({int a = probe()}) {
+          return a;
+        }
+        int supplied() { return f(a: 5); }
+        int omitted() { return f(); }
+      ''';
+
+        Future<({Object? value, List output})> run(String fn) async {
+          var vm = ApolloVM();
+          await vm.loadCodeUnit(SourceCodeUnit('dart', src, id: 'test'));
+          var runner = vm.createRunner('dart')!;
+          var output = [];
+          runner.externalPrintFunction = (o) => output.add(o);
+          var v = await runner.executeFunction('', fn);
+          return (value: v.getValueNoContext(), output: output);
+        }
+
+        var supplied = await run('supplied');
+        expect(supplied.value, equals(5));
+        expect(
+          supplied.output,
+          isEmpty,
+          reason: 'default must not be evaluated when the arg is supplied',
+        );
+
+        var omitted = await run('omitted');
+        expect(omitted.value, equals(99));
+        expect(omitted.output, equals(['default-evaluated']));
+      });
+
       test('constructor parameter defaults', () async {
         var src = r'''
         class Box {

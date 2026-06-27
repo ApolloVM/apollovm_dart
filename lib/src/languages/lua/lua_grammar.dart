@@ -507,6 +507,7 @@ class LuaGrammarDefinition extends LuaGrammarLexer {
   // Expressions.
   // -----------------------------------------------------------------
 
+  @override
   Parser<ASTExpression> expression() =>
       (ref0(expressionNoOperation) &
               (ref0(expressionOperator) & ref0(expressionNoOperation)).star())

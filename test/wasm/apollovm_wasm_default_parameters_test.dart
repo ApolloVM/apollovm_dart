@@ -165,6 +165,39 @@ void main() async {
         executions: {[]: 103},
       ),
     );
+
+    // BUG #3: a NON-constant default (here `b = a`, referencing another
+    // parameter) cannot be emitted in the caller's scope; the Wasm backend
+    // must reject it with a clear StateError instead of silently mis-compiling
+    // (the interpreter evaluates defaults in the callee scope).
+    test('non-constant default value throws a clear StateError', () async {
+      var vm = ApolloVM();
+      var loadOK = await vm.loadCodeUnit(
+        SourceCodeUnit('dart', r'''
+
+          int g(int a, [int b = a]) {
+            return a + b;
+          }
+
+          int run() {
+            return g(5);
+          }
+
+        ''', id: 'test'),
+      );
+      expect(loadOK, isTrue);
+
+      expect(
+        () => vm.generateAllIn<BytesOutput>('wasm'),
+        throwsA(
+          isA<StateError>().having(
+            (e) => e.message,
+            'message',
+            allOf(contains('non-constant default'), contains('b')),
+          ),
+        ),
+      );
+    });
   });
 }
 

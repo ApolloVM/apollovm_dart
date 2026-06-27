@@ -656,6 +656,7 @@ class JavaScriptGrammarDefinition extends JavaScriptGrammarLexer {
   @override
   Parser<ASTExpression> parseExpressionInString() => ref0(expression);
 
+  @override
   Parser<ASTExpression> expression() =>
       (ref0(expressionOperationChain) &
               (char('?').trimHidden() &

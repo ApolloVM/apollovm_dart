@@ -338,9 +338,16 @@ class CommandCompile extends CommandSourceFileBase {
 
   String _defaultOutputPath() {
     var path = sourceFilePath;
-    var ext = getPathExtension(path);
-    if (ext != null && ext.isNotEmpty) {
-      return '${path.substring(0, path.length - ext.length - 1)}.wasm';
+    // Strip the extension from the FILE NAME only — `getPathExtension` keys off
+    // the last `.` anywhere in the path, which would wrongly truncate when the
+    // file has no extension but a parent directory contains a `.` (e.g.
+    // `proj.v2/main` -> `proj.wasm`). Operate on the final path segment instead.
+    var sep = path.lastIndexOf('/');
+    var name = sep >= 0 ? path.substring(sep + 1) : path;
+    var dot = name.lastIndexOf('.');
+    if (dot > 0) {
+      // The file name has a real extension to replace.
+      return '${path.substring(0, path.length - (name.length - dot))}.wasm';
     }
     return '$path.wasm';
   }

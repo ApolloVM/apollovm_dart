@@ -741,7 +741,7 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
           for (var i = 0; i < args.length; ++i) {
             var arg = args[i];
             if (arg is ASTExpressionLiteralFunction) {
-              var pt = callee.parameters.getParameterByIndex(i)?.type;
+              var pt = _orderedParamType(callee.parameters, i);
               if (pt is ASTTypeFunction) expected[arg.function] = pt;
             }
           }
@@ -1533,7 +1533,7 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       generateASTExpression(orderedArgs[i], out: out, context: context);
       context.assertStackLength(stackBefore + 1, "After method arg[$i]");
 
-      var paramType = callee.method.parameters.getParameterByIndex(i)?.type;
+      var paramType = _orderedParamType(callee.method.parameters, i);
       if (paramType != null) {
         _autoConvertStackTypes(
           context.stackGet(0)!.type,
@@ -1980,6 +1980,20 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       // Omitted slot: fill with the parameter's default value expression.
       var defaultValue = p.defaultValue;
       if (defaultValue != null) {
+        // The default is emitted by the normal per-argument codegen in the
+        // CALLER's WasmContext, which is only correct for constant defaults.
+        // A non-constant default (referencing another parameter, `this`, a
+        // field or a function call) would resolve against the caller's frame
+        // (wrong codegen), diverging from the interpreter which evaluates
+        // defaults in the callee scope.
+        if (!_isWasmConstDefault(defaultValue)) {
+          throw StateError(
+            "Wasm: can't bind call to `$calleeDesc`: parameter `${p.name}` has "
+            "a non-constant default value (`$defaultValue`). Only constant "
+            "defaults (literals and arithmetic over literals) are supported in "
+            "Wasm.",
+          );
+        }
         ordered.add(defaultValue);
         continue;
       }
@@ -1991,6 +2005,42 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     }
 
     return ordered;
+  }
+
+  /// The declared parameter type for the ordered/pushed argument slot [i].
+  ///
+  /// Argument lists produced by [_orderInvocationArguments] follow
+  /// `parameters.allParameters` (positional + optional + named, in declaration
+  /// order). [ASTParametersDeclaration.getParameterByIndex] returns `null` for
+  /// named-declared (`{...}`) slots, which would skip type-conversion for those
+  /// arguments; indexing [allParameters] keeps the slot/type alignment. For a
+  /// positional-only call `allParameters[i]` equals the old
+  /// `getParameterByIndex(i)` for `i` in range.
+  ASTType? _orderedParamType(ASTParametersDeclaration p, int i) {
+    var all = p.allParameters;
+    return i < all.length ? all[i].type : null;
+  }
+
+  /// Whether [e] is a Wasm-safe CONSTANT default expression: built only from
+  /// literals and operations/negations over such literals. Returns `false` if
+  /// it references any variable, `this`, field or function call (which the
+  /// interpreter would evaluate in the callee scope — see [BUG #3]).
+  bool _isWasmConstDefault(ASTExpression e) {
+    if (e is ASTExpressionLiteral) return true;
+    if (e is ASTExpressionOperation) {
+      return _isWasmConstDefault(e.expression1) &&
+          _isWasmConstDefault(e.expression2);
+    }
+    if (e is ASTExpressionNegation) {
+      return _isWasmConstDefault(e.expression);
+    }
+    if (e is ASTExpressionNegative) {
+      return _isWasmConstDefault(e.expression);
+    }
+    if (e is ASTExpressionBitwiseNot) {
+      return _isWasmConstDefault(e.expression);
+    }
+    return false;
   }
 
   @override
@@ -2106,7 +2156,7 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       var stackEntry = context.stackGet(0)!;
       var stackType = stackEntry.type;
 
-      var paramType = callee.parameters.getParameterByIndex(i)?.type;
+      var paramType = _orderedParamType(callee.parameters, i);
       if (paramType != null) {
         _autoConvertStackTypes(
           stackType,
@@ -5098,7 +5148,21 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
         if (h == null) return null;
         newArgs.add(h);
       }
-      return ASTExpressionLocalFunctionInvocation(e.name, newArgs);
+      final rebuilt = ASTExpressionLocalFunctionInvocation(e.name, newArgs);
+      // Preserve named arguments (hoisting each value the same way as the
+      // positional args); dropping them would silently lose a named call's
+      // bindings inside an `async` function.
+      final named = e.namedArguments;
+      if (named != null && named.isNotEmpty) {
+        final hoistedNamed = <String, ASTExpression>{};
+        for (final entry in named.entries) {
+          final h = _hoistExpr(entry.value, module, eligible, hoisted, temps);
+          if (h == null) return null;
+          hoistedNamed[entry.key] = h;
+        }
+        rebuilt.namedArguments = hoistedNamed;
+      }
+      return rebuilt;
     }
     if (e is ASTExpressionNegation) {
       final x = _hoistExpr(e.expression, module, eligible, hoisted, temps);
@@ -6571,7 +6635,7 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       final callee = module.functionByIndex(calleeIndex)!;
       for (var i = 0; i < p.args.length; i++) {
         generateASTExpression(p.args[i], out: body, context: context);
-        final paramType = callee.parameters.getParameterByIndex(i)?.type;
+        final paramType = _orderedParamType(callee.parameters, i);
         if (paramType != null) {
           _autoConvertStackTypes(
             context.stackGet(0)!.type,
@@ -6950,7 +7014,7 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
               out: body,
               context: context,
             );
-            final paramType = callee.parameters.getParameterByIndex(ai)?.type;
+            final paramType = _orderedParamType(callee.parameters, ai);
             if (paramType != null) {
               _autoConvertStackTypes(
                 context.stackGet(0)!.type,

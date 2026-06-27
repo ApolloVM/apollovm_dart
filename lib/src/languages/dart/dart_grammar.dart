@@ -1005,6 +1005,7 @@ class DartGrammarDefinition extends DartGrammarLexer {
   Parser<ParsedString> parseExpressionInString() =>
       expression().map((e) => ParsedString.expression(e));
 
+  @override
   Parser<ASTExpression> expression() =>
       (ref0(expressionOperationChain) &
               (char('?').trimHidden() &
@@ -1235,50 +1236,6 @@ class DartGrammarDefinition extends DartGrammarLexer {
             var list = _expandListDeeply(v);
             var expressions = list.whereType<ASTExpression>().toList();
             return expressions;
-          });
-
-  /// Parses a call-site argument list mixing positional and named (`name: value`)
-  /// arguments, e.g. `1, 2`, `a: 1, b: 2`, `1, b: 2`.
-  Parser<({List<ASTExpression> positional, Map<String, ASTExpression>? named})>
-  callArguments() =>
-      (ref0(callArgument) &
-              (char(',').trimHidden() & ref0(callArgument)).star() &
-              char(',').trimHidden().optional())
-          .map((v) {
-            var args = <({String? name, ASTExpression expr})>[
-              v[0] as ({String? name, ASTExpression expr}),
-              ...(v[1] as List).map(
-                (e) => (e as List)[1] as ({String? name, ASTExpression expr}),
-              ),
-            ];
-
-            var positional = <ASTExpression>[];
-            Map<String, ASTExpression>? named;
-
-            for (var a in args) {
-              final name = a.name;
-              if (name != null) {
-                (named ??= {})[name] = a.expr;
-              } else {
-                positional.add(a.expr);
-              }
-            }
-
-            return (positional: positional, named: named);
-          });
-
-  /// A single call argument: either `name: expression` (named) or `expression`
-  /// (positional). The `name:` prefix is only matched when an identifier is
-  /// immediately followed by `:`, so positional ternaries (`a ? b : c`) and
-  /// other expressions are not misparsed.
-  Parser<({String? name, ASTExpression expr})> callArgument() =>
-      ((identifier().trim() & char(':').trimHidden()).optional() &
-              ref0(expression))
-          .map((v) {
-            var nameOpt = v[0] as List?;
-            var name = nameOpt != null ? nameOpt[0] as String : null;
-            var expr = v[1] as ASTExpression;
-            return (name: name, expr: expr);
           });
 
   Parser<ASTExpressionNullValue> expressionNullValue() =>
@@ -1638,13 +1595,6 @@ class DartGrammarDefinition extends DartGrammarLexer {
               unmodifiable: v[0] != null,
             )..defaultValue = v[3] as ASTExpression?;
           });
-
-  /// A parameter default value: `= <expression>` (used by optional/named
-  /// parameters, e.g. `int a = 5`).
-  Parser<ASTExpression> parameterDefaultValue() =>
-      ((char('=') & char('=').not()).trimHidden() & ref0(expression)).map(
-        (v) => v[1] as ASTExpression,
-      );
 
   Parser<ASTType> type() =>
       (functionType() | typeNonFunction()).cast<ASTType>();

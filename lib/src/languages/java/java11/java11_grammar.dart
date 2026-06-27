@@ -650,6 +650,7 @@ class Java11GrammarDefinition extends Java11GrammarLexer {
             return ASTBranchIfBlock(condition, blockIf);
           });
 
+  @override
   Parser<ASTExpression> expression() =>
       (ref0(expressionOperationChain) &
               (char('?').trimHidden() &
