@@ -324,6 +324,12 @@ class ApolloCodeGeneratorPython extends ApolloCodeGenerator {
     }
     if (clazz.fields.isNotEmpty) out.write('\n');
 
+    for (var set in clazz.constructors) {
+      for (var c in set.functions) {
+        generateASTClassConstructorDeclaration(c, out: out, indent: bodyIndent);
+      }
+    }
+
     for (var set in clazz.functions) {
       for (var f in set.functions) {
         _generateFunction(f, out: out, indent: bodyIndent, isMethod: true);
@@ -410,6 +416,19 @@ class ApolloCodeGeneratorPython extends ApolloCodeGenerator {
     String indent = '',
   }) {
     out ??= newOutput();
+
+    // Python's constructor is the `__init__(self, ...)` method.
+    out.write(indent);
+    out.write('def __init__(self');
+    if (constructor.parametersSize > 0) {
+      out.write(', ');
+      generateASTParametersDeclaration(constructor.parameters, out: out);
+    }
+    out.write('):\n');
+
+    _writeSuite(constructor, out, '$indent$_tab');
+    out.write('\n');
+
     return out;
   }
 

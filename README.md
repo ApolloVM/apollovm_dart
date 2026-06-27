@@ -115,26 +115,24 @@ The **Wasm** column shows what the on-the-fly WebAssembly compiler currently sup
 |---|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|
 | Classes                                                       | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 🚫  | ✅ | ✅ |
 | Fields (with initializers)                                    | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 🧩¹ | ✅ | ✅ |
-| Constructors & instantiation (`new Foo(...)` / `Foo(...)`)    | ✅ | ✅ | ✅ | ✅ | 🚧 | ✅ | 🧩¹ | 🚧² | ✅ |
+| Constructors & instantiation (`new Foo(...)` / `Foo(...)`)    | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 🧩¹ | ✅ | ✅ |
 | Methods                                                       | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Static / visibility modifiers                                 | ✅ | ✅ | 🧩⁴ | ✅ | 🧩³ | ✅ | 🚫  | 🚫  | 🧩⁵ |
+| Static / visibility modifiers                                 | ✅ | ✅ | 🧩³ | ✅ | 🧩² | ✅ | 🚫  | 🚫  | 🧩⁴ |
 | Inheritance (`extends`) / interfaces                          | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 🚫  | ✅ | 🚧 |
 | Enums (incl. runtime value access)                            | ✅ | ✅ | ✅ | ✅ | 🚫  | ✅ | 🚫  | ✅ | 🚧 |
 | Generics (generic classes + instantiation + type erasure)    | ✅ | ✅ | ✅ | ✅ | 🚫  | ✅ | 🚫  | 🚫  | 🚧 |
-| Type inference (`var` / `val` / `auto`)                       | ✅ | ✅ | ✅ | ✅ | 🚫  | ✅ | 🚫  | 🚫  | ✅⁶ |
+| Type inference (`var` / `val` / `auto`)                       | ✅ | ✅ | ✅ | ✅ | 🚫  | ✅ | 🚫  | 🚫  | ✅⁵ |
 
 ¹ Lua is table-based (no class construct): "fields" are table entries (`obj.x`) and "constructors"
 are factory functions / `setmetatable` idioms; methods use `function Obj:method`. &nbsp;
-² Python declares constructors via `__init__`, but instance-field assignment (`self.x = ...`) is not
-implemented yet, so constructors aren't usable end-to-end. &nbsp;
-³ JavaScript supports the `static` modifier but has no visibility keywords (privacy is by convention /
+² JavaScript supports the `static` modifier but has no visibility keywords (privacy is by convention /
 closures). &nbsp;
-⁴ Kotlin `private`/`public` member visibility round-trips; `internal`/`protected` are parsed but not
+³ Kotlin `private`/`public` member visibility round-trips; `internal`/`protected` are parsed but not
 yet preserved in the AST. Kotlin has no `static` (it uses `companion object`, not yet supported). &nbsp;
-⁵ Wasm compiles `static` methods (exported as `Class.method`) and instance methods (called with a
+⁴ Wasm compiles `static` methods (exported as `Class.method`) and instance methods (called with a
 receiver); only static methods are callable as entry points, and there is no source-level visibility
 concept in the module. &nbsp;
-⁶ Wasm consumes the already type-resolved AST, so `var`/`val`-typed code compiles unchanged. &nbsp;
+⁵ Wasm consumes the already type-resolved AST, so `var`/`val`-typed code compiles unchanged. &nbsp;
 Generics are marked `🚫` for JS/Lua/Python because those languages have no static type syntax to
 parameterize.
 

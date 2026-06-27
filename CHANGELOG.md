@@ -1,5 +1,19 @@
 ## 0.1.41
 
+### Constructors & instantiation for JavaScript and Python
+
+- **JavaScript**: a `constructor(...)` class method is now parsed as a real
+  constructor, and `new Foo(...)` / `Foo(...)` instantiate the class (running the
+  constructor, which can assign `this.x = …`). Round-trips to `constructor(...)`
+  and translates to other languages.
+- **Python**: `self.x = …` attribute assignment is now parsed, `__init__` is
+  treated as the constructor, and `Foo(...)` instantiates the class. The
+  generator emits `def __init__(self, …)`. (Previously instance-field assignment
+  was unimplemented, so `__init__` wasn't usable end-to-end.)
+- Both round-trip across languages (e.g. a JS/Python class with a constructor
+  translates to a runnable Dart class). The README OOP table marks JS and Python
+  "Constructors & instantiation" as supported.
+
 ### `async`/`await` for JavaScript, TypeScript, C# and Python
 
 - These languages now **parse** `async` functions/methods (and `async` arrows /

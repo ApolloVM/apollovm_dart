@@ -213,7 +213,7 @@ class PythonGrammarDefinition extends PythonGrammarLexer {
             var name = v[1] as String;
             var superOpt = v[2] as List?;
             var superName = superOpt != null ? superOpt[1] as String? : null;
-            var block = v[4] as ASTBlock;
+            var block = v[4] as ASTClassNormal;
 
             var clazz = ASTClassNormal(
               name,
@@ -221,7 +221,22 @@ class PythonGrammarDefinition extends PythonGrammarLexer {
               null,
               superClassName: superName,
             );
-            clazz.set(block);
+
+            clazz.addAllFields(block.fields);
+
+            // Python's `__init__` is the class constructor; everything else is
+            // a regular method. The constructor needs the real class name so it
+            // round-trips to languages whose constructors are named (Dart/Java).
+            for (var set in block.functions) {
+              for (var f in set.functions) {
+                if (f.name == '__init__') {
+                  clazz.addConstructor(_toConstructor(name, f));
+                } else {
+                  clazz.addFunction(f);
+                }
+              }
+            }
+
             return clazz;
           });
 
@@ -243,6 +258,39 @@ class PythonGrammarDefinition extends PythonGrammarLexer {
             block.addAllFunctions(functions);
             return block;
           });
+
+  /// Builds an [ASTClassConstructorDeclaration] from a parsed `__init__`
+  /// method of class [className]. (`self` was already dropped by
+  /// [methodDeclaration].)
+  static ASTClassConstructorDeclaration _toConstructor(
+    String className,
+    ASTFunctionDeclaration init,
+  ) {
+    var positional = init.parameters.positionalParameters
+        ?.map(
+          (p) => ASTConstructorParameterDeclaration(
+            p.type,
+            p.name,
+            p.index,
+            p.optional,
+          ),
+        )
+        .toList();
+
+    var parameters = ASTConstructorParametersDeclaration(
+      positional == null || positional.isEmpty ? null : positional,
+      null,
+      null,
+    );
+
+    return ASTClassConstructorDeclaration(
+      ASTType<VMObject>(className),
+      '',
+      parameters,
+      block: init,
+      modifiers: init.modifiers,
+    );
+  }
 
   Parser<ASTClassFunctionDeclaration> methodDeclaration() =>
       (asyncToken().trimHidden().optional() &
@@ -649,6 +697,7 @@ class PythonGrammarDefinition extends PythonGrammarLexer {
               expressionListLiteral() |
               expressionMapLiteral() |
               expressionVariableEntryAssignment() |
+              expressionObjectFieldAssignment() |
               expressionVariableAssigment() |
               expressionFunctionInvocation() |
               expressionObjectEntryFunctionInvocation() |
@@ -953,6 +1002,32 @@ class PythonGrammarDefinition extends PythonGrammarLexer {
       (variable() & assigmentOperator() & ref0(expression)).map((v) {
         return ASTExpressionVariableAssignment(v[0], v[1], v[2]);
       });
+
+  /// `self.x = value` / `obj.field = value` (and `+=`, `-=`, `*=`, `//=`, `/=`).
+  /// `self`/`this` target the current instance; `obj` the named variable's
+  /// instance. Mirrors the Dart/Java object field assignment.
+  Parser<ASTExpressionObjectSetterAssignment>
+  expressionObjectFieldAssignment() =>
+      (identifier() &
+              char('.') &
+              identifier().trimHidden() &
+              assigmentOperator() &
+              ref0(expression))
+          .map((v) {
+            var obj = v[0] as String;
+            var name = v[2] as String;
+            var op = v[3] as ASTAssignmentOperator;
+            var valueExpr = v[4] as ASTExpression;
+            ASTVariable variable = (obj == 'self' || obj == 'this')
+                ? ASTThisVariable()
+                : ASTScopeVariable(obj);
+            return ASTExpressionObjectSetterAssignment(
+              variable,
+              name,
+              op,
+              valueExpr,
+            );
+          });
 
   Parser<ASTExpressionVariableEntryAssignment>
   expressionVariableEntryAssignment() =>

@@ -100,9 +100,19 @@ class JavaScriptGrammarDefinition extends JavaScriptGrammarLexer {
             );
           });
 
+  /// Name of the class currently being parsed. Captured when the class name is
+  /// matched (before its body) so that a `constructor` method — whose own name
+  /// is the keyword `constructor`, not the class name — can be built with the
+  /// correct class type. This is required for translation to typed languages
+  /// (e.g. Dart/Java), whose generators emit the constructor's `classType.name`.
+  String _currentClassName = '';
+
   Parser<ASTClassNormal> classDeclaration() =>
       (classToken().trimHidden() &
-              identifier() &
+              identifier().map((name) {
+                _currentClassName = name;
+                return name;
+              }) &
               (extendsToken().trimHidden() & identifier()).optional() &
               classCodeBlock())
           .map((v) {
@@ -123,11 +133,15 @@ class JavaScriptGrammarDefinition extends JavaScriptGrammarLexer {
           .map((v) {
             var list = v[1] as List;
             var fields = list.whereType<ASTClassField>().toList();
+            var constructors = list
+                .whereType<ASTClassConstructorDeclaration>()
+                .toList();
             var functions = list.whereType<ASTFunctionDeclaration>().toList();
 
             var block = ASTClassNormal('?', ASTType<VMObject>('?'), null);
 
             block.addAllFields(fields);
+            block.addAllConstructors(constructors);
             block.addAllFunctions(functions);
 
             return block;
@@ -155,9 +169,11 @@ class JavaScriptGrammarDefinition extends JavaScriptGrammarLexer {
 
   /// `[static] name(params) { block }` — a class method.
   ///
-  /// A method named `constructor` is parsed as a regular method; the JS code
-  /// generator emits it back as the `constructor` keyword.
-  Parser<ASTFunctionDeclaration> classFunctionDeclaration() =>
+  /// A method named `constructor` is parsed as an [ASTClassConstructorDeclaration]
+  /// (with an empty name; the enclosing class fixes up its type), so that
+  /// `new Foo(...)` / `Foo(...)` instantiate the class. The JS code generator
+  /// emits it back as the `constructor` keyword.
+  Parser<Object> classFunctionDeclaration() =>
       (staticToken().trimHidden().optional() &
               asyncToken().trimHidden().optional() &
               identifier() &
@@ -169,6 +185,17 @@ class JavaScriptGrammarDefinition extends JavaScriptGrammarLexer {
             var name = v[2] as String;
             var parameters = v[3] as ASTFunctionParametersDeclaration;
             var block = v[4] as ASTBlock;
+
+            if (name == 'constructor') {
+              return ASTClassConstructorDeclaration(
+                ASTType(_currentClassName),
+                '',
+                _toConstructorParameters(parameters),
+                block: block,
+                modifiers: ASTModifiers(isAsync: isAsync),
+              );
+            }
+
             return ASTClassFunctionDeclaration(
               null,
               name,
@@ -178,6 +205,25 @@ class JavaScriptGrammarDefinition extends JavaScriptGrammarLexer {
               modifiers: ASTModifiers(isStatic: isStatic, isAsync: isAsync),
             );
           });
+
+  /// Converts parsed function parameters into constructor parameters (the
+  /// `constructor` method name is untyped, so each becomes a positional
+  /// `dynamic` constructor parameter).
+  ASTConstructorParametersDeclaration _toConstructorParameters(
+    ASTFunctionParametersDeclaration fn,
+  ) {
+    var positional = fn.positionalParameters
+        ?.map(
+          (p) => ASTConstructorParameterDeclaration(
+            p.type,
+            p.name,
+            p.index,
+            p.optional,
+          ),
+        )
+        .toList();
+    return ASTConstructorParametersDeclaration(positional, null, null);
+  }
 
   Parser<ASTBlock> codeBlock() =>
       (char('{').trimHidden() & ref0(statement).star() & char('}').trimHidden())
@@ -751,19 +797,24 @@ class JavaScriptGrammarDefinition extends JavaScriptGrammarLexer {
             );
           });
 
+  /// A function/method call, optionally prefixed with `new` (e.g.
+  /// `new Foo(...)`). The `new` keyword is consumed and ignored: a call to a
+  /// class name resolves to its constructor (instantiation) at runtime, exactly
+  /// like `Foo(...)`.
   Parser<ASTExpressionFunctionInvocation> expressionFunctionInvocation() =>
-      ((identifier() & char('.')).optional() &
+      (newToken().trimHidden().optional() &
+              (identifier() & char('.')).optional() &
               identifier() &
               char('(').trimHidden() &
               ref0(expressionSequence).optional() &
               char(')').trimHidden() &
               expressionChainFunctionInvocation().star())
           .map((v) {
-            var objOpt = v[0] as List?;
+            var objOpt = v[1] as List?;
             var obj = objOpt != null ? objOpt[0] as String : null;
-            var name = v[1] as String;
-            var args = (v[3] as List<ASTExpression>?) ?? <ASTExpression>[];
-            var chainFunctions = (v[5] as List)
+            var name = v[2] as String;
+            var args = (v[4] as List<ASTExpression>?) ?? <ASTExpression>[];
+            var chainFunctions = (v[6] as List)
                 .whereType<ASTExpressionChainFunctionInvocation>()
                 .toList();
 
