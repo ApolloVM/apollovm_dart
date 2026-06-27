@@ -92,6 +92,7 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       module.registerClosure(c);
     }
     module.boxedVarsByFunction.addAll(anon.boxedVars);
+    module.directClosureVarsByFunction.addAll(anon.directClosureVars);
 
     // A public function with a String or List parameter requires the host to
     // allocate the argument in module memory, so ensure `__alloc` is exported.
@@ -433,8 +434,12 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
         .mapIndexed((i, f) => MapEntry(f, importCount + i))
         .toList();
 
+    // Anonymous functions (closures) are internal — they are invoked via the
+    // function table (`call_indirect`), not by name. Exporting them would emit
+    // an entry with an empty name, and two closures would collide on the same
+    // empty export name (an invalid module). Skip them.
     var publicFunctions = functionsIndexed
-        .where((e) => !e.key.modifiers.isPrivate)
+        .where((e) => !e.key.modifiers.isPrivate && !module.isClosure(e.key))
         .toList();
 
     var entries = publicFunctions.map((f) {
@@ -718,6 +723,8 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
   ({
     List<WasmClosureInfo> closures,
     Map<ASTFunctionDeclaration, Map<String, ASTType>> boxedVars,
+    Map<ASTFunctionDeclaration, Map<String, ASTFunctionDeclaration>>
+    directClosureVars,
   })
   _collectAnonymousClosures(List<ASTFunctionDeclaration> baseFunctions) {
     var moduleFnNames = baseFunctions.map((f) => f.name).toSet();
@@ -770,8 +777,8 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
           if (!seen.add(fn)) continue;
 
           var funcType = expected[fn];
-          var returnType = _closureReturnType(fn, funcType);
           var paramTypes = _closureParamTypes(fn, funcType);
+          var returnType = _closureReturnType(fn, funcType, paramTypes);
           var captures = _closureCaptures(fn, enclosingOf[fn], moduleFnNames);
 
           // Env struct layout: i32 table slot at offset 0, then one i32 box
@@ -807,7 +814,52 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
         }
       }
     }
-    return (closures: result, boxedVars: boxedVars);
+
+    // Optimization: a `var` initialized with a capture-free closure literal and
+    // only ever *called* (never read as a value, reassigned, or captured) needs
+    // no function value at all — no env heap allocation, no table dispatch. Map
+    // each such `enclosing function -> {varName -> closure}` so the declaration
+    // can be elided and `v(x)` lowered to a direct `call`.
+    var directClosureVars =
+        <ASTFunctionDeclaration, Map<String, ASTFunctionDeclaration>>{};
+    var captureFree = <ASTFunctionDeclaration>{
+      for (var c in result)
+        if (c.captures.isEmpty) c.function,
+    };
+    for (var encl in baseFunctions) {
+      for (var node in encl.descendantChildren) {
+        if (node is! ASTStatementVariableDeclaration) continue;
+        var init = node.value;
+        if (init is! ASTExpressionLiteralFunction) continue;
+        if (!captureFree.contains(init.function)) continue;
+        if (!_isClosureVarCallOnly(encl, node.name)) continue;
+        (directClosureVars[encl] ??= {})[node.name] = init.function;
+      }
+    }
+
+    return (
+      closures: result,
+      boxedVars: boxedVars,
+      directClosureVars: directClosureVars,
+    );
+  }
+
+  /// Whether the local [varName] declared in [encl] is *only* used as the
+  /// target of a direct call (`varName(...)`) — never read as a first-class
+  /// value (`ASTExpressionVariableAccess`) nor reassigned. A call's callee is a
+  /// bare name (not a variable node), so those uses don't appear as accesses.
+  bool _isClosureVarCallOnly(ASTFunctionDeclaration encl, String varName) {
+    for (var node in encl.descendantChildren) {
+      if (node is ASTExpressionVariableAccess &&
+          node.variable.name == varName) {
+        return false;
+      }
+      if (node is ASTExpressionVariableAssignment &&
+          node.variable.name == varName) {
+        return false;
+      }
+    }
+    return true;
   }
 
   ASTFunctionDeclaration? _findModuleFunction(
@@ -824,6 +876,7 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
   ASTType _closureReturnType(
     ASTFunctionDeclaration fn,
     ASTTypeFunction? funcType,
+    List<ASTType> paramTypes,
   ) {
     var declared = fn.returnType;
     if (declared is! ASTTypeDynamic && !declared.isVoid) return declared;
@@ -836,6 +889,12 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       }
     }
 
+    // No typed context (e.g. a closure assigned to a `var` and called directly):
+    // infer the return type from the body's `return` expression(s), using the
+    // (now concrete) parameter types as the scope.
+    var inferred = _inferReturnTypeFromBody(fn, paramTypes);
+    if (inferred != null) return inferred;
+
     if (declared.isVoid) return declared;
 
     throw UnsupportedError(
@@ -843,6 +902,74 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       "typed function parameter with a concrete return type, e.g. "
       "`int Function(int n)`.",
     );
+  }
+
+  /// Best-effort static inference of an anonymous function's return type from
+  /// its body, used when no typed context provides it. Scans the function's
+  /// own `return` statements (not nested closures) and infers the expression
+  /// type from the parameter types in [paramTypes]. Returns `null` when it
+  /// can't be determined statically.
+  ASTType? _inferReturnTypeFromBody(
+    ASTFunctionDeclaration fn,
+    List<ASTType> paramTypes,
+  ) {
+    var params = fn.parameters.allParameters;
+    var scope = <String, ASTType>{};
+    for (var i = 0; i < params.length && i < paramTypes.length; ++i) {
+      scope[params[i].name] = paramTypes[i];
+    }
+    for (var stm in fn.statements) {
+      if (stm is ASTStatementReturnWithExpression) {
+        var t = _inferStaticExpressionType(stm.expression, scope);
+        if (t != null) return t;
+      }
+    }
+    return null;
+  }
+
+  /// Best-effort static type of [expr] given a [scope] of variable-name -> type
+  /// (e.g. a closure's parameters). Handles literals, variable reads and binary
+  /// operations — enough for simple arrow bodies (`n * 2`, `n + 1`, `n > 0`).
+  /// Returns `null` when the type can't be determined without running the code.
+  ASTType? _inferStaticExpressionType(
+    ASTExpression expr,
+    Map<String, ASTType> scope,
+  ) {
+    if (expr is ASTExpressionLiteral) {
+      var t = expr.value.resolveType(null);
+      return t is ASTType ? t : null;
+    }
+    if (expr is ASTExpressionVariableAccess) {
+      return scope[expr.variable.name];
+    }
+    if (expr is ASTExpressionOperation) {
+      switch (expr.operator) {
+        case ASTExpressionOperator.equals:
+        case ASTExpressionOperator.notEquals:
+        case ASTExpressionOperator.greater:
+        case ASTExpressionOperator.greaterOrEq:
+        case ASTExpressionOperator.lower:
+        case ASTExpressionOperator.lowerOrEq:
+        case ASTExpressionOperator.and:
+        case ASTExpressionOperator.or:
+          return ASTTypeBool.instance;
+        case ASTExpressionOperator.divide:
+        case ASTExpressionOperator.divideAsDouble:
+          return _astTypeDouble;
+        case ASTExpressionOperator.divideAsInt:
+          return _astTypeInt;
+        default:
+          // Arithmetic/bitwise: double if any operand is double, else int.
+          var t1 = _inferStaticExpressionType(expr.expression1, scope);
+          var t2 = _inferStaticExpressionType(expr.expression2, scope);
+          if (t1 is ASTTypeDouble || t2 is ASTTypeDouble) return _astTypeDouble;
+          if (t1 is ASTTypeInt && t2 is ASTTypeInt) return _astTypeInt;
+          if (t1 is ASTTypeNum) return t1;
+          if (t2 is ASTTypeNum) return t2;
+          return null;
+      }
+    }
+    return null;
   }
 
   /// Concrete parameter types for closure [fn]: a declared (typed) parameter
@@ -1903,6 +2030,10 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       generateASTExpression(values[i], out: out, context: context);
       if (boxElements) {
         _emitBoxValue(out, context); // concrete value -> Object box ptr
+      } else {
+        // A boxed `Object` element flowing into a typed numeric list must be
+        // unboxed to match the i64/f64 slot.
+        _coerceBoxedToNumberSlot(out, context, elemType);
       }
       context.stackDrop(); // value consumed by the store
       _emitElemStore(out, elemType, i * size);
@@ -2105,6 +2236,19 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
         );
       }
 
+      // A capture-free, call-only closure assigned to a `var`: lower directly
+      // to a `call` of the closure function (its env parameter is unused, so a
+      // null env is passed), skipping the env allocation and `call_indirect`.
+      var directFn = context.directClosureVars[name];
+      if (directFn != null) {
+        return _emitDirectClosureCall(
+          expression,
+          directFn,
+          out: out,
+          context: context,
+        );
+      }
+
       // A function value held in a local variable (a closure / function-typed
       // parameter): dispatch via `call_indirect`.
       var localFn = context.getLocalVariable(name);
@@ -2229,6 +2373,79 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     return out;
   }
 
+  /// Lowers `v(args)` for a direct-closure variable `v` (a capture-free,
+  /// call-only closure) to a plain `call` of the closure function [fn]. The
+  /// closure's hidden environment parameter is unused (no captures), so a null
+  /// env (`i32.const 0`) is passed as argument 0, followed by the real
+  /// arguments. No heap allocation and no `call_indirect`.
+  BytesOutput _emitDirectClosureCall(
+    ASTExpressionLocalFunctionInvocation expression,
+    ASTFunctionDeclaration fn, {
+    BytesOutput? out,
+    WasmContext? context,
+  }) {
+    out ??= newOutput();
+    context ??= WasmContext();
+    var module = context.module!;
+
+    var info = module.closureInfo(fn)!;
+    var fnIndex = module.functionIndexByDeclaration(fn);
+    var arguments = expression.arguments;
+
+    final stackLng0 = context.stackLength;
+
+    // Argument 0: the (unused) environment pointer — null.
+    out.write(
+      Wasm32.i32Const(0),
+      description: "[OP] direct closure call: null env",
+    );
+    context.stackPush(_astTypeInt32, "direct closure null env");
+
+    // Real arguments, converted to the closure's parameter types.
+    for (var i = 0; i < arguments.length; ++i) {
+      generateASTExpression(arguments[i], out: out, context: context);
+      if (i < info.paramTypes.length) {
+        _autoConvertStackTypes(
+          context.stackGet(0)!.type,
+          info.paramTypes[i],
+          out: out,
+          context: context,
+        );
+      }
+    }
+
+    out.write(
+      Wasm.call(fnIndex),
+      description:
+          "[OP] direct call closure `${expression.name}` (index $fnIndex)",
+    );
+
+    // Drop env + arguments; push the return value.
+    for (var i = 0; i < arguments.length; ++i) {
+      context.stackDrop();
+    }
+    context.stackDrop(); // env
+    var returnType = info.returnType;
+    if (!returnType.isVoid) {
+      ASTType resultType;
+      if (returnType is ASTTypeInt) {
+        resultType = _astTypeInt64;
+      } else if (returnType is ASTTypeDouble) {
+        resultType = _astTypeDouble64;
+      } else {
+        resultType = returnType;
+      }
+      context.stackPush(resultType, "direct closure call result");
+    }
+
+    context.assertStackLength(
+      stackLng0 + (returnType.isVoid ? 0 : 1),
+      "After direct closure call `${expression.name}`",
+    );
+
+    return out;
+  }
+
   /// Calls a function value held in a local (a closure / function-typed
   /// parameter) via `call_indirect`. The value is the i32 table index; the
   /// signature comes from the variable's [funcType] (`generics[0]` = return
@@ -2242,6 +2459,7 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
   }) {
     out ??= newOutput();
     context ??= WasmContext();
+    context.module?.tableUsed = true; // an indirect call dispatches via table
 
     var namedArgs = expression.namedArguments;
     if (namedArgs != null && namedArgs.isNotEmpty) {
@@ -2589,11 +2807,13 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       // keys[i] = key
       out.write(Wasm.localGet(keysLocal));
       generateASTExpression(entries[i].key, out: out, context: context);
+      _coerceBoxedToNumberSlot(out, context, keyType);
       context.stackDrop();
       _emitElemStore(out, keyType, i * keySize);
       // vals[i] = value
       out.write(Wasm.localGet(valsLocal));
       generateASTExpression(entries[i].value, out: out, context: context);
+      _coerceBoxedToNumberSlot(out, context, valueType);
       context.stackDrop();
       _emitElemStore(out, valueType, i * valSize);
     }
@@ -2955,6 +3175,7 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
 
     module.requiresMemory = true;
     module.requiresHeapGlobal = true;
+    module.tableUsed = true; // a real function value needs the table slot
 
     final s0 = context.stackLength;
 
@@ -2988,10 +3209,13 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       );
     }
 
-    // Leave the closure pointer on the stack as the result.
+    // Leave the closure pointer on the stack as the result. The value carries
+    // the closure's concrete signature (`generics = [returnType, ...params]`)
+    // so a `var` it is assigned to can be called via `call_indirect` with the
+    // right type.
     out.write(Wasm.localGet(ptrLocal), description: "[OP] closure ptr (value)");
     context.stackPush(
-      ASTTypeFunction(),
+      ASTTypeFunction(info.returnType, info.paramTypes),
       "closure value (slot ${info.slot}, env ${info.envSize}B)",
     );
     context.assertStackLength(s0 + 1, "After closure value");
@@ -3052,6 +3276,81 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     context.assertStackLength(stackLng0 + 1, "After conditional (ternary)");
 
     return out;
+  }
+
+  /// Appends, to [buf], bytes that unbox the boxed `Object` pointer currently
+  /// on top of the stack into a concrete number of type [target] (`int`→i64 or
+  /// `double`→f64), dispatching on the runtime box tag
+  /// (`[tag@0][typeId@4][payload@8]`). A box whose tag disagrees with [target]
+  /// is converted (`i64.trunc_f64_s` / `f64.convert_i64_s`) so the result type
+  /// is always [target]. Used when a dynamic value (e.g. a `List<Object>`
+  /// element) flows into arithmetic. Net stack effect: replaces the i32 box
+  /// pointer with one [target] value.
+  void _emitUnboxNumberInto(
+    BytesOutput buf,
+    WasmContext context,
+    ASTType target,
+  ) {
+    var module = context.module;
+    if (module == null) {
+      throw StateError("Can't unbox an Object without a module.");
+    }
+    module.requiresMemory = true;
+
+    var wantDouble = target == _astTypeDouble64 || target == _astTypeDouble;
+    var resultType = wantDouble ? WasmType.f64Type : WasmType.i64Type;
+    var boxTmp = context.scratchLocal(_astTypeString, 56); // i32
+
+    buf.write(
+      Wasm.localSet(boxTmp),
+      description: "[OP] unbox Object: stash box ptr",
+    );
+    buf.write(Wasm.localGet(boxTmp));
+    buf.write(Wasm32.i32Load(2, _boxTagOffset));
+    buf.write(Wasm32.i32Const(_boxTagInt));
+    buf.writeByte(Wasm32.i32Equals);
+    buf.write(Wasm.ifInstruction(resultType));
+    // tag == int: payload is i64.
+    buf.write(Wasm.localGet(boxTmp));
+    buf.write(Wasm64.i64Load(3, _boxPayloadOffset));
+    if (wantDouble) {
+      buf.writeByte(
+        Wasm64.i64ConvertToF64Signed,
+        description: "[OP] unbox int -> f64",
+      );
+    }
+    buf.writeByte(Wasm.elseInstruction);
+    // else: payload is f64 (double box).
+    buf.write(Wasm.localGet(boxTmp));
+    buf.write(Wasm64.f64Load(FloatAlign.align3, _boxPayloadOffset));
+    if (!wantDouble) {
+      buf.writeByte(
+        Wasm64.f64TruncateToI64Signed,
+        description: "[OP] unbox double -> i64",
+      );
+    }
+    buf.writeByte(Wasm.end);
+  }
+
+  /// If the value on top of the stack is a boxed `Object` but [slotType] is a
+  /// concrete number (`int`/`double`), unboxes it (via [_emitUnboxNumberInto])
+  /// so it can be stored into a typed numeric element/field slot. No-op
+  /// otherwise. Does not touch the virtual stack (the caller drops the value).
+  void _coerceBoxedToNumberSlot(
+    BytesOutput out,
+    WasmContext context,
+    ASTType slotType,
+  ) {
+    var vt = context.stackGet(0)?.type;
+    if (vt != null &&
+        _isObjectType(vt) &&
+        (slotType is ASTTypeInt || slotType is ASTTypeDouble)) {
+      _emitUnboxNumberInto(
+        out,
+        context,
+        slotType is ASTTypeDouble ? _astTypeDouble64 : _astTypeInt64,
+      );
+    }
   }
 
   @override
@@ -3140,6 +3439,36 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       _emitStringConcat2(out, context);
       context.assertStackLength(stackLng0 + 1, "After string concat");
       return out;
+    }
+
+    // A boxed `Object`/`dynamic` operand (e.g. an element read from a
+    // `List<Object>`, which the interpreter treats dynamically) carries an i32
+    // box pointer, not a number. Unbox it to a concrete numeric value before
+    // arithmetic/comparison; otherwise the box pointer would flow straight into
+    // `i64.add`/`f64.div` and produce invalid Wasm. Division always computes in
+    // f64; otherwise the target follows the other (numeric) operand, defaulting
+    // to int. (String operands are handled by the concatenation branch above.)
+    if (_isObjectType(stackType1) || _isObjectType(stackType2)) {
+      var op = expression.operator;
+      var isDivide =
+          op == ASTExpressionOperator.divide ||
+          op == ASTExpressionOperator.divideAsInt ||
+          op == ASTExpressionOperator.divideAsDouble;
+      bool isDouble(ASTType t) => t == _astTypeDouble || t == _astTypeDouble64;
+      ASTType target =
+          (isDivide || isDouble(stackType1) || isDouble(stackType2))
+          ? _astTypeDouble64
+          : _astTypeInt64;
+      if (_isObjectType(stackType1)) {
+        _emitUnboxNumberInto(exp1Out, context, target);
+        stackType1 = target;
+        context.stackReplaceAt(1, target, "unbox Object operand 1 -> $target");
+      }
+      if (_isObjectType(stackType2)) {
+        _emitUnboxNumberInto(exp2Out, context, target);
+        stackType2 = target;
+        context.stackReplace(target, "unbox Object operand 2 -> $target");
+      }
     }
 
     var operationType = _getOperationType(expression, stackType1, stackType2);
@@ -4826,6 +5155,13 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       "Function `${f.name}` return: $effectiveReturnType",
     );
     context.assertReturnsLength(return0 + 1);
+
+    // Direct-closure vars of this function (capture-free, call-only closures
+    // assigned to a `var`): their declarations are elided and calls go direct.
+    var mod = context.module;
+    if (mod != null) {
+      context.directClosureVars = mod.directClosureVars(f);
+    }
 
     var closureInfo = context.module?.closureInfo(f);
     if (closureInfo != null) {
@@ -8064,6 +8400,14 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
 
     var name = statement.name;
 
+    // A capture-free closure assigned to a call-only `var` carries no function
+    // value: elide the declaration entirely (no env allocation, no store). The
+    // matching `name(x)` calls are lowered to a direct `call`.
+    if (context.directClosureVars.containsKey(name) &&
+        value is ASTExpressionLiteralFunction) {
+      return out;
+    }
+
     final ASTExpression initValue = value;
     final BytesOutput initOut = out;
     final WasmContext initContext = context;
@@ -8120,8 +8464,21 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     // A `var` that the AST couldn't statically resolve (e.g. `var p = Point()`)
     // is registered as `dynamic`; refine it to the initializer's real type so
     // method/field access and the local's Wasm type are correct.
+    //
+    // A closure assigned to a `var` (`var twice = (int n) => n * 2`) is declared
+    // `var`/`dynamic` with an untyped `Function` literal; adopt the closure's
+    // concrete function type (signature generics) so a later `twice(x)` call
+    // dispatches via `call_indirect` with the matching type.
+    var initType = context.stackGet(0)!.type;
     if (localVar.type is ASTTypeDynamic) {
-      context.updateLocalVariableType(name, context.stackGet(0)!.type);
+      context.updateLocalVariableType(name, initType);
+    } else if (initType is ASTTypeFunction &&
+        (initType.generics?.isNotEmpty ?? false)) {
+      // The initializer is a closure with a concrete signature; adopt it even
+      // if the local was registered as a bare `Function` (the parser resolves a
+      // `var f = (…) => …` to untyped `Function`), so `f(x)` dispatches via
+      // `call_indirect` with the matching type.
+      context.updateLocalVariableType(name, initType);
     }
 
     _localVariableSet(out, context, localVar.index, name);
@@ -8668,6 +9025,10 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       _emitNumberToString(out, context, type);
     } else if (_isObjectType(type)) {
       _emitBoxToString(out, context);
+    } else if (type is ASTTypeMap) {
+      _emitMapToString(out, context, type);
+    } else if (type is ASTTypeArray) {
+      _emitListToString(out, context, type);
     } else if (_isWasmObjectRef(type)) {
       _emitInstanceToString(out, context, type);
     } else {
@@ -8701,6 +9062,277 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     );
     context.stackDrop();
     context.stackPush(_astTypeString, "$className.toString() result");
+  }
+
+  /// Appends, at runtime, the string handle produced by [emitPiece] onto the
+  /// accumulator string in local [accLocal]: `acc = concat(acc, piece)`.
+  /// [emitPiece] must leave exactly one i32 string handle on the stack (and
+  /// push it on the virtual stack), e.g. an interned literal or an element
+  /// coerced via [_emitToStringHandle]. Net virtual-stack effect: zero.
+  void _emitConcatInto(
+    BytesOutput out,
+    WasmContext context,
+    int accLocal,
+    void Function() emitPiece,
+  ) {
+    out.write(Wasm.localGet(accLocal));
+    context.stackPush(_astTypeString, "collection toString acc");
+    emitPiece();
+    _emitStringConcat2(out, context);
+    out.write(Wasm.localSet(accLocal));
+    context.stackDrop();
+  }
+
+  /// Loads element `i` (counter in [iLocal]) from the buffer based at
+  /// [basePtrLocal] with stride [size] and coerces it to a string handle.
+  /// Nested collections are rejected: they would re-enter [_emitMapToString]/
+  /// [_emitListToString] and clobber the shared scratch locals.
+  void _emitCollectionElement(
+    BytesOutput out,
+    WasmContext context,
+    ASTType elemType,
+    int basePtrLocal,
+    int iLocal,
+    int size,
+  ) {
+    if (elemType is ASTTypeMap || elemType is ASTTypeArray) {
+      throw UnimplementedError(
+        "Wasm string coercion of a nested collection ($elemType) inside a "
+        "Map/List is not supported yet.",
+      );
+    }
+    // addr = base + i*size
+    out.write(Wasm.localGet(basePtrLocal));
+    out.write(Wasm.localGet(iLocal));
+    out.write(Wasm32.i32Const(size));
+    out.writeByte(Wasm32.i32Multiply);
+    out.writeByte(Wasm32.i32Add);
+    _emitElemLoad(out, elemType, 0);
+    context.stackPush(_elemStackType(elemType), "collection element");
+    _emitToStringHandle(out, context, elemType);
+  }
+
+  /// Pushes an interned string literal as an i32 handle (and tracks it on the
+  /// virtual stack).
+  void _emitStringLiteralHandle(
+    BytesOutput out,
+    WasmContext context,
+    String s,
+  ) {
+    out.write(Wasm32.i32Const(context.module!.internStringLiteral(s)));
+    context.stackPush(_astTypeString, "collection toString literal '$s'");
+  }
+
+  /// Converts the `Map` header pointer on top of the stack to an i32 string
+  /// handle in Dart's `{k0: v0, k1: v1}` form. Scans the parallel key/value
+  /// buffers (`[len@0][cap@4][keysPtr@8][valuesPtr@12]`) at runtime, coercing
+  /// each key and value through [_emitToStringHandle] and joining with `, `.
+  void _emitMapToString(BytesOutput out, WasmContext context, ASTTypeMap type) {
+    var module = context.module;
+    if (module == null) {
+      throw StateError("Can't convert a Map to String without a module.");
+    }
+    module.requiresMemory = true;
+    module.requiresHeapGlobal = true;
+
+    var keyType = type.keyType;
+    var valueType = type.valueType;
+    var keySize = _mapKeySize(keyType);
+    var valSize = _elemSize(valueType);
+
+    // i32 scratch locals (slots 50+ avoid the string-concat slots 0..2 reused
+    // by `_emitStringConcat2` on every entry).
+    var hdr = context.scratchLocal(_astTypeString, 50);
+    var keysPtr = context.scratchLocal(_astTypeString, 51);
+    var valsPtr = context.scratchLocal(_astTypeString, 52);
+    var iLoc = context.scratchLocal(_astTypeString, 53);
+    var lenLoc = context.scratchLocal(_astTypeString, 54);
+    var acc = context.scratchLocal(_astTypeString, 55);
+
+    // Consume the Map header pointer (top of stack) into `hdr`.
+    out.write(
+      Wasm.localSet(hdr),
+      description: "[OP] Map -> String: stash header",
+    );
+    context.stackDrop();
+
+    // acc = "{"
+    _emitStringLiteralHandle(out, context, '{');
+    out.write(Wasm.localSet(acc));
+    context.stackDrop();
+
+    // len = hdr[0] ; keysPtr = hdr[8] ; valsPtr = hdr[12] ; i = 0
+    out.write(Wasm.localGet(hdr));
+    out.write(Wasm32.i32Load(2, 0));
+    out.write(Wasm.localSet(lenLoc));
+    out.write(Wasm.localGet(hdr));
+    out.write(Wasm32.i32Load(2, 8));
+    out.write(Wasm.localSet(keysPtr));
+    out.write(Wasm.localGet(hdr));
+    out.write(Wasm32.i32Load(2, 12));
+    out.write(Wasm.localSet(valsPtr));
+    out.write(Wasm32.i32Const(0));
+    out.write(Wasm.localSet(iLoc));
+
+    out.write(Wasm.block(WasmType.voidType));
+    out.write(Wasm.loop(WasmType.voidType));
+
+    // if (i >= len) break the block
+    out.write(Wasm.localGet(iLoc));
+    out.write(Wasm.localGet(lenLoc));
+    out.writeByte(Wasm32.i32GreaterThanOrEqualsUnsigned);
+    out.write(Wasm.brIf(1));
+
+    // if (i > 0) acc += ", "  (i is non-negative, so `i` itself is the test)
+    out.write(Wasm.localGet(iLoc));
+    out.write(Wasm.ifInstruction(WasmType.voidType));
+    _emitConcatInto(
+      out,
+      context,
+      acc,
+      () => _emitStringLiteralHandle(out, context, ', '),
+    );
+    out.writeByte(Wasm.end);
+
+    // acc += key ; acc += ": " ; acc += value
+    _emitConcatInto(
+      out,
+      context,
+      acc,
+      () =>
+          _emitCollectionElement(out, context, keyType, keysPtr, iLoc, keySize),
+    );
+    _emitConcatInto(
+      out,
+      context,
+      acc,
+      () => _emitStringLiteralHandle(out, context, ': '),
+    );
+    _emitConcatInto(
+      out,
+      context,
+      acc,
+      () => _emitCollectionElement(
+        out,
+        context,
+        valueType,
+        valsPtr,
+        iLoc,
+        valSize,
+      ),
+    );
+
+    // i++ ; continue
+    out.write(Wasm.localGet(iLoc));
+    out.write(Wasm32.i32Const(1));
+    out.writeByte(Wasm32.i32Add);
+    out.write(Wasm.localSet(iLoc));
+    out.write(Wasm.br(0));
+
+    out.writeByte(Wasm.end); // loop
+    out.writeByte(Wasm.end); // block
+
+    // acc += "}"
+    _emitConcatInto(
+      out,
+      context,
+      acc,
+      () => _emitStringLiteralHandle(out, context, '}'),
+    );
+
+    out.write(Wasm.localGet(acc));
+    context.stackPush(_astTypeString, "Map to string");
+  }
+
+  /// Converts the `List` header pointer on top of the stack to an i32 string
+  /// handle in Dart's `[e0, e1]` form. Scans the element buffer
+  /// (`[len@0][cap@4][dataPtr@8]`) at runtime, coercing each element through
+  /// [_emitToStringHandle] and joining with `, `.
+  void _emitListToString(
+    BytesOutput out,
+    WasmContext context,
+    ASTTypeArray type,
+  ) {
+    var module = context.module;
+    if (module == null) {
+      throw StateError("Can't convert a List to String without a module.");
+    }
+    module.requiresMemory = true;
+    module.requiresHeapGlobal = true;
+
+    var elemType = type.componentType;
+    var size = _elemSize(elemType);
+
+    var hdr = context.scratchLocal(_astTypeString, 50);
+    var dataPtr = context.scratchLocal(_astTypeString, 51);
+    var iLoc = context.scratchLocal(_astTypeString, 53);
+    var lenLoc = context.scratchLocal(_astTypeString, 54);
+    var acc = context.scratchLocal(_astTypeString, 55);
+
+    out.write(
+      Wasm.localSet(hdr),
+      description: "[OP] List -> String: stash header",
+    );
+    context.stackDrop();
+
+    // acc = "["
+    _emitStringLiteralHandle(out, context, '[');
+    out.write(Wasm.localSet(acc));
+    context.stackDrop();
+
+    // len = hdr[0] ; dataPtr = hdr[8] ; i = 0
+    out.write(Wasm.localGet(hdr));
+    out.write(Wasm32.i32Load(2, 0));
+    out.write(Wasm.localSet(lenLoc));
+    out.write(Wasm.localGet(hdr));
+    out.write(Wasm32.i32Load(2, 8));
+    out.write(Wasm.localSet(dataPtr));
+    out.write(Wasm32.i32Const(0));
+    out.write(Wasm.localSet(iLoc));
+
+    out.write(Wasm.block(WasmType.voidType));
+    out.write(Wasm.loop(WasmType.voidType));
+
+    out.write(Wasm.localGet(iLoc));
+    out.write(Wasm.localGet(lenLoc));
+    out.writeByte(Wasm32.i32GreaterThanOrEqualsUnsigned);
+    out.write(Wasm.brIf(1));
+
+    out.write(Wasm.localGet(iLoc));
+    out.write(Wasm.ifInstruction(WasmType.voidType));
+    _emitConcatInto(
+      out,
+      context,
+      acc,
+      () => _emitStringLiteralHandle(out, context, ', '),
+    );
+    out.writeByte(Wasm.end);
+
+    _emitConcatInto(
+      out,
+      context,
+      acc,
+      () => _emitCollectionElement(out, context, elemType, dataPtr, iLoc, size),
+    );
+
+    out.write(Wasm.localGet(iLoc));
+    out.write(Wasm32.i32Const(1));
+    out.writeByte(Wasm32.i32Add);
+    out.write(Wasm.localSet(iLoc));
+    out.write(Wasm.br(0));
+
+    out.writeByte(Wasm.end); // loop
+    out.writeByte(Wasm.end); // block
+
+    _emitConcatInto(
+      out,
+      context,
+      acc,
+      () => _emitStringLiteralHandle(out, context, ']'),
+    );
+
+    out.write(Wasm.localGet(acc));
+    context.stackPush(_astTypeString, "List to string");
   }
 
   /// Converts the boxed `Object` pointer on top of the stack to an i32 string
@@ -9297,7 +9929,26 @@ class WasmModuleContext {
   final Map<ASTFunctionDeclaration, Map<String, ASTType>> boxedVarsByFunction =
       {};
 
-  bool get requiresTable => tableFunctions.isNotEmpty;
+  /// Per enclosing function, the local variables that hold a capture-free
+  /// closure called directly only (`var f = (…) => …; f(x)`), mapped to the
+  /// closure declaration. Such a variable carries no function value: its
+  /// declaration is elided and the call is a direct `call` (no env alloc / no
+  /// `call_indirect`).
+  final Map<ASTFunctionDeclaration, Map<String, ASTFunctionDeclaration>>
+  directClosureVarsByFunction = {};
+
+  /// The direct-closure variables of [f] (see [directClosureVarsByFunction]).
+  Map<String, ASTFunctionDeclaration> directClosureVars(
+    ASTFunctionDeclaration f,
+  ) => directClosureVarsByFunction[f] ?? const {};
+
+  /// Set when a closure value is actually materialized or invoked via
+  /// `call_indirect`. A closure that is only ever called directly (see
+  /// [directClosureVarsByFunction]) never touches the table, so it stays
+  /// `false` and the table / element sections are omitted entirely.
+  bool tableUsed = false;
+
+  bool get requiresTable => tableUsed && tableFunctions.isNotEmpty;
 
   /// Registers an anonymous function (closure), returning its table slot.
   int registerClosure(WasmClosureInfo info) {
@@ -9956,6 +10607,12 @@ class WasmContext {
   /// environment (read as `env + offset`). `-1` / empty when not a closure.
   int closureEnvLocalIndex = -1;
   final Map<String, ({ASTType type, int offset})> capturedVariables = {};
+
+  /// Local variables of the function currently being generated that hold a
+  /// capture-free, call-only closure: their declaration is elided and `v(x)`
+  /// lowers to a direct `call` of the mapped closure (no env / no
+  /// `call_indirect`). Empty when there are none.
+  Map<String, ASTFunctionDeclaration> directClosureVars = const {};
 
   /// Whether [name] is a captured variable read from the closure environment.
   bool isCapturedVariable(String name) =>
