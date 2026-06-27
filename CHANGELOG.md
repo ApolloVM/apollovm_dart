@@ -1,3 +1,18 @@
+## 0.1.44
+
+### Wasm backend: rich-enum field/method reads in a `print` context
+
+- Fixed garbage values when a rich-enum instance field or method result was
+  passed through `print(...)` / string interpolation (e.g. `print(p.gravity)`
+  or `print('${p.mult(2)}')`). The lazily-generated enum-entry initializer
+  baked its constructor `call` index during an early discovery pass, before the
+  `print`/`double_to_str` host imports were registered; those imports then
+  shifted every function index, so the cached call landed on a host import
+  instead of the enum constructor. Enum-entry initializer bodies are now
+  generated lazily (after the import count is final), so the call indices are
+  correct. Reading the same field/method outside a `print` (e.g. `return
+  p.gravity`) was already correct.
+
 ## 0.1.43
 
 ### Wasm backend: close several Dart → WebAssembly gaps

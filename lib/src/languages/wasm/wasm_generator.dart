@@ -1080,11 +1080,14 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
         .toList();
 
     // Synth functions (e.g. `__alloc`) registered during user-body codegen.
-    // Each body is length-prefixed (like user-function bodies).
+    // Each body is length-prefixed (like user-function bodies). Bodies are
+    // materialized here — after the import-discovery pass above has finalized
+    // `importCount` — so a deferred body (e.g. an enum-entry init that calls the
+    // enum constructor) bakes in correct function-call indices.
     for (var s in module.synthFunctions) {
       var bodyEntry = newOutput();
       bodyEntry.writeBytesLeb128Block([
-        s.body,
+        s.materializeBody(),
       ], description: "Synth body `${s.name}`");
       entries.add(bodyEntry);
     }
@@ -4600,89 +4603,108 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     var globalIndex = module.enumEntryGlobalIndex(synthName);
     var namePtr = module.internStringLiteral(entry.name);
 
-    // Build the body with a fresh context so the constructor invocation reuses
-    // the full argument-evaluation / type-conversion machinery.
-    var context = WasmContext(module: module);
-    var instLocal = context.scratchLocal(_astTypeString, 0); // i32 ptr
+    // The body calls the enum's constructor, whose call index is
+    // `importCount + position`. Host imports are registered lazily as bodies are
+    // generated, so the body must be materialized only AFTER the import-
+    // discovery pass has finalized `importCount` — otherwise a `print`/string
+    // coercion elsewhere could register imports later and shift the baked call
+    // index onto a host import. Defer body generation via `bodyBuilder`; only
+    // the synth function's *index* is reserved eagerly here.
+    BytesOutput buildBody() {
+      // Build the body with a fresh context so the constructor invocation reuses
+      // the full argument-evaluation / type-conversion machinery.
+      var context = WasmContext(module: module);
+      var instLocal = context.scratchLocal(_astTypeString, 0); // i32 ptr
 
-    var body = newOutput();
+      var body = newOutput();
 
-    // if (global == 0) { build + cache }
-    body.write(Wasm.globalGet(globalIndex));
-    body.writeByte(Wasm32.i32EqualsToZero);
-    body.write(Wasm.ifInstruction(WasmType.voidType));
+      // if (global == 0) { build + cache }
+      body.write(Wasm.globalGet(globalIndex));
+      body.writeByte(Wasm32.i32EqualsToZero);
+      body.write(Wasm.ifInstruction(WasmType.voidType));
 
-    // instance = EnumName(<entry args>)  (the constructor allocates + inits).
-    var args = entry.arguments ?? const <ASTExpression>[];
-    var invocation = ASTExpressionLocalFunctionInvocation(
-      enumClass.name,
-      args.toList(),
-    );
-    generateASTExpressionLocalFunctionInvocation(
-      invocation,
-      out: body,
-      context: context,
-    );
-    context.stackDrop(); // consumed by the local.set below
-    body.write(Wasm.localSet(instLocal));
-
-    // instance.index = ordinal (i64)
-    body.write(Wasm.localGet(instLocal));
-    body.write(Wasm64.i64Const(entryIndex));
-    _emitElemStore(body, _astTypeInt64, layout.offsets['index']!);
-
-    // instance.name = interned String ptr (i32)
-    body.write(Wasm.localGet(instLocal));
-    body.write(Wasm32.i32Const(namePtr));
-    _emitElemStore(body, _astTypeString, layout.offsets['name']!);
-
-    // instance.value = explicit declared value (i64), for explicit-value enums.
-    var valueOffset = layout.offsets['value'];
-    if (valueOffset != null) {
-      body.write(Wasm.localGet(instLocal));
-      var entryValue = entry.value;
-      if (entryValue != null) {
-        generateASTExpression(entryValue, out: body, context: context);
-        _autoConvertStackTypes(
-          context.stackGet(0)!.type,
-          _astTypeInt64,
-          out: body,
-          context: context,
-        );
-        context.stackDrop(); // consumed by the store below
-      } else {
-        body.write(Wasm64.i64Const(0));
-      }
-      _emitElemStore(body, _astTypeInt64, valueOffset);
-    }
-
-    // global = instance
-    body.write(Wasm.localGet(instLocal));
-    body.write(Wasm.globalSet(globalIndex));
-    body.writeByte(Wasm.end); // if
-
-    // return global
-    body.write(Wasm.globalGet(globalIndex));
-
-    // Function body: local declarations (scratch locals) + ops + end.
-    var outBody = newOutput();
-    var scratchTypes = context.scratchLocalTypes;
-    outBody.write(
-      Leb128.encodeUnsigned(scratchTypes.length),
-      description: "Local groups (enum init `$synthName`)",
-    );
-    for (var astType in scratchTypes) {
-      outBody.write(Leb128.encodeUnsigned(1), description: "Scratch var count");
-      outBody.writeByte(
-        astType.wasmCode,
-        description: "Scratch (${astType.wasmType.name})",
+      // instance = EnumName(<entry args>)  (the constructor allocates + inits).
+      var args = entry.arguments ?? const <ASTExpression>[];
+      var invocation = ASTExpressionLocalFunctionInvocation(
+        enumClass.name,
+        args.toList(),
       );
+      generateASTExpressionLocalFunctionInvocation(
+        invocation,
+        out: body,
+        context: context,
+      );
+      context.stackDrop(); // consumed by the local.set below
+      body.write(Wasm.localSet(instLocal));
+
+      // instance.index = ordinal (i64)
+      body.write(Wasm.localGet(instLocal));
+      body.write(Wasm64.i64Const(entryIndex));
+      _emitElemStore(body, _astTypeInt64, layout.offsets['index']!);
+
+      // instance.name = interned String ptr (i32)
+      body.write(Wasm.localGet(instLocal));
+      body.write(Wasm32.i32Const(namePtr));
+      _emitElemStore(body, _astTypeString, layout.offsets['name']!);
+
+      // instance.value = explicit declared value (i64), for explicit-value enums.
+      var valueOffset = layout.offsets['value'];
+      if (valueOffset != null) {
+        body.write(Wasm.localGet(instLocal));
+        var entryValue = entry.value;
+        if (entryValue != null) {
+          generateASTExpression(entryValue, out: body, context: context);
+          _autoConvertStackTypes(
+            context.stackGet(0)!.type,
+            _astTypeInt64,
+            out: body,
+            context: context,
+          );
+          context.stackDrop(); // consumed by the store below
+        } else {
+          body.write(Wasm64.i64Const(0));
+        }
+        _emitElemStore(body, _astTypeInt64, valueOffset);
+      }
+
+      // global = instance
+      body.write(Wasm.localGet(instLocal));
+      body.write(Wasm.globalSet(globalIndex));
+      body.writeByte(Wasm.end); // if
+
+      // return global
+      body.write(Wasm.globalGet(globalIndex));
+
+      // Function body: local declarations (scratch locals) + ops + end.
+      var outBody = newOutput();
+      var scratchTypes = context.scratchLocalTypes;
+      outBody.write(
+        Leb128.encodeUnsigned(scratchTypes.length),
+        description: "Local groups (enum init `$synthName`)",
+      );
+      for (var astType in scratchTypes) {
+        outBody.write(
+          Leb128.encodeUnsigned(1),
+          description: "Scratch var count",
+        );
+        outBody.writeByte(
+          astType.wasmCode,
+          description: "Scratch (${astType.wasmType.name})",
+        );
+      }
+      outBody.writeBytes(body);
+      outBody.writeByte(Wasm.end, description: "Enum init body end");
+      return outBody;
     }
-    outBody.writeBytes(body);
-    outBody.writeByte(Wasm.end, description: "Enum init body end");
 
     module.addSynthFunction(
-      WasmSynthFunction(synthName, const [], const [WasmType.i32Type], outBody),
+      WasmSynthFunction(
+        synthName,
+        const [],
+        const [WasmType.i32Type],
+        null,
+        bodyBuilder: buildBody,
+      ),
     );
 
     return module.synthFunctionIndex(synthName)!;
@@ -9101,8 +9123,17 @@ class WasmSynthFunction {
   final List<WasmType> params;
   final List<WasmType> results;
 
-  /// The complete code body: locals vector + instructions + `end`.
-  final BytesOutput body;
+  /// The complete code body (locals vector + instructions + `end`), or null
+  /// when [bodyBuilder] defers body generation.
+  final BytesOutput? body;
+
+  /// Deferred body generator. Used when the body bakes in function-call indices
+  /// that depend on the final `importCount` (e.g. an enum-entry init that calls
+  /// the enum constructor): the synth function's *index* is registered eagerly
+  /// (during the import-discovery pass), but its *body* is materialized only
+  /// once all host imports have been registered, so call indices are correct.
+  final BytesOutput Function()? bodyBuilder;
+
   final bool exported;
 
   WasmSynthFunction(
@@ -9110,8 +9141,12 @@ class WasmSynthFunction {
     this.params,
     this.results,
     this.body, {
+    this.bodyBuilder,
     this.exported = false,
   });
+
+  /// The body bytes, generating them on demand via [bodyBuilder] if deferred.
+  BytesOutput materializeBody() => body ?? bodyBuilder!();
 }
 
 /// Memory layout of a class instance: field byte [offsets] (declaration order),
