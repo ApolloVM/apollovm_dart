@@ -368,31 +368,13 @@ class ApolloCodeGeneratorJava11 extends ApolloCodeGenerator {
   }) {
     out ??= newOutput();
 
-    var positionalParameters = parameters.positionalParameters;
-    if (positionalParameters != null) {
-      for (var i = 0; i < positionalParameters.length; ++i) {
-        var p = positionalParameters[i];
-        if (i > 0) out.write(', ');
-        generateASTParameterDeclaration(p, out: out);
-      }
-    }
-
-    var optionalParameters = parameters.optionalParameters;
-    if (optionalParameters != null) {
-      for (var i = 0; i < optionalParameters.length; ++i) {
-        var p = optionalParameters[i];
-        if (i > 0) out.write(', ');
-        generateASTParameterDeclaration(p, out: out);
-      }
-    }
-
-    var namedParameters = parameters.namedParameters;
-    if (namedParameters != null) {
-      for (var i = 0; i < namedParameters.length; ++i) {
-        var p = namedParameters[i];
-        if (i > 0) out.write(', ');
-        generateASTParameterDeclaration(p, out: out);
-      }
+    // Java declares all parameters positionally, so positional + optional +
+    // named are emitted as a single flat, comma-separated list.
+    var wrote = 0;
+    for (var p in parameters.allParameters) {
+      if (wrote > 0) out.write(', ');
+      generateASTParameterDeclaration(p, out: out);
+      ++wrote;
     }
 
     return out;

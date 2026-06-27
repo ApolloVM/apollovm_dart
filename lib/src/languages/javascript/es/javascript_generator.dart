@@ -244,6 +244,7 @@ class ApolloCodeGeneratorJavaScript extends ApolloCodeGenerator {
     // JavaScript parameters are untyped (and have no `this.` shorthand).
     out ??= newOutput();
     out.write(parameter.name);
+    appendParameterDefaultValue(parameter, out, indent);
     return out;
   }
 

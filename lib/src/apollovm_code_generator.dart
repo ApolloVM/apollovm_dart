@@ -264,7 +264,31 @@ abstract class ApolloCodeGenerator
 
     out.write(parameter.name);
 
+    appendParameterDefaultValue(parameter, out, indent);
+
     return out;
+  }
+
+  /// The separator emitted between a parameter and its default value in a
+  /// declaration (e.g. ` = ` in Dart/Kotlin/C#/Java, `=` in Python).
+  String get parameterDefaultValueSeparator => ' = ';
+
+  /// Appends ` = <default>` to [out] when [parameter] has a default value.
+  void appendParameterDefaultValue(
+    ASTParameterDeclaration parameter,
+    StringBuffer out,
+    String indent,
+  ) {
+    var defaultValue = parameter.defaultValue;
+    if (defaultValue == null) return;
+
+    out.write(parameterDefaultValueSeparator);
+    generateASTExpression(
+      defaultValue,
+      out: out,
+      indent: indent,
+      headIndented: false,
+    );
   }
 
   @override
@@ -1820,7 +1844,13 @@ abstract class ApolloCodeGenerator
     final functionName = expression.name;
     final arguments = expression.arguments;
 
-    _generateFunctionInvocation(functionName, arguments, out, indent);
+    _generateFunctionInvocation(
+      functionName,
+      arguments,
+      out,
+      indent,
+      namedArguments: expression.namedArguments,
+    );
 
     _generateChainFunctionInvocation(expression, out, indent);
 
@@ -1856,7 +1886,13 @@ abstract class ApolloCodeGenerator
 
     final arguments = expression.arguments;
 
-    _generateFunctionInvocation(functionName, arguments, out, indent);
+    _generateFunctionInvocation(
+      functionName,
+      arguments,
+      out,
+      indent,
+      namedArguments: expression.namedArguments,
+    );
 
     _generateChainFunctionInvocation(expression, out, indent);
 
@@ -1888,7 +1924,13 @@ abstract class ApolloCodeGenerator
 
     final arguments = expression.arguments;
 
-    _generateFunctionInvocation(functionName, arguments, out, indent);
+    _generateFunctionInvocation(
+      functionName,
+      arguments,
+      out,
+      indent,
+      namedArguments: expression.namedArguments,
+    );
 
     _generateChainFunctionInvocation(expression, out, indent);
 
@@ -1909,25 +1951,38 @@ abstract class ApolloCodeGenerator
     final functionName = expression.name;
     final arguments = expression.arguments;
 
-    _generateFunctionInvocation(functionName, arguments, out, indent);
+    _generateFunctionInvocation(
+      functionName,
+      arguments,
+      out,
+      indent,
+      namedArguments: expression.namedArguments,
+    );
 
     _generateChainFunctionInvocation(expression, out, indent);
 
     return out;
   }
 
+  /// The separator written between a named argument's name and value at a call
+  /// site (e.g. `name: value` in Dart/Kotlin/C#, `name=value` in Python).
+  String get namedArgumentSeparator => ': ';
+
   void _generateFunctionInvocation(
     String functionName,
     List<ASTExpression> arguments,
     StringBuffer out,
-    String indent,
-  ) {
+    String indent, {
+    Map<String, ASTExpression>? namedArguments,
+  }) {
     out.write(functionName);
     out.write('(');
 
+    var count = 0;
+
     for (var i = 0; i < arguments.length; ++i) {
       var arg = arguments[i];
-      if (i > 0) out.write(', ');
+      if (count > 0) out.write(', ');
 
       generateASTExpression(
         arg,
@@ -1935,7 +1990,26 @@ abstract class ApolloCodeGenerator
         indent: '$indent  ',
         headIndented: false,
       );
+      ++count;
     }
+
+    if (namedArguments != null && namedArguments.isNotEmpty) {
+      for (var entry in namedArguments.entries) {
+        if (count > 0) out.write(', ');
+
+        out.write(entry.key);
+        out.write(namedArgumentSeparator);
+
+        generateASTExpression(
+          entry.value,
+          out: out,
+          indent: '$indent  ',
+          headIndented: false,
+        );
+        ++count;
+      }
+    }
+
     out.write(')');
   }
 
@@ -1949,7 +2023,13 @@ abstract class ApolloCodeGenerator
     if (chainFunctionInvocation != null && chainFunctionInvocation.isNotEmpty) {
       for (var f in chainFunctionInvocation) {
         out.write('.');
-        _generateFunctionInvocation(f.name, f.arguments, out, indent);
+        _generateFunctionInvocation(
+          f.name,
+          f.arguments,
+          out,
+          indent,
+          namedArguments: f.namedArguments,
+        );
       }
     }
   }

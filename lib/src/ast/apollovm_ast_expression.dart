@@ -2048,16 +2048,22 @@ abstract class ASTExpressionFunctionInvocation extends ASTExpression
   String name;
   List<ASTExpression> arguments;
 
+  /// Named arguments passed at the call site (e.g. `foo(a: 1, b: 2)`).
+  /// Keys are the parameter names; values are the argument expressions.
+  /// `null`/empty when the call uses only positional arguments.
+  Map<String, ASTExpression>? namedArguments;
+
   ASTExpressionFunctionInvocation(
     this.name,
     this.arguments, [
     List<ASTExpressionChainFunctionInvocation>? chainFunctionInvocation,
+    this.namedArguments,
   ]) {
     _setChainFunctionInvocation(chainFunctionInvocation);
   }
 
   @override
-  Iterable<ASTNode> get children => arguments;
+  Iterable<ASTNode> get children => [...arguments, ...?namedArguments?.values];
 
   @override
   void resolveNode(ASTNode? parentNode) {
@@ -2066,6 +2072,32 @@ abstract class ASTExpressionFunctionInvocation extends ASTExpression
     for (var e in arguments) {
       e.resolveNode(this);
     }
+
+    final namedArguments = this.namedArguments;
+    if (namedArguments != null) {
+      for (var e in namedArguments.values) {
+        e.resolveNode(this);
+      }
+    }
+  }
+
+  /// Resolves the [namedArguments] expressions to their runtime values,
+  /// returning `null` when there are no named arguments.
+  FutureOr<Map<String, ASTValue>?> _resolveNamedArgumentsValues(
+    VMContext parentContext,
+    ASTRunStatus runStatus,
+  ) {
+    final namedArguments = this.namedArguments;
+    if (namedArguments == null || namedArguments.isEmpty) return null;
+
+    var keys = namedArguments.keys.toList();
+    var values = keys
+        .map((k) => namedArguments[k]!.run(parentContext, runStatus))
+        .resolveAll();
+
+    return values.resolveMapped(
+      (list) => Map<String, ASTValue>.fromIterables(keys, list),
+    );
   }
 
   @override
@@ -2088,7 +2120,7 @@ abstract class ASTExpressionFunctionInvocation extends ASTExpression
   ASTFunctionSignature? _functionSignature;
 
   ASTFunctionSignature _getASTFunctionSignature() {
-    _functionSignature ??= ASTFunctionSignature.from(arguments, null);
+    _functionSignature ??= ASTFunctionSignature.from(arguments, namedArguments);
     return _functionSignature!;
   }
 
@@ -2102,7 +2134,18 @@ abstract class ASTExpressionFunctionInvocation extends ASTExpression
         runStatus,
         arguments,
       ).resolveMapped((argumentsValues) {
-        return _run2(parentContext, runStatus, f, argumentsValues);
+        return _resolveNamedArgumentsValues(
+          parentContext,
+          runStatus,
+        ).resolveMapped((namedValues) {
+          return _run2(
+            parentContext,
+            runStatus,
+            f,
+            argumentsValues,
+            namedValues,
+          );
+        });
       });
     });
   }
@@ -2112,8 +2155,13 @@ abstract class ASTExpressionFunctionInvocation extends ASTExpression
     ASTRunStatus runStatus,
     ASTInvocableDeclaration f,
     List<ASTValue> argumentsValues,
+    Map<String, ASTValue>? namedValues,
   ) {
-    var ret = f.call(parentContext, positionalParameters: argumentsValues);
+    var ret = f.call(
+      parentContext,
+      positionalParameters: argumentsValues,
+      namedParameters: namedValues,
+    );
     if (!hasChainFunctionInvocation) {
       return ret;
     }
@@ -2129,8 +2177,15 @@ abstract class ASTExpressionFunctionInvocation extends ASTExpression
     ASTValue obj,
     ASTInvocableDeclaration f,
     List<ASTValue> argumentsValues,
+    Map<String, ASTValue>? namedValues,
   ) {
-    var ret = _callFunction(parentContext, obj, f, argumentsValues);
+    var ret = _callFunction(
+      parentContext,
+      obj,
+      f,
+      argumentsValues,
+      namedValues,
+    );
     if (!hasChainFunctionInvocation) {
       return ret;
     }
@@ -2145,16 +2200,22 @@ abstract class ASTExpressionFunctionInvocation extends ASTExpression
     ASTValue obj,
     ASTInvocableDeclaration f,
     List<ASTValue> argumentsValues,
+    Map<String, ASTValue>? namedValues,
   ) {
     if (f is ASTClassFunctionDeclaration) {
       return f.objectCall(
         parentContext,
         obj,
         positionalParameters: argumentsValues,
+        namedParameters: namedValues,
       );
     } else {
       // Static function call:
-      return f.call(parentContext, positionalParameters: argumentsValues);
+      return f.call(
+        parentContext,
+        positionalParameters: argumentsValues,
+        namedParameters: namedValues,
+      );
     }
   }
 
@@ -2255,13 +2316,19 @@ class ASTExpressionLocalFunctionInvocation
       runStatus,
       arguments,
     ).resolveMapped((argumentsValues) {
-      var ret = value.call(
+      return _resolveNamedArgumentsValues(
         parentContext,
-        positionalParameters: argumentsValues,
-      );
-      if (!hasChainFunctionInvocation) return ret;
-      return ret.resolveMapped((prevObj) {
-        return _callChainFunction(parentContext, runStatus, prevObj);
+        runStatus,
+      ).resolveMapped((namedValues) {
+        var ret = value.call(
+          parentContext,
+          positionalParameters: argumentsValues,
+          namedParameters: namedValues,
+        );
+        if (!hasChainFunctionInvocation) return ret;
+        return ret.resolveMapped((prevObj) {
+          return _callChainFunction(parentContext, runStatus, prevObj);
+        });
       });
     });
   }
@@ -2352,16 +2419,26 @@ class ASTExpressionChainFunctionInvocation
         runStatus,
         arguments,
       ).resolveMapped((argumentsValues) {
-        if (f is ASTClassFunctionDeclaration) {
-          return f.objectCall(
-            parentContext,
-            previousValue,
-            positionalParameters: argumentsValues,
-          );
-        } else {
-          // Static function call:
-          return f.call(parentContext, positionalParameters: argumentsValues);
-        }
+        return _resolveNamedArgumentsValues(
+          parentContext,
+          runStatus,
+        ).resolveMapped((namedValues) {
+          if (f is ASTClassFunctionDeclaration) {
+            return f.objectCall(
+              parentContext,
+              previousValue,
+              positionalParameters: argumentsValues,
+              namedParameters: namedValues,
+            );
+          } else {
+            // Static function call:
+            return f.call(
+              parentContext,
+              positionalParameters: argumentsValues,
+              namedParameters: namedValues,
+            );
+          }
+        });
       });
     });
   }
@@ -2450,14 +2527,20 @@ class ASTExpressionObjectFunctionInvocation
         runStatus,
         arguments,
       ).resolveMapped((argumentsValues) {
-        return _getVariableValue(parentContext).resolveMapped((obj) {
-          return _callFunctionAndChain(
-            parentContext,
-            runStatus,
-            obj,
-            f,
-            argumentsValues,
-          );
+        return _resolveNamedArgumentsValues(
+          parentContext,
+          runStatus,
+        ).resolveMapped((namedValues) {
+          return _getVariableValue(parentContext).resolveMapped((obj) {
+            return _callFunctionAndChain(
+              parentContext,
+              runStatus,
+              obj,
+              f,
+              argumentsValues,
+              namedValues,
+            );
+          });
         });
       });
     });
@@ -2554,13 +2637,19 @@ class ASTExpressionObjectEntryFunctionInvocation
           runStatus,
           arguments,
         ).resolveMapped((argumentsValues) {
-          return _callFunctionAndChain(
+          return _resolveNamedArgumentsValues(
             parentContext,
             runStatus,
-            obj,
-            f,
-            argumentsValues,
-          );
+          ).resolveMapped((namedValues) {
+            return _callFunctionAndChain(
+              parentContext,
+              runStatus,
+              obj,
+              f,
+              argumentsValues,
+              namedValues,
+            );
+          });
         });
       });
     });
@@ -2652,14 +2741,20 @@ class ASTExpressionGroupFunctionInvocation
         runStatus,
         arguments,
       ).resolveMapped((argumentsValues) {
-        return _getExpressionValue(parentContext).resolveMapped((obj) {
-          return _callFunctionAndChain(
-            parentContext,
-            runStatus,
-            obj,
-            f,
-            argumentsValues,
-          );
+        return _resolveNamedArgumentsValues(
+          parentContext,
+          runStatus,
+        ).resolveMapped((namedValues) {
+          return _getExpressionValue(parentContext).resolveMapped((obj) {
+            return _callFunctionAndChain(
+              parentContext,
+              runStatus,
+              obj,
+              f,
+              argumentsValues,
+              namedValues,
+            );
+          });
         });
       });
     });

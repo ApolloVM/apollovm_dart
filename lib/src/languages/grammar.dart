@@ -51,6 +51,77 @@ abstract class BaseGrammarLexer extends GrammarDefinition {
 
   Parser<String> letterLexicalToken() => letter();
 
+  //-- Shared expression/argument parsers --//
+
+  /// A full expression. Declared here so the shared argument/default-value
+  /// parsers below can reference it via `ref0(expression)`; each concrete
+  /// grammar provides the language-specific implementation.
+  Parser<ASTExpression> expression();
+
+  /// The call-site separator between a named/keyword argument's name and its
+  /// value. Defaults to `:` (Dart/C#); languages like Kotlin and Python
+  /// override this to `=` (guarded against `==`).
+  Parser namedArgumentSeparatorParser() => char(':');
+
+  /// A parameter default value: `= <expression>` (used by optional/named
+  /// parameters, e.g. `int a = 5`). The `char('=') & char('=').not()` guard
+  /// prevents matching the equality operator `==`.
+  Parser<ASTExpression> parameterDefaultValue() =>
+      ((char('=') & char('=').not()).trim(ref0(hiddenStuffWhitespace)) &
+              ref0(expression))
+          .map((v) => v[1] as ASTExpression);
+
+  /// Parses a call-site argument list mixing positional and named arguments,
+  /// e.g. `1, 2`, `a: 1, b: 2`, `1, b: 2` (separator per
+  /// [namedArgumentSeparatorParser]).
+  Parser<({List<ASTExpression> positional, Map<String, ASTExpression>? named})>
+  callArguments() =>
+      (ref0(callArgument) &
+              (char(',').trim(ref0(hiddenStuffWhitespace)) & ref0(callArgument))
+                  .star() &
+              char(',').trim(ref0(hiddenStuffWhitespace)).optional())
+          .map((v) {
+            var args = <({String? name, ASTExpression expr})>[
+              v[0] as ({String? name, ASTExpression expr}),
+              ...(v[1] as List).map(
+                (e) => (e as List)[1] as ({String? name, ASTExpression expr}),
+              ),
+            ];
+
+            var positional = <ASTExpression>[];
+            Map<String, ASTExpression>? named;
+
+            for (var a in args) {
+              final name = a.name;
+              if (name != null) {
+                (named ??= {})[name] = a.expr;
+              } else {
+                positional.add(a.expr);
+              }
+            }
+
+            return (positional: positional, named: named);
+          });
+
+  /// A single call argument: either `name<sep> expression` (named) or
+  /// `expression` (positional). The name prefix is only matched when an
+  /// identifier is immediately followed by [namedArgumentSeparatorParser], so
+  /// positional expressions (ternaries `a ? b : c`, equality `a == b`) are not
+  /// misparsed.
+  Parser<({String? name, ASTExpression expr})> callArgument() =>
+      ((identifier().trim() &
+                      namedArgumentSeparatorParser().trim(
+                        ref0(hiddenStuffWhitespace),
+                      ))
+                  .optional() &
+              ref0(expression))
+          .map((v) {
+            var nameOpt = v[0] as List?;
+            var name = nameOpt != null ? nameOpt[0] as String : null;
+            var expr = v[1] as ASTExpression;
+            return (name: name, expr: expr);
+          });
+
   //-- Reduce expressions operations --//
 
   ASTExpression computeFinalExpression(List all) {

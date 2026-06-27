@@ -16,7 +16,8 @@ void main(List<String> args) async {
           'ApolloVM/${ApolloVM.VERSION} - A compact VM for Dart, Java, Kotlin, C#, JavaScript, TypeScript, Lua and Python.',
         )
         ..addCommand(CommandRun())
-        ..addCommand(CommandTranslate());
+        ..addCommand(CommandTranslate())
+        ..addCommand(CommandCompile());
 
   commandRunner.argParser.addFlag(
     'version',
@@ -242,5 +243,121 @@ class CommandTranslate extends CommandSourceFileBase {
     print(allSources);
 
     return true;
+  }
+}
+
+class CommandCompile extends CommandSourceFileBase {
+  @override
+  final String description =
+      'Compile a source file to a binary target (WebAssembly).';
+
+  @override
+  final String name = 'compile';
+
+  CommandCompile() {
+    argParser.addOption(
+      'output',
+      abbr: 'o',
+      help:
+          'Output file path (defaults to <source>.wasm, alongside the source file).\n'
+          'If multiple modules are produced, the module name is inserted before `.wasm`.',
+      valueHelp: 'file.wasm',
+    );
+    argParser.addOption(
+      'target',
+      help: 'Binary target (currently: wasm).',
+      defaultsTo: 'wasm',
+      valueHelp: 'wasm',
+    );
+  }
+
+  String get target =>
+      (argResults!['target'] as String? ?? 'wasm').toLowerCase();
+
+  String? get output => argResults!['output'] as String?;
+
+  @override
+  FutureOr<bool> run() async {
+    var target = this.target;
+
+    if (verbose) {
+      _log('COMPILE', '$sourceFile ; language: $language > target: $target');
+    }
+
+    if (target != 'wasm') {
+      throw StateError('Unsupported compile target: $target');
+    }
+
+    var vm = ApolloVM();
+
+    var codeUnit = SourceCodeUnit(language, source, id: sourceFilePath);
+
+    var loadOK = await vm.loadCodeUnit(codeUnit);
+
+    if (!loadOK) {
+      throw StateError(
+        "Can't parse source! language: $language ; sourceFilePath: $sourceFilePath",
+      );
+    }
+
+    var storageWasm = vm.generateAllIn<BytesOutput>('wasm');
+    var wasmModules = await storageWasm.allEntries();
+
+    var modules = <MapEntry<String, BytesOutput>>[];
+    for (var namespace in wasmModules.entries) {
+      for (var module in namespace.value.entries) {
+        modules.add(MapEntry(module.key, module.value));
+      }
+    }
+
+    if (modules.isEmpty) {
+      throw StateError(
+        "No Wasm modules generated! language: $language ; sourceFilePath: $sourceFilePath",
+      );
+    }
+
+    var outputPath = output ?? _defaultOutputPath();
+
+    var single = modules.length == 1;
+
+    for (var module in modules) {
+      var moduleName = module.key;
+      var wasmBytes = module.value.output();
+
+      var filePath = single
+          ? outputPath
+          : _insertModuleName(outputPath, moduleName);
+
+      File(filePath).writeAsBytesSync(wasmBytes);
+
+      print('Wrote: $filePath (${wasmBytes.length} bytes)');
+    }
+
+    return true;
+  }
+
+  String _defaultOutputPath() {
+    var path = sourceFilePath;
+    // Strip the extension from the FILE NAME only — `getPathExtension` keys off
+    // the last `.` anywhere in the path, which would wrongly truncate when the
+    // file has no extension but a parent directory contains a `.` (e.g.
+    // `proj.v2/main` -> `proj.wasm`). Operate on the final path segment instead.
+    var sep = path.lastIndexOf('/');
+    var name = sep >= 0 ? path.substring(sep + 1) : path;
+    var dot = name.lastIndexOf('.');
+    if (dot > 0) {
+      // The file name has a real extension to replace.
+      return '${path.substring(0, path.length - (name.length - dot))}.wasm';
+    }
+    return '$path.wasm';
+  }
+
+  String _insertModuleName(String outputPath, String moduleName) {
+    const suffix = '.wasm';
+    if (outputPath.toLowerCase().endsWith(suffix)) {
+      var base = outputPath.substring(0, outputPath.length - suffix.length);
+      return '$base.$moduleName$suffix';
+    }
+    return '$outputPath.$moduleName$suffix';
   }
 }

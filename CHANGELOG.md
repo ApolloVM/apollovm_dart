@@ -1,3 +1,45 @@
+## 0.1.42
+
+### Named / keyword arguments
+
+- Function, method **and constructor** calls can now pass arguments **by name**,
+  bound to parameters by name rather than position (so call-site order is free):
+  Dart `foo(a: 1, b: 2)`, Kotlin `foo(a = 1)`, C# `foo(a: 1)`, Python
+  `foo(a=1)`.
+- Dart also parses explicit **named-parameter declarations** (`int f({int a,
+  int b})`), optional-positional groups (`[int b]`), and the same forms in
+  constructors (`Box({this.w, this.h})`); the other languages declare parameters
+  positionally and allow any of them to be passed by name, matching each
+  language's semantics.
+- Runtime, parsing and code generation all round-trip: a call's named arguments
+  regenerate in each language's syntax (`a: v` / `a = v` / `a=v`) and re-parse
+  to the same result. Languages without a native named-argument concept (Java,
+  JavaScript, TypeScript, Lua) are unaffected and keep positional calls.
+- **Wasm**: the on-the-fly WebAssembly compiler accepts named-argument calls,
+  reordering them into the callee's positional parameter slots.
+
+### Default values for optional and named parameters
+
+- Optional and named parameters can declare a **default value** that is used
+  when the argument is omitted: Dart `int f({int a = 5})` / `[int b = 3]`,
+  Kotlin `fun f(a: Int = 5)`, C# `void F(int a = 5)`, Python `def f(a=5)`
+  (including default-bearing constructor parameters, e.g. `Box({this.w = 2})`).
+  Defaults are evaluated at call time, round-trip through code generation, and
+  are overridden by any supplied positional or named argument. The Wasm compiler
+  also fills omitted parameters with their (constant) default expressions.
+
+### CLI: `compile` command (WebAssembly)
+
+- New `apollovm compile [-o out.wasm] [--target wasm] <source>` command compiles
+  a source file to a WebAssembly binary via the on-the-fly Wasm compiler,
+  writing one `.wasm` file per generated module (alongside `run` and
+  `translate`).
+
+### Tests reorganized by concern
+
+- The `test/` suite is grouped into `unit/`, `features/`, `languages/`,
+  `wasm/`, `integration/` and `meta/` subdirectories (no behavior change).
+
 ## 0.1.41
 
 ### Rich enums (enum entries are `const` class instances)

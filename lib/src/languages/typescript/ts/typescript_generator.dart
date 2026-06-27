@@ -473,6 +473,7 @@ class ApolloCodeGeneratorTypeScript extends ApolloCodeGenerator {
     out ??= newOutput();
     out.write(parameter.name);
     _writeTypeAnnotation(parameter.type, out);
+    appendParameterDefaultValue(parameter, out, indent);
     return out;
   }
 

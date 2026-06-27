@@ -621,6 +621,7 @@ class PythonGrammarDefinition extends PythonGrammarLexer {
   @override
   Parser<ASTExpression> parseExpressionInString() => ref0(expression);
 
+  @override
   Parser<ASTExpression> expression() =>
       (ref0(expressionOperationChain) &
               (ifToken().trimHidden() &
@@ -791,13 +792,20 @@ class PythonGrammarDefinition extends PythonGrammarLexer {
               char('.') &
               identifier() &
               char('(').trimHidden() &
-              ref0(expressionSequence).optional() &
+              ref0(callArguments).optional() &
               char(')').trimHidden() &
               expressionChainFunctionInvocation().star())
           .map((v) {
             var expression = v[0] as ASTExpression;
             var name = v[2] as String;
-            var args = (v[4] as List<ASTExpression>?) ?? <ASTExpression>[];
+            var argsRec =
+                v[4]
+                    as ({
+                      List<ASTExpression> positional,
+                      Map<String, ASTExpression>? named,
+                    })?;
+            var args = argsRec?.positional ?? <ASTExpression>[];
+            var named = argsRec?.named;
             var chainFunctions = (v[6] as List)
                 .whereType<ASTExpressionChainFunctionInvocation>()
                 .toList();
@@ -806,21 +814,28 @@ class PythonGrammarDefinition extends PythonGrammarLexer {
               name,
               args,
               chainFunctions,
-            );
+            )..namedArguments = named;
           });
 
   Parser<ASTExpression> expressionFunctionInvocation() =>
       ((identifier() & char('.')).optional() &
               identifier() &
               char('(').trimHidden() &
-              ref0(expressionSequence).optional() &
+              ref0(callArguments).optional() &
               char(')').trimHidden() &
               expressionChainFunctionInvocation().star())
           .map((v) {
             var objOpt = v[0] as List?;
             var obj = objOpt != null ? objOpt[0] as String : null;
             var name = v[1] as String;
-            var args = (v[3] as List<ASTExpression>?) ?? <ASTExpression>[];
+            var argsRec =
+                v[3]
+                    as ({
+                      List<ASTExpression> positional,
+                      Map<String, ASTExpression>? named,
+                    })?;
+            var args = argsRec?.positional ?? <ASTExpression>[];
+            var named = argsRec?.named;
             var chainFunctions = (v[5] as List)
                 .whereType<ASTExpressionChainFunctionInvocation>()
                 .toList();
@@ -830,7 +845,7 @@ class PythonGrammarDefinition extends PythonGrammarLexer {
                 name,
                 args,
                 chainFunctions,
-              );
+              )..namedArguments = named;
             }
 
             // `self.method(...)`/`this.method(...)` invoke on the current
@@ -845,7 +860,7 @@ class PythonGrammarDefinition extends PythonGrammarLexer {
               name,
               args,
               chainFunctions,
-            );
+            )..namedArguments = named;
           });
 
   Parser<ASTExpression> expressionGetterAccess() =>
@@ -879,6 +894,11 @@ class PythonGrammarDefinition extends PythonGrammarLexer {
             return list.whereType<ASTExpression>().toList();
           });
 
+  /// Python uses `=` (not `==`) to separate a keyword argument's name from its
+  /// value, e.g. `f(a=1)`.
+  @override
+  Parser namedArgumentSeparatorParser() => char('=') & char('=').not();
+
   Parser<ASTExpressionNullValue> expressionNoneValue() =>
       (noneToken()).map((v) => ASTExpressionNullValue());
 
@@ -902,14 +922,21 @@ class PythonGrammarDefinition extends PythonGrammarLexer {
               char('.').trimHidden() &
               identifier() &
               char('(').trimHidden() &
-              ref0(expressionSequence).optional() &
+              ref0(callArguments).optional() &
               char(')').trimHidden() &
               expressionChainFunctionInvocation().star())
           .map((v) {
             var variable = v[0];
             var expression = v[2];
             var fName = v[5];
-            var args = (v[7] as List<ASTExpression>?) ?? <ASTExpression>[];
+            var argsRec =
+                v[7]
+                    as ({
+                      List<ASTExpression> positional,
+                      Map<String, ASTExpression>? named,
+                    })?;
+            var args = argsRec?.positional ?? <ASTExpression>[];
+            var named = argsRec?.named;
             var chainFunctions = (v[9] as List)
                 .whereType<ASTExpressionChainFunctionInvocation>()
                 .toList();
@@ -919,7 +946,7 @@ class PythonGrammarDefinition extends PythonGrammarLexer {
               fName,
               args,
               chainFunctions,
-            );
+            )..namedArguments = named;
           });
 
   Parser<ASTExpressionChainFunctionInvocation>
@@ -927,12 +954,20 @@ class PythonGrammarDefinition extends PythonGrammarLexer {
       (char('.').trimHidden() &
               identifier() &
               char('(').trimHidden() &
-              ref0(expressionSequence).optional() &
+              ref0(callArguments).optional() &
               char(')').trimHidden())
           .map((v) {
             var fName = v[1];
-            var args = (v[3] as List<ASTExpression>?) ?? <ASTExpression>[];
-            return ASTExpressionChainFunctionInvocation(fName, args);
+            var argsRec =
+                v[3]
+                    as ({
+                      List<ASTExpression> positional,
+                      Map<String, ASTExpression>? named,
+                    })?;
+            var args = argsRec?.positional ?? <ASTExpression>[];
+            var named = argsRec?.named;
+            return ASTExpressionChainFunctionInvocation(fName, args)
+              ..namedArguments = named;
           });
 
   Parser<ASTExpressionListLiteral> expressionListLiteral() =>
@@ -1101,18 +1136,20 @@ class PythonGrammarDefinition extends PythonGrammarLexer {
             return params.whereType<ASTFunctionParameterDeclaration>().toList();
           });
 
-  /// `name` or `name: type` (optionally with a `= default`, which is ignored).
+  /// `name` or `name: type`, optionally with a `= default` value (e.g.
+  /// `a=5` / `a: int = 5`).
   Parser<ASTFunctionParameterDeclaration> parameterDeclaration() =>
       (identifier().trimHidden() &
               (char(':').trimHidden() & ref0(type)).optional() &
-              (char('=').trimHidden() & ref0(expression)).optional())
+              parameterDefaultValue().optional())
           .map((v) {
             var name = v[0] as String;
             var annOpt = v[1] as List?;
             var type = annOpt != null
                 ? annOpt[1] as ASTType
                 : ASTTypeDynamic.instance;
-            return ASTFunctionParameterDeclaration(type, name, -1, false);
+            return ASTFunctionParameterDeclaration(type, name, -1, false)
+              ..defaultValue = v[2] as ASTExpression?;
           });
 
   // ---------------------------------------------------------------------------

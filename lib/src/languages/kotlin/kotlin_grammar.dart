@@ -436,9 +436,11 @@ class KotlinGrammarDefinition extends KotlinGrammarLexer {
       ((valToken() | varToken()).trimHidden().optional() &
               identifier().trimHidden() &
               char(':').trimHidden() &
-              type())
+              type() &
+              parameterDefaultValue().optional())
           .map((v) {
-            return ASTConstructorParameterDeclaration(v[3], v[1], -1, false);
+            return ASTConstructorParameterDeclaration(v[3], v[1], -1, false)
+              ..defaultValue = v[4] as ASTExpression?;
           });
 
   Parser<ASTFunctionDeclaration> classFunctionDeclaration() =>
@@ -760,6 +762,7 @@ class KotlinGrammarDefinition extends KotlinGrammarLexer {
   Parser<ParsedString> parseExpressionInString() =>
       expression().map((e) => ParsedString.expression(e));
 
+  @override
   Parser<ASTExpression> expression() =>
       (ref0(ifExpression) | ref0(expressionOperationChain))
           .cast<ASTExpression>();
@@ -899,14 +902,20 @@ class KotlinGrammarDefinition extends KotlinGrammarLexer {
               char('.') &
               identifier() &
               char('(').trimHidden() &
-              ref0(expressionSequence).optional() &
+              ref0(callArguments).optional() &
               char(')').trimHidden() &
               expressionChainFunctionInvocation().star())
           .map((v) {
             var expression = v[0] as ASTExpression;
             var name = v[2] as String;
-            var args = v[4] as List<ASTExpression>?;
-            args ??= <ASTExpression>[];
+            var argsRec =
+                v[4]
+                    as ({
+                      List<ASTExpression> positional,
+                      Map<String, ASTExpression>? named,
+                    })?;
+            var args = argsRec?.positional ?? <ASTExpression>[];
+            var named = argsRec?.named;
             var chainFunctions = (v[6] as List)
                 .whereType<ASTExpressionChainFunctionInvocation>()
                 .toList();
@@ -916,7 +925,7 @@ class KotlinGrammarDefinition extends KotlinGrammarLexer {
               name,
               args,
               chainFunctions,
-            );
+            )..namedArguments = named;
           });
 
   Parser<ASTExpressionFunctionInvocation> expressionFunctionInvocation() =>
@@ -924,7 +933,7 @@ class KotlinGrammarDefinition extends KotlinGrammarLexer {
               identifier() &
               typeArguments().optional() &
               char('(').trimHidden() &
-              ref0(expressionSequence).optional() &
+              ref0(callArguments).optional() &
               char(')').trimHidden() &
               expressionChainFunctionInvocation().star())
           .map((v) {
@@ -932,8 +941,14 @@ class KotlinGrammarDefinition extends KotlinGrammarLexer {
             var obj = objOpt != null ? objOpt[0] as String : null;
             var name = normalizeFunctionName(v[1] as String);
             // v[2]: optional generic type arguments (`<Int>`), discarded.
-            var args = v[4] as List<ASTExpression>?;
-            args ??= <ASTExpression>[];
+            var argsRec =
+                v[4]
+                    as ({
+                      List<ASTExpression> positional,
+                      Map<String, ASTExpression>? named,
+                    })?;
+            var args = argsRec?.positional ?? <ASTExpression>[];
+            var named = argsRec?.named;
             var chainFunctions = (v[6] as List)
                 .whereType<ASTExpressionChainFunctionInvocation>()
                 .toList();
@@ -945,13 +960,13 @@ class KotlinGrammarDefinition extends KotlinGrammarLexer {
                 name,
                 args,
                 chainFunctions,
-              );
+              )..namedArguments = named;
             } else {
               return ASTExpressionLocalFunctionInvocation(
                 name,
                 args,
                 chainFunctions,
-              );
+              )..namedArguments = named;
             }
           });
 
@@ -983,13 +998,20 @@ class KotlinGrammarDefinition extends KotlinGrammarLexer {
       (char('.').trimHidden() &
               identifier() &
               char('(').trimHidden() &
-              ref0(expressionSequence).optional() &
+              ref0(callArguments).optional() &
               char(')').trimHidden())
           .map((v) {
             var fName = v[1];
-            var args = v[3];
-            args ??= <ASTExpression>[];
-            return ASTExpressionChainFunctionInvocation(fName, args);
+            var argsRec =
+                v[3]
+                    as ({
+                      List<ASTExpression> positional,
+                      Map<String, ASTExpression>? named,
+                    })?;
+            var args = argsRec?.positional ?? <ASTExpression>[];
+            var named = argsRec?.named;
+            return ASTExpressionChainFunctionInvocation(fName, args)
+              ..namedArguments = named;
           });
 
   Parser<List<ASTExpression>> expressionSequence() =>
@@ -999,6 +1021,11 @@ class KotlinGrammarDefinition extends KotlinGrammarLexer {
             var expressions = list.whereType<ASTExpression>().toList();
             return expressions;
           });
+
+  /// Kotlin uses `=` (not `==`) to separate a named argument's name from its
+  /// value, e.g. `f(a = 1)`.
+  @override
+  Parser namedArgumentSeparatorParser() => char('=') & char('=').not();
 
   Parser<ASTExpressionNullValue> expressionNullValue() =>
       (nullToken()).map((v) {
@@ -1030,15 +1057,21 @@ class KotlinGrammarDefinition extends KotlinGrammarLexer {
               char('.').trimHidden() &
               identifier() &
               char('(').trimHidden() &
-              ref0(expressionSequence).optional() &
+              ref0(callArguments).optional() &
               char(')').trimHidden() &
               expressionChainFunctionInvocation().star())
           .map((v) {
             var variable = v[0];
             var expression = v[2];
             var fName = v[5];
-            var args = v[7];
-            args ??= <ASTExpression>[];
+            var argsRec =
+                v[7]
+                    as ({
+                      List<ASTExpression> positional,
+                      Map<String, ASTExpression>? named,
+                    })?;
+            var args = argsRec?.positional ?? <ASTExpression>[];
+            var named = argsRec?.named;
             var chainFunctions = (v[9] as List)
                 .whereType<ASTExpressionChainFunctionInvocation>()
                 .toList();
@@ -1049,7 +1082,7 @@ class KotlinGrammarDefinition extends KotlinGrammarLexer {
               fName,
               args,
               chainFunctions,
-            );
+            )..namedArguments = named;
           });
 
   Parser<ASTExpressionListLiteral> expressionListLiteral() =>
@@ -1205,9 +1238,14 @@ class KotlinGrammarDefinition extends KotlinGrammarLexer {
           });
 
   Parser<ASTFunctionParameterDeclaration> parameterDeclaration() =>
-      (identifier().trimHidden() & char(':').trimHidden() & type()).map((v) {
-        return ASTFunctionParameterDeclaration(v[2], v[0], -1, false);
-      });
+      (identifier().trimHidden() &
+              char(':').trimHidden() &
+              type() &
+              parameterDefaultValue().optional())
+          .map((v) {
+            return ASTFunctionParameterDeclaration(v[2], v[0], -1, false)
+              ..defaultValue = v[3] as ASTExpression?;
+          });
 
   /// Kotlin lambda used as an expression (a closure): `{ x -> x * 2 }`,
   /// `{ x: Int, y: Int -> x + y }`, `{ 42 }` (no parameters). The last

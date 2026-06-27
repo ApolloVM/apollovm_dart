@@ -373,7 +373,7 @@ class DartGrammarDefinition extends DartGrammarLexer {
   Parser<ASTConstructorParametersDeclaration>
   constructorParametersDeclaration() =>
       (constructorEmptyParametersDeclaration() |
-              constructorPositionalParametersDeclaration())
+              constructorFullParametersDeclaration())
           .cast<ASTConstructorParametersDeclaration>();
 
   Parser<ASTConstructorParametersDeclaration>
@@ -381,11 +381,74 @@ class DartGrammarDefinition extends DartGrammarLexer {
     return ASTConstructorParametersDeclaration(null, null, null);
   });
 
+  /// Parses a full constructor parameters declaration: optional positional
+  /// parameters, optionally followed by a trailing `{named}` or `[optional]`
+  /// group — e.g. `(this.x, this.y)`, `({this.x, this.y})`, `(int x, {int y})`.
   Parser<ASTConstructorParametersDeclaration>
-  constructorPositionalParametersDeclaration() =>
-      (char('(') & constructorParametersList() & char(')')).map((v) {
-        return ASTConstructorParametersDeclaration(v[1], null, null);
-      });
+  constructorFullParametersDeclaration() =>
+      (char('(').trimHidden() &
+              constructorParametersList().optional() &
+              (char(',').trimHidden().optional() & constructorParameterGroup())
+                  .optional() &
+              char(',').trimHidden().optional() &
+              char(')').trimHidden())
+          .map((v) {
+            var positional = v[1] as List<ASTConstructorParameterDeclaration>?;
+            var groupOpt = v[2] as List?;
+
+            List<ASTConstructorParameterDeclaration>? named;
+            List<ASTConstructorParameterDeclaration>? optional;
+
+            if (groupOpt != null) {
+              var group =
+                  groupOpt[1]
+                      as ({
+                        bool isNamed,
+                        List<ASTConstructorParameterDeclaration> params,
+                      });
+              if (group.isNamed) {
+                named = group.params;
+              } else {
+                optional = group.params;
+              }
+            }
+
+            return ASTConstructorParametersDeclaration(
+              positional,
+              optional,
+              named,
+            );
+          });
+
+  /// A trailing constructor parameter group: `{named}` or `[optional]`.
+  Parser<({bool isNamed, List<ASTConstructorParameterDeclaration> params})>
+  constructorParameterGroup() =>
+      (constructorNamedParameterGroup() | constructorOptionalParameterGroup())
+          .cast();
+
+  Parser<({bool isNamed, List<ASTConstructorParameterDeclaration> params})>
+  constructorNamedParameterGroup() =>
+      (char('{').trimHidden() &
+              constructorParametersList() &
+              char('}').trimHidden())
+          .map((v) {
+            return (
+              isNamed: true,
+              params: v[1] as List<ASTConstructorParameterDeclaration>,
+            );
+          });
+
+  Parser<({bool isNamed, List<ASTConstructorParameterDeclaration> params})>
+  constructorOptionalParameterGroup() =>
+      (char('[').trimHidden() &
+              constructorParametersList() &
+              char(']').trimHidden())
+          .map((v) {
+            return (
+              isNamed: false,
+              params: v[1] as List<ASTConstructorParameterDeclaration>,
+            );
+          });
 
   Parser<List<ASTConstructorParameterDeclaration>>
   constructorParametersList() =>
@@ -407,23 +470,29 @@ class DartGrammarDefinition extends DartGrammarLexer {
 
   Parser<ASTConstructorParameterDeclaration>
   constructorThisParameterDeclaration() =>
-      (thisToken().trim() & char('.') & identifier()).map((v) {
-        return ASTConstructorParameterDeclaration(
-          ASTTypeConstructorThis.instance,
-          v[2],
-          -1,
-          false,
-          thisParameter: true,
-        );
-      });
+      (thisToken().trim() &
+              char('.') &
+              identifier() &
+              parameterDefaultValue().optional())
+          .map((v) {
+            return ASTConstructorParameterDeclaration(
+              ASTTypeConstructorThis.instance,
+              v[2],
+              -1,
+              false,
+              thisParameter: true,
+            )..defaultValue = v[3] as ASTExpression?;
+          });
 
   Parser<ASTConstructorParameterDeclaration>
   constructorTypedParameterDeclaration() =>
       ((finalToken() | constToken()).trim().optional() &
               type().trim() &
-              identifier())
+              identifier() &
+              parameterDefaultValue().optional())
           .map((v) {
-            return ASTConstructorParameterDeclaration(v[1], v[2], -1, false);
+            return ASTConstructorParameterDeclaration(v[1], v[2], -1, false)
+              ..defaultValue = v[3] as ASTExpression?;
           });
 
   Parser<ASTFunctionDeclaration> classFunctionDeclaration() =>
@@ -936,6 +1005,7 @@ class DartGrammarDefinition extends DartGrammarLexer {
   Parser<ParsedString> parseExpressionInString() =>
       expression().map((e) => ParsedString.expression(e));
 
+  @override
   Parser<ASTExpression> expression() =>
       (ref0(expressionOperationChain) &
               (char('?').trimHidden() &
@@ -1064,14 +1134,20 @@ class DartGrammarDefinition extends DartGrammarLexer {
               char('.') &
               identifier() &
               char('(').trimHidden() &
-              ref0(expressionSequence).optional() &
+              ref0(callArguments).optional() &
               char(')').trimHidden() &
               expressionChainFunctionInvocation().star())
           .map((v) {
             var expression = v[0] as ASTExpression;
             var name = v[2] as String;
-            var args = v[4] as List<ASTExpression>?;
-            args ??= <ASTExpression>[];
+            var argsRec =
+                v[4]
+                    as ({
+                      List<ASTExpression> positional,
+                      Map<String, ASTExpression>? named,
+                    })?;
+            var args = argsRec?.positional ?? <ASTExpression>[];
+            var named = argsRec?.named;
             var chainFunctions = (v[6] as List)
                 .whereType<ASTExpressionChainFunctionInvocation>()
                 .toList();
@@ -1081,7 +1157,7 @@ class DartGrammarDefinition extends DartGrammarLexer {
               name,
               args,
               chainFunctions,
-            );
+            )..namedArguments = named;
           });
 
   Parser<ASTExpressionFunctionInvocation> expressionFunctionInvocation() =>
@@ -1093,7 +1169,7 @@ class DartGrammarDefinition extends DartGrammarLexer {
               identifier() &
               ref0(typeArguments).optional() &
               char('(').trimHidden() &
-              ref0(expressionSequence).optional() &
+              ref0(callArguments).optional() &
               char(')').trimHidden() &
               expressionChainFunctionInvocation().star())
           .map((v) {
@@ -1102,8 +1178,14 @@ class DartGrammarDefinition extends DartGrammarLexer {
             var name = v[2] as String;
             // v[3]: optional generic type arguments (`<int>`), discarded — the
             // constructor/function resolves by name.
-            var args = v[5] as List<ASTExpression>?;
-            args ??= <ASTExpression>[];
+            var argsRec =
+                v[5]
+                    as ({
+                      List<ASTExpression> positional,
+                      Map<String, ASTExpression>? named,
+                    })?;
+            var args = argsRec?.positional ?? <ASTExpression>[];
+            var named = argsRec?.named;
             var chainFunctions = (v[7] as List)
                 .whereType<ASTExpressionChainFunctionInvocation>()
                 .toList();
@@ -1115,13 +1197,13 @@ class DartGrammarDefinition extends DartGrammarLexer {
                 name,
                 args,
                 chainFunctions,
-              );
+              )..namedArguments = named;
             } else {
               return ASTExpressionLocalFunctionInvocation(
                 name,
                 args,
                 chainFunctions,
-              );
+              )..namedArguments = named;
             }
           });
 
@@ -1186,15 +1268,21 @@ class DartGrammarDefinition extends DartGrammarLexer {
               char('.').trimHidden() &
               identifier() &
               char('(').trimHidden() &
-              ref0(expressionSequence).optional() &
+              ref0(callArguments).optional() &
               char(')').trimHidden() &
               expressionChainFunctionInvocation().star())
           .map((v) {
             var variable = v[0];
             var expression = v[2];
             var fName = v[5];
-            var args = v[7];
-            args ??= <ASTExpression>[];
+            var argsRec =
+                v[7]
+                    as ({
+                      List<ASTExpression> positional,
+                      Map<String, ASTExpression>? named,
+                    })?;
+            var args = argsRec?.positional ?? <ASTExpression>[];
+            var named = argsRec?.named;
             var chainFunctions = (v[9] as List)
                 .whereType<ASTExpressionChainFunctionInvocation>()
                 .toList();
@@ -1205,7 +1293,7 @@ class DartGrammarDefinition extends DartGrammarLexer {
               fName,
               args,
               chainFunctions,
-            );
+            )..namedArguments = named;
           });
 
   Parser<ASTExpressionChainFunctionInvocation>
@@ -1213,13 +1301,20 @@ class DartGrammarDefinition extends DartGrammarLexer {
       (char('.').trimHidden() &
               identifier() &
               char('(').trimHidden() &
-              ref0(expressionSequence).optional() &
+              ref0(callArguments).optional() &
               char(')').trimHidden())
           .map((v) {
             var fName = v[1];
-            var args = v[3];
-            args ??= <ASTExpression>[];
-            return ASTExpressionChainFunctionInvocation(fName, args);
+            var argsRec =
+                v[3]
+                    as ({
+                      List<ASTExpression> positional,
+                      Map<String, ASTExpression>? named,
+                    })?;
+            var args = argsRec?.positional ?? <ASTExpression>[];
+            var named = argsRec?.named;
+            return ASTExpressionChainFunctionInvocation(fName, args)
+              ..namedArguments = named;
           });
 
   Parser<ASTExpressionListLiteral> expressionListEmptyLiteral() =>
@@ -1404,7 +1499,7 @@ class DartGrammarDefinition extends DartGrammarLexer {
 
   Parser<ASTFunctionParametersDeclaration> functionParametersDeclaration() =>
       (functionEmptyParametersDeclaration() |
-              functionPositionalParametersDeclaration())
+              functionFullParametersDeclaration())
           .cast<ASTFunctionParametersDeclaration>();
 
   Parser<ASTFunctionParametersDeclaration>
@@ -1412,10 +1507,69 @@ class DartGrammarDefinition extends DartGrammarLexer {
     return ASTFunctionParametersDeclaration(null, null, null);
   });
 
+  /// Parses a full parameters declaration: optional positional parameters,
+  /// optionally followed by a trailing `{named}` or `[optional]` group, e.g.
+  /// `(int a, int b)`, `({int a, int b})`, `(int a, {int b})`, `(int a, [int b])`.
   Parser<ASTFunctionParametersDeclaration>
-  functionPositionalParametersDeclaration() =>
-      (char('(') & parametersList() & char(')')).map((v) {
-        return ASTFunctionParametersDeclaration(v[1], null, null);
+  functionFullParametersDeclaration() =>
+      (char('(').trimHidden() &
+              parametersList().optional() &
+              (char(',').trimHidden().optional() & parameterGroup())
+                  .optional() &
+              char(',').trimHidden().optional() &
+              char(')').trimHidden())
+          .map((v) {
+            var positional = v[1] as List<ASTFunctionParameterDeclaration>?;
+            var groupOpt = v[2] as List?;
+
+            List<ASTFunctionParameterDeclaration>? named;
+            List<ASTFunctionParameterDeclaration>? optional;
+
+            if (groupOpt != null) {
+              var group =
+                  groupOpt[1]
+                      as ({
+                        bool isNamed,
+                        List<ASTFunctionParameterDeclaration> params,
+                      });
+              if (group.isNamed) {
+                named = group.params;
+              } else {
+                optional = group.params;
+              }
+            }
+
+            return ASTFunctionParametersDeclaration(
+              positional,
+              optional,
+              named,
+            );
+          });
+
+  /// A trailing parameter group: `{named}` or `[optional]`.
+  Parser<({bool isNamed, List<ASTFunctionParameterDeclaration> params})>
+  parameterGroup() => (namedParameterGroup() | optionalParameterGroup()).cast();
+
+  Parser<({bool isNamed, List<ASTFunctionParameterDeclaration> params})>
+  namedParameterGroup() =>
+      (char('{').trimHidden() & parametersList() & char('}').trimHidden()).map((
+        v,
+      ) {
+        return (
+          isNamed: true,
+          params: v[1] as List<ASTFunctionParameterDeclaration>,
+        );
+      });
+
+  Parser<({bool isNamed, List<ASTFunctionParameterDeclaration> params})>
+  optionalParameterGroup() =>
+      (char('[').trimHidden() & parametersList() & char(']').trimHidden()).map((
+        v,
+      ) {
+        return (
+          isNamed: false,
+          params: v[1] as List<ASTFunctionParameterDeclaration>,
+        );
       });
 
   Parser<List<ASTFunctionParameterDeclaration>> parametersList() =>
@@ -1430,7 +1584,8 @@ class DartGrammarDefinition extends DartGrammarLexer {
   Parser<ASTFunctionParameterDeclaration> parameterDeclaration() =>
       ((finalToken() | constToken()).trim().optional() &
               type().trim() &
-              identifier())
+              identifier() &
+              parameterDefaultValue().optional())
           .map((v) {
             return ASTFunctionParameterDeclaration(
               v[1],
@@ -1438,7 +1593,7 @@ class DartGrammarDefinition extends DartGrammarLexer {
               -1,
               false,
               unmodifiable: v[0] != null,
-            );
+            )..defaultValue = v[3] as ASTExpression?;
           });
 
   Parser<ASTType> type() =>
