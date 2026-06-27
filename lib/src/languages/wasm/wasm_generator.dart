@@ -172,6 +172,22 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       types[field.name] = field.type;
       offset += _elemSize(field.type);
     }
+    // An enum entry is a `const` instance carrying two synthetic fields seeded
+    // at build time: `index` (the ordinal, an `int` -> i64/8B) and `name` (a
+    // `String` -> i32 ptr/4B). Append them after the declared fields so an entry
+    // instance has slots for them (loaded through the regular field-load path).
+    if (clazz is ASTClassEnum) {
+      if (!offsets.containsKey('index')) {
+        offsets['index'] = offset;
+        types['index'] = _astTypeInt64;
+        offset += _elemSize(_astTypeInt64);
+      }
+      if (!offsets.containsKey('name')) {
+        offsets['name'] = offset;
+        types['name'] = _astTypeString;
+        offset += _elemSize(_astTypeString);
+      }
+    }
     return WasmClassLayout(clazz.name, offsets, types, offset);
   }
 
@@ -954,26 +970,52 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
   }) {
     out ??= newOutput();
 
-    // One mutable i32 global: the heap pointer `$hp`, initialized to heapStart.
-    var entry = BytesOutput(
-      data: [
+    // Global 0 (mutable i32): the heap pointer `$hp`, initialized to heapStart.
+    var entries = <BytesOutput>[
+      BytesOutput(
+        data: [
+          BytesOutput(
+            data: WasmType.i32Type.value,
+            description: "Global type(i32)",
+          ),
+          BytesOutput(data: Wasm.globalMutable, description: "Mutable"),
+          BytesOutput(
+            data: [...Wasm32.i32Const(module.heapStart), Wasm.end],
+            description: "Init (i32.const ${module.heapStart})",
+          ),
+        ],
+        description: "Global \$hp",
+      ),
+    ];
+
+    // Globals 1..N (mutable i32, init 0): one per enum entry, caching its
+    // lazily-built `const` instance pointer (0 = not yet built).
+    for (var i = 0; i < module.enumEntryGlobalCount; ++i) {
+      entries.add(
         BytesOutput(
-          data: WasmType.i32Type.value,
-          description: "Global type(i32)",
+          data: [
+            BytesOutput(
+              data: WasmType.i32Type.value,
+              description: "Global type(i32)",
+            ),
+            BytesOutput(data: Wasm.globalMutable, description: "Mutable"),
+            BytesOutput(
+              data: [...Wasm32.i32Const(0), Wasm.end],
+              description: "Init (i32.const 0)",
+            ),
+          ],
+          description: "Enum entry cache global #${i + 1}",
         ),
-        BytesOutput(data: Wasm.globalMutable, description: "Mutable"),
-        BytesOutput(
-          data: [...Wasm32.i32Const(module.heapStart), Wasm.end],
-          description: "Init (i32.const ${module.heapStart})",
-        ),
-      ],
-      description: "Global \$hp",
-    );
+      );
+    }
 
     out.writeByte(Wasm.sectionGlobal, description: "Section Global ID");
     out.writeBytesLeb128Block([
-      BytesOutput(data: Leb128.encodeUnsigned(1), description: "Globals count"),
-      entry,
+      BytesOutput(
+        data: Leb128.encodeUnsigned(entries.length),
+        description: "Globals count",
+      ),
+      ...entries,
     ], description: "Globals");
 
     return out;
@@ -4133,6 +4175,21 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
 
     var name = expression.name;
     var varName = expression.variable.name;
+
+    // `EnumName.entry`: the receiver names an enum class (not a local variable),
+    // so resolve it to the entry's cached `const` instance pointer (built and
+    // cached lazily on first access). The subsequent `.index`/`.name`/declared
+    // field load and method dispatch then flow through the normal instance
+    // machinery, since the result has the enum's class layout.
+    var enumPtr = _tryGenerateEnumEntryAccess(
+      expression,
+      varName,
+      name,
+      out: out,
+      context: context,
+    );
+    if (enumPtr != null) return enumPtr;
+
     var localVar = _getLocalVariable(context, varName);
 
     var listType = localVar.type;
@@ -4220,6 +4277,191 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     throw UnimplementedError(
       "Wasm getter `.$name` on ${localVar.type} is not supported yet.",
     );
+  }
+
+  /// If the receiver [varName] of `EnumName.member` names an `ASTClassEnum`,
+  /// emits the value of that static access and returns [out]; otherwise returns
+  /// `null` (the caller falls back to the local-variable getter path).
+  ///
+  /// - `EnumName.entry` -> the entry's cached `const` instance pointer (i32),
+  ///   built lazily by a synthesized per-entry init function.
+  /// - `EnumName.values` -> a freshly materialized list of all entry pointers.
+  BytesOutput? _tryGenerateEnumEntryAccess(
+    ASTExpressionObjectGetterAccess expression,
+    String varName,
+    String name, {
+    required BytesOutput out,
+    required WasmContext context,
+  }) {
+    var node = expression.getNodeIdentifier(varName);
+    if (node is! ASTClassEnum) return null;
+    var enumClass = node;
+    var module = context.module;
+    if (module == null) return null;
+
+    if (name == 'values') {
+      return _generateEnumValues(enumClass, out: out, context: context);
+    }
+
+    var entryIndex = enumClass.entries.indexWhere((e) => e.name == name);
+    if (entryIndex < 0) return null; // a static member, not an enum entry
+
+    var initIndex = _ensureEnumEntryInitFunction(enumClass, entryIndex, module);
+    out.write(
+      Wasm.call(initIndex),
+      description: "[OP] enum `${enumClass.name}.$name` instance",
+    );
+    context.stackPush(enumClass.type, "enum `${enumClass.name}.$name`");
+    return out;
+  }
+
+  /// Emits `EnumName.values`: a fresh list (the regular list layout
+  /// `[len][cap][dataPtr]`) of the i32 entry-instance pointers, so
+  /// `for (var e in EnumName.values)` works through the normal list for-each.
+  BytesOutput _generateEnumValues(
+    ASTClassEnum enumClass, {
+    required BytesOutput out,
+    required WasmContext context,
+  }) {
+    var module = context.module!;
+    module.requiresMemory = true;
+    module.requiresHeapGlobal = true;
+    module.ensureAllocFunction();
+
+    var n = enumClass.entries.length;
+    const elemSize = 4; // each element is an i32 instance pointer
+
+    var hdrLocal = context.scratchLocal(_astTypeString, 30);
+    var dataLocal = context.scratchLocal(_astTypeString, 31);
+
+    // header = alloc(12) ; data = alloc(n*4)
+    out.write(Wasm32.i32Const(12));
+    _emitInlineAlloc(out, context);
+    out.write(Wasm.localSet(hdrLocal));
+    out.write(Wasm32.i32Const(n * elemSize));
+    _emitInlineAlloc(out, context);
+    out.write(Wasm.localSet(dataLocal));
+
+    // header[0]=length ; header[4]=capacity ; header[8]=dataPtr
+    out.write(Wasm.localGet(hdrLocal));
+    out.write(Wasm32.i32Const(n));
+    out.write(Wasm32.i32Store(2, 0));
+    out.write(Wasm.localGet(hdrLocal));
+    out.write(Wasm32.i32Const(n));
+    out.write(Wasm32.i32Store(2, 4));
+    out.write(Wasm.localGet(hdrLocal));
+    out.write(Wasm.localGet(dataLocal));
+    out.write(Wasm32.i32Store(2, 8));
+
+    // data[i] = <entry i instance pointer>
+    for (var i = 0; i < n; ++i) {
+      var initIndex = _ensureEnumEntryInitFunction(enumClass, i, module);
+      out.write(Wasm.localGet(dataLocal));
+      out.write(Wasm.call(initIndex));
+      out.write(Wasm32.i32Store(2, i * elemSize));
+    }
+
+    out.write(Wasm.localGet(hdrLocal));
+    context.stackPush(
+      ASTTypeArray(enumClass.type),
+      "enum `${enumClass.name}.values`",
+    );
+    return out;
+  }
+
+  /// Registers (once) a synthesized `() -> i32` function that lazily builds and
+  /// caches the `const` instance for enum [enumClass]'s entry at [entryIndex],
+  /// returning the Wasm function index to `call`.
+  ///
+  /// The instance is built by invoking the enum's constructor (the rich entry's
+  /// arguments, or the implicit zero-arg constructor for a simple entry), then
+  /// seeding the synthetic `index` (ordinal i64) and `name` (interned String
+  /// ptr) slots, and caching the pointer in a per-entry i32 global so repeated
+  /// access (and `==` identity) sees the one singleton.
+  int _ensureEnumEntryInitFunction(
+    ASTClassEnum enumClass,
+    int entryIndex,
+    WasmModuleContext module,
+  ) {
+    var entry = enumClass.entries[entryIndex];
+    var synthName = '__enum_${enumClass.name}_${entry.name}';
+    var existing = module.synthFunctionIndex(synthName);
+    if (existing != null) return existing;
+
+    module.requiresMemory = true;
+    module.requiresHeapGlobal = true;
+    module.ensureAllocFunction();
+
+    var layout = module.classLayouts[enumClass.name]!;
+    var globalIndex = module.enumEntryGlobalIndex(synthName);
+    var namePtr = module.internStringLiteral(entry.name);
+
+    // Build the body with a fresh context so the constructor invocation reuses
+    // the full argument-evaluation / type-conversion machinery.
+    var context = WasmContext(module: module);
+    var instLocal = context.scratchLocal(_astTypeString, 0); // i32 ptr
+
+    var body = newOutput();
+
+    // if (global == 0) { build + cache }
+    body.write(Wasm.globalGet(globalIndex));
+    body.writeByte(Wasm32.i32EqualsToZero);
+    body.write(Wasm.ifInstruction(WasmType.voidType));
+
+    // instance = EnumName(<entry args>)  (the constructor allocates + inits).
+    var args = entry.arguments ?? const <ASTExpression>[];
+    var invocation = ASTExpressionLocalFunctionInvocation(
+      enumClass.name,
+      args.toList(),
+    );
+    generateASTExpressionLocalFunctionInvocation(
+      invocation,
+      out: body,
+      context: context,
+    );
+    context.stackDrop(); // consumed by the local.set below
+    body.write(Wasm.localSet(instLocal));
+
+    // instance.index = ordinal (i64)
+    body.write(Wasm.localGet(instLocal));
+    body.write(Wasm64.i64Const(entryIndex));
+    _emitElemStore(body, _astTypeInt64, layout.offsets['index']!);
+
+    // instance.name = interned String ptr (i32)
+    body.write(Wasm.localGet(instLocal));
+    body.write(Wasm32.i32Const(namePtr));
+    _emitElemStore(body, _astTypeString, layout.offsets['name']!);
+
+    // global = instance
+    body.write(Wasm.localGet(instLocal));
+    body.write(Wasm.globalSet(globalIndex));
+    body.writeByte(Wasm.end); // if
+
+    // return global
+    body.write(Wasm.globalGet(globalIndex));
+
+    // Function body: local declarations (scratch locals) + ops + end.
+    var outBody = newOutput();
+    var scratchTypes = context.scratchLocalTypes;
+    outBody.write(
+      Leb128.encodeUnsigned(scratchTypes.length),
+      description: "Local groups (enum init `$synthName`)",
+    );
+    for (var astType in scratchTypes) {
+      outBody.write(Leb128.encodeUnsigned(1), description: "Scratch var count");
+      outBody.writeByte(
+        astType.wasmCode,
+        description: "Scratch (${astType.wasmType.name})",
+      );
+    }
+    outBody.writeBytes(body);
+    outBody.writeByte(Wasm.end, description: "Enum init body end");
+
+    module.addSynthFunction(
+      WasmSynthFunction(synthName, const [], const [WasmType.i32Type], outBody),
+    );
+
+    return module.synthFunctionIndex(synthName)!;
   }
 
   /// Allocates a heap cell ("box") for each captured variable of [f] so it can
@@ -8846,6 +9088,35 @@ class WasmModuleContext {
 
   final List<WasmSynthFunction> synthFunctions = [];
   final Set<String> _synthNames = {};
+
+  /// Registers a pre-built synthesized function (e.g. an enum entry initializer).
+  void addSynthFunction(WasmSynthFunction f) {
+    if (_synthNames.contains(f.name)) return;
+    synthFunctions.add(f);
+    _synthNames.add(f.name);
+  }
+
+  // --- Enum entry caches (one mutable i32 global per enum entry) ---
+
+  /// Per-entry global keys (in registration order). Each holds the i32 pointer
+  /// of a cached enum entry `const` instance (0 = not yet built). Placed after
+  /// the heap-pointer global `$hp` (index 0), so a key's global index is
+  /// `1 + its position` here.
+  final List<String> _enumEntryGlobals = [];
+
+  /// Number of enum-entry cache globals (emitted after `$hp`).
+  int get enumEntryGlobalCount => _enumEntryGlobals.length;
+
+  /// Registers (or reuses) the cache global for enum-entry [key], returning its
+  /// Wasm global index.
+  int enumEntryGlobalIndex(String key) {
+    var i = _enumEntryGlobals.indexOf(key);
+    if (i >= 0) return 1 + i;
+    _enumEntryGlobals.add(key);
+    requiresMemory = true;
+    requiresHeapGlobal = true; // ensures the Global section is emitted
+    return _enumEntryGlobals.length; // 1 + (length-1)
+  }
 
   /// Ensures the exported `__alloc(i32 size) -> i32 ptr` bump-allocator function
   /// exists. Exported so the host can allocate strings in module memory.
