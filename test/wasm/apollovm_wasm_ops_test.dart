@@ -409,5 +409,33 @@ void main() {
         },
       );
     });
+
+    // GAP 5: a `switch` whose scrutinee is a genuinely boxed `dynamic`/`Object`
+    // value (e.g. a `List<Object>` element, or a `dynamic` parameter marshalled
+    // by the host). The compiler currently throws "switch on dynamic is not
+    // supported (int only)". A robust fix must narrow the boxed scrutinee to its
+    // i64 int payload AND agree with how the value is boxed (host-marshalled
+    // params vs in-module boxes) — deferred.
+    test('switch on a boxed dynamic scrutinee', () async {
+      await _testWasm(
+        r'''
+        int run(List<Object> args) {
+          switch (args[0]) {
+            case 1: return 10;
+            case 2: return 20;
+            default: return 99;
+          }
+        }
+        ''',
+        'run',
+        {
+          [
+            [1],
+          ]: 10,
+        },
+      );
+    }, skip: 'BUG/GAP 5: Wasm `switch` on a boxed dynamic/Object scrutinee is '
+        'not yet supported (needs payload narrowing consistent with the box '
+        'representation).');
   });
 }

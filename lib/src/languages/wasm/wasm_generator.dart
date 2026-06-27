@@ -246,17 +246,10 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
         if (fn.modifiers.isStatic) {
           // Static method: no `this`. Synthesized as an exported module function
           // under the qualified `Class.method` name, generated like a top-level
-          // function (see [_WasmStaticMethodFunction]).
-          var staticParams = fn.parameters.allParameters
-              .map(
-                (p) => ASTFunctionParameterDeclaration(
-                  p.type,
-                  p.name,
-                  p.index,
-                  p.optional,
-                ),
-              )
-              .toList();
+          // function (see [_WasmStaticMethodFunction]). The declared parameters
+          // are reused directly (as the instance-method path does) so their
+          // default values are preserved for default-argument resolution.
+          var staticParams = fn.parameters.allParameters.toList();
           result.add(
             _WasmStaticMethodFunction(
               clazz,
@@ -1112,10 +1105,14 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       return _generateClassConstructorFunction(f, module: module);
     } else if (f is _WasmMethodFunction) {
       return _generateClassMethodFunction(f, module: module);
+    } else if (f is _WasmStaticMethodFunction) {
+      // A static method has no `this` (params remain locals 0..n-1), but it
+      // still belongs to a class: set `classLayout` so an unqualified sibling
+      // call can resolve against the enclosing class's static methods.
+      var context = WasmContext(module: module);
+      context.classLayout = module.classLayouts[f.clazz.name];
+      return generateASTFunctionDeclaration(f, context: context, module: module);
     }
-    // A `_WasmStaticMethodFunction` has no `this`; it is generated with a fresh
-    // context (no `thisLocalIndex`/`classLayout`), exactly like a top-level
-    // function — params become locals 0..n-1.
     return generateASTFunctionDeclaration(f, module: module);
   }
 
@@ -2106,23 +2103,37 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
         );
       }
 
-      // Only static methods are callable without a receiver. A receiver-less
-      // call that matches a non-static method (e.g. a `static` method calling an
-      // instance sibling, where no `this` is in scope) needs an instance.
-      var instanceMethod = context.module?.instanceMethodQualifiedName(
-        name,
-        argsCount,
-      );
-      if (instanceMethod != null) {
-        throw UnsupportedError(
-          "Can't call non-static method '$instanceMethod' without an instance.",
+      // A bare-name call to a sibling STATIC method of the enclosing class.
+      // Static methods are registered under their qualified `Class.method`
+      // name, so they miss the top-level bare-name lookup above; resolve them
+      // here and fall through to the normal call emission below (no receiver).
+      if (layout != null) {
+        calleeIndex = context.module?.staticMethodIndexForCall(
+          layout.className,
+          name,
+          argsCount,
         );
       }
 
-      throw StateError(
-        "Can't resolve local function `$name` with $argsCount argument(s) "
-        "in the Wasm function index table.",
-      );
+      if (calleeIndex == null) {
+        // Only static methods are callable without a receiver. A receiver-less
+        // call that matches a non-static method (e.g. a `static` method calling
+        // an instance sibling, where no `this` is in scope) needs an instance.
+        var instanceMethod = context.module?.instanceMethodQualifiedName(
+          name,
+          argsCount,
+        );
+        if (instanceMethod != null) {
+          throw UnsupportedError(
+            "Can't call non-static method '$instanceMethod' without an instance.",
+          );
+        }
+
+        throw StateError(
+          "Can't resolve local function `$name` with $argsCount argument(s) "
+          "in the Wasm function index table.",
+        );
+      }
     }
 
     var callee = context.functionByIndex(calleeIndex)!;
@@ -3089,17 +3100,27 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     var stackType1 = stack1.type;
     var stackType2 = stack2.type;
 
-    // String `+` -> concatenation (both operands must already be String).
+    // String `+` -> concatenation. Each operand is coerced to a String handle
+    // (a String is already a handle; int/double/bool route through the same
+    // host converters used by string interpolation), so `String + number`
+    // (from Java/Kotlin/C#/JS/TS, e.g. `"n=" + n`) works.
     if (expression.operator == ASTExpressionOperator.add &&
         (stackType1 is ASTTypeString || stackType2 is ASTTypeString)) {
-      if (stackType1 is! ASTTypeString || stackType2 is! ASTTypeString) {
-        throw UnimplementedError(
-          "Wasm string `+` with a non-String operand (number-to-string) is "
-          "not supported yet ($stackType1 + $stackType2).",
-        );
-      }
+      // The operands were tracked on the virtual stack during generation above;
+      // drop them and re-track as each is emitted then coerced, so the coercion
+      // helpers see the correct top-of-stack value (the conversion bytes must be
+      // interleaved between the two operand buffers).
+      context.stackDrop(); // operand 2 (stack2)
+      context.stackDrop(); // operand 1 (stack1)
+
       out.writeBytes(exp1Out);
+      context.stackPush(stackType1, "string `+` operand 1");
+      _emitToStringHandle(out, context, stackType1);
+
       out.writeBytes(exp2Out);
+      context.stackPush(stackType2, "string `+` operand 2");
+      _emitToStringHandle(out, context, stackType2);
+
       context.assertStackLength(stackLng2, "After push string operands");
       _emitStringConcat2(out, context);
       context.assertStackLength(stackLng0 + 1, "After string concat");
@@ -5844,6 +5865,15 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       final clauseVarTypes = <ASTType?>[];
       for (final c in s.catches) {
         var varType = c.exceptionType;
+        // A declared catch-all type (`Exception`/`Throwable`/`Error`/`Object`/
+        // `dynamic`, from Java/Kotlin/C# `catch (Exception e)` or Dart
+        // `on Exception catch (e)`) is not a representable Wasm value type and
+        // binds whatever was thrown. Resolve its bound variable like an untyped
+        // `catch (e)` (infer from the thrown value); the clause still matches
+        // every tag via [_catchClauseAcceptedTags].
+        if (varType != null && _excCatchAllTypeNames.contains(varType.name)) {
+          varType = null;
+        }
         if (varType == null && c.variableName != null) {
           final inferred = _inferTryThrownType(s.tryBlock);
           if (inferred != null) {
@@ -9243,6 +9273,34 @@ class WasmModuleContext {
     for (var i = 0; i < functions.length; ++i) {
       var f = functions[i];
       if (f is! _WasmMethodFunction ||
+          f.clazz.name != className ||
+          f.method.name != methodName) {
+        continue;
+      }
+      var size = f.method.parameters.size;
+      if (size < suppliedCount) continue;
+      if (bestSize == null || size < bestSize) {
+        bestSize = size;
+        bestIndex = importCount + i;
+      }
+    }
+    return bestIndex;
+  }
+
+  /// Like [methodIndexForCall] but for **static** methods (no receiver):
+  /// resolves a bare-name call to a sibling `static` method of [className].
+  /// Returns the smallest declared arity `>= suppliedCount` (so omitted
+  /// default-valued trailing parameters still resolve).
+  int? staticMethodIndexForCall(
+    String className,
+    String methodName,
+    int suppliedCount,
+  ) {
+    int? bestIndex;
+    int? bestSize;
+    for (var i = 0; i < functions.length; ++i) {
+      var f = functions[i];
+      if (f is! _WasmStaticMethodFunction ||
           f.clazz.name != className ||
           f.method.name != methodName) {
         continue;

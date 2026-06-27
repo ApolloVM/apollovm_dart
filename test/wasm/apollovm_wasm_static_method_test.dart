@@ -477,5 +477,58 @@ void main() {
         ['1', '2', '3', '4'],
       );
     });
+
+    // GAP 1: a static method calling a SIBLING static method by bare name (no
+    // `this.`/`Foo.` qualifier). Static methods are registered under their
+    // qualified `Class.method` name, so a bare-name call must resolve against
+    // the enclosing class's static methods.
+    test('unqualified sibling static call resolves', () async {
+      await _testStaticPrints(
+        r'''
+        class Foo {
+          static int dbl(int n) { return n * 2; }
+          static void run(int x) { print(dbl(x)); }
+        }
+        ''',
+        'Foo',
+        'run',
+        const [5],
+        ['10'],
+      );
+    });
+
+    // GAP 1: named arguments on a bare-name sibling static call (`h` is a real
+    // named parameter, so this is valid Dart).
+    test('named args on a bare-name sibling static call', () async {
+      await _testStaticPrints(
+        r'''
+        class Foo {
+          static int area(int w, {int h = 1}) { return w * h; }
+          static void run() { print(area(4, h: 3)); }
+        }
+        ''',
+        'Foo',
+        'run',
+        const [],
+        ['12'],
+      );
+    });
+
+    // GAP 1: omitted default on a bare-name sibling static call (`h` defaults
+    // to 3).
+    test('default param omitted on a bare-name sibling static call', () async {
+      await _testStaticPrints(
+        r'''
+        class Foo {
+          static int area(int w, [int h = 3]) { return w * h; }
+          static void run() { print(area(5)); }
+        }
+        ''',
+        'Foo',
+        'run',
+        const [],
+        ['15'],
+      );
+    });
   });
 }

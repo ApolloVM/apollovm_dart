@@ -300,6 +300,29 @@ int test(int x) {
         51,
       );
     });
+
+    // GAP 8: a catch clause with a declared catch-all exception TYPE
+    // (`Exception`/`Throwable`/`Error`/`Object`). The Wasm model carries a
+    // single thrown value, so a typed catch-all must be treated like an untyped
+    // `catch (e)` instead of failing with "Can't handle type: Exception".
+    test('typed catch with a catch-all type (on Exception)', () async {
+      await _check(
+        'typed-catchall',
+        r'''
+int test(int b) {
+  try {
+    if (b == 0) { throw 7; }
+    return b;
+  } on Exception catch (e) {
+    return -1;
+  }
+}
+''',
+        'test',
+        [0],
+        -1,
+      );
+    });
   });
 
   group('Wasm cross-function propagation', () {
