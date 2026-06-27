@@ -1,5 +1,22 @@
 ## 0.1.41
 
+### Rich enums (enum entries are `const` class instances)
+
+- Enums are redesigned: an enum is a class and each entry is a cached `const`
+  instance — a singleton, so `==` is identity — replacing the int-ordinal model.
+  Every entry carries `index` (ordinal) and `name`, and `EnumName.values` lists
+  them. **Dart enhanced enums** work: entries with constructor arguments, fields,
+  and methods (`Planet.earth.gravity()`). Explicit-value entries (C#/TypeScript
+  `Medium = 5`) expose the value via `.value`.
+- Parsing: Dart, Java and Kotlin parse rich-enum entry args + members.
+- Generation: Java/Kotlin emit native rich enums; C#/TypeScript/Python emit a
+  class + `static`-const-instances idiom (simple enums are unchanged).
+- Wasm: enum entries compile to heap instances (lazily built, cached per entry);
+  `.index`/`.name`/fields/methods and `EnumName.values` all work.
+- **Breaking change**: an enum entry is no longer an `int` — use
+  `Color.blue.index` (and `.value` for explicit `= N` entries) instead of
+  `int x = Color.blue`.
+
 ### Constructors & instantiation for JavaScript and Python
 
 - **JavaScript**: a `constructor(...)` class method is now parsed as a real
