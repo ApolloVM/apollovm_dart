@@ -1,3 +1,17 @@
+## 0.1.46
+
+### Wasm backend: `num` (TypeScript/JS `number`) + switch on a boxed scrutinee
+
+- **`num` (a TypeScript/JavaScript `number`) is now supported** in the Wasm
+  backend. A plain `num` has no fixed width; the VM treats integer-valued
+  numbers as `int`, so `num` is represented as i64. This fixes string
+  interpolation/concatenation of a `num` (e.g. `"sum=" + (a + b)`), `switch` on
+  a `num` scrutinee, and `num` arithmetic — unblocking the TypeScript Class,
+  Conditional, Exceptions and Switch examples.
+- **`switch` on a boxed `dynamic`/`Object` scrutinee** (e.g. a `List<Object>`
+  element) now compiles: the scrutinee is unboxed to a concrete i64 to drive
+  the integer branch table.
+
 ## 0.1.45
 
 ### Wasm backend: collection-to-String + dynamic arithmetic on boxed values

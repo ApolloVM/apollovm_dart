@@ -7857,7 +7857,20 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     generateASTExpression(statement.expression, out: out, context: context);
     var valueType = context.stackGet(0)!.type;
 
-    final switchOnInt = valueType == _astTypeInt64 || valueType == _astTypeInt;
+    // A boxed `dynamic`/`Object` scrutinee (e.g. a JavaScript/Python untyped
+    // parameter) is unboxed to a concrete i64 so it can drive the int branch
+    // table (case labels are integer literals).
+    if (_isObjectType(valueType)) {
+      _emitUnboxNumberInto(out, context, _astTypeInt64);
+      context.stackReplace(_astTypeInt64, "unboxed dynamic switch scrutinee");
+      valueType = _astTypeInt64;
+    }
+
+    // A plain `num` (TS/JS `number`) is represented as i64; switch on it as int.
+    final switchOnInt =
+        valueType == _astTypeInt64 ||
+        valueType == _astTypeInt ||
+        (valueType is ASTTypeNum && valueType is! ASTTypeDouble);
     final switchOnString = valueType is ASTTypeString;
 
     // An `enum` scrutinee is compared by ordinal: reduce both the scrutinee and
@@ -9023,6 +9036,9 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       _emitBoolToString(out, context);
     } else if (type is ASTTypeInt || type is ASTTypeDouble) {
       _emitNumberToString(out, context, type);
+    } else if (type is ASTTypeNum) {
+      // A plain `num` (TS/JS `number`) is represented as i64 (int) in Wasm.
+      _emitNumberToString(out, context, _astTypeInt);
     } else if (_isObjectType(type)) {
       _emitBoxToString(out, context);
     } else if (type is ASTTypeMap) {
@@ -10908,6 +10924,10 @@ extension _ASTTypeExtension on ASTType {
       return WasmType.i64Type;
     } else if (this is ASTTypeDouble) {
       return WasmType.f64Type;
+    } else if (this is ASTTypeNum) {
+      // A plain `num` (e.g. TypeScript/JS `number`) has no fixed width; ApolloVM
+      // treats integer-valued numbers as `int`, so represent it as i64.
+      return WasmType.i64Type;
     } else if (this is ASTTypeBool) {
       return WasmType.i32Type;
     } else if (this is ASTTypeString) {
