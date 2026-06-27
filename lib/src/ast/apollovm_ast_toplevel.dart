@@ -972,7 +972,12 @@ class ASTClassNormal extends ASTClass<VMObject> {
   }
 }
 
-/// An entry of an [ASTClassEnum] (e.g. `Red` or `Red = 1`).
+/// An entry of an [ASTClassEnum].
+///
+/// - A simple entry is just a name (`red`).
+/// - An explicit-value entry (C#/TS `Red = 1`) carries [value].
+/// - A rich/enhanced entry (Dart `earth(5.97, 6371)`) carries constructor
+///   [arguments].
 class ASTEnumEntry {
   /// The entry name.
   final String name;
@@ -980,16 +985,27 @@ class ASTEnumEntry {
   /// The optional explicit value expression (e.g. `1` in `Red = 1`).
   final ASTExpression? value;
 
-  ASTEnumEntry(this.name, [this.value]);
+  /// The optional constructor arguments of a rich/enhanced enum entry
+  /// (e.g. `(5.97, 6371)` in `earth(5.97, 6371)`).
+  final List<ASTExpression>? arguments;
+
+  ASTEnumEntry(this.name, {this.value, this.arguments});
 
   @override
-  String toString() => value != null ? '$name = $value' : name;
+  String toString() {
+    if (value != null) return '$name = $value';
+    if (arguments != null) return '$name(${arguments!.join(', ')})';
+    return name;
+  }
 }
 
 /// AST of an enum class (e.g. Dart/TypeScript `enum`).
 ///
 /// Extends [ASTClassNormal] so it flows through the existing class generation
-/// and resolution; the [entries] hold the enum constants.
+/// and resolution; the [entries] hold the enum constants. Each entry resolves
+/// at runtime to a cached `const` instance of this class (a singleton, so `==`
+/// is identity), carrying the synthetic fields `index` (ordinal) and `name`,
+/// plus any declared fields initialized by the enum's `const` constructor.
 class ASTClassEnum extends ASTClassNormal {
   /// The enum entries (constants), in declaration order.
   final List<ASTEnumEntry> entries;
@@ -1002,6 +1018,81 @@ class ASTClassEnum extends ASTClassNormal {
     super.superClassName,
     super.implementsTypes,
   }) : entries = entries ?? <ASTEnumEntry>[];
+
+  /// Cached entry instances (one singleton per entry name → const + identity).
+  /// The build *future* is memoized (not just the result) so two concurrent
+  /// resolutions of the same entry — e.g. both operands of `E.a == E.a` —
+  /// share the one instance instead of each building its own.
+  final Map<String, FutureOr<ASTClassInstance<VMObject>>> _entryInstances = {};
+  List<ASTClassInstance<VMObject>>? _values;
+
+  /// Returns the cached `const` instance for the entry named [entryName], or
+  /// null if there is no such entry. Built once (lazily) and memoized.
+  FutureOr<ASTClassInstance<VMObject>?> getEntryInstance(
+    VMContext context,
+    String entryName,
+  ) {
+    var index = entries.indexWhere((e) => e.name == entryName);
+    if (index < 0) return null;
+    return _entryInstances.putIfAbsent(
+      entryName,
+      () => _buildEntryInstance(context, index),
+    );
+  }
+
+  /// All entry instances, in declaration order (Dart `EnumName.values`).
+  FutureOr<List<ASTClassInstance<VMObject>>> getValues(VMContext context) {
+    var values = _values;
+    if (values != null) return values;
+    return entries
+        .map((e) => getEntryInstance(context, e.name))
+        .toList()
+        .resolveAll()
+        .resolveMapped((list) {
+          var instances = list.whereType<ASTClassInstance<VMObject>>().toList();
+          _values = instances;
+          return instances;
+        });
+  }
+
+  Future<ASTClassInstance<VMObject>> _buildEntryInstance(
+    VMContext context,
+    int index,
+  ) async {
+    var entry = entries[index];
+    var classContext = createContext(context.typeResolver, context);
+    var runStatus = ASTRunStatus();
+
+    ASTClassInstance<VMObject> instance;
+    var arguments = entry.arguments;
+    if (arguments != null) {
+      // Rich/enhanced enum entry: run the `const` constructor with its args.
+      var constructor = getConstructor('', null, classContext);
+      if (constructor == null) {
+        throw StateError(
+          "Enum '$name' entry '${entry.name}' has constructor arguments but the "
+          "enum declares no constructor.",
+        );
+      }
+      var argValues = <ASTValue>[];
+      for (var a in arguments) {
+        argValues.add(await a.run(classContext, runStatus));
+      }
+      var result = await constructor.call(
+        classContext,
+        positionalParameters: argValues,
+      );
+      instance = result as ASTClassInstance<VMObject>;
+    } else {
+      // Simple enum entry: a bare instance (field initializers, if any, run).
+      instance = (await createInstance(classContext, runStatus))!;
+    }
+
+    // Seed the synthetic `index` (ordinal) and `name` fields.
+    instance.vmObject.setFieldValue('index', ASTValueInt(index));
+    instance.vmObject.setFieldValue('name', ASTValueString(entry.name));
+    return instance;
+  }
 
   @override
   String toString() => 'enum $name';
