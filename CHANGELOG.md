@@ -17,6 +17,23 @@
   `<String,int>{'a': a}` where `a` is dynamic) is unboxed to match the slot's
   `i64`/`f64` width.
 
+### Wasm backend: anonymous functions assigned to a `var` and called directly
+
+- **Lambdas stored in a `var` and invoked by name** now compile (e.g.
+  `var twice = (int n) => n * 2; … twice(x)`). The return type is inferred from
+  the body when no typed call context provides it, and the variable adopts the
+  closure's concrete function signature so the call resolves.
+- Fixed a latent bug where anonymous functions were exported with an empty name;
+  two closures then collided on the same `""` export name, producing an invalid
+  module. Anonymous functions are internal (table-dispatched) and are no longer
+  exported.
+- **Optimization:** a capture-free closure assigned to a `var` that is only ever
+  *called* (never used as a value, reassigned, or captured) is lowered to a
+  direct `call` — no environment heap allocation, no `call_indirect`, and the
+  function-table / element sections are omitted entirely. Closures used as
+  first-class values or that capture variables keep the environment + table
+  path.
+
 ## 0.1.44
 
 ### Wasm backend: rich-enum field/method reads in a `print` context
