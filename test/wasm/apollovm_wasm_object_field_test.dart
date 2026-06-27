@@ -181,5 +181,34 @@ void main() {
         ['Hi Bob'],
       );
     });
+
+    // GAP 4: a generic class with a type-parameter field instantiated as
+    // `Box<int>`. The type parameter `T` is erased to `dynamic`, so the field is
+    // a boxed (i32) slot, but storing an `int` (i64) into it does not box the
+    // value — producing an i32/i64 width mismatch. A robust fix needs box-on
+    // -store / unbox-on-read for `dynamic`/`Object` fields holding primitives.
+    test(
+      'generic Box<int> field round-trips',
+      () async {
+        await _testWasmPrints(
+          r'''
+        class Box<T> {
+          T value;
+          Box(this.value);
+        }
+        void main() {
+          var b = Box<int>(7);
+          print(b.value);
+        }
+      ''',
+          'main',
+          ['7'],
+        );
+      },
+      skip:
+          'BUG/GAP 4: a generic (type-parameter -> `dynamic`) field holding a '
+          'primitive int is not boxed on store, causing an i32/i64 width '
+          'mismatch in Wasm.',
+    );
   });
 }

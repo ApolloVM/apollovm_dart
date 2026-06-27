@@ -187,6 +187,14 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
         types['name'] = _astTypeString;
         offset += _elemSize(_astTypeString);
       }
+      // An explicit-value enum (C#/TypeScript `Medium = 5`) exposes the declared
+      // integer via `.value`; give it an i64 slot seeded at build time.
+      if (clazz.entries.any((e) => e.value != null) &&
+          !offsets.containsKey('value')) {
+        offsets['value'] = offset;
+        types['value'] = _astTypeInt64;
+        offset += _elemSize(_astTypeInt64);
+      }
     }
     return WasmClassLayout(clazz.name, offsets, types, offset);
   }
@@ -246,17 +254,10 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
         if (fn.modifiers.isStatic) {
           // Static method: no `this`. Synthesized as an exported module function
           // under the qualified `Class.method` name, generated like a top-level
-          // function (see [_WasmStaticMethodFunction]).
-          var staticParams = fn.parameters.allParameters
-              .map(
-                (p) => ASTFunctionParameterDeclaration(
-                  p.type,
-                  p.name,
-                  p.index,
-                  p.optional,
-                ),
-              )
-              .toList();
+          // function (see [_WasmStaticMethodFunction]). The declared parameters
+          // are reused directly (as the instance-method path does) so their
+          // default values are preserved for default-argument resolution.
+          var staticParams = fn.parameters.allParameters.toList();
           result.add(
             _WasmStaticMethodFunction(
               clazz,
@@ -1112,10 +1113,18 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       return _generateClassConstructorFunction(f, module: module);
     } else if (f is _WasmMethodFunction) {
       return _generateClassMethodFunction(f, module: module);
+    } else if (f is _WasmStaticMethodFunction) {
+      // A static method has no `this` (params remain locals 0..n-1), but it
+      // still belongs to a class: set `classLayout` so an unqualified sibling
+      // call can resolve against the enclosing class's static methods.
+      var context = WasmContext(module: module);
+      context.classLayout = module.classLayouts[f.clazz.name];
+      return generateASTFunctionDeclaration(
+        f,
+        context: context,
+        module: module,
+      );
     }
-    // A `_WasmStaticMethodFunction` has no `this`; it is generated with a fresh
-    // context (no `thisLocalIndex`/`classLayout`), exactly like a top-level
-    // function — params become locals 0..n-1.
     return generateASTFunctionDeclaration(f, module: module);
   }
 
@@ -2106,23 +2115,37 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
         );
       }
 
-      // Only static methods are callable without a receiver. A receiver-less
-      // call that matches a non-static method (e.g. a `static` method calling an
-      // instance sibling, where no `this` is in scope) needs an instance.
-      var instanceMethod = context.module?.instanceMethodQualifiedName(
-        name,
-        argsCount,
-      );
-      if (instanceMethod != null) {
-        throw UnsupportedError(
-          "Can't call non-static method '$instanceMethod' without an instance.",
+      // A bare-name call to a sibling STATIC method of the enclosing class.
+      // Static methods are registered under their qualified `Class.method`
+      // name, so they miss the top-level bare-name lookup above; resolve them
+      // here and fall through to the normal call emission below (no receiver).
+      if (layout != null) {
+        calleeIndex = context.module?.staticMethodIndexForCall(
+          layout.className,
+          name,
+          argsCount,
         );
       }
 
-      throw StateError(
-        "Can't resolve local function `$name` with $argsCount argument(s) "
-        "in the Wasm function index table.",
-      );
+      if (calleeIndex == null) {
+        // Only static methods are callable without a receiver. A receiver-less
+        // call that matches a non-static method (e.g. a `static` method calling
+        // an instance sibling, where no `this` is in scope) needs an instance.
+        var instanceMethod = context.module?.instanceMethodQualifiedName(
+          name,
+          argsCount,
+        );
+        if (instanceMethod != null) {
+          throw UnsupportedError(
+            "Can't call non-static method '$instanceMethod' without an instance.",
+          );
+        }
+
+        throw StateError(
+          "Can't resolve local function `$name` with $argsCount argument(s) "
+          "in the Wasm function index table.",
+        );
+      }
     }
 
     var callee = context.functionByIndex(calleeIndex)!;
@@ -3089,17 +3112,27 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     var stackType1 = stack1.type;
     var stackType2 = stack2.type;
 
-    // String `+` -> concatenation (both operands must already be String).
+    // String `+` -> concatenation. Each operand is coerced to a String handle
+    // (a String is already a handle; int/double/bool route through the same
+    // host converters used by string interpolation), so `String + number`
+    // (from Java/Kotlin/C#/JS/TS, e.g. `"n=" + n`) works.
     if (expression.operator == ASTExpressionOperator.add &&
         (stackType1 is ASTTypeString || stackType2 is ASTTypeString)) {
-      if (stackType1 is! ASTTypeString || stackType2 is! ASTTypeString) {
-        throw UnimplementedError(
-          "Wasm string `+` with a non-String operand (number-to-string) is "
-          "not supported yet ($stackType1 + $stackType2).",
-        );
-      }
+      // The operands were tracked on the virtual stack during generation above;
+      // drop them and re-track as each is emitted then coerced, so the coercion
+      // helpers see the correct top-of-stack value (the conversion bytes must be
+      // interleaved between the two operand buffers).
+      context.stackDrop(); // operand 2 (stack2)
+      context.stackDrop(); // operand 1 (stack1)
+
       out.writeBytes(exp1Out);
+      context.stackPush(stackType1, "string `+` operand 1");
+      _emitToStringHandle(out, context, stackType1);
+
       out.writeBytes(exp2Out);
+      context.stackPush(stackType2, "string `+` operand 2");
+      _emitToStringHandle(out, context, stackType2);
+
       context.assertStackLength(stackLng2, "After push string operands");
       _emitStringConcat2(out, context);
       context.assertStackLength(stackLng0 + 1, "After string concat");
@@ -4603,6 +4636,26 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     body.write(Wasm32.i32Const(namePtr));
     _emitElemStore(body, _astTypeString, layout.offsets['name']!);
 
+    // instance.value = explicit declared value (i64), for explicit-value enums.
+    var valueOffset = layout.offsets['value'];
+    if (valueOffset != null) {
+      body.write(Wasm.localGet(instLocal));
+      var entryValue = entry.value;
+      if (entryValue != null) {
+        generateASTExpression(entryValue, out: body, context: context);
+        _autoConvertStackTypes(
+          context.stackGet(0)!.type,
+          _astTypeInt64,
+          out: body,
+          context: context,
+        );
+        context.stackDrop(); // consumed by the store below
+      } else {
+        body.write(Wasm64.i64Const(0));
+      }
+      _emitElemStore(body, _astTypeInt64, valueOffset);
+    }
+
     // global = instance
     body.write(Wasm.localGet(instLocal));
     body.write(Wasm.globalSet(globalIndex));
@@ -4801,7 +4854,18 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
 
     var returnType = effectiveReturnType;
 
-    if (!returnType.isVoid && context.stackLength == 0) {
+    // A non-void function needs a trailing `unreachable` + default unless its
+    // body already ends with an explicit `return` instruction. When the last
+    // top-level statement is NOT a `return` (e.g. a `switch`/`if`/`while` that
+    // returns on all paths), the body ends with a `block`'s `end`, which the
+    // validator treats as reachable — so the terminator is required even when a
+    // residual virtual-stack entry (e.g. from a preceding `var` declaration)
+    // makes `context.stackLength != 0`. The `stackLength == 0` case keeps the
+    // (redundant but pre-existing) terminator for plain `return`-ended bodies.
+    var lastStatement = f.statements.isEmpty ? null : f.statements.last;
+
+    if (!returnType.isVoid &&
+        (context.stackLength == 0 || lastStatement is! ASTStatementReturn)) {
       // Notify that the function can't reach the end.
       bodyCode.writeByte(
         Wasm.unreachable,
@@ -5844,6 +5908,15 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       final clauseVarTypes = <ASTType?>[];
       for (final c in s.catches) {
         var varType = c.exceptionType;
+        // A declared catch-all type (`Exception`/`Throwable`/`Error`/`Object`/
+        // `dynamic`, from Java/Kotlin/C# `catch (Exception e)` or Dart
+        // `on Exception catch (e)`) is not a representable Wasm value type and
+        // binds whatever was thrown. Resolve its bound variable like an untyped
+        // `catch (e)` (infer from the thrown value); the clause still matches
+        // every tag via [_catchClauseAcceptedTags].
+        if (varType != null && _excCatchAllTypeNames.contains(varType.name)) {
+          varType = null;
+        }
         if (varType == null && c.variableName != null) {
           final inferred = _inferTryThrownType(s.tryBlock);
           if (inferred != null) {
@@ -7416,15 +7489,58 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     out ??= newOutput();
     context ??= WasmContext();
 
-    // Evaluate the switch value once into a scratch local (int only).
+    // Evaluate the switch value once into a scratch local. Supported scrutinee
+    // kinds:
+    //  - `int`    : i64 equality (branch table).
+    //  - `String` : content equality via the `__streq` host/synth helper.
+    //  - a reference instance (e.g. an `enum` entry): i32 pointer identity —
+    //    enum entries are cached `const` singletons, so `==` is identity.
+    // A boxed `dynamic`/`Object` scrutinee is not supported (see GAP 5).
     generateASTExpression(statement.expression, out: out, context: context);
     var valueType = context.stackGet(0)!.type;
-    if (valueType != _astTypeInt64 && valueType != _astTypeInt) {
+
+    final switchOnInt = valueType == _astTypeInt64 || valueType == _astTypeInt;
+    final switchOnString = valueType is ASTTypeString;
+
+    // An `enum` scrutinee is compared by ordinal: reduce both the scrutinee and
+    // each case entry to their `.index` (i64).
+    final enumLayout =
+        (!switchOnInt && !switchOnString && valueType.name.isNotEmpty)
+        ? context.module?.classLayouts[valueType.name]
+        : null;
+    final switchOnEnum =
+        enumLayout != null && enumLayout.offsets.containsKey('index');
+    final enumIndexOffset = switchOnEnum ? enumLayout.offsets['index']! : 0;
+
+    if (!switchOnInt && !switchOnString && !switchOnEnum) {
       throw UnimplementedError(
-        "Wasm switch on $valueType is not supported (int only).",
+        "Wasm switch on $valueType is not supported "
+        "(int, String or enum only).",
       );
     }
-    var valueLocal = context.scratchLocal(_astTypeInt64, 17);
+
+    int? strEqIndex;
+    if (switchOnString) {
+      var module = context.module!;
+      module.requiresMemory = true;
+      module.ensureStrEqFunction();
+      strEqIndex = module.synthFunctionIndex('__streq')!;
+    }
+
+    if (switchOnEnum) {
+      context.module?.requiresMemory = true;
+      out.write(
+        Wasm64.i64Load(3, enumIndexOffset),
+        description: "[OP] switch enum scrutinee .index",
+      );
+      context.stackReplace(_astTypeInt64, "enum scrutinee .index");
+    }
+
+    // The scrutinee is held as i64 (int / enum ordinal) or i32 (String handle).
+    final ASTType scrutineeLocalType = (switchOnInt || switchOnEnum)
+        ? _astTypeInt64
+        : _astTypeString;
+    var valueLocal = context.scratchLocal(scrutineeLocalType, 17);
     out.write(Wasm.localSet(valueLocal));
     context.stackDrop();
 
@@ -7472,10 +7588,30 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
         continue;
       }
       out.write(Wasm.localGet(valueLocal));
-      context.stackPush(_astTypeInt64, "switch value");
+      context.stackPush(scrutineeLocalType, "switch value");
       generateASTExpression(c.value!, out: out, context: context);
-      out.writeByte(Wasm64.i64Equals, description: "[OP] switch case == ");
-      context.stackOperationBinary(_astTypeInt32, "i64.eq (switch)");
+      if (switchOnEnum) {
+        // Reduce the case enum entry to its `.index` (i64), then compare ints.
+        context.module?.requiresMemory = true;
+        out.write(
+          Wasm64.i64Load(3, enumIndexOffset),
+          description: "[OP] switch enum case .index",
+        );
+        context.stackReplace(_astTypeInt64, "enum case .index");
+      }
+      if (switchOnString) {
+        // __streq(scrutinee, caseValue) -> i32 (0/1) content equality.
+        out.write(
+          Wasm.call(strEqIndex!),
+          description: "[OP] switch case __streq",
+        );
+      } else {
+        out.writeByte(
+          Wasm64.i64Equals,
+          description: "[OP] switch case == (i64)",
+        );
+      }
+      context.stackOperationBinary(_astTypeInt32, "switch case ==");
       out.write(
         Wasm.brIf(context.controlDepth - entryLevel(i)),
         description: "[OP] switch br_if case $i",
@@ -9257,6 +9393,34 @@ class WasmModuleContext {
     return bestIndex;
   }
 
+  /// Like [methodIndexForCall] but for **static** methods (no receiver):
+  /// resolves a bare-name call to a sibling `static` method of [className].
+  /// Returns the smallest declared arity `>= suppliedCount` (so omitted
+  /// default-valued trailing parameters still resolve).
+  int? staticMethodIndexForCall(
+    String className,
+    String methodName,
+    int suppliedCount,
+  ) {
+    int? bestIndex;
+    int? bestSize;
+    for (var i = 0; i < functions.length; ++i) {
+      var f = functions[i];
+      if (f is! _WasmStaticMethodFunction ||
+          f.clazz.name != className ||
+          f.method.name != methodName) {
+        continue;
+      }
+      var size = f.method.parameters.size;
+      if (size < suppliedCount) continue;
+      if (bestSize == null || size < bestSize) {
+        bestSize = size;
+        bestIndex = importCount + i;
+      }
+    }
+    return bestIndex;
+  }
+
   /// The qualified `Class.method` name of a compiled **non-static** (instance)
   /// method whose declared name is [methodName] and arity is [arity], or null if
   /// none. Used to reject a receiver-less call to a non-static method (e.g. a
@@ -10075,6 +10239,11 @@ extension _ASTTypeExtension on ASTType {
       return WasmType.voidType;
     } else if (this is ASTType<VMObject>) {
       // A class instance is an i32 pointer into linear memory.
+      return WasmType.i32Type;
+    } else if (name.isNotEmpty) {
+      // Any other named reference type — a user class or an enum used by name
+      // (e.g. an enum-typed parameter `Planet p`) — is a heap instance,
+      // represented as an i32 pointer like other object instances.
       return WasmType.i32Type;
     }
 

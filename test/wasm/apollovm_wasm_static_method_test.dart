@@ -477,5 +477,119 @@ void main() {
         ['1', '2', '3', '4'],
       );
     });
+
+    // GAP 1: a static method calling a SIBLING static method by bare name (no
+    // `this.`/`Foo.` qualifier). Static methods are registered under their
+    // qualified `Class.method` name, so a bare-name call must resolve against
+    // the enclosing class's static methods.
+    test('unqualified sibling static call resolves', () async {
+      await _testStaticPrints(
+        r'''
+        class Foo {
+          static int dbl(int n) { return n * 2; }
+          static void run(int x) { print(dbl(x)); }
+        }
+        ''',
+        'Foo',
+        'run',
+        const [5],
+        ['10'],
+      );
+    });
+
+    // GAP 1: named arguments on a bare-name sibling static call (`h` is a real
+    // named parameter, so this is valid Dart).
+    test('named args on a bare-name sibling static call', () async {
+      await _testStaticPrints(
+        r'''
+        class Foo {
+          static int area(int w, {int h = 1}) { return w * h; }
+          static void run() { print(area(4, h: 3)); }
+        }
+        ''',
+        'Foo',
+        'run',
+        const [],
+        ['12'],
+      );
+    });
+
+    // GAP 1: omitted default on a bare-name sibling static call (`h` defaults
+    // to 3).
+    test('default param omitted on a bare-name sibling static call', () async {
+      await _testStaticPrints(
+        r'''
+        class Foo {
+          static int area(int w, [int h = 3]) { return w * h; }
+          static void run() { print(area(5)); }
+        }
+        ''',
+        'Foo',
+        'run',
+        const [],
+        ['15'],
+      );
+    });
+
+    // GAP 1: an INSTANCE method calling a sibling INSTANCE method by bare name
+    // (an implicit-`this` call), driven from a static entry.
+    test('unqualified sibling instance call (implicit this)', () async {
+      await _testStaticPrints(
+        r'''
+        class Calc {
+          int base;
+          Calc(this.base);
+          int dbl(int n) { return n * 2; }
+          int compute(int n) { return dbl(n) + base; }
+          static void run() {
+            var c = Calc(100);
+            print(c.compute(5));
+          }
+        }
+        ''',
+        'Calc',
+        'run',
+        const [],
+        ['110'],
+      );
+    });
+
+    // GAP 1: named arguments on a bare-name sibling INSTANCE call.
+    test('named args on a bare-name sibling instance call', () async {
+      await _testStaticPrints(
+        r'''
+        class Calc {
+          int scale(int v, {int by = 1}) { return v * by; }
+          int run2() { return scale(6, by: 7); }
+          static void run() {
+            var c = Calc();
+            print(c.run2());
+          }
+        }
+        ''',
+        'Calc',
+        'run',
+        const [],
+        ['42'],
+      );
+    });
+
+    // GAP 1: a static method calling a sibling static method that itself takes
+    // multiple arguments (chained resolution).
+    test('chained bare-name sibling static calls', () async {
+      await _testStaticPrints(
+        r'''
+        class Foo {
+          static int add(int a, int b) { return a + b; }
+          static int twice(int n) { return add(n, n); }
+          static void run() { print(twice(21)); }
+        }
+        ''',
+        'Foo',
+        'run',
+        const [],
+        ['42'],
+      );
+    });
   });
 }

@@ -1,8 +1,48 @@
-@Tags(['wasm', 'dart'])
+@Tags(['wasm', 'dart', 'csharp'])
 library;
 
 import 'package:apollovm/apollovm.dart';
 import 'package:test/test.dart';
+
+/// Compiles [src] in [language] to Wasm and runs the static [entry] (e.g.
+/// `Foo.run`) on BOTH the AST interpreter and the compiled Wasm module,
+/// asserting both produce [expected].
+Future<void> _bothEqualLang(
+  String language,
+  String src,
+  String entry,
+  Object? expected,
+) async {
+  var dot = entry.indexOf('.');
+  var className = entry.substring(0, dot);
+  var method = entry.substring(dot + 1);
+
+  var vm = ApolloVM();
+  var ok = await vm.loadCodeUnit(SourceCodeUnit(language, src, id: 'test'));
+  expect(ok, isTrue, reason: "Can't load `$language` source");
+
+  var astRes = await vm
+      .createRunner(language)!
+      .executeClassMethod('', className, method);
+  expect(astRes.getValueNoContext(), expected, reason: 'interpreter');
+
+  var storage = vm.generateAllIn<BytesOutput>('wasm');
+  var modules = await storage.allEntries();
+  BytesOutput? compiled;
+  for (var ns in modules.entries) {
+    for (var m in ns.value.entries) {
+      compiled ??= m.value;
+    }
+  }
+  expect(compiled, isNotNull, reason: 'No compiled Wasm module');
+
+  var vmWasm = ApolloVM();
+  await vmWasm.loadCodeUnit(
+    BinaryCodeUnit('wasm', compiled!.output(), id: 'test.wasm', namespace: ''),
+  );
+  var wasmRes = await vmWasm.createRunner('wasm')!.executeFunction('', entry);
+  expect(wasmRes.getValueNoContext(), expected, reason: 'Wasm');
+}
 
 /// Compiles [src] (Dart) to Wasm and runs `Main.run` on BOTH the AST
 /// interpreter and the compiled Wasm module, asserting both produce
@@ -97,6 +137,153 @@ enum Planet {
       await _bothEqual(
         '${planet}class Main { static int run() { var m = Planet.mars; return m.index; } }',
         1,
+      );
+    });
+
+    // GAP 7: an enum method that uses a field.
+    test('enum method using a field', () async {
+      await _bothEqual(r'''
+        enum Planet {
+          earth(9.8), mars(3.7);
+          final double gravity;
+          const Planet(this.gravity);
+          double mult(double m) { return gravity * m; }
+        }
+        class Main {
+          static double run() {
+            var e = Planet.earth;
+            return e.mult(2.0);
+          }
+        }
+        ''', 19.6);
+    });
+
+    // GAP 7: an enum method taking an enum-TYPED parameter (`Planet p`).
+    test('enum method taking an enum-typed parameter', () async {
+      await _bothEqual(r'''
+        enum Planet {
+          earth(9.8), mars(3.7);
+          final double gravity;
+          const Planet(this.gravity);
+          double ratio(Planet p) { return gravity / p.gravity; }
+        }
+        class Main {
+          static double run() {
+            var e = Planet.earth;
+            var m = Planet.mars;
+            return e.ratio(m);
+          }
+        }
+        ''', 9.8 / 3.7);
+    });
+  });
+
+  group('Wasm: switch on an enum', () {
+    // `switch` on an enum is compiled by reducing the scrutinee and each case
+    // entry to their ordinal (`.index`) and comparing as ints.
+    test('switch on an enum scrutinee', () async {
+      await _bothEqual(r'''
+        enum Color { red, green, blue }
+        class Main {
+          static int run() {
+            var c = Color.green;
+            switch (c) {
+              case Color.red: return 1;
+              case Color.green: return 2;
+              default: return 9;
+            }
+          }
+        }
+        ''', 2);
+    });
+
+    test('enum switch matches the last entry explicitly', () async {
+      await _bothEqual(r'''
+        enum Color { red, green, blue }
+        class Main {
+          static int run() {
+            var c = Color.blue;
+            switch (c) {
+              case Color.red: return 1;
+              case Color.green: return 2;
+              case Color.blue: return 3;
+              default: return 9;
+            }
+          }
+        }
+        ''', 3);
+    });
+
+    test('enum switch falls to default', () async {
+      await _bothEqual(r'''
+        enum Color { red, green, blue }
+        class Main {
+          static int run() {
+            var c = Color.blue;
+            switch (c) {
+              case Color.red: return 1;
+              case Color.green: return 2;
+              default: return 99;
+            }
+          }
+        }
+        ''', 99);
+    });
+
+    test('enum switch returns a String', () async {
+      await _bothEqual(r'''
+        enum Color { red, green, blue }
+        class Main {
+          static String run() {
+            var c = Color.green;
+            switch (c) {
+              case Color.red: return 'R';
+              case Color.green: return 'G';
+              default: return '?';
+            }
+          }
+        }
+        ''', 'G');
+    });
+
+    test('enum switch over a rich enum entry', () async {
+      await _bothEqual(r'''
+        enum Planet {
+          earth(9.8), mars(3.7);
+          final double gravity;
+          const Planet(this.gravity);
+        }
+        class Main {
+          static double run() {
+            var p = Planet.mars;
+            switch (p) {
+              case Planet.earth: return 1.0;
+              case Planet.mars: return 2.0;
+              default: return 0.0;
+            }
+          }
+        }
+        ''', 2.0);
+    });
+  });
+
+  group('Wasm: C# enum .value (explicit values)', () {
+    // GAP 9: an explicit-value (C#) enum entry exposes its declared integer via
+    // `.value`.
+    test('C# enum .value', () async {
+      await _bothEqualLang(
+        'csharp',
+        r'''
+        enum Level { Low = 1, Medium = 5, High = 10 }
+        class Foo {
+          public static int run() {
+            var m = Level.Medium;
+            return m.value;
+          }
+        }
+        ''',
+        'Foo.run',
+        5,
       );
     });
   });

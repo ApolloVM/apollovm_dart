@@ -409,5 +409,105 @@ void main() {
         },
       );
     });
+
+    // GAP 5: a `switch` whose scrutinee is a genuinely boxed `dynamic`/`Object`
+    // value (e.g. a `List<Object>` element, or a `dynamic` parameter marshalled
+    // by the host). The compiler currently throws "switch on dynamic is not
+    // supported (int only)". A robust fix must narrow the boxed scrutinee to its
+    // i64 int payload AND agree with how the value is boxed (host-marshalled
+    // params vs in-module boxes) — deferred.
+    test(
+      'switch on a boxed dynamic scrutinee',
+      () async {
+        await _testWasm(
+          r'''
+        int run(List<Object> args) {
+          switch (args[0]) {
+            case 1: return 10;
+            case 2: return 20;
+            default: return 99;
+          }
+        }
+        ''',
+          'run',
+          {
+            [
+              [1],
+            ]: 10,
+          },
+        );
+      },
+      skip:
+          'BUG/GAP 5: Wasm `switch` on a boxed dynamic/Object scrutinee is '
+          'not yet supported (needs payload narrowing consistent with the box '
+          'representation).',
+    );
+
+    // `switch` on a String scrutinee (content equality).
+    test('switch on a String scrutinee', () async {
+      await _testWasm(
+        r'''
+        String run(String s) {
+          switch (s) {
+            case 'a': return 'first';
+            case 'b': return 'second';
+            default: return 'other';
+          }
+        }
+        ''',
+        'run',
+        {
+          ['a']: 'first',
+          ['b']: 'second',
+          ['z']: 'other',
+        },
+      );
+    });
+
+    // `switch` on a String using assignment + `break` (not return-per-case),
+    // followed by a trailing `return`.
+    test('switch on a String with break + trailing return', () async {
+      await _testWasm(
+        r'''
+        int run(String s) {
+          int r = 0;
+          switch (s) {
+            case 'x': { r = 1; break; }
+            case 'y': { r = 2; break; }
+            default: { r = 9; }
+          }
+          return r;
+        }
+        ''',
+        'run',
+        {
+          ['x']: 1,
+          ['y']: 2,
+          ['q']: 9,
+        },
+      );
+    });
+
+    // A String scrutinee held in a local variable (not the parameter directly).
+    test('switch on a String local after a var declaration', () async {
+      await _testWasm(
+        r'''
+        String run(String s) {
+          var key = s;
+          switch (key) {
+            case 'go': return 'green';
+            case 'stop': return 'red';
+            default: return 'amber';
+          }
+        }
+        ''',
+        'run',
+        {
+          ['go']: 'green',
+          ['stop']: 'red',
+          ['wait']: 'amber',
+        },
+      );
+    });
   });
 }
