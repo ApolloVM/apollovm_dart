@@ -1,3 +1,22 @@
+## 0.1.43
+
+### Wasm backend: close several Dart → WebAssembly gaps
+
+- **Unqualified sibling class-method calls** now resolve: a method can call a
+  sibling `static` method by bare name (`dbl(x)` instead of `Foo.dbl(x)`),
+  including with named arguments and omitted default parameters.
+- **`String + <number>`** concatenation (from Java/Kotlin/C#/JS/TS, e.g.
+  `"n=" + n`) compiles, coercing the numeric operand to a String.
+- **`switch` on a `String`** scrutinee (content equality). `switch` on `int`
+  already worked; the Dart interpreter already handled `String`/`enum` switch.
+- **Rich-enum methods that take an enum-typed parameter** (`double ratio(Planet
+  p)`) compile; **C#/TypeScript explicit-value enums** expose `.value`.
+- **Typed catch-all clauses** (`on Exception catch (e)` / `catch (Exception
+  e)`) compile instead of failing on the declared exception type.
+- Known remaining gaps (documented, with skipped reproduction tests): `Map`/
+  `List` → String coercion, generic (`Box<T>`) primitive fields, lambdas, and
+  `switch` on `enum`/`dynamic` scrutinees.
+
 ## 0.1.42
 
 ### Named / keyword arguments
