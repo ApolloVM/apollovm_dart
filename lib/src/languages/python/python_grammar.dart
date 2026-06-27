@@ -127,7 +127,9 @@ class PythonGrammarDefinition extends PythonGrammarLexer {
               char('=').trimHidden() &
               ref0(expression) &
               newlineToken())
-          .map((v) => ASTEnumEntry(v[0] as String, value: v[2] as ASTExpression));
+          .map(
+            (v) => ASTEnumEntry(v[0] as String, value: v[2] as ASTExpression),
+          );
 
   // ---------------------------------------------------------------------------
   // Imports: `import x [as y]` and `from x import y`.

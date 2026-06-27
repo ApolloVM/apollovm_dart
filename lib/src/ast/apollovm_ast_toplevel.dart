@@ -1091,6 +1091,16 @@ class ASTClassEnum extends ASTClassNormal {
     // Seed the synthetic `index` (ordinal) and `name` fields.
     instance.vmObject.setFieldValue('index', ASTValueInt(index));
     instance.vmObject.setFieldValue('name', ASTValueString(entry.name));
+
+    // An explicit-value entry (e.g. C#/TypeScript `Medium = 5`) exposes its
+    // value via the synthetic `value` field.
+    var explicitValue = entry.value;
+    if (explicitValue != null) {
+      instance.vmObject.setFieldValue(
+        'value',
+        await explicitValue.run(classContext, runStatus),
+      );
+    }
     return instance;
   }
 

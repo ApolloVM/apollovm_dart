@@ -176,13 +176,18 @@ class ApolloCodeGeneratorJava11 extends ApolloCodeGenerator {
     return out;
   }
 
-  /// Generates a Java `enum` declaration.
+  /// Generates a Java `enum` declaration (simple or with members/constructor).
   StringBuffer generateASTClassEnum(
     ASTClassEnum clazz, {
     StringBuffer? out,
     String indent = '',
   }) {
     out ??= newOutput();
+
+    var hasMembers =
+        clazz.fields.isNotEmpty ||
+        clazz.constructors.isNotEmpty ||
+        clazz.functions.isNotEmpty;
 
     out.write(indent);
     out.write('enum ');
@@ -192,14 +197,57 @@ class ApolloCodeGeneratorJava11 extends ApolloCodeGenerator {
     var entries = clazz.entries;
     for (var i = 0; i < entries.length; ++i) {
       out.write('$indent  ');
-      out.write(entries[i].name);
-      if (i < entries.length - 1) out.write(',');
+      _generateEnumEntry(entries[i], out);
+      // Java requires a `;` after the constants when members follow.
+      if (i < entries.length - 1) {
+        out.write(',');
+      } else if (hasMembers) {
+        out.write(';');
+      }
       out.write('\n');
+    }
+
+    if (hasMembers) {
+      var indent2 = '$indent  ';
+
+      for (var field in clazz.fields) {
+        generateASTClassField(field, out: out, indent: indent2);
+      }
+
+      for (var constructor in clazz.constructors) {
+        for (var c in constructor.functions) {
+          generateASTClassConstructorDeclaration(c, out: out, indent: indent2);
+        }
+      }
+
+      for (var set in clazz.functions) {
+        for (var f in set.functions) {
+          if (f is ASTClassFunctionDeclaration) {
+            generateASTClassFunctionDeclaration(f, out: out, indent: indent2);
+          }
+        }
+      }
     }
 
     out.write('$indent}\n');
 
     return out;
+  }
+
+  /// Generates a single enum entry: a bare name or constructor arguments
+  /// (`EARTH(5.97, 6371)`).
+  void _generateEnumEntry(ASTEnumEntry entry, StringBuffer out) {
+    out.write(entry.name);
+
+    var arguments = entry.arguments;
+    if (arguments != null) {
+      out.write('(');
+      for (var i = 0; i < arguments.length; ++i) {
+        if (i > 0) out.write(', ');
+        generateASTExpression(arguments[i], out: out, headIndented: false);
+      }
+      out.write(')');
+    }
   }
 
   @override

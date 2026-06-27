@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<test title="C# enum value access (explicit values)">
+<test title="C# enum value access (explicit values via .value)">
     <source language="csharp">
         <![CDATA[
 enum Level {
@@ -10,8 +10,9 @@ enum Level {
 
 class C {
   static int run(){
-    int x = Level.Medium;
-    return x + Level.High;
+    Level m = Level.Medium;
+    Level h = Level.High;
+    return m.value + h.value;
   }
 }
         ]]>
@@ -33,8 +34,9 @@ enum Level {
 class C {
 
   static int run() {
-    int x = Level.Medium;
-    return x + Level.High;
+    Level m = Level.Medium;
+    Level h = Level.High;
+    return m.value + h.value;
   }
 
 }

@@ -174,7 +174,11 @@ class ApolloCodeGeneratorKotlin extends ApolloCodeGenerator {
     return out;
   }
 
-  /// Generates a Kotlin `enum class` declaration.
+  /// Generates a Kotlin `enum class` declaration (simple or rich).
+  ///
+  /// Kotlin places the constructor parameters in the class header
+  /// (`enum class Planet(val mass: Double, ...)`); the enum constants then
+  /// pass their arguments, and any methods follow after a `;`.
   StringBuffer generateASTClassEnum(
     ASTClassEnum clazz, {
     StringBuffer? out,
@@ -182,22 +186,91 @@ class ApolloCodeGeneratorKotlin extends ApolloCodeGenerator {
   }) {
     out ??= newOutput();
 
+    var fields = clazz.fields;
+    var constructors = clazz.constructors;
+    var functions = clazz.functions;
+
+    // Primary-constructor parameters (go in the enum class header).
+    var ctorParams = <ASTConstructorParameterDeclaration>[];
+    if (constructors.isNotEmpty) {
+      var c = constructors.first.functions.first;
+      ctorParams = c.parameters.positionalParameters ?? [];
+    }
+    var ctorParamNames = ctorParams.map((p) => p.name).toSet();
+
     out.write(indent);
     out.write('enum class ');
     out.write(clazz.name);
+
+    if (ctorParams.isNotEmpty) {
+      out.write('(');
+      for (var i = 0; i < ctorParams.length; ++i) {
+        var p = ctorParams[i];
+        if (i > 0) out.write(', ');
+        out.write('val ');
+        out.write(p.name);
+        out.write(': ');
+        generateASTType(p.type, out: out);
+      }
+      out.write(')');
+    }
+
     out.write(' {\n');
+
+    var indent2 = '$indent  ';
+
+    // Fields already declared as constructor params live in the header; any
+    // remaining fields stay as body properties.
+    var bodyFields = fields
+        .where((f) => !ctorParamNames.contains(f.name))
+        .toList();
+    var hasMembers = bodyFields.isNotEmpty || functions.isNotEmpty;
 
     var entries = clazz.entries;
     for (var i = 0; i < entries.length; ++i) {
       out.write('$indent  ');
-      out.write(entries[i].name);
-      if (i < entries.length - 1) out.write(',');
+      _generateEnumEntry(entries[i], out);
+      if (i < entries.length - 1) {
+        out.write(',');
+      } else if (hasMembers) {
+        out.write(';');
+      }
       out.write('\n');
+    }
+
+    if (hasMembers) {
+      for (var field in bodyFields) {
+        generateASTClassField(field, out: out, indent: indent2);
+      }
+
+      for (var set in functions) {
+        for (var f in set.functions) {
+          if (f is ASTClassFunctionDeclaration) {
+            generateASTClassFunctionDeclaration(f, out: out, indent: indent2);
+          }
+        }
+      }
     }
 
     out.write('$indent}\n');
 
     return out;
+  }
+
+  /// Generates a single enum entry: a bare name or constructor arguments
+  /// (`EARTH(5.97, 6371)`).
+  void _generateEnumEntry(ASTEnumEntry entry, StringBuffer out) {
+    out.write(entry.name);
+
+    var arguments = entry.arguments;
+    if (arguments != null) {
+      out.write('(');
+      for (var i = 0; i < arguments.length; ++i) {
+        if (i > 0) out.write(', ');
+        generateASTExpression(arguments[i], out: out, headIndented: false);
+      }
+      out.write(')');
+    }
   }
 
   @override

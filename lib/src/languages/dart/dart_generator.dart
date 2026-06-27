@@ -122,13 +122,18 @@ class ApolloCodeGeneratorDart extends ApolloCodeGenerator {
     return out;
   }
 
-  /// Generates a Dart `enum` declaration.
+  /// Generates a Dart `enum` declaration (simple or enhanced/rich).
   StringBuffer generateASTClassEnum(
     ASTClassEnum clazz, {
     StringBuffer? out,
     String indent = '',
   }) {
     out ??= newOutput();
+
+    var hasMembers =
+        clazz.fields.isNotEmpty ||
+        clazz.constructors.isNotEmpty ||
+        clazz.functions.isNotEmpty;
 
     out.write(indent);
     out.write('enum ');
@@ -138,14 +143,67 @@ class ApolloCodeGeneratorDart extends ApolloCodeGenerator {
     var entries = clazz.entries;
     for (var i = 0; i < entries.length; ++i) {
       out.write('$indent  ');
-      out.write(entries[i].name);
+      _generateEnumEntry(entries[i], out);
       if (i < entries.length - 1) out.write(',');
       out.write('\n');
+    }
+
+    if (hasMembers) {
+      var indent2 = '$indent  ';
+      // Enhanced/rich enum: `;` then the class members (fields, the `const`
+      // constructor, methods) — reusing the class member generators.
+      out.write('$indent  ;\n');
+
+      for (var field in clazz.fields) {
+        generateASTClassField(field, out: out, indent: indent2);
+      }
+
+      for (var constructor in clazz.constructors) {
+        for (var c in constructor.functions) {
+          // Dart enum constructors must be `const`.
+          var cCode = generateASTClassConstructorDeclaration(
+            c,
+            indent: indent2,
+          ).toString();
+          out.write(indent2);
+          out.write('const ');
+          out.write(cCode.substring(indent2.length));
+        }
+      }
+
+      for (var set in clazz.functions) {
+        for (var f in set.functions) {
+          if (f is ASTClassFunctionDeclaration) {
+            generateASTClassFunctionDeclaration(f, out: out, indent: indent2);
+          }
+        }
+      }
     }
 
     out.write('$indent}\n');
 
     return out;
+  }
+
+  /// Generates a single enum entry: a bare name, an explicit value (`Red = 1`),
+  /// or rich constructor arguments (`earth(5.97, 6371)`).
+  void _generateEnumEntry(ASTEnumEntry entry, StringBuffer out) {
+    out.write(entry.name);
+
+    var value = entry.value;
+    var arguments = entry.arguments;
+
+    if (value != null) {
+      out.write(' = ');
+      generateASTExpression(value, out: out, headIndented: false);
+    } else if (arguments != null) {
+      out.write('(');
+      for (var i = 0; i < arguments.length; ++i) {
+        if (i > 0) out.write(', ');
+        generateASTExpression(arguments[i], out: out, headIndented: false);
+      }
+      out.write(')');
+    }
   }
 
   @override
