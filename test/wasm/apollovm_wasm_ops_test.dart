@@ -437,5 +437,26 @@ void main() {
     }, skip: 'BUG/GAP 5: Wasm `switch` on a boxed dynamic/Object scrutinee is '
         'not yet supported (needs payload narrowing consistent with the box '
         'representation).');
+
+    // `switch` on a String scrutinee (content equality).
+    test('switch on a String scrutinee', () async {
+      await _testWasm(
+        r'''
+        String run(String s) {
+          switch (s) {
+            case 'a': return 'first';
+            case 'b': return 'second';
+            default: return 'other';
+          }
+        }
+        ''',
+        'run',
+        {
+          ['a']: 'first',
+          ['b']: 'second',
+          ['z']: 'other',
+        },
+      );
+    });
   });
 }

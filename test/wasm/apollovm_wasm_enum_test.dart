@@ -186,6 +186,31 @@ enum Planet {
     });
   });
 
+  group('Wasm: switch on an enum', () {
+    // The Dart interpreter handles `switch` on an enum; the Wasm compiler does
+    // not yet (the scrutinee's enum value reduction leaves the stack
+    // unbalanced). `switch` on `int` and `String` work.
+    test('switch on an enum scrutinee', () async {
+      await _bothEqual(
+        r'''
+        enum Color { red, green, blue }
+        class Main {
+          static int run() {
+            var c = Color.green;
+            switch (c) {
+              case Color.red: return 1;
+              case Color.green: return 2;
+              default: return 9;
+            }
+          }
+        }
+        ''',
+        2,
+      );
+    }, skip: 'BUG: Wasm `switch` on an enum scrutinee is not yet supported '
+        '(int and String switch work).');
+  });
+
   group('Wasm: C# enum .value (explicit values)', () {
     // GAP 9: an explicit-value (C#) enum entry exposes its declared integer via
     // `.value`.

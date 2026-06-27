@@ -7474,15 +7474,39 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     out ??= newOutput();
     context ??= WasmContext();
 
-    // Evaluate the switch value once into a scratch local (int only).
+    // Evaluate the switch value once into a scratch local. Supported scrutinee
+    // kinds:
+    //  - `int`    : i64 equality (branch table).
+    //  - `String` : content equality via the `__streq` host/synth helper.
+    //  - a reference instance (e.g. an `enum` entry): i32 pointer identity —
+    //    enum entries are cached `const` singletons, so `==` is identity.
+    // A boxed `dynamic`/`Object` scrutinee is not supported (see GAP 5).
     generateASTExpression(statement.expression, out: out, context: context);
     var valueType = context.stackGet(0)!.type;
-    if (valueType != _astTypeInt64 && valueType != _astTypeInt) {
+
+    final switchOnInt =
+        valueType == _astTypeInt64 || valueType == _astTypeInt;
+    final switchOnString = valueType is ASTTypeString;
+
+    if (!switchOnInt && !switchOnString) {
       throw UnimplementedError(
-        "Wasm switch on $valueType is not supported (int only).",
+        "Wasm switch on $valueType is not supported (int or String only).",
       );
     }
-    var valueLocal = context.scratchLocal(_astTypeInt64, 17);
+
+    int? strEqIndex;
+    if (switchOnString) {
+      var module = context.module!;
+      module.requiresMemory = true;
+      module.ensureStrEqFunction();
+      strEqIndex = module.synthFunctionIndex('__streq')!;
+    }
+
+    // The scrutinee is held as i64 (int) or i32 (String handle).
+    final ASTType scrutineeLocalType = switchOnInt
+        ? _astTypeInt64
+        : _astTypeString;
+    var valueLocal = context.scratchLocal(scrutineeLocalType, 17);
     out.write(Wasm.localSet(valueLocal));
     context.stackDrop();
 
@@ -7530,10 +7554,21 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
         continue;
       }
       out.write(Wasm.localGet(valueLocal));
-      context.stackPush(_astTypeInt64, "switch value");
+      context.stackPush(scrutineeLocalType, "switch value");
       generateASTExpression(c.value!, out: out, context: context);
-      out.writeByte(Wasm64.i64Equals, description: "[OP] switch case == ");
-      context.stackOperationBinary(_astTypeInt32, "i64.eq (switch)");
+      if (switchOnString) {
+        // __streq(scrutinee, caseValue) -> i32 (0/1) content equality.
+        out.write(
+          Wasm.call(strEqIndex!),
+          description: "[OP] switch case __streq",
+        );
+      } else {
+        out.writeByte(
+          Wasm64.i64Equals,
+          description: "[OP] switch case == (i64)",
+        );
+      }
+      context.stackOperationBinary(_astTypeInt32, "switch case ==");
       out.write(
         Wasm.brIf(context.controlDepth - entryLevel(i)),
         description: "[OP] switch br_if case $i",
