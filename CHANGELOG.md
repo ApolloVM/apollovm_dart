@@ -11,6 +11,14 @@
 - **`switch` on a boxed `dynamic`/`Object` scrutinee** (e.g. a `List<Object>`
   element) now compiles: the scrutinee is unboxed to a concrete i64 to drive
   the integer branch table.
+- **Scalar `Object`/`dynamic` entry-point parameters are now marshalled.** An
+  untyped parameter (e.g. a JavaScript/Python `main(a, b)`, or an explicit Dart
+  `dynamic` parameter) is passed as a host-allocated box instead of a raw scalar
+  the module would read as a garbage pointer — fixing the JavaScript, Lua and
+  Python Class/Conditional/Switch examples, which previously ran with all
+  arguments seen as `0`. (The `apollovm_sig` section is now emitted whenever a
+  public function has an `Object`/`dynamic` parameter, and a plain `num` is
+  tagged as `int` so it is passed as a raw i64 rather than boxed.)
 
 ## 0.1.45
 

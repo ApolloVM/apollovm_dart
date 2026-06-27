@@ -116,6 +116,16 @@ class ApolloRunnerWasm extends ApolloRunner {
     int elemSizeOf(int elemTag) =>
         (elemTag == _tagInt || elemTag == _tagDouble) ? 8 : 4;
 
+    int encodeBox(Object? value) {
+      var m = loadedModule!;
+      var strPtr = value is String ? allocAndWriteString(value) : null;
+      var box = m.invokeExport('__alloc', [_boxSize]) as int;
+      var mem = m.readMemory()!;
+      var bd = ByteData.sublistView(mem);
+      _writeBox(bd, box, value, strPtr);
+      return box;
+    }
+
     // Encodes a Dart [list] into module memory as `[len:i32][cap:i32][dataPtr:i32]`
     // + a separate elements buffer (the generator's indirect list layout), and
     // returns the header pointer. `int` elements use i64, `double` f64, `bool`
@@ -334,6 +344,10 @@ class ApolloRunnerWasm extends ApolloRunner {
           allParams[i] = encodeList(arg, pt.elemTag);
         } else if (pt.isMap && arg is Map) {
           allParams[i] = encodeMap(arg, pt.elemTag, pt.valTag);
+        } else if (pt.tag == _tagObject && !pt.isList && !pt.isMap) {
+          // A scalar `Object`/`dynamic` parameter: pass a host-allocated box,
+          // not a raw scalar the module would read as a garbage pointer.
+          allParams[i] = encodeBox(arg);
         }
       }
     }

@@ -67,6 +67,60 @@ Future<void> _testWasm({
   }
 }
 
+/// Like [_testWasm] but compares captured `print` output (for `void` functions).
+Future<void> _testWasmPrints({
+  required String language,
+  required String code,
+  required String functionName,
+  required List args,
+  required List<String> expected,
+}) async {
+  var vm = ApolloVM();
+  var loadOK = await vm.loadCodeUnit(
+    SourceCodeUnit(language, code, id: 'test'),
+  );
+  expect(loadOK, isTrue, reason: "Can't load `$language` source");
+
+  var astRunner = vm.createRunner(language)!;
+  var astOut = <String>[];
+  astRunner.externalPrintFunction = (o) => astOut.add('$o');
+  await astRunner.executeFunction('', functionName, positionalParameters: args);
+  expect(astOut, equals(expected), reason: 'interpreter');
+
+  var storageWasm = vm.generateAllIn<BytesOutput>('wasm');
+  var wasmModules = await storageWasm.allEntries();
+  BytesOutput? compiled;
+  for (var ns in wasmModules.entries) {
+    for (var m in ns.value.entries) {
+      compiled ??= m.value;
+    }
+  }
+  expect(compiled, isNotNull);
+
+  var wasmRuntime = WasmRuntime();
+  wasmRuntime.ensureBooted();
+  if (!wasmRuntime.isSupported) return;
+
+  var vmWasm = ApolloVM();
+  await vmWasm.loadCodeUnit(
+    BinaryCodeUnit(
+      'wasm',
+      Uint8List.fromList(compiled!.output()),
+      id: 'test.wasm',
+      namespace: '',
+    ),
+  );
+  var wasmRunner = vmWasm.createRunner('wasm')!;
+  var wasmOut = <String>[];
+  wasmRunner.externalPrintFunction = (o) => wasmOut.add('$o');
+  await wasmRunner.executeFunction(
+    '',
+    functionName,
+    positionalParameters: args,
+  );
+  expect(wasmOut, equals(expected), reason: 'wasm');
+}
+
 void main() {
   // A plain `num` (TypeScript / JavaScript `number`) has no fixed width; the VM
   // treats integer-valued numbers as `int`, so the Wasm backend represents
@@ -123,6 +177,73 @@ void main() {
           [2]: 20,
           [9]: 30,
         },
+      );
+    });
+  });
+
+  // A scalar `Object`/`dynamic` parameter is passed as a host-allocated box (so
+  // the module reads a real box, not a raw scalar). This covers untyped
+  // parameters from JavaScript/Python and an explicit Dart `dynamic` parameter.
+  group('Wasm: scalar dynamic/Object parameter marshalling', () {
+    test('Dart `dynamic` parameter arithmetic', () {
+      return _testWasm(
+        language: 'dart',
+        code: r'''
+          int run(dynamic a, dynamic b) {
+            return a + b;
+          }
+        ''',
+        functionName: 'run',
+        executions: {
+          [10, 20]: 30,
+        },
+      );
+    });
+
+    test('JavaScript untyped parameters (print)', () {
+      return _testWasmPrints(
+        language: 'javascript',
+        code: r'''
+          function run(a, b) {
+            print(a + b);
+          }
+        ''',
+        functionName: 'run',
+        args: [10, 20],
+        expected: ['30'],
+      );
+    });
+
+    test('JavaScript switch on an untyped (dynamic) parameter (print)', () {
+      return _testWasmPrints(
+        language: 'javascript',
+        code: r'''
+          function run(n) {
+            switch (n) {
+              case 1:
+                print("one");
+                break;
+              case 2:
+                print("two");
+                break;
+              default:
+                print("many");
+            }
+          }
+        ''',
+        functionName: 'run',
+        args: [2],
+        expected: ['two'],
+      );
+    });
+
+    test('Python untyped parameters (print)', () {
+      return _testWasmPrints(
+        language: 'python',
+        code: 'def run(a, b):\n    print(a + b)\n',
+        functionName: 'run',
+        args: [10, 20],
+        expected: ['30'],
       );
     });
   });

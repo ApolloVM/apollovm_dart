@@ -303,6 +303,9 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     if (t is ASTTypeString) return 4;
     if (t is ASTTypeArray) return 6;
     if (t is ASTTypeMap) return 7;
+    // A plain `num` (TS/JS `number`) is represented as i64 (int), so tag it as
+    // int — NOT as `Object` (5), so the host passes a raw i64, not a box.
+    if (t is ASTTypeNum) return 1;
     return 5;
   }
 
@@ -331,17 +334,15 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
         t is ASTTypeString ||
         t is ASTTypeBool ||
         t is ASTTypeArray ||
-        t is ASTTypeMap;
+        t is ASTTypeMap ||
+        _isObjectType(t);
     for (var f in module.functions) {
       if (f.modifiers.isPrivate) continue;
       if (needs(f.effectiveReturnType)) return true;
       for (var p in f.parameters.allParameters) {
-        if (p.type is ASTTypeString ||
-            p.type is ASTTypeBool ||
-            p.type is ASTTypeArray ||
-            p.type is ASTTypeMap) {
-          return true;
-        }
+        // An `Object`/`dynamic` param must be in the section so the runner
+        // knows to pass a host-allocated box (not a raw scalar).
+        if (needs(p.type)) return true;
       }
     }
     return false;
@@ -355,7 +356,9 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       for (var p in f.parameters.allParameters) {
         if (p.type is ASTTypeString ||
             p.type is ASTTypeArray ||
-            p.type is ASTTypeMap) {
+            p.type is ASTTypeMap ||
+            _isObjectType(p.type)) {
+          // A scalar `Object`/`dynamic` param is passed as a host-allocated box.
           return true;
         }
       }
