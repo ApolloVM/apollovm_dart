@@ -66,7 +66,7 @@ Kotlin → JavaScript), and code can be regenerated back to its original languag
 
 ### Control flow & operators
 
-Legend: ✅ supported · ⚠️ supported via the language's idiom · 🚧 not yet supported (exists in the
+Legend: ✅ supported · 🧩 supported via the language's idiom · 🚧 not yet supported (exists in the
 language but not implemented yet) · — not applicable (the language has no such construct).
 
 The **Wasm** column shows what the on-the-fly WebAssembly compiler currently supports
@@ -75,20 +75,20 @@ The **Wasm** column shows what the on-the-fly WebAssembly compiler currently sup
 | Feature | Dart | Java | Kotlin | C# | JS | TS | Lua | Python | Wasm |
 |---|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|
 | `if` / `else if` / `else`        | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| `for` (C-style)                  | ✅ | ✅ | —  | ✅ | ✅ | ✅ | ⚠️¹ | — | ✅ |
+| `for` (C-style)                  | ✅ | ✅ | —  | ✅ | ✅ | ✅ | 🧩¹ | — | ✅ |
 | `for-each` / `for-in`            | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | `while`                          | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| `do` / `while`                   | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ⚠️² | — | ✅ |
-| `switch` / `case`                | ✅ | ✅ | ⚠️³ | ✅ | ✅ | ✅ | —  | ⚠️⁴ | ✅ |
+| `do` / `while`                   | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 🧩² | — | ✅ |
+| `switch` / `case`                | ✅ | ✅ | 🧩³ | ✅ | ✅ | ✅ | —  | 🧩⁴ | ✅ |
 | `break`                          | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | `continue`                       | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | —  | ✅ | ✅ |
 | `try` / `catch` / `finally`      | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | —  | ✅ | ✅ |
 | `throw` / `raise`                | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | —  | ✅ | ✅ |
-| `async` / `await`                | ✅ | —  | ⚠️⁷ | ✅ | ✅ | ✅ | —  | ✅ | ✅ |
+| `async` / `await`                | ✅ | —  | 🧩⁷ | ✅ | ✅ | ✅ | —  | ✅ | ✅ |
 | Ternary (`? :`)                  | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | —  | ✅ | ✅ |
 | Arithmetic (`+ - * / %`)         | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Comparison / logical             | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Bitwise (`& \| ^ << >> ~`)       | ✅ | ✅ | ⚠️⁵ | ✅ | ✅ | ✅ | ⚠️⁶ | ✅ | ✅ |
+| Bitwise (`& \| ^ << >> ~`)       | ✅ | ✅ | 🧩⁵ | ✅ | ✅ | ✅ | 🧩⁶ | ✅ | ✅ |
 | `++` / `--`, compound assign     | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Lambdas / closures               | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | String interpolation / concat    | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
@@ -105,7 +105,7 @@ The **Wasm** column shows what the on-the-fly WebAssembly compiler currently sup
 
 ### Classes, types & OOP
 
-Legend: ✅ supported · ⚠️ supported via the language's idiom · 🚧 not yet supported (exists in the
+Legend: ✅ supported · 🧩 supported via the language's idiom · 🚧 not yet supported (exists in the
 language but not implemented yet) · — not applicable (the language has no such construct).
 
 The **Wasm** column shows what the on-the-fly WebAssembly compiler currently supports
@@ -114,10 +114,10 @@ The **Wasm** column shows what the on-the-fly WebAssembly compiler currently sup
 | Feature | Dart | Java | Kotlin | C# | JS | TS | Lua | Python | Wasm |
 |---|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|
 | Classes                                                       | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | —  | ✅ | ✅ |
-| Fields (with initializers)                                    | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ⚠️¹ | ✅ | ✅ |
-| Constructors & instantiation (`new Foo(...)` / `Foo(...)`)    | ✅ | ✅ | ✅ | ✅ | 🚧 | ✅ | ⚠️¹ | 🚧² | ✅ |
+| Fields (with initializers)                                    | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 🧩¹ | ✅ | ✅ |
+| Constructors & instantiation (`new Foo(...)` / `Foo(...)`)    | ✅ | ✅ | ✅ | ✅ | 🚧 | ✅ | 🧩¹ | 🚧² | ✅ |
 | Methods                                                       | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Static / visibility modifiers                                 | ✅ | ✅ | ⚠️⁴ | ✅ | ⚠️³ | ✅ | —  | —  | ⚠️⁵ |
+| Static / visibility modifiers                                 | ✅ | ✅ | 🧩⁴ | ✅ | 🧩³ | ✅ | —  | —  | 🧩⁵ |
 | Inheritance (`extends`) / interfaces                          | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | —  | ✅ | 🚧 |
 | Enums (incl. runtime value access)                            | ✅ | ✅ | ✅ | ✅ | —  | ✅ | —  | ✅ | 🚧 |
 | Generics (generic classes + instantiation + type erasure)    | ✅ | ✅ | ✅ | ✅ | —  | ✅ | —  | —  | 🚧 |
