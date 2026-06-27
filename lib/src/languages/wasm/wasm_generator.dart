@@ -732,14 +732,26 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
   _collectAnonymousClosures(List<ASTFunctionDeclaration> baseFunctions) {
     var moduleFnNames = baseFunctions.map((f) => f.name).toSet();
 
+    // The closure function carried by a node: an anonymous-function literal
+    // (`(n) => …`) or a named nested function declaration (JS/TS parse
+    // `let twice = (n) => …` as a named nested function, not a `var`).
+    ASTFunctionDeclaration? closureFnOf(ASTNode node) {
+      if (node is ASTExpressionLiteralFunction) return node.function;
+      if (node is ASTStatementFunctionDeclaration) {
+        return node.functionDeclaration;
+      }
+      return null;
+    }
+
     // Map each closure to the function type it is passed as, and to the
     // function that lexically encloses it (for resolving captured-var types).
     var expected = <ASTFunctionDeclaration, ASTTypeFunction>{};
     var enclosingOf = <ASTFunctionDeclaration, ASTFunctionDeclaration>{};
     for (var encl in baseFunctions) {
       for (var node in encl.descendantChildren) {
-        if (node is ASTExpressionLiteralFunction) {
-          enclosingOf.putIfAbsent(node.function, () => encl);
+        var cfn = closureFnOf(node);
+        if (cfn != null) {
+          enclosingOf.putIfAbsent(cfn, () => encl);
         }
         if (node is ASTExpressionLocalFunctionInvocation) {
           var callee = _findModuleFunction(
@@ -775,8 +787,8 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     var seen = <ASTFunctionDeclaration>{};
     for (var encl in baseFunctions) {
       for (var node in encl.descendantChildren) {
-        if (node is ASTExpressionLiteralFunction) {
-          var fn = node.function;
+        var fn = closureFnOf(node);
+        if (fn != null) {
           if (!seen.add(fn)) continue;
 
           var funcType = expected[fn];
@@ -831,12 +843,21 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     };
     for (var encl in baseFunctions) {
       for (var node in encl.descendantChildren) {
-        if (node is! ASTStatementVariableDeclaration) continue;
-        var init = node.value;
-        if (init is! ASTExpressionLiteralFunction) continue;
-        if (!captureFree.contains(init.function)) continue;
-        if (!_isClosureVarCallOnly(encl, node.name)) continue;
-        (directClosureVars[encl] ??= {})[node.name] = init.function;
+        // `var f = (n) => …`: a closure literal bound to a call-only variable.
+        if (node is ASTStatementVariableDeclaration) {
+          var init = node.value;
+          if (init is! ASTExpressionLiteralFunction) continue;
+          if (!captureFree.contains(init.function)) continue;
+          if (!_isClosureVarCallOnly(encl, node.name)) continue;
+          (directClosureVars[encl] ??= {})[node.name] = init.function;
+        } else if (node is ASTStatementFunctionDeclaration) {
+          // `let twice = (n) => …` (JS/TS): a named nested function, called by
+          // name. Lowered to a direct `call` just like a call-only closure var.
+          var fn = node.functionDeclaration;
+          if (!captureFree.contains(fn)) continue;
+          if (!_isClosureVarCallOnly(encl, fn.name)) continue;
+          (directClosureVars[encl] ??= {})[fn.name] = fn;
+        }
       }
     }
 
@@ -930,6 +951,27 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     return null;
   }
 
+  /// Best-effort static inference of an untyped closure parameter [paramName]
+  /// from its use in the body: a parameter that participates in a binary
+  /// operation is numeric, taking `double` when the other operand is `double`,
+  /// else `int`. Returns `null` when it can't be inferred.
+  ASTType? _inferParamTypeFromBody(
+    ASTFunctionDeclaration fn,
+    String paramName,
+  ) {
+    bool isParam(ASTExpression e) =>
+        e is ASTExpressionVariableAccess && e.variable.name == paramName;
+    for (var node in fn.descendantChildren) {
+      if (node is! ASTExpressionOperation) continue;
+      var e1 = node.expression1, e2 = node.expression2;
+      if (!isParam(e1) && !isParam(e2)) continue;
+      var other = isParam(e1) ? e2 : e1;
+      var t = _inferStaticExpressionType(other, const {});
+      return t is ASTTypeDouble ? _astTypeDouble : _astTypeInt;
+    }
+    return null;
+  }
+
   /// Best-effort static type of [expr] given a [scope] of variable-name -> type
   /// (e.g. a closure's parameters). Handles literals, variable reads and binary
   /// operations — enough for simple arrow bodies (`n * 2`, `n + 1`, `n > 0`).
@@ -998,6 +1040,14 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
           result.add(t);
           continue;
         }
+      }
+      // No typed context (e.g. `var f = (n) => n * 2` from C#/Lua/Python where
+      // the parameter is untyped): infer the parameter type from how it is used
+      // in the body.
+      var inferred = _inferParamTypeFromBody(fn, params[i].name);
+      if (inferred != null) {
+        result.add(inferred);
+        continue;
       }
       throw UnsupportedError(
         "Wasm: can't infer the type of parameter `${params[i].name}` of an "
@@ -2211,6 +2261,23 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       return _generatePrintInvocation(expression, out: out, context: context);
     }
 
+    // A capture-free, call-only closure — a `var f = (n) => …` or a named
+    // nested function (`let f = (n) => …` parsed as a function declaration) — is
+    // lowered directly to a `call` of the closure function (its env parameter is
+    // unused, so a null env is passed), skipping the env allocation and
+    // `call_indirect`. Checked before the module-function table because a named
+    // nested closure is *also* a module function, but its true signature takes
+    // the hidden env parameter.
+    var directFn = context.directClosureVars[name];
+    if (directFn != null) {
+      return _emitDirectClosureCall(
+        expression,
+        directFn,
+        out: out,
+        context: context,
+      );
+    }
+
     // Resolve at the callee's DECLARED arity: a call may omit trailing
     // parameters that have default values, so the supplied [argsCount] can be
     // less than the registered (declared) arity.
@@ -2234,19 +2301,6 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
           methodName: name,
           arguments: positionalArgs,
           namedArguments: namedArgs,
-          out: out,
-          context: context,
-        );
-      }
-
-      // A capture-free, call-only closure assigned to a `var`: lower directly
-      // to a `call` of the closure function (its env parameter is unused, so a
-      // null env is passed), skipping the env allocation and `call_indirect`.
-      var directFn = context.directClosureVars[name];
-      if (directFn != null) {
-        return _emitDirectClosureCall(
-          expression,
-          directFn,
           out: out,
           context: context,
         );
@@ -3016,8 +3070,10 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     BytesOutput out,
     WasmContext context,
   ) {
-    assert(stackType1 == _astTypeInt, stackType1);
-    assert(stackType2 == _astTypeInt, stackType2);
+    // `int` operands, or a plain `num` (TS/JS `number`) which is represented as
+    // i64 like `int`.
+    assert(stackType1 is ASTTypeNum, stackType1);
+    assert(stackType2 is ASTTypeNum, stackType2);
 
     if (stackType1.equalsStrict(stackType2)) {
       out.writeBytes(opsOut1);
@@ -8328,6 +8384,26 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
 
     if (stackType == targetType) return out;
 
+    // A boxed `Object`/`dynamic` value flowing into a concrete numeric target
+    // (e.g. a dynamic argument passed to a typed `int` closure/function
+    // parameter) is unboxed via the runtime box tag.
+    if (_isObjectType(stackType) && targetType is ASTTypeNum) {
+      _emitUnboxNumberInto(
+        out,
+        context,
+        targetType is ASTTypeDouble ? _astTypeDouble64 : _astTypeInt64,
+      );
+      return out;
+    }
+
+    // A concrete value flowing into an `Object`/`dynamic` target (e.g. an `int`
+    // argument passed to a generic `T` field/parameter, which is represented as
+    // a boxed `Object`) is boxed.
+    if (_isObjectType(targetType) && !_isObjectType(stackType)) {
+      _emitBoxValue(out, context);
+      return out;
+    }
+
     if (stackType is ASTTypeNum) {
       final stackType32 = stackType.isBits32;
       final stackType64 = stackType.isBits64;
@@ -8516,7 +8592,12 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     ASTStatementFunctionDeclaration statement, {
     BytesOutput? out,
   }) {
-    throw UnimplementedError("generateASTStatementFunctionDeclaration");
+    // A named nested function (e.g. JS/TS `let twice = (n) => …`) is collected
+    // and generated as a module function by [_collectAnonymousClosures]; the
+    // declaration statement itself emits nothing. A call `twice(x)` resolves to
+    // a direct `call` (capture-free, call-only) or fails to resolve at the call
+    // site if it is used in an unsupported way (captured/escaping).
+    return out ?? newOutput();
   }
 
   @override
@@ -9502,6 +9583,10 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     } else if (type is ASTTypeDouble) {
       tag = _boxTagDouble;
       valLocalType = _astTypeDouble64; // f64
+    } else if (type is ASTTypeNum) {
+      // A plain `num` (TS/JS `number`) is represented as i64 (int).
+      tag = _boxTagInt;
+      valLocalType = _astTypeInt64;
     } else if (type is ASTTypeString) {
       tag = _boxTagString;
       valLocalType = _astTypeString; // i32 string ptr
@@ -11156,7 +11241,33 @@ extension _ASTFunctionDeclarationExtension on ASTFunctionDeclaration {
     if (modifiers.isAsync && rt is ASTTypeFuture) {
       return rt.futureValueType;
     }
+    // A function typed `dynamic` (e.g. an untyped Lua/Python function) whose own
+    // body never directly returns a value — its only `return <expr>` lives in a
+    // nested closure, which some parsers wrongly attribute to the parent — is
+    // effectively `void`. Treating it as non-void would emit a trailing
+    // terminator that traps when the function falls off its end.
+    if (rt is ASTTypeDynamic && !_bodyHasDirectValueReturn) {
+      return ASTTypeVoid.instance;
+    }
     return rt;
+  }
+
+  /// Whether this function's own body contains a `return <expression>` that is
+  /// not inside a nested anonymous function (closures are skipped).
+  bool get _bodyHasDirectValueReturn {
+    bool scan(ASTNode node) {
+      if (node is ASTExpressionLiteralFunction) return false;
+      if (node is ASTStatementReturnWithExpression) return true;
+      for (var c in node.children) {
+        if (scan(c)) return true;
+      }
+      return false;
+    }
+
+    for (var stm in statements) {
+      if (scan(stm)) return true;
+    }
+    return false;
   }
 
   List<int> get parametersTypesWasmCode {

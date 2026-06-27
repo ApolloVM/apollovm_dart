@@ -19,6 +19,18 @@
   arguments seen as `0`. (The `apollovm_sig` section is now emitted whenever a
   public function has an `Object`/`dynamic` parameter, and a plain `num` is
   tagged as `int` so it is passed as a raw i64 rather than boxed.)
+- **Anonymous functions with an untyped parameter** (`n => n * 2` from
+  C#/Lua/Python) now compile: the parameter type is inferred from its body. A
+  nested closure's `return` no longer makes the enclosing (void) function
+  non-void.
+- **Named nested function declarations** (`let twice = (n) => …`, which
+  JavaScript/TypeScript parse as a function declaration rather than a `var`) are
+  hoisted and lowered to a direct `call`.
+- **A boxed value flows into and out of an `Object`/`dynamic` slot.** A concrete
+  value passed to a generic `T` field/parameter (represented as a boxed
+  `Object`) is boxed; a boxed value used in arithmetic or passed to a typed
+  numeric parameter is unboxed. This makes generic `Box<T>` (Dart, Java, Kotlin,
+  C#, TypeScript) work.
 
 ## 0.1.45
 
