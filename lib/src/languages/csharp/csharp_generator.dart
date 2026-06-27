@@ -237,6 +237,10 @@ class ApolloCodeGeneratorCSharp extends ApolloCodeGenerator {
       out.write('static ');
     }
 
+    if (f.modifiers.isAsync) {
+      out.write('async ');
+    }
+
     out.write(typeCode);
     out.write(' ');
     out.write(f.name);

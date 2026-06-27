@@ -79,6 +79,10 @@ abstract class TypeScriptGrammarLexer extends BaseGrammarLexer {
 
   Parser throwToken() => ref1(token, 'throw');
 
+  Parser asyncToken() => keywordToken('async');
+
+  Parser awaitToken() => keywordToken('await');
+
   // TypeScript-specific keywords.
   Parser abstractToken() => ref1(token, 'abstract');
 

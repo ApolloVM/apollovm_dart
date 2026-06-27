@@ -100,6 +100,11 @@ abstract class CSharpGrammarLexer extends BaseGrammarLexer {
 
   Parser staticToken() => ref1(token, 'static');
 
+  // Whole-word match so identifiers like `awaiter` aren't read as `await` + …
+  Parser asyncToken() => keywordToken('async');
+
+  Parser awaitToken() => keywordToken('await');
+
   Parser hexNumberLexicalToken() =>
       string('0x') & ref0(hexDigitLexicalToken).plus() |
       string('0X') & ref0(hexDigitLexicalToken).plus();

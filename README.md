@@ -60,12 +60,14 @@ Kotlin → JavaScript), and code can be regenerated back to its original languag
 - **Execution**: a tree-walking interpreter runs the AST directly.
 - **Translation**: regenerate the AST as source in any supported language.
 - **Wasm compilation**: compile to WebAssembly, including `async`/`await` (via
-  Asyncify), classes, exceptions, maps and GC types.
+  Asyncify), classes (fields, constructors, instance & `static` methods,
+  `toString()` dispatch, `Object`/`dynamic` boxing), exceptions, closures,
+  lists/maps and GC types.
 
 ### Control flow & operators
 
-Legend: ✅ supported · ⚠️ supported via the language's idiom · 🚧 not yet supported (exists in the
-language but not implemented yet) · — not applicable (the language has no such construct).
+Legend: ✅ supported · 🧩 supported via the language's idiom · 🚧 not yet supported (exists in the
+language but not implemented yet) · 🚫 not applicable (the language has no such construct).
 
 The **Wasm** column shows what the on-the-fly WebAssembly compiler currently supports
 (any source language is compiled through the same shared AST).
@@ -73,19 +75,20 @@ The **Wasm** column shows what the on-the-fly WebAssembly compiler currently sup
 | Feature | Dart | Java | Kotlin | C# | JS | TS | Lua | Python | Wasm |
 |---|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|
 | `if` / `else if` / `else`        | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| `for` (C-style)                  | ✅ | ✅ | —  | ✅ | ✅ | ✅ | ⚠️¹ | — | ✅ |
+| `for` (C-style)                  | ✅ | ✅ | 🚫  | ✅ | ✅ | ✅ | 🧩¹ | 🚫 | ✅ |
 | `for-each` / `for-in`            | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | `while`                          | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| `do` / `while`                   | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ⚠️² | — | ✅ |
-| `switch` / `case`                | ✅ | ✅ | ⚠️³ | ✅ | ✅ | ✅ | —  | ⚠️⁴ | ✅ |
+| `do` / `while`                   | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 🧩² | 🚫 | ✅ |
+| `switch` / `case`                | ✅ | ✅ | 🧩³ | ✅ | ✅ | ✅ | 🚫  | 🧩⁴ | ✅ |
 | `break`                          | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| `continue`                       | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | —  | ✅ | ✅ |
-| `try` / `catch` / `finally`      | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | —  | ✅ | ✅ |
-| `throw` / `raise`                | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | —  | ✅ | ✅ |
-| Ternary (`? :`)                  | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | —  | ✅ | ✅ |
+| `continue`                       | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 🚫  | ✅ | ✅ |
+| `try` / `catch` / `finally`      | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 🚫  | ✅ | ✅ |
+| `throw` / `raise`                | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 🚫  | ✅ | ✅ |
+| `async` / `await`                | ✅ | 🚫  | 🧩⁷ | ✅ | ✅ | ✅ | 🚫  | ✅ | ✅ |
+| Ternary (`? :`)                  | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 🚫  | ✅ | ✅ |
 | Arithmetic (`+ - * / %`)         | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Comparison / logical             | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Bitwise (`& \| ^ << >> ~`)       | ✅ | ✅ | ⚠️⁵ | ✅ | ✅ | ✅ | ⚠️⁶ | ✅ | ✅ |
+| Bitwise (`& \| ^ << >> ~`)       | ✅ | ✅ | 🧩⁵ | ✅ | ✅ | ✅ | 🧩⁶ | ✅ | ✅ |
 | `++` / `--`, compound assign     | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Lambdas / closures               | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | String interpolation / concat    | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
@@ -95,34 +98,42 @@ The **Wasm** column shows what the on-the-fly WebAssembly compiler currently sup
 ¹ Lua numeric-for (`for i = a, b do`). &nbsp; ² Lua `repeat … until`. &nbsp;
 ³ Kotlin `when`. &nbsp; ⁴ Python `match` / `case`. &nbsp;
 ⁵ Kotlin bitwise are infix functions: `and`/`or`/`xor`/`shl`/`shr` and `.inv()`. &nbsp;
-⁶ Lua bitwise use `&`/`|`/`~` (xor)/`<<`/`>>` and unary `~` (Lua 5.3).
+⁶ Lua bitwise use `&`/`|`/`~` (xor)/`<<`/`>>` and unary `~` (Lua 5.3). &nbsp;
+⁷ Kotlin's async idiom is `suspend` / coroutines: ApolloVM generates `suspend fun`
+(dropping `await`) when translating to Kotlin, but does not yet parse Kotlin `suspend`.
+`await` unwraps the awaitable (`Future<T>` / `Promise<T>` / `Task<T>`) to `T`.
 
 ### Classes, types & OOP
 
-Legend: ✅ supported · ⚠️ supported via the language's idiom · 🚧 not yet supported (exists in the
-language but not implemented yet) · — not applicable (the language has no such construct).
+Legend: ✅ supported · 🧩 supported via the language's idiom · 🚧 not yet supported (exists in the
+language but not implemented yet) · 🚫 not applicable (the language has no such construct).
 
-| Feature | Dart | Java | Kotlin | C# | JS | TS | Lua | Python |
-|---|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|
-| Classes                                                       | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | —  | ✅ |
-| Fields (with initializers)                                    | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ⚠️¹ | ✅ |
-| Constructors & instantiation (`new Foo(...)` / `Foo(...)`)    | ✅ | ✅ | ✅ | ✅ | 🚧 | ✅ | ⚠️¹ | 🚧² |
-| Methods                                                       | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Static / visibility modifiers                                 | ✅ | ✅ | ⚠️⁴ | ✅ | ⚠️³ | ✅ | —  | —  |
-| Inheritance (`extends`) / interfaces                          | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | —  | ✅ |
-| Enums (incl. runtime value access)                            | ✅ | ✅ | ✅ | ✅ | —  | ✅ | —  | ✅ |
-| Generics (generic classes + instantiation + type erasure)    | ✅ | ✅ | ✅ | ✅ | —  | ✅ | —  | —  |
-| Type inference (`var` / `val` / `auto`)                       | ✅ | ✅ | ✅ | ✅ | —  | ✅ | —  | —  |
+The **Wasm** column shows what the on-the-fly WebAssembly compiler currently supports
+(any source language is compiled through the same shared AST).
+
+| Feature | Dart | Java | Kotlin | C# | JS | TS | Lua | Python | Wasm |
+|---|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|
+| Classes                                                       | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 🚫  | ✅ | ✅ |
+| Fields (with initializers)                                    | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 🧩¹ | ✅ | ✅ |
+| Constructors & instantiation (`new Foo(...)` / `Foo(...)`)    | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 🧩¹ | ✅ | ✅ |
+| Methods                                                       | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Static / visibility modifiers                                 | ✅ | ✅ | 🧩³ | ✅ | 🧩² | ✅ | 🚫  | 🚫  | 🧩⁴ |
+| Inheritance (`extends`) / interfaces                          | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 🚫  | ✅ | 🚧 |
+| Enums (incl. runtime value access)                            | ✅ | ✅ | ✅ | ✅ | 🚫  | ✅ | 🚫  | ✅ | 🚧 |
+| Generics (generic classes + instantiation + type erasure)    | ✅ | ✅ | ✅ | ✅ | 🚫  | ✅ | 🚫  | 🚫  | 🚧 |
+| Type inference (`var` / `val` / `auto`)                       | ✅ | ✅ | ✅ | ✅ | 🚫  | ✅ | 🚫  | 🚫  | ✅⁵ |
 
 ¹ Lua is table-based (no class construct): "fields" are table entries (`obj.x`) and "constructors"
 are factory functions / `setmetatable` idioms; methods use `function Obj:method`. &nbsp;
-² Python declares constructors via `__init__`, but instance-field assignment (`self.x = ...`) is not
-implemented yet, so constructors aren't usable end-to-end. &nbsp;
-³ JavaScript supports the `static` modifier but has no visibility keywords (privacy is by convention /
+² JavaScript supports the `static` modifier but has no visibility keywords (privacy is by convention /
 closures). &nbsp;
-⁴ Kotlin member visibility modifiers (`private`/`public`/`internal`/`protected`) are supported; Kotlin
-has no `static` (it uses `companion object`, not yet supported). &nbsp;
-Generics are marked `—` for JS/Lua/Python because those languages have no static type syntax to
+³ Kotlin `private`/`public` member visibility round-trips; `internal`/`protected` are parsed but not
+yet preserved in the AST. Kotlin has no `static` (it uses `companion object`, not yet supported). &nbsp;
+⁴ Wasm compiles `static` methods (exported as `Class.method`) and instance methods (called with a
+receiver); only static methods are callable as entry points, and there is no source-level visibility
+concept in the module. &nbsp;
+⁵ Wasm consumes the already type-resolved AST, so `var`/`val`-typed code compiles unchanged. &nbsp;
+Generics are marked `🚫` for JS/Lua/Python because those languages have no static type syntax to
 parameterize.
 
 > Per-language behavior is normalized to a shared AST, so types and constructs map
@@ -1107,7 +1118,7 @@ Any help from the open-source community is always welcome and needed:
 
 ## TODO
 
-- JavaScript: extended support (destructuring, spread, async/await, `this.x` constructor parameters, full ESM modules). *Named arrow functions (`const f = (a, b) => a + b;`), anonymous arrow callbacks/closures (`(x) => x * 2`), and the ternary operator (`c ? a : b`) are already supported.*
+- JavaScript: extended support (destructuring, spread, `this.x` constructor parameters, full ESM modules). *Named arrow functions (`const f = (a, b) => a + b;`), anonymous arrow callbacks/closures (`(x) => x * 2`), the ternary operator (`c ? a : b`), and `async`/`await` are already supported.*
   - *See the [JavaScript implementation (at "lib/src/languages/javascript/es")](https://github.com/ApolloVM/apollovm_dart/tree/master/lib/src/languages/javascript/es).*
 
 

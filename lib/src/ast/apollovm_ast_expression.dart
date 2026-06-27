@@ -1002,7 +1002,17 @@ class ASTExpressionAwait extends ASTExpression {
   @override
   FutureOr<ASTType> resolveType(VMContext? context) {
     return expression.resolveType(context).resolveMapped((t) {
-      return t is ASTTypeFuture ? t.futureValueType : t;
+      if (t is ASTTypeFuture) return t.futureValueType;
+      // Other languages name the awaitable differently (TypeScript
+      // `Promise<T>`, C# `Task<T>`); awaiting any of them yields its value
+      // type `T`, so the inferred type of `await expr` unwraps the generic.
+      var generics = t.generics;
+      if (generics != null &&
+          generics.isNotEmpty &&
+          (t.name == 'Future' || t.name == 'Promise' || t.name == 'Task')) {
+        return generics.first;
+      }
+      return t;
     });
   }
 

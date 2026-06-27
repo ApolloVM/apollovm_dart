@@ -25,6 +25,14 @@ abstract class BaseGrammarLexer extends GrammarDefinition {
         return t is Token ? t.value : '$t';
       });
 
+  /// A whole-word keyword token for [word]: matches only when [word] is not
+  /// immediately followed by an identifier part, so contextual keywords like
+  /// `await` are not read inside identifiers such as `awaiter`.
+  Parser keywordToken(String word) =>
+      (string(word) & ref0(identifierPartLexicalToken).not())
+          .map((v) => v[0])
+          .trim(ref0(hiddenStuffWhitespace));
+
   Parser<String> identifierLexicalToken() =>
       (ref0(identifierStartLexicalToken) &
               ref0(identifierPartLexicalToken).star())
