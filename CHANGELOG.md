@@ -31,6 +31,11 @@
   `Object`) is boxed; a boxed value used in arithmetic or passed to a typed
   numeric parameter is unboxed. This makes generic `Box<T>` (Dart, Java, Kotlin,
   C#, TypeScript) work.
+- **More boxed-operand operations.** A `var` whose initializer is a boxed-operand
+  expression (e.g. `var s = a + b` where `a`/`b` are `Object[]`/`List<Object>`
+  elements) is refined to the result's concrete type, and the `== 0` fast path
+  (`i64.eqz`) unboxes a boxed operand first. Fixes the Java Class example and the
+  JavaScript try/catch example.
 
 ## 0.1.45
 

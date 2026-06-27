@@ -248,6 +248,50 @@ void main() {
     });
   });
 
+  // Operations whose operands are boxed `Object`/`dynamic` values.
+  group('Wasm: operations on boxed dynamic values', () {
+    test('a + b with both operands boxed (var result refined to int)', () {
+      // `a` and `b` are boxed `List<Object>` elements; the sum is an i64 and the
+      // unresolved `var s` is refined to it.
+      return _testWasm(
+        language: 'dart',
+        code: r'''
+          int run(List<Object> args) {
+            var a = args[0];
+            var b = args[1];
+            var s = a + b;
+            return s;
+          }
+        ''',
+        functionName: 'run',
+        executions: {
+          [
+            [10, 20],
+          ]: 30,
+        },
+      );
+    });
+
+    test('equality-to-zero on a boxed dynamic parameter', () {
+      // `b == 0` uses the `i64.eqz` fast path, which must unbox `b` first.
+      return _testWasmPrints(
+        language: 'javascript',
+        code: r'''
+          function run(b) {
+            if (b == 0) {
+              print("zero");
+            } else {
+              print("nonzero");
+            }
+          }
+        ''',
+        functionName: 'run',
+        args: [0],
+        expected: ['zero'],
+      );
+    });
+  });
+
   // A boxed `dynamic`/`Object` switch scrutinee is unboxed to a concrete i64 so
   // it can drive the int branch table.
   group('Wasm: switch on a boxed dynamic/Object scrutinee', () {

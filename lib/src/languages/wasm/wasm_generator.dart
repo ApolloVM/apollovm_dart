@@ -3144,6 +3144,12 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       "After operation expression (left)",
     );
 
+    // A boxed `Object`/`dynamic` operand (e.g. a dynamic `b` in `b == 0`) is
+    // unboxed to i64 before the `i64.eqz`.
+    if (_isObjectType(context.stackGet(0)!.type)) {
+      _emitUnboxNumberInto(out, context, _astTypeInt64);
+    }
+
     out.writeByte(
       Wasm64.i64EqualsToZero,
       description: "[OP] operator: equals to zero",
@@ -8562,7 +8568,12 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     // concrete function type (signature generics) so a later `twice(x)` call
     // dispatches via `call_indirect` with the matching type.
     var initType = context.stackGet(0)!.type;
-    if (localVar.type is ASTTypeDynamic) {
+    if (_isObjectType(localVar.type) && !_isObjectType(initType)) {
+      // A `var`/`Object`/`dynamic` local whose initializer has a concrete type:
+      // refine to it so method/field access and the local's Wasm width are
+      // correct — `var p = Point()` (i32 instance) or `var s = a + b` where
+      // `a`/`b` are boxed `Object`s and the sum is an i64. A genuinely boxed
+      // initializer (e.g. `var a = args[0]`) stays `Object`.
       context.updateLocalVariableType(name, initType);
     } else if (initType is ASTTypeFunction &&
         (initType.generics?.isNotEmpty ?? false)) {
