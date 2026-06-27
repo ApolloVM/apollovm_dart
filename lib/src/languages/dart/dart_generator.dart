@@ -413,17 +413,21 @@ class ApolloCodeGeneratorDart extends ApolloCodeGenerator {
   }) {
     out ??= newOutput();
 
+    var wrote = 0;
+
     var positionalParameters = parameters.positionalParameters;
     if (positionalParameters != null) {
       for (var i = 0; i < positionalParameters.length; ++i) {
         var p = positionalParameters[i];
-        if (i > 0) out.write(', ');
+        if (wrote > 0) out.write(', ');
         generateASTParameterDeclaration(p, out: out);
+        ++wrote;
       }
     }
 
     var optionalParameters = parameters.optionalParameters;
-    if (optionalParameters != null) {
+    if (optionalParameters != null && optionalParameters.isNotEmpty) {
+      if (wrote > 0) out.write(', ');
       out.write('[');
       for (var i = 0; i < optionalParameters.length; ++i) {
         var p = optionalParameters[i];
@@ -431,10 +435,12 @@ class ApolloCodeGeneratorDart extends ApolloCodeGenerator {
         generateASTParameterDeclaration(p, out: out);
       }
       out.write(']');
+      ++wrote;
     }
 
     var namedParameters = parameters.namedParameters;
-    if (namedParameters != null) {
+    if (namedParameters != null && namedParameters.isNotEmpty) {
+      if (wrote > 0) out.write(', ');
       out.write('{');
       for (var i = 0; i < namedParameters.length; ++i) {
         var p = namedParameters[i];
@@ -442,6 +448,7 @@ class ApolloCodeGeneratorDart extends ApolloCodeGenerator {
         generateASTParameterDeclaration(p, out: out);
       }
       out.write('}');
+      ++wrote;
     }
 
     return out;

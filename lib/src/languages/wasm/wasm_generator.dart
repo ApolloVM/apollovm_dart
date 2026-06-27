@@ -1472,6 +1472,7 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       receiverDesc: expression.variable.name,
       methodName: expression.name,
       arguments: expression.arguments,
+      namedArguments: expression.namedArguments,
       out: out,
       context: context,
     );
@@ -1485,20 +1486,41 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     required String receiverDesc,
     required String methodName,
     required List<ASTExpression> arguments,
+    Map<String, ASTExpression>? namedArguments,
     required BytesOutput out,
     required WasmContext context,
   }) {
     var module = context.module!;
     var className = recv.type.name;
-    var arity = arguments.length;
+    // Supplied arity = positional + named. A call may omit trailing parameters
+    // that have default values, so this can be less than the method's declared
+    // arity; resolve at the declared arity (Wasm methods are fixed-arity).
+    var suppliedCount = arguments.length + (namedArguments?.length ?? 0);
 
-    var calleeIndex = module.methodIndex(className, methodName, arity);
+    var calleeIndex = module.methodIndexForCall(
+      className,
+      methodName,
+      suppliedCount,
+    );
     if (calleeIndex == null) {
       throw StateError(
-        "Can't resolve method `$className.$methodName` with $arity argument(s).",
+        "Can't resolve method `$className.$methodName` with $suppliedCount "
+        "argument(s).",
       );
     }
     var callee = module.functionByIndex(calleeIndex) as _WasmMethodFunction;
+
+    // Reorder/merge named arguments into the method's positional order and fill
+    // omitted parameters that have defaults (no-op for purely-positional calls
+    // that already cover all declared parameters). The resulting list has length
+    // equal to the method's DECLARED arity.
+    var orderedArgs = _orderInvocationArguments(
+      arguments,
+      namedArguments,
+      callee.method.parameters,
+      '$className.$methodName',
+    );
+    var arity = orderedArgs.length;
 
     final stackLng0 = context.stackLength;
 
@@ -1508,7 +1530,7 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
 
     for (var i = 0; i < arity; ++i) {
       var stackBefore = context.stackLength;
-      generateASTExpression(arguments[i], out: out, context: context);
+      generateASTExpression(orderedArgs[i], out: out, context: context);
       context.assertStackLength(stackBefore + 1, "After method arg[$i]");
 
       var paramType = callee.method.parameters.getParameterByIndex(i)?.type;
@@ -1905,6 +1927,72 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     return out;
   }
 
+  /// Merges an invocation's positional and named arguments into the single
+  /// positional order expected by the callee (Wasm calls are positional at the
+  /// bytecode level).
+  ///
+  /// When [named] is null/empty AND the [positional] args already cover every
+  /// declared parameter, the original [positional] list is returned unchanged,
+  /// so the purely-positional path stays byte-for-byte identical.
+  ///
+  /// Otherwise, walks the callee's declared parameters in order (positional +
+  /// optional + named) and, for each parameter index `i`, uses `positional[i]`
+  /// when present, else the named argument bound to that parameter's name, else
+  /// the parameter's `defaultValue` expression when it has one (Wasm functions
+  /// are fixed-arity, so an omitted slot with a default is filled with that
+  /// default's expression and emitted by the normal per-argument codegen).
+  ///
+  /// A parameter that is neither supplied nor defaulted is a genuinely missing
+  /// required argument and throws a clear [StateError]. The returned list always
+  /// has length equal to the number of declared parameters.
+  List<ASTExpression> _orderInvocationArguments(
+    List<ASTExpression> positional,
+    Map<String, ASTExpression>? named,
+    ASTParametersDeclaration parameters,
+    String calleeDesc,
+  ) {
+    var paramDecls = parameters.allParameters;
+
+    // Fast path: purely-positional and already covering all declared
+    // parameters (no named args, no omitted/default slots) -> unchanged.
+    if ((named == null || named.isEmpty) &&
+        positional.length == paramDecls.length) {
+      return positional;
+    }
+
+    var ordered = <ASTExpression>[];
+    for (var i = 0; i < paramDecls.length; ++i) {
+      var p = paramDecls[i];
+
+      // Positional argument supplied for this slot.
+      if (i < positional.length) {
+        ordered.add(positional[i]);
+        continue;
+      }
+
+      // Named argument bound to this parameter's name.
+      var arg = named?[p.name];
+      if (arg != null) {
+        ordered.add(arg);
+        continue;
+      }
+
+      // Omitted slot: fill with the parameter's default value expression.
+      var defaultValue = p.defaultValue;
+      if (defaultValue != null) {
+        ordered.add(defaultValue);
+        continue;
+      }
+
+      throw StateError(
+        "Wasm: can't bind call to `$calleeDesc`: parameter `${p.name}` has no "
+        "matching positional or named argument and no default value.",
+      );
+    }
+
+    return ordered;
+  }
+
   @override
   BytesOutput generateASTExpressionLocalFunctionInvocation(
     ASTExpressionLocalFunctionInvocation expression, {
@@ -1915,15 +2003,22 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     context ??= WasmContext();
 
     var name = expression.name;
-    var arguments = expression.arguments;
-    var argsCount = arguments.length;
+    var positionalArgs = expression.arguments;
+    var namedArgs = expression.namedArguments;
+    var arguments = positionalArgs;
+    // Total arity = positional + named; used to resolve the callee (Wasm
+    // functions are positional/fixed-arity at the bytecode level).
+    var argsCount = positionalArgs.length + (namedArgs?.length ?? 0);
 
     // Built-in external `print(Object)` lowers to a host import call.
     if (name == 'print' && argsCount == 1) {
       return _generatePrintInvocation(expression, out: out, context: context);
     }
 
-    var calleeIndex = context.functionIndex(name, argsCount);
+    // Resolve at the callee's DECLARED arity: a call may omit trailing
+    // parameters that have default values, so the supplied [argsCount] can be
+    // less than the registered (declared) arity.
+    var calleeIndex = context.functionIndexForCall(name, argsCount);
     if (calleeIndex == null) {
       // Inside a method, an unqualified call is an implicit-`this` method call
       // (`foo()` == `this.foo()`).
@@ -1931,13 +2026,18 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       var thisVar = context.getLocalVariable('this');
       if (layout != null &&
           thisVar != null &&
-          context.module?.methodIndex(layout.className, name, argsCount) !=
+          context.module?.methodIndexForCall(
+                layout.className,
+                name,
+                argsCount,
+              ) !=
               null) {
         return _emitClassMethodCall(
           recv: thisVar,
           receiverDesc: 'this',
           methodName: name,
-          arguments: arguments,
+          arguments: positionalArgs,
+          namedArguments: namedArgs,
           out: out,
           context: context,
         );
@@ -1977,11 +2077,23 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
 
     var callee = context.functionByIndex(calleeIndex)!;
 
+    // Reorder/merge named arguments into the callee's positional order and fill
+    // omitted parameters that have defaults (no-op for purely-positional calls
+    // that already cover all declared parameters). The resulting list has length
+    // equal to the callee's DECLARED arity (Wasm calls are fixed-arity).
+    arguments = _orderInvocationArguments(
+      positionalArgs,
+      namedArgs,
+      callee.parameters,
+      name,
+    );
+    var declaredArity = arguments.length;
+
     final stackLng0 = context.stackLength;
 
     // Evaluate each argument (left-to-right), pushing onto the Wasm stack,
     // converting each to the callee's declared parameter type.
-    for (var i = 0; i < argsCount; ++i) {
+    for (var i = 0; i < declaredArity; ++i) {
       var arg = arguments[i];
 
       var stackLngArg = context.stackLength;
@@ -2006,7 +2118,7 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     }
 
     context.assertStackLength(
-      stackLng0 + argsCount,
+      stackLng0 + declaredArity,
       "Before call `$name` (all arguments pushed)",
     );
 
@@ -2016,7 +2128,7 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     );
 
     // Update the virtual stack: drop the N arguments and push the return type.
-    for (var i = 0; i < argsCount; ++i) {
+    for (var i = 0; i < declaredArity; ++i) {
       context.stackDrop();
     }
 
@@ -2054,6 +2166,15 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
   }) {
     out ??= newOutput();
     context ??= WasmContext();
+
+    var namedArgs = expression.namedArguments;
+    if (namedArgs != null && namedArgs.isNotEmpty) {
+      throw StateError(
+        "Wasm: named arguments are not supported for closure / indirect calls "
+        "(`${expression.name}`): a function-typed value carries no parameter "
+        "names to bind by.",
+      );
+    }
 
     var arguments = expression.arguments;
     var generics = funcType.generics ?? const <ASTType>[];
@@ -9043,6 +9164,35 @@ class WasmModuleContext {
     return null;
   }
 
+  /// Resolves a class method for a call supplying [suppliedCount] arguments
+  /// (excluding `this`), allowing omitted trailing parameters that have default
+  /// values: picks the method named [methodName] on [className] with the
+  /// smallest declared parameter count that is `>= suppliedCount` (an exact
+  /// arity match wins). Returns its Wasm function index, or `null` if none.
+  int? methodIndexForCall(
+    String className,
+    String methodName,
+    int suppliedCount,
+  ) {
+    int? bestIndex;
+    int? bestSize;
+    for (var i = 0; i < functions.length; ++i) {
+      var f = functions[i];
+      if (f is! _WasmMethodFunction ||
+          f.clazz.name != className ||
+          f.method.name != methodName) {
+        continue;
+      }
+      var size = f.method.parameters.size;
+      if (size < suppliedCount) continue;
+      if (bestSize == null || size < bestSize) {
+        bestSize = size;
+        bestIndex = importCount + i;
+      }
+    }
+    return bestIndex;
+  }
+
   /// The qualified `Class.method` name of a compiled **non-static** (instance)
   /// method whose declared name is [methodName] and arity is [arity], or null if
   /// none. Used to reject a receiver-less call to a non-static method (e.g. a
@@ -9282,6 +9432,28 @@ class WasmModuleContext {
     return null;
   }
 
+  /// Resolves a module function for a call by [name] supplying [suppliedCount]
+  /// arguments, allowing omitted trailing parameters that have default values:
+  /// picks the function named [name] with the smallest declared parameter count
+  /// that is `>= suppliedCount` (an exact arity match wins). Returns its Wasm
+  /// function index, or `null` if none. The actual default-filling/validation
+  /// happens in `_orderInvocationArguments`.
+  int? functionIndexForCall(String name, int suppliedCount) {
+    int? bestIndex;
+    int? bestSize;
+    for (var i = 0; i < functions.length; ++i) {
+      var f = functions[i];
+      if (f.name != name) continue;
+      var size = f.parameters.size;
+      if (size < suppliedCount) continue;
+      if (bestSize == null || size < bestSize) {
+        bestSize = size;
+        bestIndex = importCount + i;
+      }
+    }
+    return bestIndex;
+  }
+
   /// Returns the module-defined function at function [index] (accounting for
   /// the imported-function offset); `null` for imported indices.
   ASTFunctionDeclaration? functionByIndex(int index) {
@@ -9498,6 +9670,12 @@ class WasmContext {
   /// Resolves the Wasm function index for a function with [name] and [arity].
   int? functionIndex(String name, int arity) =>
       module?.functionIndex(name, arity);
+
+  /// Resolves the Wasm function index for a call by [name] supplying
+  /// [suppliedCount] arguments, allowing omitted trailing parameters that have
+  /// default values (see [WasmModuleContext.functionIndexForCall]).
+  int? functionIndexForCall(String name, int suppliedCount) =>
+      module?.functionIndexForCall(name, suppliedCount);
 
   /// Returns the function at the module's function index [index].
   ASTFunctionDeclaration? functionByIndex(int index) =>

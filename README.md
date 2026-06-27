@@ -91,6 +91,8 @@ The **Wasm** column shows what the on-the-fly WebAssembly compiler currently sup
 | Bitwise (`& \| ^ << >> ~`)       | ✅ | ✅ | 🧩⁵ | ✅ | ✅ | ✅ | 🧩⁶ | ✅ | ✅ |
 | `++` / `--`, compound assign     | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Lambdas / closures               | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Named / keyword arguments        | ✅ | 🚫  | ✅ | ✅ | 🚫  | 🚫  | 🚫  | ✅ | ✅ |
+| Parameter default values         | ✅ | 🚫  | ✅ | ✅ | 🚫  | 🚫  | 🚫  | ✅ | ✅ |
 | String interpolation / concat    | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | List & map / dict literals       | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | `null` / `None` / `nil`          | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |

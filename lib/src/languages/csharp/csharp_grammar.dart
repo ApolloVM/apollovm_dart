@@ -773,14 +773,20 @@ class CSharpGrammarDefinition extends CSharpGrammarLexer {
               char('.') &
               identifier() &
               char('(').trimHidden() &
-              ref0(expressionSequence).optional() &
+              ref0(callArguments).optional() &
               char(')').trimHidden() &
               expressionChainFunctionInvocation().star())
           .map((v) {
             var expression = v[0] as ASTExpression;
             var name = v[2] as String;
-            var args = v[4] as List<ASTExpression>?;
-            args ??= <ASTExpression>[];
+            var argsRec =
+                v[4]
+                    as ({
+                      List<ASTExpression> positional,
+                      Map<String, ASTExpression>? named,
+                    })?;
+            var args = argsRec?.positional ?? <ASTExpression>[];
+            var named = argsRec?.named;
             var chainFunctions = (v[6] as List)
                 .whereType<ASTExpressionChainFunctionInvocation>()
                 .toList();
@@ -790,7 +796,7 @@ class CSharpGrammarDefinition extends CSharpGrammarLexer {
               name,
               args,
               chainFunctions,
-            );
+            )..namedArguments = named;
           });
 
   Parser<ASTExpressionFunctionInvocation> expressionFunctionInvocation() =>
@@ -802,7 +808,7 @@ class CSharpGrammarDefinition extends CSharpGrammarLexer {
               identifier() &
               genericArguments().optional() &
               char('(').trimHidden() &
-              ref0(expressionSequence).optional() &
+              ref0(callArguments).optional() &
               char(')').trimHidden() &
               expressionChainFunctionInvocation().star())
           .map((v) {
@@ -811,8 +817,14 @@ class CSharpGrammarDefinition extends CSharpGrammarLexer {
             var name = v[2] as String;
             // v[3]: optional generic type arguments (`<int>`), discarded — the
             // constructor/function resolves by name.
-            var args = v[5] as List<ASTExpression>?;
-            args ??= <ASTExpression>[];
+            var argsRec =
+                v[5]
+                    as ({
+                      List<ASTExpression> positional,
+                      Map<String, ASTExpression>? named,
+                    })?;
+            var args = argsRec?.positional ?? <ASTExpression>[];
+            var named = argsRec?.named;
             var chainFunctions = (v[7] as List)
                 .whereType<ASTExpressionChainFunctionInvocation>()
                 .toList();
@@ -824,13 +836,13 @@ class CSharpGrammarDefinition extends CSharpGrammarLexer {
                 name,
                 args,
                 chainFunctions,
-              );
+              )..namedArguments = named;
             } else {
               return ASTExpressionLocalFunctionInvocation(
                 name,
                 args,
                 chainFunctions,
-              );
+              )..namedArguments = named;
             }
           });
 
@@ -861,13 +873,20 @@ class CSharpGrammarDefinition extends CSharpGrammarLexer {
       (char('.').trimHidden() &
               identifier() &
               char('(').trimHidden() &
-              ref0(expressionSequence).optional() &
+              ref0(callArguments).optional() &
               char(')').trimHidden())
           .map((v) {
             var fName = v[1];
-            var args = v[3];
-            args ??= <ASTExpression>[];
-            return ASTExpressionChainFunctionInvocation(fName, args);
+            var argsRec =
+                v[3]
+                    as ({
+                      List<ASTExpression> positional,
+                      Map<String, ASTExpression>? named,
+                    })?;
+            var args = argsRec?.positional ?? <ASTExpression>[];
+            var named = argsRec?.named;
+            return ASTExpressionChainFunctionInvocation(fName, args)
+              ..namedArguments = named;
           });
 
   Parser<List<ASTExpression>> expressionSequence() =>
@@ -876,6 +895,50 @@ class CSharpGrammarDefinition extends CSharpGrammarLexer {
             var list = _expandListDeeply(v);
             var expressions = list.whereType<ASTExpression>().toList();
             return expressions;
+          });
+
+  /// Parses a call-site argument list mixing positional and named
+  /// (`name: value`) arguments, e.g. `1, 2`, `a: 1, b: 2`, `1, b: 2`.
+  Parser<({List<ASTExpression> positional, Map<String, ASTExpression>? named})>
+  callArguments() =>
+      (ref0(callArgument) &
+              (char(',').trimHidden() & ref0(callArgument)).star() &
+              char(',').trimHidden().optional())
+          .map((v) {
+            var args = <({String? name, ASTExpression expr})>[
+              v[0] as ({String? name, ASTExpression expr}),
+              ...(v[1] as List).map(
+                (e) => (e as List)[1] as ({String? name, ASTExpression expr}),
+              ),
+            ];
+
+            var positional = <ASTExpression>[];
+            Map<String, ASTExpression>? named;
+
+            for (var a in args) {
+              final name = a.name;
+              if (name != null) {
+                (named ??= {})[name] = a.expr;
+              } else {
+                positional.add(a.expr);
+              }
+            }
+
+            return (positional: positional, named: named);
+          });
+
+  /// A single call argument: either `name: expression` (named) or `expression`
+  /// (positional). The `name:` prefix is only matched when an identifier is
+  /// immediately followed by `:`, so positional ternaries (`a ? b : c`) and
+  /// other expressions are not misparsed.
+  Parser<({String? name, ASTExpression expr})> callArgument() =>
+      ((identifier().trim() & char(':').trimHidden()).optional() &
+              ref0(expression))
+          .map((v) {
+            var nameOpt = v[0] as List?;
+            var name = nameOpt != null ? nameOpt[0] as String : null;
+            var expr = v[1] as ASTExpression;
+            return (name: name, expr: expr);
           });
 
   Parser<ASTExpressionNullValue> expressionNullValue() =>
@@ -908,15 +971,21 @@ class CSharpGrammarDefinition extends CSharpGrammarLexer {
               char('.').trimHidden() &
               identifier() &
               char('(').trimHidden() &
-              ref0(expressionSequence).optional() &
+              ref0(callArguments).optional() &
               char(')').trimHidden() &
               expressionChainFunctionInvocation().star())
           .map((v) {
             var variable = v[0];
             var expression = v[2];
             var fName = v[5];
-            var args = v[7];
-            args ??= <ASTExpression>[];
+            var argsRec =
+                v[7]
+                    as ({
+                      List<ASTExpression> positional,
+                      Map<String, ASTExpression>? named,
+                    })?;
+            var args = argsRec?.positional ?? <ASTExpression>[];
+            var named = argsRec?.named;
             var chainFunctions = (v[9] as List)
                 .whereType<ASTExpressionChainFunctionInvocation>()
                 .toList();
@@ -927,7 +996,7 @@ class CSharpGrammarDefinition extends CSharpGrammarLexer {
               fName,
               args,
               chainFunctions,
-            );
+            )..namedArguments = named;
           });
 
   /// C# collection initializer: `new List<T>()` (empty).
@@ -1227,9 +1296,18 @@ class CSharpGrammarDefinition extends CSharpGrammarLexer {
           });
 
   Parser<ASTFunctionParameterDeclaration> parameterDeclaration() =>
-      (type() & identifier()).map((v) {
-        return ASTFunctionParameterDeclaration(v[0], v[1], -1, false);
+      (type() & identifier() & parameterDefaultValue().optional()).map((v) {
+        return ASTFunctionParameterDeclaration(v[0], v[1], -1, false)
+          ..defaultValue = v[2] as ASTExpression?;
       });
+
+  /// A parameter default value: `= <expression>` (C# optional parameter,
+  /// e.g. `int a = 5`). The `== ` guard prevents matching the equality
+  /// operator.
+  Parser<ASTExpression> parameterDefaultValue() =>
+      ((char('=') & char('=').not()).trimHidden() & ref0(expression)).map(
+        (v) => v[1] as ASTExpression,
+      );
 
   Parser<ASTType> type() => (arrayType() | simpleType()).cast<ASTType>();
 

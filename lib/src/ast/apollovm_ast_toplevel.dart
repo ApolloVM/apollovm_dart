@@ -10,7 +10,6 @@ import 'package:collection/collection.dart'
     show IterableExtension, equalsIgnoreAsciiCase, CombinedListView;
 
 import '../apollovm_base.dart';
-import '../apollovm_utils.dart';
 import '../core/apollovm_core_base.dart';
 import 'apollovm_ast_base.dart';
 import 'apollovm_ast_expression.dart';
@@ -1257,10 +1256,17 @@ class ASTParameterDeclaration<T> with ASTNode implements ASTTypedNode {
 
   final String name;
 
-  ASTParameterDeclaration(ASTType<T> type, this.name) : _type = type;
+  /// The default-value expression used when this parameter is omitted at the
+  /// call site (optional/named parameters only), e.g. `int a = 5`. `null` when
+  /// the parameter has no default. Set by the parser after construction.
+  ASTExpression? defaultValue;
+
+  ASTParameterDeclaration(ASTType<T> type, this.name, {this.defaultValue})
+    : _type = type;
 
   @override
-  Iterable<ASTNode> get children => [type];
+  Iterable<ASTNode> get children =>
+      defaultValue == null ? [type] : [type, defaultValue!];
 
   @override
   void associateToType(ASTTypedNode node) {}
@@ -1275,6 +1281,14 @@ class ASTParameterDeclaration<T> with ASTNode implements ASTTypedNode {
   FutureOr<ASTValue<T>?> toValue(VMContext context, Object? v) =>
       type.toValue(context, v);
 
+  /// Resolves this parameter's [defaultValue] to a value in [context], or `null`
+  /// when there is no default.
+  FutureOr<ASTValue?> resolveDefaultValue(VMContext context) {
+    var defaultValue = this.defaultValue;
+    if (defaultValue == null) return null;
+    return defaultValue.run(context, ASTRunStatus());
+  }
+
   ASTNode? _parentNode;
 
   @override
@@ -1283,6 +1297,8 @@ class ASTParameterDeclaration<T> with ASTNode implements ASTTypedNode {
   @override
   void resolveNode(ASTNode? parentNode) {
     _parentNode = parentNode;
+
+    defaultValue?.resolveNode(this);
 
     cacheDescendantChildren();
   }
@@ -2215,11 +2231,17 @@ abstract class ASTInvocableDeclaration<
         0,
         context,
       );
-      return ret.onResolve((i) {
-        _initializeOptionalParameters(i, context);
+      return ret.resolveMapped((i) {
+        return _declareRemainingParameters(
+          i,
+          context,
+        ).resolveWith(() => _applyNamedArguments(namedParameters, context));
       });
     } else {
-      _initializeOptionalParameters(0, context);
+      return _declareRemainingParameters(
+        0,
+        context,
+      ).resolveWith(() => _applyNamedArguments(namedParameters, context));
     }
   }
 
@@ -2314,47 +2336,115 @@ abstract class ASTInvocableDeclaration<
     Map? namedParameters, {
     bool ignoreCase = true,
   }) {
-    if (namedParameters == null) return null;
+    if (namedParameters == null || namedParameters.isEmpty) return null;
 
-    final namedParametersDeclaration = parameters.namedParameters;
-    if (namedParametersDeclaration == null ||
-        namedParametersDeclaration.isEmpty) {
-      return null;
+    // Each named argument is matched to its parameter by name — whether it is an
+    // explicit named-parameter declaration (Dart `{...}`) or an ordinary
+    // positional parameter passed by name (Kotlin/C#/Python). Unknown names are
+    // dropped.
+    var normalized = <String, dynamic>{};
+
+    for (var entry in namedParameters.entries) {
+      var name = '${entry.key}';
+      var p = getParameterByName(name);
+      if (p == null) continue;
+
+      var astValue = p.type.toASTValue(entry.value);
+      normalized[p.name] = astValue?.getValueNoContext();
     }
 
-    var lng = math.min(
-      namedParametersDeclaration.length,
-      namedParameters.length,
-    );
-
-    if (lng == 0) return null;
-
-    var namedParameters2 = Map.fromEntries(
-      List.generate(lng, (i) {
-        var p = namedParametersDeclaration[i];
-        var pName = p.name;
-        var v = namedParameters.lookupValue(pName, ignoreCase: true);
-        var astType = p.type;
-        var astValue = astType.toASTValue(v);
-        var v2 = astValue?.getValueNoContext();
-        return MapEntry(pName, v2);
-      }),
-    );
-
-    return namedParameters2;
+    return normalized.isEmpty ? null : normalized;
   }
 
-  void _initializeOptionalParameters(int i, VMContext context) {
-    var parametersSize = this.parametersSize;
+  /// Declares every parameter not yet bound by a positional argument, so the
+  /// function body always sees a declared variable for each parameter.
+  ///
+  /// Covers the positional + optional parameters from index [i] onward (those
+  /// not filled by positional arguments) and all named-declared parameters
+  /// (Dart-style `{...}`). Each such parameter is declared with its
+  /// [ASTParameterDeclaration.defaultValue] when present, otherwise `null`.
+  /// Named arguments are applied afterwards by [_applyNamedArguments],
+  /// overwriting these defaults when the argument is supplied.
+  FutureOr<void> _declareRemainingParameters(int i, VMContext context) {
+    FutureOr<void>? prevFuture;
 
-    for (; i < parametersSize; ++i) {
-      var fParam = getParameterByIndex(i)!;
+    void declare(ASTParameterDeclaration fParam) {
+      var future = _declareParameterDefault(fParam, context);
+      prevFuture = prevFuture == null
+          ? future
+          : prevFuture!.resolveWith(() => future);
+    }
+
+    // Only positional + optional parameters are addressable by index.
+    var posOptEnd =
+        parameters.positionalParametersSize + parameters.optionalParametersSize;
+
+    for (; i < posOptEnd; ++i) {
+      declare(getParameterByIndex(i)!);
+    }
+
+    final namedParametersDeclaration = parameters.namedParameters;
+    if (namedParametersDeclaration != null) {
+      for (var fParam in namedParametersDeclaration) {
+        declare(fParam);
+      }
+    }
+
+    return prevFuture;
+  }
+
+  /// Declares [fParam] with its evaluated default value (when it has one),
+  /// otherwise with `null`.
+  FutureOr<void> _declareParameterDefault(
+    ASTParameterDeclaration fParam,
+    VMContext context,
+  ) {
+    if (fParam.defaultValue == null) {
       context.declareVariableWithValue(
         fParam.type,
         fParam.name,
         ASTValueNull.instance,
       );
+      return null;
     }
+
+    return fParam.resolveDefaultValue(context).resolveMapped((v) {
+      context.declareVariableWithValue(fParam.type, fParam.name, v);
+    });
+  }
+
+  /// Applies call-site [namedParameters] to their target parameters, looked up
+  /// by name via [getParameterByName].
+  ///
+  /// Works uniformly for languages with explicit named-parameter declarations
+  /// (Dart `{...}`) and for languages where any positional parameter can be
+  /// passed by name at the call site (Kotlin/C#/Python). Unknown names are
+  /// ignored. The target variable is already declared (as `null`) by
+  /// [_declareRemainingParametersAsNull], so values are set, not re-declared.
+  FutureOr<void> _applyNamedArguments(Map? namedParameters, VMContext context) {
+    if (namedParameters == null || namedParameters.isEmpty) return null;
+
+    FutureOr<void>? prevFuture;
+
+    for (var entry in namedParameters.entries) {
+      var name = '${entry.key}';
+      var fParam = getParameterByName(name);
+      if (fParam == null) continue;
+
+      var value = fParam.toValue(context, entry.value) ?? ASTValueNull.instance;
+
+      var future = value.onResolve((v) {
+        context.setVariable(fParam.name, v ?? ASTValueNull.instance, false);
+      });
+
+      if (prevFuture == null) {
+        prevFuture = future;
+      } else {
+        prevFuture = prevFuture.resolveWith(() => future);
+      }
+    }
+
+    return prevFuture;
   }
 
   @override

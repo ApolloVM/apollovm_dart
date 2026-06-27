@@ -24,6 +24,14 @@ class ApolloCodeGeneratorPython extends ApolloCodeGenerator {
 
   static const String _tab = '    ';
 
+  /// Python keyword arguments are emitted as `name=value` (no spaces).
+  @override
+  String get namedArgumentSeparator => '=';
+
+  /// Python parameter defaults are emitted as `name=value` (no spaces).
+  @override
+  String get parameterDefaultValueSeparator => '=';
+
   // -----------------------------------------------------------------
   // Types.
   // -----------------------------------------------------------------
@@ -251,12 +259,14 @@ class ApolloCodeGeneratorPython extends ApolloCodeGenerator {
   }) {
     out ??= newOutput();
 
-    var positionalParameters = parameters.positionalParameters;
-    if (positionalParameters != null) {
-      for (var i = 0; i < positionalParameters.length; ++i) {
-        if (i > 0) out.write(', ');
-        generateASTParameterDeclaration(positionalParameters[i], out: out);
-      }
+    // Python declares all parameters positionally (any can be passed as a
+    // keyword argument at the call site), so positional + optional + named are
+    // emitted as a single flat, comma-separated list.
+    var wrote = 0;
+    for (var p in parameters.allParameters) {
+      if (wrote > 0) out.write(', ');
+      generateASTParameterDeclaration(p, out: out);
+      ++wrote;
     }
 
     return out;
@@ -284,6 +294,8 @@ class ApolloCodeGeneratorPython extends ApolloCodeGenerator {
       out.write(': ');
       generateASTType(type!, out: out);
     }
+
+    appendParameterDefaultValue(parameter, out, indent);
 
     return out;
   }
