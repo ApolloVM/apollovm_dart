@@ -1,5 +1,19 @@
 ## 0.1.41
 
+### `async`/`await` for JavaScript, TypeScript, C# and Python
+
+- These languages now **parse** `async` functions/methods (and `async` arrows /
+  lambdas) and the `await` expression, joining Dart. Parsed code executes on the
+  shared async runtime, round-trips back to its source language, and translates
+  across languages (e.g. C# `async Task<int>` ⇄ Dart `Future<int> … async`).
+- C# and Python also gained `async` code generation (`async`/`async def`); the
+  JavaScript and TypeScript generators already emitted it.
+- `await` now unwraps any awaitable type — `Future<T>`, `Promise<T>` (TypeScript)
+  and `Task<T>` (C#) — to its value type `T`, so awaiting a typed result infers
+  the correct type. A shared word-boundary keyword token keeps identifiers like
+  `awaiter` from being read as `await` + `er`.
+- The README "Control flow & operators" table gains an `async`/`await` row.
+
 ### Wasm: static methods + boxed `Object`
 
 - The WebAssembly compiler now supports `static` class methods: each is

@@ -169,26 +169,28 @@ class PythonGrammarDefinition extends PythonGrammarLexer {
   // Functions.
   // ---------------------------------------------------------------------------
   Parser<ASTFunctionDeclaration> functionDeclaration() =>
-      (defToken().trimHidden() &
+      (asyncToken().trimHidden().optional() &
+              defToken().trimHidden() &
               identifier() &
               functionParametersDeclaration() &
               returnAnnotation().optional() &
               char(':').trimHidden() &
               suite())
           .map((v) {
-            var name = v[1] as String;
+            var isAsync = v[0] != null;
+            var name = v[2] as String;
             var parameters = _dropSelf(
-              v[2] as ASTFunctionParametersDeclaration,
+              v[3] as ASTFunctionParametersDeclaration,
             );
-            var block = v[5] as ASTBlock;
-            var declared = v[3] as ASTType?;
+            var block = v[6] as ASTBlock;
+            var declared = v[4] as ASTType?;
             var returnType = declared ?? inferReturnType(block);
             return ASTFunctionDeclaration(
               name,
               parameters,
               returnType,
               block: block,
-              modifiers: ASTModifiers.modifierStatic,
+              modifiers: ASTModifiers(isStatic: true, isAsync: isAsync),
             );
           });
 
@@ -243,19 +245,21 @@ class PythonGrammarDefinition extends PythonGrammarLexer {
           });
 
   Parser<ASTClassFunctionDeclaration> methodDeclaration() =>
-      (defToken().trimHidden() &
+      (asyncToken().trimHidden().optional() &
+              defToken().trimHidden() &
               identifier() &
               functionParametersDeclaration() &
               returnAnnotation().optional() &
               char(':').trimHidden() &
               suite())
           .map((v) {
-            var name = v[1] as String;
+            var isAsync = v[0] != null;
+            var name = v[2] as String;
             var parameters = _dropSelf(
-              v[2] as ASTFunctionParametersDeclaration,
+              v[3] as ASTFunctionParametersDeclaration,
             );
-            var block = v[5] as ASTBlock;
-            var declared = v[3] as ASTType?;
+            var block = v[6] as ASTBlock;
+            var declared = v[4] as ASTType?;
             var returnType = declared ?? inferReturnType(block);
             return ASTClassFunctionDeclaration(
               null,
@@ -263,6 +267,7 @@ class PythonGrammarDefinition extends PythonGrammarLexer {
               parameters,
               returnType,
               block: block,
+              modifiers: ASTModifiers(isAsync: isAsync),
             );
           });
 
@@ -634,7 +639,8 @@ class PythonGrammarDefinition extends PythonGrammarLexer {
           .cast<ASTExpressionOperator>();
 
   Parser<ASTExpression> expressionNoOperation() =>
-      (expressionLambda() |
+      (expressionAwait() |
+              expressionLambda() |
               expressionNegate() |
               expressionBitwiseNot() |
               expressionLiteral() |
@@ -652,6 +658,11 @@ class PythonGrammarDefinition extends PythonGrammarLexer {
               expressionVariableAccess() |
               expressionNegative())
           .cast<ASTExpression>();
+
+  /// Python `await expr` — suspends until the awaited awaitable completes.
+  Parser<ASTExpressionAwait> expressionAwait() =>
+      (awaitToken() & (ref0(expressionNoOperation) | ref0(expressionGroup)))
+          .map((v) => ASTExpressionAwait(v[1] as ASTExpression));
 
   /// Python anonymous function: `lambda [params]: expr` (single-expression
   /// body). Captures the enclosing scope at runtime (closure).

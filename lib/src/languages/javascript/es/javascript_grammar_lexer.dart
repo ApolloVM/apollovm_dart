@@ -79,6 +79,11 @@ abstract class JavaScriptGrammarLexer extends BaseGrammarLexer {
 
   Parser throwToken() => ref1(token, 'throw');
 
+  // Whole-word match so identifiers like `awaiter` aren't read as `await` + …
+  Parser asyncToken() => keywordToken('async');
+
+  Parser awaitToken() => keywordToken('await');
+
   // -----------------------------------------------------------------
   // Numbers.
   // -----------------------------------------------------------------

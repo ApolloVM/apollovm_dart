@@ -323,11 +323,13 @@ class CSharpGrammarDefinition extends CSharpGrammarLexer {
         v.contains('readonly') || v.contains('const') || v.contains('sealed');
     var isPrivate = v.contains('private');
     var isPublic = v.contains('public');
+    var isAsync = v.contains('async');
     return ASTModifiers(
       isStatic: isStatic,
       isFinal: isFinal,
       isPrivate: isPrivate,
       isPublic: isPublic,
+      isAsync: isAsync,
     );
   });
 
@@ -342,6 +344,7 @@ class CSharpGrammarDefinition extends CSharpGrammarLexer {
               string('override') |
               string('abstract') |
               string('sealed') |
+              string('async') |
               string('static'))
           .trimHidden()
           .flatten();
@@ -708,7 +711,8 @@ class CSharpGrammarDefinition extends CSharpGrammarLexer {
           });
 
   Parser<ASTExpression> expressionNoOperation() =>
-      (expressionLambda() |
+      (expressionAwait() |
+              expressionLambda() |
               expressionNegate() |
               expressionBitwiseNot() |
               expressionLiteral() |
@@ -729,6 +733,10 @@ class CSharpGrammarDefinition extends CSharpGrammarLexer {
               expressionVariableAccess() |
               expressionNegative())
           .cast<ASTExpression>();
+
+  Parser<ASTExpressionAwait> expressionAwait() =>
+      (awaitToken() & (ref0(expressionNoOperation) | ref0(expressionGroup)))
+          .map((v) => ASTExpressionAwait(v[1] as ASTExpression));
 
   Parser<ASTExpressionNegation> expressionNegate() =>
       (char('!').trimHidden() &
@@ -1111,18 +1119,23 @@ class CSharpGrammarDefinition extends CSharpGrammarLexer {
   /// C# lambda used as an expression (a closure): `(a, b) => expr`,
   /// `(int a) => { ... }`, `x => x * 2`, `() => 0`. Captures the enclosing scope.
   Parser<ASTExpression> expressionLambda() =>
-      (lambdaParameters() & string('=>').trimHidden() & lambdaBody()).map((v) {
-        var parameters = v[0] as ASTFunctionParametersDeclaration;
-        var block = v[2] as ASTBlock;
-        var f = ASTFunctionDeclaration(
-          '',
-          parameters,
-          ASTTypeDynamic.instance,
-          block: block,
-          modifiers: ASTModifiers.modifierStatic,
-        );
-        return ASTExpressionLiteralFunction(f);
-      });
+      (asyncToken().trimHidden().optional() &
+              lambdaParameters() &
+              string('=>').trimHidden() &
+              lambdaBody())
+          .map((v) {
+            var isAsync = v[0] != null;
+            var parameters = v[1] as ASTFunctionParametersDeclaration;
+            var block = v[3] as ASTBlock;
+            var f = ASTFunctionDeclaration(
+              '',
+              parameters,
+              ASTTypeDynamic.instance,
+              block: block,
+              modifiers: ASTModifiers(isStatic: true, isAsync: isAsync),
+            );
+            return ASTExpressionLiteralFunction(f);
+          });
 
   Parser<ASTBlock> lambdaBody() =>
       (codeBlock() | lambdaExpressionBody()).cast<ASTBlock>();

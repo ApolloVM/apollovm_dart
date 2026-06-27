@@ -84,6 +84,7 @@ The **Wasm** column shows what the on-the-fly WebAssembly compiler currently sup
 | `continue`                       | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | —  | ✅ | ✅ |
 | `try` / `catch` / `finally`      | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | —  | ✅ | ✅ |
 | `throw` / `raise`                | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | —  | ✅ | ✅ |
+| `async` / `await`                | ✅ | —  | ⚠️⁷ | ✅ | ✅ | ✅ | —  | ✅ | ✅ |
 | Ternary (`? :`)                  | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | —  | ✅ | ✅ |
 | Arithmetic (`+ - * / %`)         | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Comparison / logical             | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
@@ -97,7 +98,10 @@ The **Wasm** column shows what the on-the-fly WebAssembly compiler currently sup
 ¹ Lua numeric-for (`for i = a, b do`). &nbsp; ² Lua `repeat … until`. &nbsp;
 ³ Kotlin `when`. &nbsp; ⁴ Python `match` / `case`. &nbsp;
 ⁵ Kotlin bitwise are infix functions: `and`/`or`/`xor`/`shl`/`shr` and `.inv()`. &nbsp;
-⁶ Lua bitwise use `&`/`|`/`~` (xor)/`<<`/`>>` and unary `~` (Lua 5.3).
+⁶ Lua bitwise use `&`/`|`/`~` (xor)/`<<`/`>>` and unary `~` (Lua 5.3). &nbsp;
+⁷ Kotlin's async idiom is `suspend` / coroutines: ApolloVM generates `suspend fun`
+(dropping `await`) when translating to Kotlin, but does not yet parse Kotlin `suspend`.
+`await` unwraps the awaitable (`Future<T>` / `Promise<T>` / `Task<T>`) to `T`.
 
 ### Classes, types & OOP
 
@@ -1116,7 +1120,7 @@ Any help from the open-source community is always welcome and needed:
 
 ## TODO
 
-- JavaScript: extended support (destructuring, spread, async/await, `this.x` constructor parameters, full ESM modules). *Named arrow functions (`const f = (a, b) => a + b;`), anonymous arrow callbacks/closures (`(x) => x * 2`), and the ternary operator (`c ? a : b`) are already supported.*
+- JavaScript: extended support (destructuring, spread, `this.x` constructor parameters, full ESM modules). *Named arrow functions (`const f = (a, b) => a + b;`), anonymous arrow callbacks/closures (`(x) => x * 2`), the ternary operator (`c ? a : b`), and `async`/`await` are already supported.*
   - *See the [JavaScript implementation (at "lib/src/languages/javascript/es")](https://github.com/ApolloVM/apollovm_dart/tree/master/lib/src/languages/javascript/es).*
 
 

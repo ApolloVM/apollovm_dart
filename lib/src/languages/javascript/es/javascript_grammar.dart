@@ -81,20 +81,22 @@ class JavaScriptGrammarDefinition extends JavaScriptGrammarLexer {
           });
 
   Parser<ASTFunctionDeclaration> functionDeclaration() =>
-      (functionToken().trimHidden() &
+      (asyncToken().trimHidden().optional() &
+              functionToken().trimHidden() &
               identifier() &
               functionParametersDeclaration() &
               codeBlock())
           .map((v) {
-            var name = v[1] as String;
-            var parameters = v[2] as ASTFunctionParametersDeclaration;
-            var block = v[3] as ASTBlock;
+            var isAsync = v[0] != null;
+            var name = v[2] as String;
+            var parameters = v[3] as ASTFunctionParametersDeclaration;
+            var block = v[4] as ASTBlock;
             return ASTFunctionDeclaration(
               name,
               parameters,
               inferReturnType(block),
               block: block,
-              modifiers: ASTModifiers.modifierStatic,
+              modifiers: ASTModifiers(isStatic: true, isAsync: isAsync),
             );
           });
 
@@ -157,23 +159,23 @@ class JavaScriptGrammarDefinition extends JavaScriptGrammarLexer {
   /// generator emits it back as the `constructor` keyword.
   Parser<ASTFunctionDeclaration> classFunctionDeclaration() =>
       (staticToken().trimHidden().optional() &
+              asyncToken().trimHidden().optional() &
               identifier() &
               functionParametersDeclaration() &
               codeBlock())
           .map((v) {
             var isStatic = v[0] != null;
-            var name = v[1] as String;
-            var parameters = v[2] as ASTFunctionParametersDeclaration;
-            var block = v[3] as ASTBlock;
+            var isAsync = v[1] != null;
+            var name = v[2] as String;
+            var parameters = v[3] as ASTFunctionParametersDeclaration;
+            var block = v[4] as ASTBlock;
             return ASTClassFunctionDeclaration(
               null,
               name,
               parameters,
               inferReturnType(block),
               block: block,
-              modifiers: isStatic
-                  ? ASTModifiers.modifierStatic
-                  : ASTModifiers.modifiersNone,
+              modifiers: ASTModifiers(isStatic: isStatic, isAsync: isAsync),
             );
           });
 
@@ -433,20 +435,22 @@ class JavaScriptGrammarDefinition extends JavaScriptGrammarLexer {
       ((constToken() | letToken() | varToken()).trimHidden() &
               identifier().trimHidden() &
               char('=').trimHidden() &
+              asyncToken().trimHidden().optional() &
               arrowParameters() &
               string('=>').trimHidden() &
               arrowBody() &
               char(';').trimHidden())
           .map((v) {
             var name = v[1] as String;
-            var parameters = v[3] as ASTFunctionParametersDeclaration;
-            var block = v[5] as ASTBlock;
+            var isAsync = v[3] != null;
+            var parameters = v[4] as ASTFunctionParametersDeclaration;
+            var block = v[6] as ASTBlock;
             return ASTFunctionDeclaration(
               name,
               parameters,
               inferReturnType(block),
               block: block,
-              modifiers: ASTModifiers.modifierStatic,
+              modifiers: ASTModifiers(isStatic: true, isAsync: isAsync),
             );
           });
 
@@ -459,18 +463,23 @@ class JavaScriptGrammarDefinition extends JavaScriptGrammarLexer {
   /// `(a, b) => a + b`, `x => x * x`, `() => { ... }`. Captures the enclosing
   /// scope at runtime and can be passed as a callback or stored in a variable.
   Parser<ASTExpression> expressionArrowFunction() =>
-      (arrowParameters() & string('=>').trimHidden() & arrowBody()).map((v) {
-        var parameters = v[0] as ASTFunctionParametersDeclaration;
-        var block = v[2] as ASTBlock;
-        var f = ASTFunctionDeclaration(
-          '',
-          parameters,
-          inferReturnType(block),
-          block: block,
-          modifiers: ASTModifiers.modifierStatic,
-        );
-        return ASTExpressionLiteralFunction(f);
-      });
+      (asyncToken().trimHidden().optional() &
+              arrowParameters() &
+              string('=>').trimHidden() &
+              arrowBody())
+          .map((v) {
+            var isAsync = v[0] != null;
+            var parameters = v[1] as ASTFunctionParametersDeclaration;
+            var block = v[3] as ASTBlock;
+            var f = ASTFunctionDeclaration(
+              '',
+              parameters,
+              inferReturnType(block),
+              block: block,
+              modifiers: ASTModifiers(isStatic: true, isAsync: isAsync),
+            );
+            return ASTExpressionLiteralFunction(f);
+          });
 
   /// Arrow parameters: `(a, b)`, `()`, or a single bare identifier `a`.
   Parser<ASTFunctionParametersDeclaration> arrowParameters() =>
@@ -673,7 +682,8 @@ class JavaScriptGrammarDefinition extends JavaScriptGrammarLexer {
           });
 
   Parser<ASTExpression> expressionNoOperation() =>
-      (expressionArrowFunction() |
+      (expressionAwait() |
+              expressionArrowFunction() |
               expressionNegate() |
               expressionBitwiseNot() |
               expressionLiteral() |
@@ -691,6 +701,10 @@ class JavaScriptGrammarDefinition extends JavaScriptGrammarLexer {
               expressionVariableAccess() |
               expressionNegative())
           .cast<ASTExpression>();
+
+  Parser<ASTExpressionAwait> expressionAwait() =>
+      (awaitToken() & (ref0(expressionNoOperation) | ref0(expressionGroup)))
+          .map((v) => ASTExpressionAwait(v[1] as ASTExpression));
 
   Parser<ASTExpressionNegation> expressionNegate() =>
       (char('!').trimHidden() &

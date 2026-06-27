@@ -211,6 +211,9 @@ class ApolloCodeGeneratorPython extends ApolloCodeGenerator {
     out ??= newOutput();
 
     out.write(indent);
+    if (f.modifiers.isAsync) {
+      out.write('async ');
+    }
     out.write('def ');
     out.write(f.name);
     out.write('(');

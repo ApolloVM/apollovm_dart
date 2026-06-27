@@ -83,6 +83,10 @@ abstract class PythonGrammarLexer extends BaseGrammarLexer {
 
   Parser asToken() => ref1(keyword, 'as');
 
+  Parser asyncToken() => ref1(keyword, 'async');
+
+  Parser awaitToken() => ref1(keyword, 'await');
+
   Parser breakToken() => ref1(keyword, 'break');
 
   Parser classToken() => ref1(keyword, 'class');

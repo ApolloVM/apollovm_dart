@@ -151,6 +151,7 @@ class TypeScriptGrammarDefinition extends TypeScriptGrammarLexer {
       isProtected: names.contains('protected'),
       isAbstract: names.contains('abstract'),
       isFinal: names.contains('readonly'),
+      isAsync: names.contains('async'),
     );
   });
 
@@ -160,9 +161,10 @@ class TypeScriptGrammarDefinition extends TypeScriptGrammarLexer {
               protectedToken() |
               readonlyToken() |
               staticToken() |
-              abstractToken())
+              abstractToken() |
+              asyncToken())
           .trimHidden()
-          .map((t) => (t as Token).value as String);
+          .map((t) => (t is Token ? t.value : t) as String);
 
   Parser<ASTStatementImport> statementImport() =>
       (importToken().trimHidden() &
@@ -186,22 +188,24 @@ class TypeScriptGrammarDefinition extends TypeScriptGrammarLexer {
           });
 
   Parser<ASTFunctionDeclaration> functionDeclaration() =>
-      (functionToken().trimHidden() &
+      (asyncToken().trimHidden().optional() &
+              functionToken().trimHidden() &
               identifier() &
               functionParametersDeclaration() &
               typeAnnotation().optional() &
               codeBlock())
           .map((v) {
-            var name = v[1] as String;
-            var parameters = v[2] as ASTFunctionParametersDeclaration;
-            var declaredReturn = v[3] as ASTType?;
-            var block = v[4] as ASTBlock;
+            var isAsync = v[0] != null;
+            var name = v[2] as String;
+            var parameters = v[3] as ASTFunctionParametersDeclaration;
+            var declaredReturn = v[4] as ASTType?;
+            var block = v[5] as ASTBlock;
             return ASTFunctionDeclaration(
               name,
               parameters,
               declaredReturn ?? inferReturnType(block),
               block: block,
-              modifiers: ASTModifiers.modifierStatic,
+              modifiers: ASTModifiers(isStatic: true, isAsync: isAsync),
             );
           });
 
@@ -737,6 +741,7 @@ class TypeScriptGrammarDefinition extends TypeScriptGrammarLexer {
       ((constToken() | letToken() | varToken()).trimHidden() &
               identifier().trimHidden() &
               char('=').trimHidden() &
+              asyncToken().trimHidden().optional() &
               arrowParameters() &
               typeAnnotation().optional() &
               string('=>').trimHidden() &
@@ -744,15 +749,16 @@ class TypeScriptGrammarDefinition extends TypeScriptGrammarLexer {
               char(';').trimHidden())
           .map((v) {
             var name = v[1] as String;
-            var parameters = v[3] as ASTFunctionParametersDeclaration;
-            var declaredReturn = v[4] as ASTType?;
-            var block = v[6] as ASTBlock;
+            var isAsync = v[3] != null;
+            var parameters = v[4] as ASTFunctionParametersDeclaration;
+            var declaredReturn = v[5] as ASTType?;
+            var block = v[7] as ASTBlock;
             return ASTFunctionDeclaration(
               name,
               parameters,
               declaredReturn ?? inferReturnType(block),
               block: block,
-              modifiers: ASTModifiers.modifierStatic,
+              modifiers: ASTModifiers(isStatic: true, isAsync: isAsync),
             );
           });
 
@@ -764,20 +770,22 @@ class TypeScriptGrammarDefinition extends TypeScriptGrammarLexer {
   /// Anonymous arrow function used as an expression (a closure), e.g.
   /// `(a, b) => a + b`, `x => x * x`, `(a): number => a`.
   Parser<ASTExpression> expressionArrowFunction() =>
-      (arrowParameters() &
+      (asyncToken().trimHidden().optional() &
+              arrowParameters() &
               typeAnnotation().optional() &
               string('=>').trimHidden() &
               arrowBody())
           .map((v) {
-            var parameters = v[0] as ASTFunctionParametersDeclaration;
-            var declaredReturn = v[1] as ASTType?;
-            var block = v[3] as ASTBlock;
+            var isAsync = v[0] != null;
+            var parameters = v[1] as ASTFunctionParametersDeclaration;
+            var declaredReturn = v[2] as ASTType?;
+            var block = v[4] as ASTBlock;
             var f = ASTFunctionDeclaration(
               '',
               parameters,
               declaredReturn ?? inferReturnType(block),
               block: block,
-              modifiers: ASTModifiers.modifierStatic,
+              modifiers: ASTModifiers(isStatic: true, isAsync: isAsync),
             );
             return ASTExpressionLiteralFunction(f);
           });
@@ -991,7 +999,8 @@ class TypeScriptGrammarDefinition extends TypeScriptGrammarLexer {
           });
 
   Parser<ASTExpression> expressionNoOperation() =>
-      (expressionArrowFunction() |
+      (expressionAwait() |
+              expressionArrowFunction() |
               expressionNegate() |
               expressionBitwiseNot() |
               expressionLiteral() |
@@ -1009,6 +1018,10 @@ class TypeScriptGrammarDefinition extends TypeScriptGrammarLexer {
               expressionVariableAccess() |
               expressionNegative())
           .cast<ASTExpression>();
+
+  Parser<ASTExpressionAwait> expressionAwait() =>
+      (awaitToken() & (ref0(expressionNoOperation) | ref0(expressionGroup)))
+          .map((v) => ASTExpressionAwait(v[1] as ASTExpression));
 
   Parser<ASTExpressionNegation> expressionNegate() =>
       (char('!').trimHidden() &
