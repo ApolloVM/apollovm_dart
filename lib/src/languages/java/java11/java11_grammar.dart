@@ -63,6 +63,9 @@ class Java11GrammarDefinition extends Java11GrammarLexer {
 
   Parser topLevelDefinition() => (enumDeclaration() | classDeclaration());
 
+  /// Java enum: `enum Name { A[(args)], B; members }`. After the constants an
+  /// optional `;` introduces class members (fields, a constructor, methods),
+  /// reusing the class-member parsing (rich/enhanced enum).
   Parser<ASTClassEnum> enumDeclaration() =>
       (string('enum') &
               ref0(identifierPartLexicalToken).not() &
@@ -71,6 +74,13 @@ class Java11GrammarDefinition extends Java11GrammarLexer {
               enumEntry() &
               (char(',').trimHidden() & enumEntry()).star() &
               char(',').trimHidden().optional() &
+              (char(';').trimHidden() &
+                      (ref0(classConstructorDefaultDeclaration) |
+                              ref0(classFunctionDeclaration) |
+                              ref0(classFieldDeclaration) |
+                              ref0(classFieldDeclarationWithValue))
+                          .star())
+                  .optional() &
               char('}').trimHidden())
           .map((v) {
             var name = v[2] as String;
@@ -78,16 +88,50 @@ class Java11GrammarDefinition extends Java11GrammarLexer {
             for (var e in (v[5] as List)) {
               entries.add(e[1] as ASTEnumEntry);
             }
-            return ASTClassEnum(
+
+            var enumClass = ASTClassEnum(
               name,
               ASTType<VMObject>(name),
               null,
               entries: entries,
             );
+
+            var membersOpt = v[7] as List?;
+            if (membersOpt != null) {
+              var members = membersOpt[1] as List;
+              enumClass.addAllFields(
+                members.whereType<ASTClassField>().toList(),
+              );
+              enumClass.addAllConstructors(
+                members.whereType<ASTClassConstructorDeclaration>().toList(),
+              );
+              enumClass.addAllFunctions(
+                members.whereType<ASTFunctionDeclaration>().toList(),
+              );
+            }
+
+            return enumClass;
           });
 
+  /// A Java enum entry: a bare name or with constructor arguments
+  /// (`EARTH(5.97, 6371)`).
   Parser<ASTEnumEntry> enumEntry() =>
-      identifier().trimHidden().map((v) => ASTEnumEntry(v));
+      (identifier().trimHidden() &
+              (char('(').trimHidden() &
+                      expressionSequence().optional() &
+                      char(')').trimHidden())
+                  .optional())
+          .map((v) {
+            var name = v[0] as String;
+            var argsOpt = v[1] as List?;
+            List<ASTExpression>? arguments;
+            if (argsOpt != null) {
+              arguments =
+                  (argsOpt[1] as List?)?.cast<ASTExpression>() ??
+                  <ASTExpression>[];
+            }
+            return ASTEnumEntry(name, arguments: arguments);
+          });
 
   /// Type-parameter names of the class currently being parsed (e.g. `T` in
   /// `class Wrapper<T>`). Used by [simpleType] to erase them to `dynamic`.

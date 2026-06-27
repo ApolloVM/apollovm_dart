@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<test title="Dart enum value access (ordinal)">
+<test title="Dart enum value access (ordinal via .index)">
     <source language="dart">
         <![CDATA[
 enum Color {
@@ -9,11 +9,11 @@ enum Color {
 }
 
 int run() {
-  int a = Color.red;
-  int b = Color.green;
-  int c = Color.blue;
-  int total = a + b + c;
-  if (Color.green == 1) {
+  var a = Color.red;
+  var b = Color.green;
+  var c = Color.blue;
+  int total = a.index + b.index + c.index;
+  if (b.index == 1) {
     total = total + 100;
   }
   return total;
@@ -30,11 +30,11 @@ int run() {
 <<<< NAMESPACE="" >>>>
 <<<< CODE_UNIT_START="/test" >>>>
   int run() {
-    int a = Color.red;
-    int b = Color.green;
-    int c = Color.blue;
-    int total = (a + b) + c;
-    if (Color.green == 1) {
+    var a = Color.red;
+    var b = Color.green;
+    var c = Color.blue;
+    int total = (a.index + b.index) + c.index;
+    if (b.index == 1) {
         total = total + 100;
     }
 

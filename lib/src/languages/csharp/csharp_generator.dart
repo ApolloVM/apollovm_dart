@@ -126,13 +126,30 @@ class ApolloCodeGeneratorCSharp extends ApolloCodeGenerator {
     return out;
   }
 
+  /// Returns `true` if [clazz] is a rich/enhanced enum (entries with
+  /// constructor arguments, or declared fields/constructors/methods). A rich
+  /// enum can't map to a native C# `enum`, so it's emitted as a class with
+  /// static-readonly singleton instances.
+  bool _isRichEnum(ASTClassEnum clazz) =>
+      clazz.entries.any((e) => e.arguments != null) ||
+      clazz.fields.isNotEmpty ||
+      clazz.constructors.isNotEmpty ||
+      clazz.functions.isNotEmpty;
+
   /// Generates a C# `enum` declaration (with optional `= value` entries).
+  ///
+  /// A rich/enhanced enum is emitted as a class with a private constructor and
+  /// one `static readonly` singleton instance per entry (see [_isRichEnum]).
   StringBuffer generateASTClassEnum(
     ASTClassEnum clazz, {
     StringBuffer? out,
     String indent = '',
   }) {
     out ??= newOutput();
+
+    if (_isRichEnum(clazz)) {
+      return _generateRichEnumCSharp(clazz, out, indent);
+    }
 
     out.write(indent);
     out.write('enum ');
@@ -151,6 +168,114 @@ class ApolloCodeGeneratorCSharp extends ApolloCodeGenerator {
       if (i < entries.length - 1) out.write(',');
       out.write('\n');
     }
+
+    out.write('$indent}\n');
+
+    return out;
+  }
+
+  /// Emits a rich/enhanced enum as a C# class: declared fields, a `private`
+  /// constructor, the methods, one `public static readonly` singleton per
+  /// entry (constructed with its arguments) and a `Values` array.
+  StringBuffer _generateRichEnumCSharp(
+    ASTClassEnum clazz,
+    StringBuffer out,
+    String indent,
+  ) {
+    var i2 = '$indent  ';
+    var name = clazz.name;
+
+    out.write(indent);
+    out.write('class ');
+    out.write(name);
+    out.write(' {\n\n');
+
+    // Declared fields.
+    for (var field in clazz.fields) {
+      out.write(i2);
+      out.write('public ');
+      if (field.finalValue) out.write('readonly ');
+      out.write(generateASTType(field.type));
+      out.write(' ');
+      out.write(field.name);
+      if (field is ASTClassFieldWithInitialValue) {
+        out.write(' = ');
+        generateASTExpression(
+          field.initialValue,
+          out: out,
+          headIndented: false,
+        );
+      }
+      out.write(';\n');
+    }
+    if (clazz.fields.isNotEmpty) out.write('\n');
+
+    // Private constructor.
+    var ctor = clazz.constructors.isNotEmpty
+        ? clazz.constructors.first.firstFunction
+        : null;
+    if (ctor != null) {
+      var params = ctor.parameters.allParameters;
+      out.write(i2);
+      out.write('private ');
+      out.write(name);
+      out.write('(');
+      for (var i = 0; i < params.length; ++i) {
+        if (i > 0) out.write(', ');
+        out.write(generateASTType(params[i].type));
+        out.write(' ');
+        out.write(params[i].name);
+      }
+      out.write(') {\n');
+      for (var p in params) {
+        if (p.thisParameter) {
+          out.write('$i2  this.${p.name} = ${p.name};\n');
+        }
+      }
+      out.write(generateASTBlock(ctor, indent: i2, withBrackets: false));
+      out.write('$i2}\n\n');
+    }
+
+    // Methods.
+    for (var set in clazz.functions) {
+      for (var f in set.functions) {
+        if (f is! ASTClassFunctionDeclaration) continue;
+        out.write(i2);
+        out.write('public ');
+        if (f.modifiers.isStatic) out.write('static ');
+        out.write(generateASTType(f.returnType));
+        out.write(' ');
+        out.write(f.name);
+        out.write('(');
+        if (f.parametersSize > 0) {
+          generateASTParametersDeclaration(f.parameters, out: out);
+        }
+        out.write(') {\n');
+        out.write(generateASTBlock(f, indent: i2, withBrackets: false));
+        out.write('$i2}\n\n');
+      }
+    }
+
+    // Static singleton instances (one per entry).
+    for (var e in clazz.entries) {
+      out.write(i2);
+      out.write('public static readonly $name ${e.name} = new $name(');
+      var args = e.arguments;
+      if (args != null) {
+        for (var i = 0; i < args.length; ++i) {
+          if (i > 0) out.write(', ');
+          generateASTExpression(args[i], out: out, headIndented: false);
+        }
+      }
+      out.write(');\n');
+    }
+    if (clazz.entries.isNotEmpty) out.write('\n');
+
+    // Values array.
+    out.write(i2);
+    out.write('public static readonly $name[] Values = { ');
+    out.write(clazz.entries.map((e) => e.name).join(', '));
+    out.write(' };\n');
 
     out.write('$indent}\n');
 

@@ -2796,9 +2796,11 @@ class ASTExpressionObjectGetterAccess extends ASTExpressionGetterAccess
     return node is ASTClassEnum ? node : null;
   }
 
-  /// Resolves an enum entry reference (`EnumType.entry`) to its value: the
-  /// explicit value expression when present, otherwise the entry's ordinal
-  /// index. Returns `null` if this is not an enum entry reference.
+  /// Resolves an enum static access (`EnumType.entry` or `EnumType.values`):
+  /// an entry yields its cached `const` instance (a singleton, so `==` is
+  /// identity); `values` yields the list of all instances in declaration order.
+  /// Returns `null` if the receiver is not an enum, or the member is neither an
+  /// entry nor `values` (e.g. a static member — handled by the normal path).
   FutureOr<ASTValue>? _resolveEnumEntry(
     VMContext context,
     ASTRunStatus runStatus,
@@ -2806,21 +2808,17 @@ class ASTExpressionObjectGetterAccess extends ASTExpressionGetterAccess
     var enumClass = _enumClass();
     if (enumClass == null) return null;
 
-    var entries = enumClass.entries;
-    for (var i = 0; i < entries.length; ++i) {
-      if (entries[i].name == name) {
-        var value = entries[i].value;
-        if (value != null) return value.run(context, runStatus);
-        return ASTValueInt(i);
-      }
+    if (name == 'values') {
+      return enumClass
+          .getValues(context)
+          .resolveMapped(
+            (list) => ASTValueArray(ASTTypeDynamic.instance, list),
+          );
     }
-    return null;
-  }
 
-  /// `true` if this access is an enum entry reference (`EnumType.entry`).
-  bool _isEnumEntry() {
-    var e = _enumClass();
-    return e != null && e.entries.any((entry) => entry.name == name);
+    if (enumClass.entries.every((e) => e.name != name)) return null;
+
+    return enumClass.getEntryInstance(context, name).resolveMapped((i) => i!);
   }
 
   ASTClass? _getterClass;
@@ -2855,7 +2853,11 @@ class ASTExpressionObjectGetterAccess extends ASTExpressionGetterAccess
 
   @override
   FutureOr<ASTType> resolveType(VMContext? context) {
-    if (_isEnumEntry()) return ASTTypeInt.instance;
+    var enumClass = _enumClass();
+    if (enumClass != null) {
+      if (name == 'values') return ASTTypeArray(enumClass.type);
+      if (enumClass.entries.any((e) => e.name == name)) return enumClass.type;
+    }
 
     if (context == null) {
       return super.resolveType(context);
@@ -2881,7 +2883,11 @@ class ASTExpressionObjectGetterAccess extends ASTExpressionGetterAccess
     VMContext context,
     ASTNode? node,
   ) {
-    if (_isEnumEntry()) return ASTTypeInt.instance;
+    var enumClass = _enumClass();
+    if (enumClass != null) {
+      if (name == 'values') return ASTTypeArray(enumClass.type);
+      if (enumClass.entries.any((e) => e.name == name)) return enumClass.type;
+    }
 
     return _getVariableValue(context).resolveMapped((obj) {
       if (obj is ASTClassInstance) {

@@ -116,7 +116,7 @@ class CSharpGrammarDefinition extends CSharpGrammarLexer {
             var name = v[0] as String;
             var valueOpt = v[1] as List?;
             var value = valueOpt != null ? valueOpt[1] as ASTExpression : null;
-            return ASTEnumEntry(name, value);
+            return ASTEnumEntry(name, value: value);
           });
 
   /// Type-parameter names of the class currently being parsed (e.g. `T` in

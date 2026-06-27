@@ -119,22 +119,24 @@ The **Wasm** column shows what the on-the-fly WebAssembly compiler currently sup
 | Methods                                                       | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Static / visibility modifiers                                 | ✅ | ✅ | 🧩³ | ✅ | 🧩² | ✅ | 🚫  | 🚫  | 🧩⁴ |
 | Inheritance (`extends`) / interfaces                          | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 🚫  | ✅ | 🚧 |
-| Enums (incl. runtime value access)                            | ✅ | ✅ | ✅ | ✅ | 🚫  | ✅ | 🚫  | ✅ | 🚧 |
+| Enums (rich: ctor args, fields, methods)⁶                     | ✅ | ✅ | ✅ | ✅ | 🚫  | ✅ | 🚫  | ✅ | ✅⁶ |
 | Generics (generic classes + instantiation + type erasure)    | ✅ | ✅ | ✅ | ✅ | 🚫  | ✅ | 🚫  | 🚫  | 🚧 |
 | Type inference (`var` / `val` / `auto`)                       | ✅ | ✅ | ✅ | ✅ | 🚫  | ✅ | 🚫  | 🚫  | ✅⁵ |
 
-¹ Lua is table-based (no class construct): "fields" are table entries (`obj.x`) and "constructors"
-are factory functions / `setmetatable` idioms; methods use `function Obj:method`. &nbsp;
-² JavaScript supports the `static` modifier but has no visibility keywords (privacy is by convention /
-closures). &nbsp;
-³ Kotlin `private`/`public` member visibility round-trips; `internal`/`protected` are parsed but not
-yet preserved in the AST. Kotlin has no `static` (it uses `companion object`, not yet supported). &nbsp;
+¹ Lua is table-based: "fields" are table entries (`obj.x`), "constructors" are factory/`setmetatable`
+idioms, methods are `function Obj:method`. &nbsp;
+² JavaScript has `static` but no visibility keywords (privacy is by convention/closures). &nbsp;
+³ Kotlin `private`/`public` visibility round-trips; `internal`/`protected` are parsed but not preserved
+yet; no `static` (uses `companion object`, not yet supported). &nbsp;
 ⁴ Wasm compiles `static` methods (exported as `Class.method`) and instance methods (called with a
-receiver); only static methods are callable as entry points, and there is no source-level visibility
-concept in the module. &nbsp;
+receiver); only static methods are callable as entry points, with no source-level visibility. &nbsp;
 ⁵ Wasm consumes the already type-resolved AST, so `var`/`val`-typed code compiles unchanged. &nbsp;
-Generics are marked `🚫` for JS/Lua/Python because those languages have no static type syntax to
-parameterize.
+⁶ Each enum entry is a `const` **instance** of the enum's class (Dart enhanced enums): `.index`,
+`.name`, `EnumName.values`, identity `==`, plus rich-enum constructor args, fields and methods.
+Java/Kotlin emit native rich enums; C#/TS/Python use a class + `static`-const-instances idiom; Wasm
+compiles entries to heap instances (a method chained directly on an entry needs a variable first).
+**Breaking change**: an entry is no longer an `int` — use `.index` (and `.value` for `= N` entries). &nbsp;
+Generics are `🚫` for JS/Lua/Python: no static type syntax to parameterize.
 
 > Per-language behavior is normalized to a shared AST, so types and constructs map
 > cleanly when translating between languages (e.g. C# `string` ⇄ Dart `String`,

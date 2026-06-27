@@ -346,14 +346,32 @@ class ApolloCodeGeneratorPython extends ApolloCodeGenerator {
     return out;
   }
 
+  /// Returns `true` if [clazz] is a rich/enhanced enum (entries with
+  /// constructor arguments, or declared fields/constructors/methods). A rich
+  /// enum can't map to a `Enum` subclass with plain members, so it's emitted as
+  /// a plain class with class-level singleton instances.
+  bool _isRichEnum(ASTClassEnum clazz) =>
+      clazz.entries.any((e) => e.arguments != null) ||
+      clazz.fields.isNotEmpty ||
+      clazz.constructors.isNotEmpty ||
+      clazz.functions.isNotEmpty;
+
   /// Generates a Python enum: `class Name(Enum):` with `NAME = value` members.
   /// Members without an explicit value get their ordinal index.
+  ///
+  /// A rich/enhanced enum is emitted as a plain class with an `__init__` and
+  /// class-level singleton instances assigned after the class (see
+  /// [_isRichEnum]).
   StringBuffer generateASTClassEnum(
     ASTClassEnum clazz, {
     StringBuffer? out,
     String indent = '',
   }) {
     out ??= newOutput();
+
+    if (_isRichEnum(clazz)) {
+      return _generateRichEnumPython(clazz, out, indent);
+    }
 
     out.write(indent);
     out.write('class ');
@@ -378,6 +396,91 @@ class ApolloCodeGeneratorPython extends ApolloCodeGenerator {
       }
       out.write('\n');
     }
+    out.write('\n');
+
+    return out;
+  }
+
+  /// Emits a rich/enhanced enum as a plain Python class: an `__init__` that
+  /// assigns the declared fields, the methods, and class-level singleton
+  /// instances assigned after the class body (so the type already exists),
+  /// plus a `values` list.
+  StringBuffer _generateRichEnumPython(
+    ASTClassEnum clazz,
+    StringBuffer out,
+    String indent,
+  ) {
+    var bodyIndent = '$indent$_tab';
+    var name = clazz.name;
+
+    out.write(indent);
+    out.write('class ');
+    out.write(name);
+    out.write(':\n');
+
+    var before = out.length;
+
+    // __init__ from the enum constructor (assigns the declared fields).
+    var ctor = clazz.constructors.isNotEmpty
+        ? clazz.constructors.first.firstFunction
+        : null;
+    if (ctor != null) {
+      var params = ctor.parameters.allParameters;
+      out.write(bodyIndent);
+      out.write('def __init__(self');
+      for (var p in params) {
+        out.write(', ');
+        out.write(p.name);
+      }
+      out.write('):\n');
+      var assigned = false;
+      for (var p in params) {
+        if (p.thisParameter) {
+          out.write('$bodyIndent${_tab}self.${p.name} = ${p.name}\n');
+          assigned = true;
+        }
+      }
+      if (!assigned) {
+        out.write('$bodyIndent${_tab}pass\n');
+      }
+      out.write('\n');
+    }
+
+    // Methods.
+    for (var set in clazz.functions) {
+      for (var f in set.functions) {
+        _generateFunction(f, out: out, indent: bodyIndent, isMethod: true);
+      }
+    }
+
+    if (out.length == before) {
+      out.write(bodyIndent);
+      out.write('pass\n');
+    }
+
+    out.write('\n');
+
+    // Class-level singleton instances, assigned after the class so the type
+    // already exists when constructing them.
+    for (var e in clazz.entries) {
+      out.write(indent);
+      out.write('$name.${e.name} = $name(');
+      var args = e.arguments;
+      if (args != null) {
+        for (var i = 0; i < args.length; ++i) {
+          if (i > 0) out.write(', ');
+          generateASTExpression(args[i], out: out, headIndented: false);
+        }
+      }
+      out.write(')\n');
+    }
+
+    // Values list.
+    out.write(indent);
+    out.write('$name.values = [');
+    out.write(clazz.entries.map((e) => '$name.${e.name}').join(', '));
+    out.write(']\n');
+
     out.write('\n');
 
     return out;

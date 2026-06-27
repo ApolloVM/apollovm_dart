@@ -108,33 +108,142 @@ class KotlinGrammarDefinition extends KotlinGrammarLexer {
               statementVariableDeclaration())
           .plus();
 
-  /// Kotlin `enum class Name { A, B, C }`.
+  /// Kotlin enum class:
+  /// `enum class Name[(val p: T, ...)] { A[(args)], B; members }`.
+  ///
+  /// The optional header parameters declare both the enum's fields and a
+  /// `this.`-binding constructor (auto-assigning the fields); the optional
+  /// `;` + members section adds extra fields/methods (rich/enhanced enum).
   Parser<ASTClassEnum> enumDeclaration() =>
       (string('enum') &
               ref0(identifierPartLexicalToken).not() &
               classToken().trimHidden() &
               identifier().trimHidden() &
+              enumHeaderParameters().optional() &
               char('{').trimHidden() &
               enumEntry() &
               (char(',').trimHidden() & enumEntry()).star() &
               char(',').trimHidden().optional() &
+              (char(';').trimHidden() &
+                      (ref0(classFunctionDeclaration) |
+                              ref0(classFieldDeclaration))
+                          .star())
+                  .optional() &
               char('}').trimHidden())
           .map((v) {
             var name = v[3] as String;
-            var entries = <ASTEnumEntry>[v[5] as ASTEnumEntry];
-            for (var e in (v[6] as List)) {
+            var headerParams =
+                (v[4]
+                    as List<({String name, ASTType type, bool finalValue})>?) ??
+                const <({String name, ASTType type, bool finalValue})>[];
+
+            var entries = <ASTEnumEntry>[v[6] as ASTEnumEntry];
+            for (var e in (v[7] as List)) {
               entries.add(e[1] as ASTEnumEntry);
             }
-            return ASTClassEnum(
+
+            var enumClass = ASTClassEnum(
               name,
               ASTType<VMObject>(name),
               null,
               entries: entries,
             );
+
+            if (headerParams.isNotEmpty) {
+              enumClass.addAllFields(
+                headerParams.map(
+                  (p) => ASTClassField(p.type, p.name, p.finalValue),
+                ),
+              );
+              var ctorParams = <ASTConstructorParameterDeclaration>[
+                for (var p in headerParams)
+                  ASTConstructorParameterDeclaration(
+                    p.type,
+                    p.name,
+                    -1,
+                    false,
+                    thisParameter: true,
+                  ),
+              ];
+              enumClass.addConstructor(
+                ASTClassConstructorDeclaration(
+                  ASTType<VMObject>(name),
+                  '',
+                  ASTConstructorParametersDeclaration(ctorParams, null, null),
+                ),
+              );
+            }
+
+            var membersOpt = v[9] as List?;
+            if (membersOpt != null) {
+              var members = membersOpt[1] as List;
+              enumClass.addAllFields(
+                members.whereType<ASTClassField>().toList(),
+              );
+              enumClass.addAllConstructors(
+                members.whereType<ASTClassConstructorDeclaration>().toList(),
+              );
+              enumClass.addAllFunctions(
+                members.whereType<ASTFunctionDeclaration>().toList(),
+              );
+            }
+
+            return enumClass;
           });
 
+  /// Kotlin enum class header parameters: `(val mass: Double, val radius: ...)`.
+  Parser<List<({String name, ASTType type, bool finalValue})>>
+  enumHeaderParameters() =>
+      (char('(').trimHidden() &
+              enumHeaderParameter() &
+              (char(',').trimHidden() & enumHeaderParameter()).star() &
+              char(',').trimHidden().optional() &
+              char(')').trimHidden())
+          .map((v) {
+            var list = <({String name, ASTType type, bool finalValue})>[
+              v[1] as ({String name, ASTType type, bool finalValue}),
+            ];
+            for (var e in (v[2] as List)) {
+              list.add(
+                (e as List)[1]
+                    as ({String name, ASTType type, bool finalValue}),
+              );
+            }
+            return list;
+          });
+
+  Parser<({String name, ASTType type, bool finalValue})>
+  enumHeaderParameter() =>
+      ((valToken() | varToken()).trimHidden() &
+              identifier().trimHidden() &
+              char(':').trimHidden() &
+              type())
+          .map((v) {
+            var finalValue = (v[0] as Token).value == 'val';
+            var name = v[1] as String;
+            var type = v[3] as ASTType;
+            return (name: name, type: type, finalValue: finalValue);
+          });
+
+  /// A Kotlin enum entry: a bare name or with constructor arguments
+  /// (`EARTH(5.97, 6371)`).
   Parser<ASTEnumEntry> enumEntry() =>
-      identifier().trimHidden().map((v) => ASTEnumEntry(v));
+      (identifier().trimHidden() &
+              (char('(').trimHidden() &
+                      expressionSequence().optional() &
+                      char(')').trimHidden())
+                  .optional())
+          .map((v) {
+            var name = v[0] as String;
+            var argsOpt = v[1] as List?;
+            List<ASTExpression>? arguments;
+            if (argsOpt != null) {
+              arguments =
+                  (argsOpt[1] as List?)?.cast<ASTExpression>() ??
+                  <ASTExpression>[];
+            }
+            return ASTEnumEntry(name, arguments: arguments);
+          });
 
   Parser<ASTFunctionDeclaration> functionDeclaration() =>
       (funToken().trimHidden() &

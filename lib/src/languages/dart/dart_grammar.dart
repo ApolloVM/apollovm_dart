@@ -220,6 +220,15 @@ class DartGrammarDefinition extends DartGrammarLexer {
               enumEntry() &
               (char(',').trimHidden() & enumEntry()).star() &
               char(',').trimHidden().optional() &
+              // Enhanced/rich enum body: `;` then class members (fields, a
+              // `const` constructor, methods) — reusing class-member parsing.
+              (char(';').trimHidden() &
+                      (ref0(classConstructorDefaultDeclaration) |
+                              ref0(classFunctionDeclaration) |
+                              ref0(classFieldDeclaration) |
+                              ref0(classFieldDeclarationWithValue))
+                          .star())
+                  .optional() &
               char('}').trimHidden())
           .map((v) {
             var name = v[1] as String;
@@ -227,22 +236,52 @@ class DartGrammarDefinition extends DartGrammarLexer {
             for (var e in (v[4] as List)) {
               entries.add(e[1] as ASTEnumEntry);
             }
-            return ASTClassEnum(
+            var enumClass = ASTClassEnum(
               name,
               ASTType<VMObject>(name),
               null,
               entries: entries,
             );
+            var membersOpt = v[6] as List?;
+            if (membersOpt != null) {
+              var members = membersOpt[1] as List;
+              enumClass.addAllFields(
+                members.whereType<ASTClassField>().toList(),
+              );
+              enumClass.addAllConstructors(
+                members.whereType<ASTClassConstructorDeclaration>().toList(),
+              );
+              enumClass.addAllFunctions(
+                members.whereType<ASTFunctionDeclaration>().toList(),
+              );
+            }
+            return enumClass;
           });
 
   Parser<ASTEnumEntry> enumEntry() =>
       (identifier().trimHidden() &
-              (char('=').trimHidden() & ref0(expression)).optional())
+              ((char('=').trimHidden() & ref0(expression)) |
+                      (char('(').trimHidden() &
+                          expressionSequence().optional() &
+                          char(')').trimHidden()))
+                  .optional())
           .map((v) {
             var name = v[0] as String;
-            var valueOpt = v[1] as List?;
-            var value = valueOpt != null ? valueOpt[1] as ASTExpression : null;
-            return ASTEnumEntry(name, value);
+            var suffix = v[1] as List?;
+            ASTExpression? value;
+            List<ASTExpression>? arguments;
+            if (suffix != null) {
+              if (suffix[0] == '=') {
+                // Explicit value: `Red = 1`.
+                value = suffix[1] as ASTExpression;
+              } else {
+                // Rich-enum constructor args: `earth(5.97, 6371)`.
+                arguments =
+                    (suffix[1] as List?)?.cast<ASTExpression>() ??
+                    <ASTExpression>[];
+              }
+            }
+            return ASTEnumEntry(name, value: value, arguments: arguments);
           });
 
   Parser<ASTBlock> classCodeBlock() =>
@@ -314,13 +353,14 @@ class DartGrammarDefinition extends DartGrammarLexer {
           });
 
   Parser<ASTClassConstructorDeclaration> classConstructorDefaultDeclaration() =>
-      (identifier() &
+      (constToken().trimHidden().optional() &
+              identifier() &
               constructorParametersDeclaration() &
               (char(';').trim() | codeBlock()))
           .map((v) {
-            var className = v[0];
-            var parameters = v[1] as ASTConstructorParametersDeclaration;
-            var optionalBlock = v[2];
+            var className = v[1];
+            var parameters = v[2] as ASTConstructorParametersDeclaration;
+            var optionalBlock = v[3];
             var block = optionalBlock is ASTBlock ? optionalBlock : null;
             return ASTClassConstructorDeclaration(
               ASTType(className),
