@@ -67,7 +67,7 @@ Kotlin → JavaScript), and code can be regenerated back to its original languag
 ### Control flow & operators
 
 Legend: ✅ supported · 🧩 supported via the language's idiom · 🚧 not yet supported (exists in the
-language but not implemented yet) · — not applicable (the language has no such construct).
+language but not implemented yet) · 🚫 not applicable (the language has no such construct).
 
 The **Wasm** column shows what the on-the-fly WebAssembly compiler currently supports
 (any source language is compiled through the same shared AST).
@@ -75,17 +75,17 @@ The **Wasm** column shows what the on-the-fly WebAssembly compiler currently sup
 | Feature | Dart | Java | Kotlin | C# | JS | TS | Lua | Python | Wasm |
 |---|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|
 | `if` / `else if` / `else`        | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| `for` (C-style)                  | ✅ | ✅ | —  | ✅ | ✅ | ✅ | 🧩¹ | — | ✅ |
+| `for` (C-style)                  | ✅ | ✅ | 🚫  | ✅ | ✅ | ✅ | 🧩¹ | 🚫 | ✅ |
 | `for-each` / `for-in`            | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | `while`                          | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| `do` / `while`                   | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 🧩² | — | ✅ |
-| `switch` / `case`                | ✅ | ✅ | 🧩³ | ✅ | ✅ | ✅ | —  | 🧩⁴ | ✅ |
+| `do` / `while`                   | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 🧩² | 🚫 | ✅ |
+| `switch` / `case`                | ✅ | ✅ | 🧩³ | ✅ | ✅ | ✅ | 🚫  | 🧩⁴ | ✅ |
 | `break`                          | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| `continue`                       | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | —  | ✅ | ✅ |
-| `try` / `catch` / `finally`      | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | —  | ✅ | ✅ |
-| `throw` / `raise`                | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | —  | ✅ | ✅ |
-| `async` / `await`                | ✅ | —  | 🧩⁷ | ✅ | ✅ | ✅ | —  | ✅ | ✅ |
-| Ternary (`? :`)                  | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | —  | ✅ | ✅ |
+| `continue`                       | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 🚫  | ✅ | ✅ |
+| `try` / `catch` / `finally`      | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 🚫  | ✅ | ✅ |
+| `throw` / `raise`                | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 🚫  | ✅ | ✅ |
+| `async` / `await`                | ✅ | 🚫  | 🧩⁷ | ✅ | ✅ | ✅ | 🚫  | ✅ | ✅ |
+| Ternary (`? :`)                  | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 🚫  | ✅ | ✅ |
 | Arithmetic (`+ - * / %`)         | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Comparison / logical             | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Bitwise (`& \| ^ << >> ~`)       | ✅ | ✅ | 🧩⁵ | ✅ | ✅ | ✅ | 🧩⁶ | ✅ | ✅ |
@@ -106,22 +106,22 @@ The **Wasm** column shows what the on-the-fly WebAssembly compiler currently sup
 ### Classes, types & OOP
 
 Legend: ✅ supported · 🧩 supported via the language's idiom · 🚧 not yet supported (exists in the
-language but not implemented yet) · — not applicable (the language has no such construct).
+language but not implemented yet) · 🚫 not applicable (the language has no such construct).
 
 The **Wasm** column shows what the on-the-fly WebAssembly compiler currently supports
 (any source language is compiled through the same shared AST).
 
 | Feature | Dart | Java | Kotlin | C# | JS | TS | Lua | Python | Wasm |
 |---|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|
-| Classes                                                       | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | —  | ✅ | ✅ |
+| Classes                                                       | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 🚫  | ✅ | ✅ |
 | Fields (with initializers)                                    | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 🧩¹ | ✅ | ✅ |
 | Constructors & instantiation (`new Foo(...)` / `Foo(...)`)    | ✅ | ✅ | ✅ | ✅ | 🚧 | ✅ | 🧩¹ | 🚧² | ✅ |
 | Methods                                                       | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Static / visibility modifiers                                 | ✅ | ✅ | 🧩⁴ | ✅ | 🧩³ | ✅ | —  | —  | 🧩⁵ |
-| Inheritance (`extends`) / interfaces                          | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | —  | ✅ | 🚧 |
-| Enums (incl. runtime value access)                            | ✅ | ✅ | ✅ | ✅ | —  | ✅ | —  | ✅ | 🚧 |
-| Generics (generic classes + instantiation + type erasure)    | ✅ | ✅ | ✅ | ✅ | —  | ✅ | —  | —  | 🚧 |
-| Type inference (`var` / `val` / `auto`)                       | ✅ | ✅ | ✅ | ✅ | —  | ✅ | —  | —  | ✅⁶ |
+| Static / visibility modifiers                                 | ✅ | ✅ | 🧩⁴ | ✅ | 🧩³ | ✅ | 🚫  | 🚫  | 🧩⁵ |
+| Inheritance (`extends`) / interfaces                          | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 🚫  | ✅ | 🚧 |
+| Enums (incl. runtime value access)                            | ✅ | ✅ | ✅ | ✅ | 🚫  | ✅ | 🚫  | ✅ | 🚧 |
+| Generics (generic classes + instantiation + type erasure)    | ✅ | ✅ | ✅ | ✅ | 🚫  | ✅ | 🚫  | 🚫  | 🚧 |
+| Type inference (`var` / `val` / `auto`)                       | ✅ | ✅ | ✅ | ✅ | 🚫  | ✅ | 🚫  | 🚫  | ✅⁶ |
 
 ¹ Lua is table-based (no class construct): "fields" are table entries (`obj.x`) and "constructors"
 are factory functions / `setmetatable` idioms; methods use `function Obj:method`. &nbsp;
@@ -135,7 +135,7 @@ yet preserved in the AST. Kotlin has no `static` (it uses `companion object`, no
 receiver); only static methods are callable as entry points, and there is no source-level visibility
 concept in the module. &nbsp;
 ⁶ Wasm consumes the already type-resolved AST, so `var`/`val`-typed code compiles unchanged. &nbsp;
-Generics are marked `—` for JS/Lua/Python because those languages have no static type syntax to
+Generics are marked `🚫` for JS/Lua/Python because those languages have no static type syntax to
 parameterize.
 
 > Per-language behavior is normalized to a shared AST, so types and constructs map
