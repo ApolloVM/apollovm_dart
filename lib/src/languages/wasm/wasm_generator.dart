@@ -187,6 +187,14 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
         types['name'] = _astTypeString;
         offset += _elemSize(_astTypeString);
       }
+      // An explicit-value enum (C#/TypeScript `Medium = 5`) exposes the declared
+      // integer via `.value`; give it an i64 slot seeded at build time.
+      if (clazz.entries.any((e) => e.value != null) &&
+          !offsets.containsKey('value')) {
+        offsets['value'] = offset;
+        types['value'] = _astTypeInt64;
+        offset += _elemSize(_astTypeInt64);
+      }
     }
     return WasmClassLayout(clazz.name, offsets, types, offset);
   }
@@ -4623,6 +4631,26 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     body.write(Wasm.localGet(instLocal));
     body.write(Wasm32.i32Const(namePtr));
     _emitElemStore(body, _astTypeString, layout.offsets['name']!);
+
+    // instance.value = explicit declared value (i64), for explicit-value enums.
+    var valueOffset = layout.offsets['value'];
+    if (valueOffset != null) {
+      body.write(Wasm.localGet(instLocal));
+      var entryValue = entry.value;
+      if (entryValue != null) {
+        generateASTExpression(entryValue, out: body, context: context);
+        _autoConvertStackTypes(
+          context.stackGet(0)!.type,
+          _astTypeInt64,
+          out: body,
+          context: context,
+        );
+        context.stackDrop(); // consumed by the store below
+      } else {
+        body.write(Wasm64.i64Const(0));
+      }
+      _emitElemStore(body, _astTypeInt64, valueOffset);
+    }
 
     // global = instance
     body.write(Wasm.localGet(instLocal));

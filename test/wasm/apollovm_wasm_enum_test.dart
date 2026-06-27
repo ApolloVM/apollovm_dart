@@ -1,8 +1,50 @@
-@Tags(['wasm', 'dart'])
+@Tags(['wasm', 'dart', 'csharp'])
 library;
 
 import 'package:apollovm/apollovm.dart';
 import 'package:test/test.dart';
+
+/// Compiles [src] in [language] to Wasm and runs the static [entry] (e.g.
+/// `Foo.run`) on BOTH the AST interpreter and the compiled Wasm module,
+/// asserting both produce [expected].
+Future<void> _bothEqualLang(
+  String language,
+  String src,
+  String entry,
+  Object? expected,
+) async {
+  var dot = entry.indexOf('.');
+  var className = entry.substring(0, dot);
+  var method = entry.substring(dot + 1);
+
+  var vm = ApolloVM();
+  var ok = await vm.loadCodeUnit(SourceCodeUnit(language, src, id: 'test'));
+  expect(ok, isTrue, reason: "Can't load `$language` source");
+
+  var astRes = await vm
+      .createRunner(language)!
+      .executeClassMethod('', className, method);
+  expect(astRes.getValueNoContext(), expected, reason: 'interpreter');
+
+  var storage = vm.generateAllIn<BytesOutput>('wasm');
+  var modules = await storage.allEntries();
+  BytesOutput? compiled;
+  for (var ns in modules.entries) {
+    for (var m in ns.value.entries) {
+      compiled ??= m.value;
+    }
+  }
+  expect(compiled, isNotNull, reason: 'No compiled Wasm module');
+
+  var vmWasm = ApolloVM();
+  await vmWasm.loadCodeUnit(
+    BinaryCodeUnit('wasm', compiled!.output(), id: 'test.wasm', namespace: ''),
+  );
+  var wasmRes = await vmWasm
+      .createRunner('wasm')!
+      .executeFunction('', entry);
+  expect(wasmRes.getValueNoContext(), expected, reason: 'Wasm');
+}
 
 /// Compiles [src] (Dart) to Wasm and runs `Main.run` on BOTH the AST
 /// interpreter and the compiled Wasm module, asserting both produce
@@ -97,6 +139,27 @@ enum Planet {
       await _bothEqual(
         '${planet}class Main { static int run() { var m = Planet.mars; return m.index; } }',
         1,
+      );
+    });
+  });
+
+  group('Wasm: C# enum .value (explicit values)', () {
+    // GAP 9: an explicit-value (C#) enum entry exposes its declared integer via
+    // `.value`.
+    test('C# enum .value', () async {
+      await _bothEqualLang(
+        'csharp',
+        r'''
+        enum Level { Low = 1, Medium = 5, High = 10 }
+        class Foo {
+          public static int run() {
+            var m = Level.Medium;
+            return m.value;
+          }
+        }
+        ''',
+        'Foo.run',
+        5,
       );
     });
   });
