@@ -78,6 +78,48 @@ Future<void> _bothEqual(String src, Object? expected) async {
   expect(wasmRes.getValueNoContext(), expected, reason: 'Wasm');
 }
 
+/// Compiles [src] (Dart) and runs the static `Main.run` (no return value) on
+/// BOTH the AST interpreter and the compiled Wasm module, asserting both emit
+/// [expectedPrints].
+///
+/// Exercises enum access in a function that ALSO calls `print` / string
+/// interpolation: `print` and `int_to_str`/`double_to_str` are registered as
+/// host imports, which shifts module function indices. A lazily-generated
+/// enum-entry init synth function must bake its constructor call index using the
+/// FINAL import count, or it ends up calling a host import instead of the
+/// constructor (reading back garbage fields).
+Future<void> _bothPrints(String src, List<String> expectedPrints) async {
+  var vm = ApolloVM();
+  var ok = await vm.loadCodeUnit(SourceCodeUnit('dart', src, id: 'test'));
+  expect(ok, isTrue, reason: "Can't load Dart source");
+
+  var astRunner = vm.createRunner('dart')!;
+  var astOut = <String>[];
+  astRunner.externalPrintFunction = (o) => astOut.add('$o');
+  await astRunner.executeClassMethod('', 'Main', 'run');
+  expect(astOut, equals(expectedPrints), reason: 'interpreter print output');
+
+  var storage = vm.generateAllIn<BytesOutput>('wasm');
+  var modules = await storage.allEntries();
+  BytesOutput? compiled;
+  for (var ns in modules.entries) {
+    for (var m in ns.value.entries) {
+      compiled ??= m.value;
+    }
+  }
+  expect(compiled, isNotNull, reason: 'No compiled Wasm module');
+
+  var vmWasm = ApolloVM();
+  await vmWasm.loadCodeUnit(
+    BinaryCodeUnit('wasm', compiled!.output(), id: 'test.wasm', namespace: ''),
+  );
+  var wasmRunner = vmWasm.createRunner('wasm')!;
+  var wasmOut = <String>[];
+  wasmRunner.externalPrintFunction = (o) => wasmOut.add('$o');
+  await wasmRunner.executeFunction('', 'Main.run');
+  expect(wasmOut, equals(expectedPrints), reason: 'Wasm print output');
+}
+
 void main() {
   group('Wasm: enum entries as const instances', () {
     const color = 'enum Color { red, green, blue }\n';
@@ -176,6 +218,92 @@ enum Planet {
         }
         ''', 9.8 / 3.7);
     });
+  });
+
+  group('Wasm: rich enum fields/methods printed (host-import index)', () {
+    // Regression: an enum's fields/methods accessed in a function that ALSO
+    // calls `print` (registering `print`/`*_to_str` host imports) used to read
+    // garbage, because the enum-entry init synth baked a stale constructor call
+    // index that the later-registered imports shifted onto a host import.
+    const planet = '''
+enum Planet {
+  earth(9.8), mars(3.7);
+  final double gravity;
+  const Planet(this.gravity);
+  double mult(double m) => gravity * m;
+  double ratio(Planet p) => gravity / p.gravity;
+}
+''';
+
+    // The exact motivating program. Restricted to the VM: the irrational
+    // `9.8 / 3.7` ratio renders slightly differently under dart2js's
+    // `double_to_str` than the interpreter (an orthogonal double-formatting
+    // concern), so the cross-platform cases below use round values.
+    test('the motivating program', () async {
+      await _bothPrints(
+        '${planet}class Main { static void run() {\n'
+        '  var earth = Planet.earth;\n'
+        '  var mars = Planet.mars;\n'
+        "  print('earth.gravity: \${earth.gravity}');\n"
+        "  print('mars.index: \${mars.index} ; mars.name: \${mars.name}');\n"
+        "  print('earth.mult(2): \${earth.mult(2)}');\n"
+        "  print('earth / mars: \${earth.ratio(mars)}');\n"
+        '} }',
+        [
+          'earth.gravity: 9.8',
+          'mars.index: 1 ; mars.name: mars',
+          'earth.mult(2): 19.6',
+          'earth / mars: ${9.8 / 3.7}',
+        ],
+      );
+    }, testOn: 'vm');
+
+    test('print an enum double field directly', () async {
+      await _bothPrints(
+        '${planet}class Main { static void run() {\n'
+        '  var e = Planet.earth;\n'
+        '  print(e.gravity);\n'
+        '} }',
+        ['9.8'],
+      );
+    });
+
+    test('print an enum method result', () async {
+      // 9.8 * 2 = 19.6 — a non-whole double that renders identically on the VM
+      // and dart2js (whole doubles like `37.0` print as `37` under dart2js).
+      await _bothPrints(
+        '${planet}class Main { static void run() {\n'
+        '  var e = Planet.earth;\n'
+        '  print(e.mult(2.0));\n'
+        '} }',
+        ['19.6'],
+      );
+    });
+
+    test('print enum .index and .name together', () async {
+      await _bothPrints(
+        '${planet}class Main { static void run() {\n'
+        '  var e = Planet.mars;\n'
+        "  print('\${e.index}/\${e.name}');\n"
+        '} }',
+        ['1/mars'],
+      );
+    });
+
+    // VM-only: `ratio` returns a whole/irrational double whose string form
+    // differs under dart2js (an orthogonal double-formatting concern). The
+    // enum-typed-parameter path is also covered cross-platform by the
+    // value-comparing `enum method taking an enum-typed parameter` test above.
+    test('print enum-typed-parameter method result', () async {
+      await _bothPrints(
+        '${planet}class Main { static void run() {\n'
+        '  var e = Planet.earth;\n'
+        '  var m = Planet.mars;\n'
+        '  print(e.ratio(m));\n'
+        '} }',
+        ['${9.8 / 3.7}'],
+      );
+    }, testOn: 'vm');
   });
 
   group('Wasm: switch on an enum', () {
