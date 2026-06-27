@@ -60,7 +60,9 @@ Kotlin → JavaScript), and code can be regenerated back to its original languag
 - **Execution**: a tree-walking interpreter runs the AST directly.
 - **Translation**: regenerate the AST as source in any supported language.
 - **Wasm compilation**: compile to WebAssembly, including `async`/`await` (via
-  Asyncify), classes, exceptions, maps and GC types.
+  Asyncify), classes (fields, constructors, instance & `static` methods,
+  `toString()` dispatch, `Object`/`dynamic` boxing), exceptions, closures,
+  lists/maps and GC types.
 
 ### Control flow & operators
 
@@ -102,17 +104,20 @@ The **Wasm** column shows what the on-the-fly WebAssembly compiler currently sup
 Legend: ✅ supported · ⚠️ supported via the language's idiom · 🚧 not yet supported (exists in the
 language but not implemented yet) · — not applicable (the language has no such construct).
 
-| Feature | Dart | Java | Kotlin | C# | JS | TS | Lua | Python |
-|---|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|
-| Classes                                                       | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | —  | ✅ |
-| Fields (with initializers)                                    | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ⚠️¹ | ✅ |
-| Constructors & instantiation (`new Foo(...)` / `Foo(...)`)    | ✅ | ✅ | ✅ | ✅ | 🚧 | ✅ | ⚠️¹ | 🚧² |
-| Methods                                                       | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Static / visibility modifiers                                 | ✅ | ✅ | ⚠️⁴ | ✅ | ⚠️³ | ✅ | —  | —  |
-| Inheritance (`extends`) / interfaces                          | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | —  | ✅ |
-| Enums (incl. runtime value access)                            | ✅ | ✅ | ✅ | ✅ | —  | ✅ | —  | ✅ |
-| Generics (generic classes + instantiation + type erasure)    | ✅ | ✅ | ✅ | ✅ | —  | ✅ | —  | —  |
-| Type inference (`var` / `val` / `auto`)                       | ✅ | ✅ | ✅ | ✅ | —  | ✅ | —  | —  |
+The **Wasm** column shows what the on-the-fly WebAssembly compiler currently supports
+(any source language is compiled through the same shared AST).
+
+| Feature | Dart | Java | Kotlin | C# | JS | TS | Lua | Python | Wasm |
+|---|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|
+| Classes                                                       | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | —  | ✅ | ✅ |
+| Fields (with initializers)                                    | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ⚠️¹ | ✅ | ✅ |
+| Constructors & instantiation (`new Foo(...)` / `Foo(...)`)    | ✅ | ✅ | ✅ | ✅ | 🚧 | ✅ | ⚠️¹ | 🚧² | ✅ |
+| Methods                                                       | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Static / visibility modifiers                                 | ✅ | ✅ | ⚠️⁴ | ✅ | ⚠️³ | ✅ | —  | —  | ⚠️⁵ |
+| Inheritance (`extends`) / interfaces                          | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | —  | ✅ | 🚧 |
+| Enums (incl. runtime value access)                            | ✅ | ✅ | ✅ | ✅ | —  | ✅ | —  | ✅ | 🚧 |
+| Generics (generic classes + instantiation + type erasure)    | ✅ | ✅ | ✅ | ✅ | —  | ✅ | —  | —  | 🚧 |
+| Type inference (`var` / `val` / `auto`)                       | ✅ | ✅ | ✅ | ✅ | —  | ✅ | —  | —  | ✅⁶ |
 
 ¹ Lua is table-based (no class construct): "fields" are table entries (`obj.x`) and "constructors"
 are factory functions / `setmetatable` idioms; methods use `function Obj:method`. &nbsp;
@@ -120,8 +125,12 @@ are factory functions / `setmetatable` idioms; methods use `function Obj:method`
 implemented yet, so constructors aren't usable end-to-end. &nbsp;
 ³ JavaScript supports the `static` modifier but has no visibility keywords (privacy is by convention /
 closures). &nbsp;
-⁴ Kotlin member visibility modifiers (`private`/`public`/`internal`/`protected`) are supported; Kotlin
-has no `static` (it uses `companion object`, not yet supported). &nbsp;
+⁴ Kotlin `private`/`public` member visibility round-trips; `internal`/`protected` are parsed but not
+yet preserved in the AST. Kotlin has no `static` (it uses `companion object`, not yet supported). &nbsp;
+⁵ Wasm compiles `static` methods (exported as `Class.method`) and instance methods (called with a
+receiver); only static methods are callable as entry points, and there is no source-level visibility
+concept in the module. &nbsp;
+⁶ Wasm consumes the already type-resolved AST, so `var`/`val`-typed code compiles unchanged. &nbsp;
 Generics are marked `—` for JS/Lua/Python because those languages have no static type syntax to
 parameterize.
 
