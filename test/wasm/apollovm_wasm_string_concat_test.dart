@@ -4,7 +4,6 @@ library;
 import 'dart:typed_data';
 
 import 'package:apollovm/apollovm.dart';
-import 'package:data_serializer/data_serializer.dart';
 import 'package:test/test.dart';
 
 /// Compiles [code] to Wasm, runs the exported [functionName] on the native
