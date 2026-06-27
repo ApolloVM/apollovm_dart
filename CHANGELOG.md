@@ -1,3 +1,42 @@
+## 0.1.46
+
+### Wasm backend: `num` (TypeScript/JS `number`) + switch on a boxed scrutinee
+
+- **`num` (a TypeScript/JavaScript `number`) is now supported** in the Wasm
+  backend. A plain `num` has no fixed width; the VM treats integer-valued
+  numbers as `int`, so `num` is represented as i64. This fixes string
+  interpolation/concatenation of a `num` (e.g. `"sum=" + (a + b)`), `switch` on
+  a `num` scrutinee, and `num` arithmetic — unblocking the TypeScript Class,
+  Conditional, Exceptions and Switch examples.
+- **`switch` on a boxed `dynamic`/`Object` scrutinee** (e.g. a `List<Object>`
+  element) now compiles: the scrutinee is unboxed to a concrete i64 to drive
+  the integer branch table.
+- **Scalar `Object`/`dynamic` entry-point parameters are now marshalled.** An
+  untyped parameter (e.g. a JavaScript/Python `main(a, b)`, or an explicit Dart
+  `dynamic` parameter) is passed as a host-allocated box instead of a raw scalar
+  the module would read as a garbage pointer — fixing the JavaScript, Lua and
+  Python Class/Conditional/Switch examples, which previously ran with all
+  arguments seen as `0`. (The `apollovm_sig` section is now emitted whenever a
+  public function has an `Object`/`dynamic` parameter, and a plain `num` is
+  tagged as `int` so it is passed as a raw i64 rather than boxed.)
+- **Anonymous functions with an untyped parameter** (`n => n * 2` from
+  C#/Lua/Python) now compile: the parameter type is inferred from its body. A
+  nested closure's `return` no longer makes the enclosing (void) function
+  non-void.
+- **Named nested function declarations** (`let twice = (n) => …`, which
+  JavaScript/TypeScript parse as a function declaration rather than a `var`) are
+  hoisted and lowered to a direct `call`.
+- **A boxed value flows into and out of an `Object`/`dynamic` slot.** A concrete
+  value passed to a generic `T` field/parameter (represented as a boxed
+  `Object`) is boxed; a boxed value used in arithmetic or passed to a typed
+  numeric parameter is unboxed. This makes generic `Box<T>` (Dart, Java, Kotlin,
+  C#, TypeScript) work.
+- **More boxed-operand operations.** A `var` whose initializer is a boxed-operand
+  expression (e.g. `var s = a + b` where `a`/`b` are `Object[]`/`List<Object>`
+  elements) is refined to the result's concrete type, and the `== 0` fast path
+  (`i64.eqz`) unboxes a boxed operand first. Fixes the Java Class example and the
+  JavaScript try/catch example.
+
 ## 0.1.45
 
 ### Wasm backend: collection-to-String + dynamic arithmetic on boxed values
