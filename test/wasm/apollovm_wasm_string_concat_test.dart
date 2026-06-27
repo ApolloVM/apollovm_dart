@@ -16,7 +16,9 @@ Future<void> _testWasm({
   required Map<List, Object?> executions,
 }) async {
   var vm = ApolloVM();
-  var loadOK = await vm.loadCodeUnit(SourceCodeUnit(language, code, id: 'test'));
+  var loadOK = await vm.loadCodeUnit(
+    SourceCodeUnit(language, code, id: 'test'),
+  );
   expect(loadOK, isTrue, reason: "Can't load `$language` source");
 
   // AST interpreter reference run.

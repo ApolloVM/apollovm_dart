@@ -1119,7 +1119,11 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       // call can resolve against the enclosing class's static methods.
       var context = WasmContext(module: module);
       context.classLayout = module.classLayouts[f.clazz.name];
-      return generateASTFunctionDeclaration(f, context: context, module: module);
+      return generateASTFunctionDeclaration(
+        f,
+        context: context,
+        module: module,
+      );
     }
     return generateASTFunctionDeclaration(f, module: module);
   }
@@ -4850,7 +4854,18 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
 
     var returnType = effectiveReturnType;
 
-    if (!returnType.isVoid && context.stackLength == 0) {
+    // A non-void function needs a trailing `unreachable` + default when the
+    // validator considers the body end reachable but no value is produced. This
+    // is detected by `stackLength == 0` (the body left nothing). It also applies
+    // when the last statement is a `switch` that returns on all paths: such a
+    // switch ends with a `block`'s `end` (reachable to the validator) yet the
+    // scrutinee evaluation can leave a residual virtual-stack entry (e.g. when
+    // preceded by a `var` declaration), so the `stackLength == 0` check alone
+    // would miss it.
+    var lastStatement = f.statements.isEmpty ? null : f.statements.last;
+
+    if (!returnType.isVoid &&
+        (context.stackLength == 0 || lastStatement is ASTStatementSwitch)) {
       // Notify that the function can't reach the end.
       bodyCode.writeByte(
         Wasm.unreachable,
@@ -7484,13 +7499,23 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     generateASTExpression(statement.expression, out: out, context: context);
     var valueType = context.stackGet(0)!.type;
 
-    final switchOnInt =
-        valueType == _astTypeInt64 || valueType == _astTypeInt;
+    final switchOnInt = valueType == _astTypeInt64 || valueType == _astTypeInt;
     final switchOnString = valueType is ASTTypeString;
 
-    if (!switchOnInt && !switchOnString) {
+    // An `enum` scrutinee is compared by ordinal: reduce both the scrutinee and
+    // each case entry to their `.index` (i64).
+    final enumLayout =
+        (!switchOnInt && !switchOnString && valueType.name.isNotEmpty)
+        ? context.module?.classLayouts[valueType.name]
+        : null;
+    final switchOnEnum =
+        enumLayout != null && enumLayout.offsets.containsKey('index');
+    final enumIndexOffset = switchOnEnum ? enumLayout.offsets['index']! : 0;
+
+    if (!switchOnInt && !switchOnString && !switchOnEnum) {
       throw UnimplementedError(
-        "Wasm switch on $valueType is not supported (int or String only).",
+        "Wasm switch on $valueType is not supported "
+        "(int, String or enum only).",
       );
     }
 
@@ -7502,8 +7527,17 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       strEqIndex = module.synthFunctionIndex('__streq')!;
     }
 
-    // The scrutinee is held as i64 (int) or i32 (String handle).
-    final ASTType scrutineeLocalType = switchOnInt
+    if (switchOnEnum) {
+      context.module?.requiresMemory = true;
+      out.write(
+        Wasm64.i64Load(3, enumIndexOffset),
+        description: "[OP] switch enum scrutinee .index",
+      );
+      context.stackReplace(_astTypeInt64, "enum scrutinee .index");
+    }
+
+    // The scrutinee is held as i64 (int / enum ordinal) or i32 (String handle).
+    final ASTType scrutineeLocalType = (switchOnInt || switchOnEnum)
         ? _astTypeInt64
         : _astTypeString;
     var valueLocal = context.scratchLocal(scrutineeLocalType, 17);
@@ -7556,6 +7590,15 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       out.write(Wasm.localGet(valueLocal));
       context.stackPush(scrutineeLocalType, "switch value");
       generateASTExpression(c.value!, out: out, context: context);
+      if (switchOnEnum) {
+        // Reduce the case enum entry to its `.index` (i64), then compare ints.
+        context.module?.requiresMemory = true;
+        out.write(
+          Wasm64.i64Load(3, enumIndexOffset),
+          description: "[OP] switch enum case .index",
+        );
+        context.stackReplace(_astTypeInt64, "enum case .index");
+      }
       if (switchOnString) {
         // __streq(scrutinee, caseValue) -> i32 (0/1) content equality.
         out.write(

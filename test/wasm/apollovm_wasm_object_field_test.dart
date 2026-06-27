@@ -187,9 +187,11 @@ void main() {
     // a boxed (i32) slot, but storing an `int` (i64) into it does not box the
     // value — producing an i32/i64 width mismatch. A robust fix needs box-on
     // -store / unbox-on-read for `dynamic`/`Object` fields holding primitives.
-    test('generic Box<int> field round-trips', () async {
-      await _testWasmPrints(
-        r'''
+    test(
+      'generic Box<int> field round-trips',
+      () async {
+        await _testWasmPrints(
+          r'''
         class Box<T> {
           T value;
           Box(this.value);
@@ -199,11 +201,14 @@ void main() {
           print(b.value);
         }
       ''',
-        'main',
-        ['7'],
-      );
-    }, skip: 'BUG/GAP 4: a generic (type-parameter -> `dynamic`) field holding a '
-        'primitive int is not boxed on store, causing an i32/i64 width '
-        'mismatch in Wasm.');
+          'main',
+          ['7'],
+        );
+      },
+      skip:
+          'BUG/GAP 4: a generic (type-parameter -> `dynamic`) field holding a '
+          'primitive int is not boxed on store, causing an i32/i64 width '
+          'mismatch in Wasm.',
+    );
   });
 }

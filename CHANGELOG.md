@@ -7,15 +7,18 @@
   including with named arguments and omitted default parameters.
 - **`String + <number>`** concatenation (from Java/Kotlin/C#/JS/TS, e.g.
   `"n=" + n`) compiles, coercing the numeric operand to a String.
-- **`switch` on a `String`** scrutinee (content equality). `switch` on `int`
-  already worked; the Dart interpreter already handled `String`/`enum` switch.
+- **`switch` on a `String`** scrutinee (content equality) and **`switch` on an
+  `enum`** scrutinee (compared by ordinal). `switch` on `int` already worked.
+  Also fixes a function-end edge case where a `switch` that returns on all paths
+  as the last statement (e.g. after a `var` declaration) compiled to a function
+  that fell off its end without a return value.
 - **Rich-enum methods that take an enum-typed parameter** (`double ratio(Planet
   p)`) compile; **C#/TypeScript explicit-value enums** expose `.value`.
 - **Typed catch-all clauses** (`on Exception catch (e)` / `catch (Exception
   e)`) compile instead of failing on the declared exception type.
 - Known remaining gaps (documented, with skipped reproduction tests): `Map`/
   `List` → String coercion, generic (`Box<T>`) primitive fields, lambdas, and
-  `switch` on `enum`/`dynamic` scrutinees.
+  `switch` on a boxed `dynamic`/`Object` scrutinee.
 
 ## 0.1.42
 

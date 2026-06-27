@@ -416,9 +416,11 @@ void main() {
     // supported (int only)". A robust fix must narrow the boxed scrutinee to its
     // i64 int payload AND agree with how the value is boxed (host-marshalled
     // params vs in-module boxes) — deferred.
-    test('switch on a boxed dynamic scrutinee', () async {
-      await _testWasm(
-        r'''
+    test(
+      'switch on a boxed dynamic scrutinee',
+      () async {
+        await _testWasm(
+          r'''
         int run(List<Object> args) {
           switch (args[0]) {
             case 1: return 10;
@@ -427,16 +429,19 @@ void main() {
           }
         }
         ''',
-        'run',
-        {
-          [
-            [1],
-          ]: 10,
-        },
-      );
-    }, skip: 'BUG/GAP 5: Wasm `switch` on a boxed dynamic/Object scrutinee is '
-        'not yet supported (needs payload narrowing consistent with the box '
-        'representation).');
+          'run',
+          {
+            [
+              [1],
+            ]: 10,
+          },
+        );
+      },
+      skip:
+          'BUG/GAP 5: Wasm `switch` on a boxed dynamic/Object scrutinee is '
+          'not yet supported (needs payload narrowing consistent with the box '
+          'representation).',
+    );
 
     // `switch` on a String scrutinee (content equality).
     test('switch on a String scrutinee', () async {

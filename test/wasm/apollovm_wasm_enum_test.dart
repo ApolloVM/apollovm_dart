@@ -40,9 +40,7 @@ Future<void> _bothEqualLang(
   await vmWasm.loadCodeUnit(
     BinaryCodeUnit('wasm', compiled!.output(), id: 'test.wasm', namespace: ''),
   );
-  var wasmRes = await vmWasm
-      .createRunner('wasm')!
-      .executeFunction('', entry);
+  var wasmRes = await vmWasm.createRunner('wasm')!.executeFunction('', entry);
   expect(wasmRes.getValueNoContext(), expected, reason: 'Wasm');
 }
 
@@ -144,8 +142,7 @@ enum Planet {
 
     // GAP 7: an enum method that uses a field.
     test('enum method using a field', () async {
-      await _bothEqual(
-        r'''
+      await _bothEqual(r'''
         enum Planet {
           earth(9.8), mars(3.7);
           final double gravity;
@@ -158,15 +155,12 @@ enum Planet {
             return e.mult(2.0);
           }
         }
-        ''',
-        19.6,
-      );
+        ''', 19.6);
     });
 
     // GAP 7: an enum method taking an enum-TYPED parameter (`Planet p`).
     test('enum method taking an enum-typed parameter', () async {
-      await _bothEqual(
-        r'''
+      await _bothEqual(r'''
         enum Planet {
           earth(9.8), mars(3.7);
           final double gravity;
@@ -180,19 +174,15 @@ enum Planet {
             return e.ratio(m);
           }
         }
-        ''',
-        9.8 / 3.7,
-      );
+        ''', 9.8 / 3.7);
     });
   });
 
   group('Wasm: switch on an enum', () {
-    // The Dart interpreter handles `switch` on an enum; the Wasm compiler does
-    // not yet (the scrutinee's enum value reduction leaves the stack
-    // unbalanced). `switch` on `int` and `String` work.
+    // `switch` on an enum is compiled by reducing the scrutinee and each case
+    // entry to their ordinal (`.index`) and comparing as ints.
     test('switch on an enum scrutinee', () async {
-      await _bothEqual(
-        r'''
+      await _bothEqual(r'''
         enum Color { red, green, blue }
         class Main {
           static int run() {
@@ -204,11 +194,8 @@ enum Planet {
             }
           }
         }
-        ''',
-        2,
-      );
-    }, skip: 'BUG: Wasm `switch` on an enum scrutinee is not yet supported '
-        '(int and String switch work).');
+        ''', 2);
+    });
   });
 
   group('Wasm: C# enum .value (explicit values)', () {
