@@ -141,6 +141,49 @@ enum Planet {
         1,
       );
     });
+
+    // GAP 7: an enum method that uses a field.
+    test('enum method using a field', () async {
+      await _bothEqual(
+        r'''
+        enum Planet {
+          earth(9.8), mars(3.7);
+          final double gravity;
+          const Planet(this.gravity);
+          double mult(double m) { return gravity * m; }
+        }
+        class Main {
+          static double run() {
+            var e = Planet.earth;
+            return e.mult(2.0);
+          }
+        }
+        ''',
+        19.6,
+      );
+    });
+
+    // GAP 7: an enum method taking an enum-TYPED parameter (`Planet p`).
+    test('enum method taking an enum-typed parameter', () async {
+      await _bothEqual(
+        r'''
+        enum Planet {
+          earth(9.8), mars(3.7);
+          final double gravity;
+          const Planet(this.gravity);
+          double ratio(Planet p) { return gravity / p.gravity; }
+        }
+        class Main {
+          static double run() {
+            var e = Planet.earth;
+            var m = Planet.mars;
+            return e.ratio(m);
+          }
+        }
+        ''',
+        9.8 / 3.7,
+      );
+    });
   });
 
   group('Wasm: C# enum .value (explicit values)', () {

@@ -10162,6 +10162,11 @@ extension _ASTTypeExtension on ASTType {
     } else if (this is ASTType<VMObject>) {
       // A class instance is an i32 pointer into linear memory.
       return WasmType.i32Type;
+    } else if (name.isNotEmpty) {
+      // Any other named reference type — a user class or an enum used by name
+      // (e.g. an enum-typed parameter `Planet p`) — is a heap instance,
+      // represented as an i32 pointer like other object instances.
+      return WasmType.i32Type;
     }
 
     throw StateError("Can't handle type: $this");
