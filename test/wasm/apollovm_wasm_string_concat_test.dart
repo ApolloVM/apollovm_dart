@@ -21,14 +21,23 @@ Future<void> _testWasm({
   );
   expect(loadOK, isTrue, reason: "Can't load `$language` source");
 
-  // AST interpreter reference run.
+  // AST interpreter reference run. A `Class.method` entry (no top-level
+  // functions, e.g. C#) is invoked via `executeClassMethod`.
   var astRunner = vm.createRunner(language)!;
+  var dot = functionName.indexOf('.');
   for (var e in executions.entries) {
-    var astValue = await astRunner.executeFunction(
-      '',
-      functionName,
-      positionalParameters: e.key,
-    );
+    var astValue = dot < 0
+        ? await astRunner.executeFunction(
+            '',
+            functionName,
+            positionalParameters: e.key,
+          )
+        : await astRunner.executeClassMethod(
+            '',
+            functionName.substring(0, dot),
+            functionName.substring(dot + 1),
+            positionalParameters: e.key,
+          );
     expect(astValue.getValueNoContext(), e.value, reason: 'interpreter');
   }
 
@@ -94,6 +103,58 @@ void main() {
         ''',
         functionName: 'run',
         executions: {[]: 'g=9.8'},
+      );
+    });
+
+    // Chained: String + int + String (left-associative; the running value stays
+    // a String after the first concat).
+    test('String + int + String chained (Kotlin)', () {
+      return _testWasm(
+        language: 'kotlin',
+        code: r'''
+          fun run(n: Int): String {
+            return "[" + n + "]"
+          }
+        ''',
+        functionName: 'run',
+        executions: {
+          [42]: '[42]',
+        },
+      );
+    });
+
+    // Number on the left is NOT a String concat in Kotlin (`n + "x"` where n is
+    // Int is invalid), but `"x" + n + m` chains two numbers onto a String.
+    test('String + int + int chained (Kotlin)', () {
+      return _testWasm(
+        language: 'kotlin',
+        code: r'''
+          fun run(a: Int, b: Int): String {
+            return "sum:" + a + "+" + b
+          }
+        ''',
+        functionName: 'run',
+        executions: {
+          [3, 4]: 'sum:3+4',
+        },
+      );
+    });
+
+    // The same gap from C# (a different front end / generator).
+    test('String + int (C#)', () {
+      return _testWasm(
+        language: 'csharp',
+        code: r'''
+          class Foo {
+            public static string run(int n) {
+              return "n=" + n;
+            }
+          }
+        ''',
+        functionName: 'Foo.run',
+        executions: {
+          [7]: 'n=7',
+        },
       );
     });
   });

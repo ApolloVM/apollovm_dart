@@ -196,6 +196,75 @@ enum Planet {
         }
         ''', 2);
     });
+
+    test('enum switch matches the last entry explicitly', () async {
+      await _bothEqual(r'''
+        enum Color { red, green, blue }
+        class Main {
+          static int run() {
+            var c = Color.blue;
+            switch (c) {
+              case Color.red: return 1;
+              case Color.green: return 2;
+              case Color.blue: return 3;
+              default: return 9;
+            }
+          }
+        }
+        ''', 3);
+    });
+
+    test('enum switch falls to default', () async {
+      await _bothEqual(r'''
+        enum Color { red, green, blue }
+        class Main {
+          static int run() {
+            var c = Color.blue;
+            switch (c) {
+              case Color.red: return 1;
+              case Color.green: return 2;
+              default: return 99;
+            }
+          }
+        }
+        ''', 99);
+    });
+
+    test('enum switch returns a String', () async {
+      await _bothEqual(r'''
+        enum Color { red, green, blue }
+        class Main {
+          static String run() {
+            var c = Color.green;
+            switch (c) {
+              case Color.red: return 'R';
+              case Color.green: return 'G';
+              default: return '?';
+            }
+          }
+        }
+        ''', 'G');
+    });
+
+    test('enum switch over a rich enum entry', () async {
+      await _bothEqual(r'''
+        enum Planet {
+          earth(9.8), mars(3.7);
+          final double gravity;
+          const Planet(this.gravity);
+        }
+        class Main {
+          static double run() {
+            var p = Planet.mars;
+            switch (p) {
+              case Planet.earth: return 1.0;
+              case Planet.mars: return 2.0;
+              default: return 0.0;
+            }
+          }
+        }
+        ''', 2.0);
+    });
   });
 
   group('Wasm: C# enum .value (explicit values)', () {

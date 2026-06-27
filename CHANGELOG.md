@@ -9,9 +9,10 @@
   `"n=" + n`) compiles, coercing the numeric operand to a String.
 - **`switch` on a `String`** scrutinee (content equality) and **`switch` on an
   `enum`** scrutinee (compared by ordinal). `switch` on `int` already worked.
-  Also fixes a function-end edge case where a `switch` that returns on all paths
-  as the last statement (e.g. after a `var` declaration) compiled to a function
-  that fell off its end without a return value.
+  Also fixes a general function-end edge case: a control construct
+  (`switch`/`if`/`while`) that returns on all paths as the last statement (e.g.
+  after a `var` declaration) compiled to a function that fell off its end
+  without a return value.
 - **Rich-enum methods that take an enum-typed parameter** (`double ratio(Planet
   p)`) compile; **C#/TypeScript explicit-value enums** expose `.value`.
 - **Typed catch-all clauses** (`on Exception catch (e)` / `catch (Exception

@@ -4854,18 +4854,18 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
 
     var returnType = effectiveReturnType;
 
-    // A non-void function needs a trailing `unreachable` + default when the
-    // validator considers the body end reachable but no value is produced. This
-    // is detected by `stackLength == 0` (the body left nothing). It also applies
-    // when the last statement is a `switch` that returns on all paths: such a
-    // switch ends with a `block`'s `end` (reachable to the validator) yet the
-    // scrutinee evaluation can leave a residual virtual-stack entry (e.g. when
-    // preceded by a `var` declaration), so the `stackLength == 0` check alone
-    // would miss it.
+    // A non-void function needs a trailing `unreachable` + default unless its
+    // body already ends with an explicit `return` instruction. When the last
+    // top-level statement is NOT a `return` (e.g. a `switch`/`if`/`while` that
+    // returns on all paths), the body ends with a `block`'s `end`, which the
+    // validator treats as reachable — so the terminator is required even when a
+    // residual virtual-stack entry (e.g. from a preceding `var` declaration)
+    // makes `context.stackLength != 0`. The `stackLength == 0` case keeps the
+    // (redundant but pre-existing) terminator for plain `return`-ended bodies.
     var lastStatement = f.statements.isEmpty ? null : f.statements.last;
 
     if (!returnType.isVoid &&
-        (context.stackLength == 0 || lastStatement is ASTStatementSwitch)) {
+        (context.stackLength == 0 || lastStatement is! ASTStatementReturn)) {
       // Notify that the function can't reach the end.
       bodyCode.writeByte(
         Wasm.unreachable,

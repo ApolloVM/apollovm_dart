@@ -463,5 +463,51 @@ void main() {
         },
       );
     });
+
+    // `switch` on a String using assignment + `break` (not return-per-case),
+    // followed by a trailing `return`.
+    test('switch on a String with break + trailing return', () async {
+      await _testWasm(
+        r'''
+        int run(String s) {
+          int r = 0;
+          switch (s) {
+            case 'x': { r = 1; break; }
+            case 'y': { r = 2; break; }
+            default: { r = 9; }
+          }
+          return r;
+        }
+        ''',
+        'run',
+        {
+          ['x']: 1,
+          ['y']: 2,
+          ['q']: 9,
+        },
+      );
+    });
+
+    // A String scrutinee held in a local variable (not the parameter directly).
+    test('switch on a String local after a var declaration', () async {
+      await _testWasm(
+        r'''
+        String run(String s) {
+          var key = s;
+          switch (key) {
+            case 'go': return 'green';
+            case 'stop': return 'red';
+            default: return 'amber';
+          }
+        }
+        ''',
+        'run',
+        {
+          ['go']: 'green',
+          ['stop']: 'red',
+          ['wait']: 'amber',
+        },
+      );
+    });
   });
 }
