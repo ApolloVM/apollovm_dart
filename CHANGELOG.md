@@ -1,3 +1,21 @@
+## 0.1.47
+
+### Wasm backend: integer division semantics (`/` on ints) + division-by-zero
+
+- **`/` on integer operands is now integer (truncating) division** in
+  Java/Kotlin/C# — where the expression resolves to `int` — instead of an f64
+  quotient (so `10 / 3` is `3`, not `3.33`). Dart's `/` keeps its `double`
+  result; `~/` is unchanged.
+- **Integer division by zero raises a catchable exception** whose message
+  matches the interpreter (`IntegerDivisionByZeroException` for `/`,
+  `Unsupported operation: Infinity or NaN toInt` for `~/`). Applies to both `~/`
+  and integer `/`.
+- A `print` whose argument is built from a value that just raised (e.g. the
+  quotient in `print('q = ${a ~/ b}')`) is **skipped when an exception is
+  pending**, matching the interpreter, which never reaches the print.
+
+These fix the Dart, Java and Kotlin exception (try/catch/finally) examples.
+
 ## 0.1.46
 
 ### Wasm backend: `num` (TypeScript/JS `number`) + switch on a boxed scrutinee

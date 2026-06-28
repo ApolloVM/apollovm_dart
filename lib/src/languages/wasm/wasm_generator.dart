@@ -2659,10 +2659,34 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       WasmType.i32Type,
     ], const []);
 
-    out.write(
-      Wasm.call(importIndex),
-      description: "[OP] call host import `env.print` (index $importIndex)",
-    );
+    if (context.exceptionMode && module.requiresException) {
+      // If an exception was raised while building the argument (e.g. an integer
+      // division by zero inside the interpolation), skip the print: the value is
+      // invalid and the exception is about to unwind. This matches the
+      // interpreter, which never reaches the print. (The handle is stashed in a
+      // local so the `if` branches don't reach below their block frame.)
+      var argLocal = context.scratchLocal(_astTypeString, 57); // i32 handle
+      out.write(Wasm.localSet(argLocal), description: "[OP] stash print arg");
+      out.write(Wasm32.i32Const(0));
+      out.write(
+        Wasm32.i32Load(2, module.excPendingOffset),
+        description: "[OP] load EXC_PENDING (guard print)",
+      );
+      out.write(Wasm.ifInstruction(WasmType.voidType));
+      // pending: skip the print (argument discarded).
+      out.writeByte(Wasm.elseInstruction);
+      out.write(Wasm.localGet(argLocal));
+      out.write(
+        Wasm.call(importIndex),
+        description: "[OP] call host import `env.print` (index $importIndex)",
+      );
+      out.writeByte(Wasm.end);
+    } else {
+      out.write(
+        Wasm.call(importIndex),
+        description: "[OP] call host import `env.print` (index $importIndex)",
+      );
+    }
     context.stackDrop();
 
     context.assertStackLength(stackLng0, "After print (void)");
@@ -3655,6 +3679,27 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
             description: "[OP] operator: divide(f64)",
           );
           context.stackOperationBinary(_astTypeDouble64, "Wasm64.f64Divide");
+
+          // `/` on integer operands is *integer* division in Java/Kotlin/C#
+          // (the AST resolves the expression to `int`): truncate to i64, and on
+          // divide-by-zero raise the matching catchable exception. Dart's `/`
+          // resolves to `double` and stays an f64 quotient.
+          var resolved = expression.resolveType(null);
+          if (resolved is ASTTypeInt) {
+            if (context.exceptionMode) {
+              _emitGuardedF64ToI64(
+                out,
+                context,
+                msg: 'IntegerDivisionByZeroException',
+              );
+            } else {
+              out.writeByte(
+                Wasm64.f64TruncateToI64Signed,
+                description: "[OP] integer divide -> i64",
+              );
+            }
+            context.stackReplace(_astTypeInt64, "integer divide -> i64");
+          }
         }
       case ASTExpressionOperator.divideAsInt:
         {
@@ -6094,11 +6139,14 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
   /// finite, truncate; otherwise raise a catchable exception (a `String` whose
   /// message matches the AST interpreter) and yield `0`. Net stack effect:
   /// pops one `f64`, pushes one `i64`.
-  void _emitGuardedF64ToI64(BytesOutput out, WasmContext context) {
+  void _emitGuardedF64ToI64(
+    BytesOutput out,
+    WasmContext context, {
+    String msg = 'Unsupported operation: Infinity or NaN toInt',
+  }) {
     final module = context.module!;
     module.requiresException = true;
     final fdiv = context.scratchLocal(_astTypeDouble64, 950);
-    const msg = 'Unsupported operation: Infinity or NaN toInt';
     final msgPtr = module.internStringLiteral(msg);
 
     out.write(Wasm.localSet(fdiv)); // $fdiv = result
@@ -6144,14 +6192,21 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     return null;
   }
 
+  /// Whether [o] is an integer division that can raise a catchable "division by
+  /// zero" exception: Dart's `~/` (`divideAsInt`), or `/` whose operands are
+  /// integers so the expression resolves to `int` (Java/Kotlin/C# `/`).
+  bool _isIntegerDivision(ASTExpressionOperation o) =>
+      o.operator == ASTExpressionOperator.divideAsInt ||
+      (o.operator == ASTExpressionOperator.divide &&
+          o.resolveType(null) is ASTTypeInt);
+
   /// Whether [tryBlock] can raise (a `throw` statement or an integer division).
   bool _tryHasThrow(ASTBlock tryBlock) =>
       tryBlock.statements.any((s) => s is ASTStatementThrow) ||
       tryBlock.descendantChildren.any(
         (n) =>
             n is ASTStatementThrow ||
-            (n is ASTExpressionOperation &&
-                n.operator == ASTExpressionOperator.divideAsInt),
+            (n is ASTExpressionOperation && _isIntegerDivision(n)),
       );
 
   /// The common static type of the values thrown directly within [tryBlock]
@@ -6174,9 +6229,9 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       if (rt is! ASTType) return null;
       types[rt.name] = rt;
     }
-    // An integer division can raise a `String` ("Infinity or NaN").
+    // An integer division can raise a `String` (the division-by-zero message).
     if (tryBlock.descendantChildren.whereType<ASTExpressionOperation>().any(
-      (o) => o.operator == ASTExpressionOperator.divideAsInt,
+      _isIntegerDivision,
     )) {
       types['String'] = ASTTypeString.instance;
     }
@@ -6244,10 +6299,10 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
   /// Number of integer divisions (`~/`) within [s] — each can raise a catchable
   /// "Infinity or NaN" exception under the exception CFG, so the enclosing
   /// statement needs a post-evaluation pending check.
-  int _countIntDivisions(ASTStatement s) => [s, ...s.descendantChildren]
-      .whereType<ASTExpressionOperation>()
-      .where((o) => o.operator == ASTExpressionOperator.divideAsInt)
-      .length;
+  int _countIntDivisions(ASTStatement s) => [
+    s,
+    ...s.descendantChildren,
+  ].whereType<ASTExpressionOperation>().where(_isIntegerDivision).length;
 
   /// Builds the exception-handling CFG for [f]: lowers `throw` / `try` / `catch`
   /// (and the statements around them) into `$pc`-dispatched basic blocks with
