@@ -133,7 +133,21 @@ class CommandRun extends CommandSourceFileBase {
 
     var vm = ApolloVM();
 
-    var codeUnit = SourceCodeUnit(language, source, id: sourceFilePath);
+    // A `.wasm` file is a binary module: load its bytes as a `BinaryCodeUnit`
+    // (parsed by `ApolloParserWasm` into its exported functions) and run it
+    // through the Wasm runtime, rather than decoding the binary as UTF-8 source.
+    CodeUnit<Object> codeUnit;
+    if (language == 'wasm') {
+      var bytes = sourceFile.readAsBytesSync();
+      codeUnit = BinaryCodeUnit(
+        'wasm',
+        bytes,
+        id: sourceFilePath,
+        namespace: '',
+      );
+    } else {
+      codeUnit = SourceCodeUnit(language, source, id: sourceFilePath);
+    }
 
     var loadOK = await vm.loadCodeUnit(codeUnit);
 
