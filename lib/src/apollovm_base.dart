@@ -53,7 +53,7 @@ import 'languages/wasm/wasm_runner.dart';
 /// The Apollo VM.
 class ApolloVM implements VMTypeResolver {
   // ignore: non_constant_identifier_names
-  static final String VERSION = '0.1.47';
+  static final String VERSION = '0.1.48';
 
   static int _idCount = 0;
 
@@ -409,6 +409,8 @@ class ApolloVM implements VMTypeResolver {
         return 'csharp';
       case 'kt':
         return 'kotlin';
+      case 'wasm':
+        return 'wasm';
       case 'cpp':
       case 'c++':
         return 'cpp';

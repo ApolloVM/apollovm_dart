@@ -1,3 +1,15 @@
+## 0.1.48
+
+### CLI: `run` executes `.wasm` files through the Wasm runtime
+
+- **`apollovm run foo.wasm` now runs the binary module** via the Wasm runtime
+  (`ApolloRunnerWasm`) instead of trying to decode it as UTF-8 source. The file
+  is loaded as a `BinaryCodeUnit`, parsed for its exported functions by
+  `ApolloParserWasm`, and its entry function (e.g. `main`) is invoked — closing
+  the `compile` → `run` loop from the command line.
+- The `.wasm` file extension now maps to the `wasm` language in
+  `ApolloVM.parseLanguageFromFilePathExtension`.
+
 ## 0.1.47
 
 ### Wasm backend: integer division semantics (`/` on ints) + division-by-zero
