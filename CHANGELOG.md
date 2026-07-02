@@ -21,6 +21,26 @@
   README feature tables for the full per-feature matrix; `try`/`catch`/`throw`,
   inheritance/interfaces, rich enums and generics are not yet implemented for Go.
 
+### MCP-native runtime: expose ApolloVM to AI agents over the Model Context Protocol
+
+- **New `apollovm serve` command** starts an MCP (Model Context Protocol) server,
+  turning ApolloVM into a programmable, sandboxed execution engine for AI agents.
+  Built on the official `dart_mcp` SDK; serves over **stdio** (default) or
+  **HTTP/SSE** (`--http <port>`).
+- **Seven tools**: `apollo.parse`, `apollo.execute`, `apollo.translate`,
+  `apollo.ast`, `apollo.symbols`, `apollo.types`, `apollo.wasm` — parse, run,
+  translate, compile to Wasm, and inspect AST / symbol graph / type table across
+  all supported languages.
+- **Security model**: file/network access denied by construction (only `print` is
+  exposed; inputs are inline source only); `apollo.execute` runs in a **killable
+  isolate** so a hard timeout is enforced even against runaway synchronous loops
+  (per-tool configurable via `--isolate-tools`); input/output size caps
+  (`--max-source-chars`, `--max-output-chars`); best-effort process-level memory.
+- **New public library** `package:apollovm/apollovm_mcp.dart` (`ApolloMcpServer`,
+  `serveStdio`, `HttpSseTransport`, `McpLimits`, `computeTool`).
+- Added dependency `dart_mcp: ^0.5.2` (and `stream_channel`). New `mcp`-tagged
+  integration tests under `test/mcp/`. See `doc/MCP.md`.
+
 ## 0.1.48
 
 ### CLI: `run` executes `.wasm` files through the Wasm runtime

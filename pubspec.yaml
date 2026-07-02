@@ -30,6 +30,8 @@ dependencies:
   crypto: ^3.0.7
   path: ^1.9.1
   web: ^1.1.1
+  dart_mcp: ^0.5.2
+  stream_channel: ^2.1.4
 
 dev_dependencies:
   lints: ^6.1.0
