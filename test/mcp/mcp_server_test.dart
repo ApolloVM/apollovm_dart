@@ -144,20 +144,22 @@ class Calc {
       expect(summary['classes'], contains('Calc'));
     });
 
-    test('apollo.parse on broken source returns line/column diagnostics',
-        () async {
-      final r = await client.callTool('apollo.parse', {
-        'language': 'dart',
-        'source': 'class { oops',
-      });
-      expect(r['_isError'], isTrue);
-      expect(r['ok'], isFalse);
-      final diag = (r['diagnostics'] as List).first as Map;
-      expect(diag['severity'], 'error');
-      expect(diag['line'], isNotNull);
-      expect(diag['column'], isNotNull);
-      expect(diag['sourceLine'], contains('class'));
-    });
+    test(
+      'apollo.parse on broken source returns line/column diagnostics',
+      () async {
+        final r = await client.callTool('apollo.parse', {
+          'language': 'dart',
+          'source': 'class { oops',
+        });
+        expect(r['_isError'], isTrue);
+        expect(r['ok'], isFalse);
+        final diag = (r['diagnostics'] as List).first as Map;
+        expect(diag['severity'], 'error');
+        expect(diag['line'], isNotNull);
+        expect(diag['column'], isNotNull);
+        expect(diag['sourceLine'], contains('class'));
+      },
+    );
 
     test('apollo.execute returns result and captured output', () async {
       final r = await client.callTool('apollo.execute', {
@@ -211,9 +213,7 @@ class Calc {
       });
       expect(r['_isError'], isFalse);
       final types = r['types'] as List;
-      final byName = {
-        for (final t in types) (t as Map)['name']: t['kind'],
-      };
+      final byName = {for (final t in types) (t as Map)['name']: t['kind']};
       expect(byName['Calc'], 'class');
       expect(byName['int'], 'builtin');
     });

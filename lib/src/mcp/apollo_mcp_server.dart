@@ -22,19 +22,17 @@ import 'tools/apollo_tools.dart';
 final class ApolloMcpServer extends MCPServer with ToolsSupport {
   final McpLimits limits;
 
-  ApolloMcpServer(
-    super.channel, {
-    this.limits = const McpLimits(),
-  }) : super.fromStreamChannel(
-         implementation: Implementation(
-           name: 'apollovm-mcp',
-           version: ApolloVM.VERSION,
-         ),
-         instructions:
-             'ApolloVM programmable execution engine. Tools: '
-             '${allToolNames.join(', ')}. All operate on inline source strings; '
-             'no file or network access is granted to executed code.',
-       ) {
+  ApolloMcpServer(super.channel, {this.limits = const McpLimits()})
+    : super.fromStreamChannel(
+        implementation: Implementation(
+          name: 'apollovm-mcp',
+          version: ApolloVM.VERSION,
+        ),
+        instructions:
+            'ApolloVM programmable execution engine. Tools: '
+            '${allToolNames.join(', ')}. All operate on inline source strings; '
+            'no file or network access is granted to executed code.',
+      ) {
     for (final tool in buildTools()) {
       registerTool(tool, (request) => _handle(tool.name, request));
     }

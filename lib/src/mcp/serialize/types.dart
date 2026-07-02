@@ -8,8 +8,22 @@ import 'ast_json.dart';
 
 /// Well-known builtin/primitive type names (used to classify `kind`).
 const _builtinTypeNames = <String>{
-  'int', 'double', 'num', 'bool', 'String', 'Object', 'dynamic', 'void',
-  'Null', 'var', 'List', 'Map', 'Set', 'Future', 'Function', 'Iterable',
+  'int',
+  'double',
+  'num',
+  'bool',
+  'String',
+  'Object',
+  'dynamic',
+  'void',
+  'Null',
+  'var',
+  'List',
+  'Map',
+  'Set',
+  'Future',
+  'Function',
+  'Iterable',
 };
 
 /// Builds a deduplicated type table for a parsed [ASTRoot].
@@ -73,7 +87,10 @@ Map<String, Object?> typesToJson(ASTRoot root) {
   return <String, Object?>{
     'types': [
       for (var name in names)
-        <String, Object?>{...typeToJson(collected[name]!), 'kind': kindOf(name)},
+        <String, Object?>{
+          ...typeToJson(collected[name]!),
+          'kind': kindOf(name),
+        },
     ],
   };
 }

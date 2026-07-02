@@ -87,7 +87,9 @@ List<Tool> buildTools() => [
         'return the generated source.',
     inputSchema: ObjectSchema(
       properties: {
-        'from': Schema.string(description: 'Source language ($_languageValues).'),
+        'from': Schema.string(
+          description: 'Source language ($_languageValues).',
+        ),
         'to': Schema.string(description: 'Target language ($_languageValues).'),
         'source': _sourceSchema,
       },
@@ -246,7 +248,10 @@ Future<Map<String, Object?>> computeTool(
     default:
       return <String, Object?>{
         'diagnostics': [
-          <String, Object?>{'severity': 'error', 'message': 'Unknown tool: $name'},
+          <String, Object?>{
+            'severity': 'error',
+            'message': 'Unknown tool: $name',
+          },
         ],
         'isError': true,
       };

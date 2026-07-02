@@ -72,9 +72,9 @@ Future<Map<String, Object?>> runToolInIsolate(
 
     timer = Timer(timeout, () {
       isolate?.kill(priority: Isolate.immediate);
-      complete(_errorResult(
-        'Execution timed out after ${timeout.inMilliseconds}ms',
-      ));
+      complete(
+        _errorResult('Execution timed out after ${timeout.inMilliseconds}ms'),
+      );
     });
 
     replyPort.listen((message) {

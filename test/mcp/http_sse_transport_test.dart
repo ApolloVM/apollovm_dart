@@ -24,65 +24,72 @@ void main() {
     await transport.stop();
   });
 
-  test('SSE endpoint event + POST initialize replies over the stream',
-      () async {
-    final port = transport.port!;
-    final endpoint = Completer<String>();
-    final initResult = Completer<Map<String, Object?>>();
+  test(
+    'SSE endpoint event + POST initialize replies over the stream',
+    () async {
+      final port = transport.port!;
+      final endpoint = Completer<String>();
+      final initResult = Completer<Map<String, Object?>>();
 
-    // Open the SSE stream.
-    final sseResp = await (await http.getUrl(
-      Uri.parse('http://127.0.0.1:$port/sse'),
-    )).close();
-    expect(sseResp.statusCode, 200);
+      // Open the SSE stream.
+      final sseResp = await (await http.getUrl(
+        Uri.parse('http://127.0.0.1:$port/sse'),
+      )).close();
+      expect(sseResp.statusCode, 200);
 
-    late StreamSubscription<String> sub;
-    sub = sseResp
-        .transform(utf8.decoder)
-        .transform(const LineSplitter())
-        .listen((line) {
-      if (!line.startsWith('data: ')) return;
-      final data = line.substring(6);
-      if (data.contains('sessionId') && !endpoint.isCompleted) {
-        endpoint.complete(data);
-      } else if (data.startsWith('{')) {
-        final msg = jsonDecode(data) as Map<String, Object?>;
-        if (msg['id'] == 1 && !initResult.isCompleted) {
-          initResult.complete(msg['result'] as Map<String, Object?>);
-        }
-      }
-    });
+      late StreamSubscription<String> sub;
+      sub = sseResp
+          .transform(utf8.decoder)
+          .transform(const LineSplitter())
+          .listen((line) {
+            if (!line.startsWith('data: ')) return;
+            final data = line.substring(6);
+            if (data.contains('sessionId') && !endpoint.isCompleted) {
+              endpoint.complete(data);
+            } else if (data.startsWith('{')) {
+              final msg = jsonDecode(data) as Map<String, Object?>;
+              if (msg['id'] == 1 && !initResult.isCompleted) {
+                initResult.complete(msg['result'] as Map<String, Object?>);
+              }
+            }
+          });
 
-    final endpointPath =
-        await endpoint.future.timeout(const Duration(seconds: 5));
-    expect(endpointPath, contains('/message?sessionId='));
+      final endpointPath = await endpoint.future.timeout(
+        const Duration(seconds: 5),
+      );
+      expect(endpointPath, contains('/message?sessionId='));
 
-    // POST initialize to the advertised endpoint.
-    final postReq = await http.postUrl(
-      Uri.parse('http://127.0.0.1:$port$endpointPath'),
-    );
-    postReq.headers.contentType = ContentType.json;
-    postReq.write(jsonEncode({
-      'jsonrpc': '2.0',
-      'id': 1,
-      'method': 'initialize',
-      'params': {
-        'protocolVersion': '2024-11-05',
-        'capabilities': <String, Object?>{},
-        'clientInfo': {'name': 'http-test', 'version': '1.0'},
-      },
-    }));
-    final postResp = await postReq.close();
-    expect(postResp.statusCode, HttpStatus.accepted);
-    await postResp.drain<void>();
+      // POST initialize to the advertised endpoint.
+      final postReq = await http.postUrl(
+        Uri.parse('http://127.0.0.1:$port$endpointPath'),
+      );
+      postReq.headers.contentType = ContentType.json;
+      postReq.write(
+        jsonEncode({
+          'jsonrpc': '2.0',
+          'id': 1,
+          'method': 'initialize',
+          'params': {
+            'protocolVersion': '2024-11-05',
+            'capabilities': <String, Object?>{},
+            'clientInfo': {'name': 'http-test', 'version': '1.0'},
+          },
+        }),
+      );
+      final postResp = await postReq.close();
+      expect(postResp.statusCode, HttpStatus.accepted);
+      await postResp.drain<void>();
 
-    final result = await initResult.future.timeout(const Duration(seconds: 5));
-    final serverInfo = result['serverInfo'] as Map<String, Object?>;
-    expect(serverInfo['name'], 'apollovm-mcp');
+      final result = await initResult.future.timeout(
+        const Duration(seconds: 5),
+      );
+      final serverInfo = result['serverInfo'] as Map<String, Object?>;
+      expect(serverInfo['name'], 'apollovm-mcp');
 
-    // Clean teardown: stop listening before closing the client.
-    await sub.cancel();
-  });
+      // Clean teardown: stop listening before closing the client.
+      await sub.cancel();
+    },
+  );
 
   test('unknown path returns 404', () async {
     final port = transport.port!;

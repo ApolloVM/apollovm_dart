@@ -20,9 +20,6 @@ ApolloMcpServer serveStdio({
   Stream<List<int>>? input,
   StreamSink<List<int>>? output,
 }) {
-  final channel = stdioChannel(
-    input: input ?? stdin,
-    output: output ?? stdout,
-  );
+  final channel = stdioChannel(input: input ?? stdin, output: output ?? stdout);
   return ApolloMcpServer(channel, limits: limits);
 }

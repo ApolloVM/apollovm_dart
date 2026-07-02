@@ -43,8 +43,10 @@ class ApolloRuntime {
 
   ApolloRuntime({this.limits = const McpLimits()});
 
-  Diagnostic _err(String message) =>
-      <String, Object?>{'severity': 'error', 'message': message};
+  Diagnostic _err(String message) => <String, Object?>{
+    'severity': 'error',
+    'message': message,
+  };
 
   /// Returns a source-too-large diagnostic list, or `null` if within limits.
   List<Diagnostic>? _checkSource(String source) {
@@ -70,7 +72,10 @@ class ApolloRuntime {
     final vm = ApolloVM();
     final parser = vm.getParser<String>(language);
     if (parser == null) {
-      return (root: null, diagnostics: [_err('Unsupported language: $language')]);
+      return (
+        root: null,
+        diagnostics: [_err('Unsupported language: $language')],
+      );
     }
 
     final codeUnit = SourceCodeUnit(language, source, id: 'mcp');
@@ -350,7 +355,10 @@ class ApolloRuntime {
         });
       });
       if (modules.isEmpty) {
-        return (modules: null, diagnostics: [_err('No Wasm modules generated')]);
+        return (
+          modules: null,
+          diagnostics: [_err('No Wasm modules generated')],
+        );
       }
       return (modules: modules, diagnostics: const <Diagnostic>[]);
     } catch (e) {

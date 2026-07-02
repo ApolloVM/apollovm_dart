@@ -40,7 +40,11 @@ Future<ASTRoot> _parse(String source, [String language = 'dart']) async {
   final vm = ApolloVM();
   final parser = vm.getParser<String>(language)!;
   final result = await parser.parse(SourceCodeUnit(language, source, id: 't'));
-  expect(result.isOK, isTrue, reason: 'source should parse: ${result.errorMessage}');
+  expect(
+    result.isOK,
+    isTrue,
+    reason: 'source should parse: ${result.errorMessage}',
+  );
   return result.root!;
 }
 
@@ -67,8 +71,26 @@ void main() {
     });
 
     test('recurses into lists and maps, stringifying map keys', () {
-      expect(valueToJson([1, [2, 3]]), [1, [2, 3]]);
-      expect(valueToJson({'a': 1, 'b': [2]}), {'a': 1, 'b': [2]});
+      expect(
+        valueToJson([
+          1,
+          [2, 3],
+        ]),
+        [
+          1,
+          [2, 3],
+        ],
+      );
+      expect(
+        valueToJson({
+          'a': 1,
+          'b': [2],
+        }),
+        {
+          'a': 1,
+          'b': [2],
+        },
+      );
       expect(valueToJson({1: 'x', 2: 'y'}), {'1': 'x', '2': 'y'});
     });
 
@@ -79,19 +101,29 @@ void main() {
       expect(() => valueToJson(cyclic, maxDepth: 4), returnsNormally);
     });
 
-    test('serializes a VMObject result from execution with its fields', () async {
-      final vm = ApolloVM();
-      await vm.loadCodeUnit(SourceCodeUnit('dart',
-          'class Box { int v = 7; } Box main(List a){ return Box(); }',
-          id: 't'));
-      final runner = vm.createRunner('dart')!;
-      final r = await runner.tryExecuteFunction('', 'main', []);
-      final json = valueToJson(r!.getValueNoContext());
-      expect(json, isA<Map>());
-      expect((json as Map)[r'\$type'] ?? json['\$type'], anyOf('Box', isNull));
-      // The field value is present regardless of the type-key spelling.
-      expect(json.values, contains(7));
-    });
+    test(
+      'serializes a VMObject result from execution with its fields',
+      () async {
+        final vm = ApolloVM();
+        await vm.loadCodeUnit(
+          SourceCodeUnit(
+            'dart',
+            'class Box { int v = 7; } Box main(List a){ return Box(); }',
+            id: 't',
+          ),
+        );
+        final runner = vm.createRunner('dart')!;
+        final r = await runner.tryExecuteFunction('', 'main', []);
+        final json = valueToJson(r!.getValueNoContext());
+        expect(json, isA<Map>());
+        expect(
+          (json as Map)[r'\$type'] ?? json['\$type'],
+          anyOf('Box', isNull),
+        );
+        // The field value is present regardless of the type-key spelling.
+        expect(json.values, contains(7));
+      },
+    );
   });
 
   group('astNodeToJson', () {
@@ -105,8 +137,11 @@ void main() {
 
       final types = _nodeTypes(json);
       expect(types, contains('ASTClassNormal'));
-      expect(types, contains('ASTStatementImport'),
-          reason: 'import nodes should be walked, not just listed');
+      expect(
+        types,
+        contains('ASTStatementImport'),
+        reason: 'import nodes should be walked, not just listed',
+      );
       expect(
         types.any((t) => t.contains('FunctionDeclaration')),
         isTrue,
@@ -115,22 +150,27 @@ void main() {
       expect(types.any((t) => t.startsWith('ASTType')), isTrue);
     });
 
-    test('serializes an invocable with returnType, modifiers and parameters',
-        () async {
-      final root = await _parse(_richSource);
-      final compute = root.functions
-          .expand((s) => s.functions)
-          .firstWhere((f) => f.name == 'compute');
-      final json = invocableToJson(compute);
-      expect(json['name'], 'compute');
-      expect((json['returnType'] as Map)['name'], 'int');
-      expect(json['modifiers'], isA<List>());
-      final params = (json['parameters'] as List).cast<Map>();
-      expect(params.map((p) => p['name']), containsAll(['a', 'args', 'scale']));
-      final scale = params.firstWhere((p) => p['name'] == 'scale');
-      expect(scale['named'], isTrue);
-      expect(scale['hasDefault'], isTrue);
-    });
+    test(
+      'serializes an invocable with returnType, modifiers and parameters',
+      () async {
+        final root = await _parse(_richSource);
+        final compute = root.functions
+            .expand((s) => s.functions)
+            .firstWhere((f) => f.name == 'compute');
+        final json = invocableToJson(compute);
+        expect(json['name'], 'compute');
+        expect((json['returnType'] as Map)['name'], 'int');
+        expect(json['modifiers'], isA<List>());
+        final params = (json['parameters'] as List).cast<Map>();
+        expect(
+          params.map((p) => p['name']),
+          containsAll(['a', 'args', 'scale']),
+        );
+        final scale = params.firstWhere((p) => p['name'] == 'scale');
+        expect(scale['named'], isTrue);
+        expect(scale['hasDefault'], isTrue);
+      },
+    );
 
     test('respects maxDepth by omitting deeper children', () async {
       final root = await _parse(_richSource);
@@ -143,8 +183,9 @@ void main() {
       final compute = root.functions
           .expand((s) => s.functions)
           .firstWhere((f) => f.name == 'compute');
-      final listParam = compute.parameters.allParameters
-          .firstWhere((p) => p.name == 'args');
+      final listParam = compute.parameters.allParameters.firstWhere(
+        (p) => p.name == 'args',
+      );
       final typeJson = typeToJson(listParam.type);
       expect(typeJson['name'], 'List');
       expect(typeJson['generics'], isNotNull);
@@ -156,18 +197,24 @@ void main() {
       final root = await _parse(_richSource);
       final symbols = symbolsToJson(root);
 
-      expect((symbols['functions'] as List).map((f) => (f as Map)['name']),
-          contains('compute'));
+      expect(
+        (symbols['functions'] as List).map((f) => (f as Map)['name']),
+        contains('compute'),
+      );
 
-      final point = (symbols['classes'] as List)
-          .cast<Map>()
-          .firstWhere((c) => c['name'] == 'Point');
+      final point = (symbols['classes'] as List).cast<Map>().firstWhere(
+        (c) => c['name'] == 'Point',
+      );
       expect(point['superClassName'], 'Shape');
-      expect((point['fields'] as List).map((f) => (f as Map)['name']),
-          containsAll(['x', 'y']));
+      expect(
+        (point['fields'] as List).map((f) => (f as Map)['name']),
+        containsAll(['x', 'y']),
+      );
       expect(point['constructors'], isNotEmpty);
-      expect((point['methods'] as List).map((m) => (m as Map)['name']),
-          containsAll(['origin', 'sum']));
+      expect(
+        (point['methods'] as List).map((m) => (m as Map)['name']),
+        containsAll(['origin', 'sum']),
+      );
     });
   });
 
@@ -184,17 +231,20 @@ void main() {
       expect(d['message'], 'bad syntax');
     });
 
-    test('diagnosticFromParseResult carries position and source line',
-        () async {
-      final vm = ApolloVM();
-      final parser = vm.getParser<String>('dart')!;
-      final result =
-          await parser.parse(SourceCodeUnit('dart', 'class { oops', id: 't'));
-      final d = diagnosticFromParseResult(result);
-      expect(d['line'], isNotNull);
-      expect(d['column'], isNotNull);
-      expect('${d['sourceLine']}', contains('class'));
-    });
+    test(
+      'diagnosticFromParseResult carries position and source line',
+      () async {
+        final vm = ApolloVM();
+        final parser = vm.getParser<String>('dart')!;
+        final result = await parser.parse(
+          SourceCodeUnit('dart', 'class { oops', id: 't'),
+        );
+        final d = diagnosticFromParseResult(result);
+        expect(d['line'], isNotNull);
+        expect(d['column'], isNotNull);
+        expect('${d['sourceLine']}', contains('class'));
+      },
+    );
   });
 
   group('typesToJson', () {
