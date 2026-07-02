@@ -1,0 +1,3 @@
+# The LSP server, VS Code extension, example workspace and benchmark are
+# development tooling and are not part of the published `apollovm` package.
+lsp/
