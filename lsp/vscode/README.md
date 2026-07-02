@@ -1,15 +1,16 @@
 # ApolloVM Language Server — VS Code extension
 
-A thin LSP client that launches the ApolloVM language server
-(`../apollovm_lsp/bin/apollovm_lsp.dart`) and wires it to VS Code.
+A thin LSP client that starts the ApolloVM language server via the
+`apollovm lsp` subcommand (the server ships inside the `apollovm` package) and
+wires it to VS Code.
 
 ## Develop / try it
 
 Prerequisites: the [Dart SDK](https://dart.dev/get-dart) on `PATH` and Node.js.
 
 ```sh
-# 1. Prepare the server package.
-cd ../apollovm_lsp && dart pub get && cd ../vscode
+# 1. Prepare the apollovm package (repo root).
+cd ../.. && dart pub get && cd lsp/vscode
 
 # 2. Install the client dependency.
 npm install
@@ -31,7 +32,7 @@ In the development host, open `example_workspace/models.dart` and try:
 | Setting | Default | Meaning |
 |---|---|---|
 | `apollovmLsp.dartExecutable` | `dart` | Dart SDK executable used to launch the server. |
-| `apollovmLsp.serverEntrypoint` | *(sibling package)* | Absolute path to `bin/apollovm_lsp.dart`. |
+| `apollovmLsp.serverEntrypoint` | *(repo-root `bin/apollovm.dart`)* | Path to the apollovm CLI, started as `apollovm lsp`. |
 
 > Note: on files with the `dart` language id, VS Code's official Dart extension
 > may also be active. Disable it in the dev host if you want to see only the

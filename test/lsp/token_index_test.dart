@@ -1,4 +1,4 @@
-import 'package:apollovm_lsp/apollovm_lsp.dart';
+import 'package:apollovm/apollovm_lsp.dart';
 import 'package:test/test.dart';
 
 const _src = '''

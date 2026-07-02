@@ -1,48 +1,70 @@
 # ApolloVM tooling — Language Server
 
-This directory holds the ApolloVM Language Server and its companions. It is
-development tooling and is excluded from the published `apollovm` package (see
-`../.pubignore`).
+The ApolloVM **Language Server (LSP 3.17)** ships **inside the `apollovm`
+package**, not as a separate package:
+
+- Library: `package:apollovm/apollovm_lsp.dart` (separate from
+  `package:apollovm/apollovm.dart`, which keeps its existing exports).
+- Source: `lib/src/lsp/` — transport, protocol, analysis, server.
+- CLI: `apollovm lsp` (a subcommand of `bin/apollovm.dart`) speaks LSP over stdio.
+- Tests: `test/lsp/`.
+
+**Web-safe:** the `apollovm_lsp` library imports no `dart:io`, so a browser-based
+IDE or an AI agent can embed the server directly (see below).
+
+This `lsp/` directory holds only the companion assets (excluded from the
+published package via `../.pubignore`):
 
 | Directory | What it is |
 |-----------|------------|
-| [`apollovm_lsp/`](apollovm_lsp/) | The LSP 3.17 server (Dart). Transport, protocol, analysis, handlers. |
-| [`vscode/`](vscode/) | A minimal VS Code client that launches the server. |
+| [`vscode/`](vscode/) | A minimal VS Code client that launches `apollovm lsp`. |
 | [`example_workspace/`](example_workspace/) | Sample ApolloVM sources to try it against. |
 | [`benchmark/`](benchmark/) | Latency harness for the performance targets. |
 
-## Quick start
+## Use it
+
+**Local editor / CLI (stdio):**
 
 ```sh
-cd apollovm_lsp
 dart pub get
-dart analyze          # static analysis: clean
-dart test             # unit + full protocol-session integration test
-dart run bin/apollovm_lsp.dart   # the server, speaking LSP over stdio
-
-cd ../benchmark && dart pub get && dart run bin/benchmark.dart
+dart run bin/apollovm.dart lsp     # speaks LSP over stdin/stdout
 ```
+
+**Web IDE / AI agent (embedded, no stdio):** drive the server with decoded
+JSON-RPC messages — no byte framing, no `dart:io`:
+
+```dart
+import 'package:apollovm/apollovm_lsp.dart';
+
+final endpoint = MessageLspEndpoint((msg) => hostPort.send(msg)); // outgoing
+final server = LspServer(endpoint);
+// deliver each incoming JSON-RPC object from the host:
+endpoint.receive(incomingMessage);
+```
+
+`StreamLspEndpoint` (byte streams + `Content-Length` framing) is also exported
+for stdio/socket hosts, and is what `apollovm lsp` uses.
 
 ## Design in one paragraph
 
-ApolloVM's AST is built for execution/translation: it carries **no source
-positions** and its parser **discards comments**. Rather than thread source
-spans through all eight grammars (invasive and regression-prone), the server
-keeps the ApolloVM core **read-only** and recovers geometry in a small,
-self-contained scanner (`apollovm_lsp/lib/src/analysis/token_index.dart`) that
-re-scans the raw text for identifier and declaration positions, then correlates
-them to the AST — which remains the source of truth for *semantics* (types,
-signatures, modifiers). The four layers (transport / protocol / analysis /
-server) are strictly separated, and **no LSP logic lives in the parser**.
+ApolloVM's AST carries **no source positions** and its parser **discards
+comments**. Rather than thread source spans through all eight grammars (invasive,
+regression-prone), the server keeps the ApolloVM core **read-only** and recovers
+geometry in a small, self-contained scanner (`lib/src/lsp/analysis/token_index.dart`)
+that re-scans the raw text for identifier/declaration positions, correlating them
+to the AST — which stays the source of truth for *semantics*. Four strictly
+separated layers keep **LSP logic out of the parser**: transport (JSON-RPC 2.0,
+transport-agnostic), protocol (LSP 3.17 types), analysis (parse/index/resolve),
+and server (handlers).
 
 ## Feature status
 
-**Implemented (Dart):** `initialize`/`shutdown`, incremental diagnostics
-(parse + unresolved core imports), `documentSymbol`, `hover` (kind, signature,
-type, documentation), `definition`. Plus working single-file `references`,
-`rename`, and a basic `completion` with local→global ranking.
+**Implemented (Dart):** `initialize`/`shutdown`, incremental diagnostics (parse +
+unresolvable core imports), `documentSymbol`, `hover` (kind, signature, type,
+documentation), `definition`. Plus working single-file `references`, `rename`,
+and a basic `completion` with local→global ranking.
 
-**Follow-up** (documented in the plan): a static resolution/type pass to enable
-type-error diagnostics and cross-package definition/references/rename; a
-workspace import graph; and per-language enablement for the other seven
-ApolloVM languages (the analysis layer is already language-agnostic).
+**Follow-up:** a static resolution/type pass for type-error diagnostics and
+cross-package definition/references/rename; a workspace import graph; and
+per-language enablement for the other seven ApolloVM languages (the analysis
+layer is already language-agnostic).

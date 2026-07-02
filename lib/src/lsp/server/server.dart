@@ -3,6 +3,8 @@
 // logic lives here.
 import 'dart:async';
 
+import 'package:apollovm/apollovm.dart' show ApolloVM;
+
 import '../analysis/analyzer.dart';
 import '../analysis/document_store.dart';
 import '../analysis/symbols.dart';
@@ -11,7 +13,7 @@ import '../protocol/protocol.dart';
 import '../transport/json_rpc.dart';
 
 class LspServer {
-  final LspConnection _conn;
+  final LspEndpoint _endpoint;
   final Analyzer _analyzer = Analyzer();
   final DocumentStore _store = DocumentStore();
   final Map<String, AnalyzedUnit> _cache = {};
@@ -21,14 +23,20 @@ class LspServer {
   /// Set when `exit` is received; the entrypoint uses it to choose exit code.
   bool cleanExit = false;
 
-  LspServer(this._conn) {
-    _conn.onRequest = _handleRequest;
-    _conn.onNotification = _handleNotification;
+  /// Creates a server over any [LspEndpoint] — [StreamLspEndpoint] for stdio,
+  /// or [MessageLspEndpoint] for a web IDE / AI-agent host.
+  LspServer(this._endpoint) {
+    _endpoint.onRequest = _handleRequest;
+    _endpoint.onNotification = _handleNotification;
   }
 
-  void start() => _conn.listen();
+  /// The underlying transport, e.g. to `receive()` messages on a
+  /// [MessageLspEndpoint] host.
+  LspEndpoint get endpoint => _endpoint;
 
-  Future<void> get done => _conn.done;
+  void start() => _endpoint.listen();
+
+  Future<void> get done => _endpoint.done;
 
   // --- Requests ---
 
@@ -79,7 +87,7 @@ class LspServer {
           'triggerCharacters': ['.'],
         },
       },
-      'serverInfo': {'name': 'apollovm_lsp', 'version': '0.1.0'},
+      'serverInfo': {'name': 'apollovm-lsp', 'version': ApolloVM.VERSION},
     };
   }
 
@@ -113,7 +121,7 @@ class LspServer {
         final uri = doc['uri'] as String;
         _store.close(uri);
         _cache.remove(uri);
-        _conn.sendNotification('textDocument/publishDiagnostics',
+        _endpoint.sendNotification('textDocument/publishDiagnostics',
             {'uri': uri, 'diagnostics': const []});
         break;
       case 'exit':
@@ -139,7 +147,7 @@ class LspServer {
   Future<void> _analyzeAndPublish(String uri) async {
     final unit = await _unit(uri);
     if (unit == null) return;
-    _conn.sendNotification('textDocument/publishDiagnostics', {
+    _endpoint.sendNotification('textDocument/publishDiagnostics', {
       'uri': uri,
       'diagnostics': unit.diagnostics.map((d) => d.toJson()).toList(),
     });

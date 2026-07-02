@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:apollovm_lsp/apollovm_lsp.dart';
+import 'package:apollovm/apollovm_lsp.dart';
 import 'package:test/test.dart';
 
 const _uri = 'file:///workspace/models.dart';
@@ -29,7 +29,7 @@ void main() {
       () async {
     final input = StreamController<List<int>>();
     final output = _OutputSink();
-    final conn = LspConnection(input.stream, output);
+    final conn = StreamLspEndpoint(input.stream, output);
     LspServer(conn).start();
 
     final line = LineIndex(_content);

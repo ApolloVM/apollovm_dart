@@ -15,25 +15,19 @@ function activate(context) {
   const config = workspace.getConfiguration('apollovmLsp');
   const dartExe = config.get('dartExecutable') || 'dart';
 
-  // Default the server entrypoint to the sibling apollovm_lsp package.
-  const packageDir = path.join(context.extensionPath, '..', 'apollovm_lsp');
+  // The LSP server ships inside the `apollovm` package and is started via the
+  // `apollovm lsp` subcommand. The repo root is two levels up from lsp/vscode.
+  const packageDir = path.join(context.extensionPath, '..', '..');
   const entrypoint =
-    config.get('serverEntrypoint') || path.join(packageDir, 'bin', 'apollovm_lsp.dart');
+    config.get('serverEntrypoint') || path.join(packageDir, 'bin', 'apollovm.dart');
 
-  const serverOptions = {
-    run: {
-      command: dartExe,
-      args: ['run', entrypoint],
-      transport: TransportKind.stdio,
-      options: { cwd: packageDir },
-    },
-    debug: {
-      command: dartExe,
-      args: ['run', entrypoint],
-      transport: TransportKind.stdio,
-      options: { cwd: packageDir },
-    },
+  const launch = {
+    command: dartExe,
+    args: ['run', entrypoint, 'lsp'],
+    transport: TransportKind.stdio,
+    options: { cwd: packageDir },
   };
+  const serverOptions = { run: launch, debug: launch };
 
   const clientOptions = {
     documentSelector: LANGUAGES.map((language) => ({ scheme: 'file', language })),

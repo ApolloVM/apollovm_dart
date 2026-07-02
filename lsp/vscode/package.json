@@ -33,7 +33,7 @@
         "apollovmLsp.serverEntrypoint": {
           "type": "string",
           "default": "",
-          "description": "Absolute path to bin/apollovm_lsp.dart. Defaults to the sibling apollovm_lsp package."
+          "description": "Absolute path to the apollovm CLI (bin/apollovm.dart), started as `apollovm lsp`. Defaults to the repo-root apollovm package."
         }
       }
     }

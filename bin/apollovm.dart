@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:apollovm/apollovm.dart';
+import 'package:apollovm/apollovm_lsp.dart';
 import 'package:args/args.dart';
 import 'package:args/command_runner.dart';
 import 'package:swiss_knife/swiss_knife.dart';
@@ -17,7 +18,8 @@ void main(List<String> args) async {
         )
         ..addCommand(CommandRun())
         ..addCommand(CommandTranslate())
-        ..addCommand(CommandCompile());
+        ..addCommand(CommandCompile())
+        ..addCommand(CommandLsp());
 
   commandRunner.argParser.addFlag(
     'version',
@@ -375,3 +377,34 @@ class CommandCompile extends CommandSourceFileBase {
     return '$outputPath.$moduleName$suffix';
   }
 }
+
+/// Runs the ApolloVM Language Server over stdio (JSON-RPC 2.0 with
+/// `Content-Length` framing), for local editors/agents:
+///
+/// ```sh
+/// apollovm lsp
+/// ```
+///
+/// Note: stdout is the LSP channel, so this command must not print anything
+/// else to it.
+class CommandLsp extends Command<bool> {
+  @override
+  final String description =
+      'Start the ApolloVM Language Server (LSP) over stdin/stdout.';
+
+  @override
+  final String name = 'lsp';
+
+  @override
+  FutureOr<bool> run() async {
+    // Keep stdout raw so binary framing isn't mangled by line translation.
+    stdout.encoding = SystemEncoding();
+
+    final endpoint = StreamLspEndpoint(stdin, stdout);
+    final server = LspServer(endpoint);
+    server.start();
+    await server.done;
+    return server.cleanExit;
+  }
+}
+

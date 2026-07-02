@@ -6,7 +6,7 @@
 // Runs each operation many times over a synthetic document and reports the
 // median and p95 latency against the target. Run with:
 //   dart run bin/benchmark.dart
-import 'package:apollovm_lsp/apollovm_lsp.dart';
+import 'package:apollovm/apollovm_lsp.dart';
 
 const _openTargetMs = 100.0;
 const _completionTargetMs = 50.0;

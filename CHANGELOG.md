@@ -2,23 +2,32 @@
 
 ### Language Server Protocol (LSP 3.17) server
 
-- **New `lsp/` tooling directory** (excluded from the published package via
-  `.pubignore`) adding a Dart-first **language server** for ApolloVM sources,
-  plus a VS Code client, an example workspace, and a benchmark harness.
+- **A Dart-first language server is now part of the `apollovm` package**, exposed
+  as a separate library `package:apollovm/apollovm_lsp.dart` (the existing
+  `package:apollovm/apollovm.dart` exports are unchanged). Source lives in
+  `lib/src/lsp/`.
+- **Runnable two ways.** Locally over stdio via a new CLI subcommand
+  `apollovm lsp`; and **embedded / web** — the library imports no `dart:io`, so a
+  browser IDE or an AI agent can drive it with decoded JSON-RPC messages via
+  `MessageLspEndpoint` (no byte framing). `StreamLspEndpoint` provides
+  `Content-Length` framing for stdio/sockets. Both share a transport-agnostic
+  `LspEndpoint`.
 - The server keeps the ApolloVM core **read-only**: because the AST carries no
   source positions and the parser discards comments, a small self-contained
   scanner re-scans raw text for identifier/declaration positions and correlates
   them back to the AST (the source of truth for semantics). Four strictly
-  separated layers keep LSP logic out of the parser — transport (JSON-RPC 2.0
-  over stdio), protocol (LSP 3.17 types), analysis (parse/index/resolve), and
-  server (handlers).
+  separated layers keep LSP logic out of the parser — transport, protocol (LSP
+  3.17 types), analysis (parse/index/resolve), and server (handlers).
 - Implemented: `initialize`/`shutdown`, incremental diagnostics (parse +
   unresolvable core imports), `documentSymbol`, `hover` (kind/signature/type/
   documentation), `definition`; plus single-file `references`/`rename` and a
   basic ranked `completion`.
-- Verified with `dart analyze` (clean), 16 passing tests including a full
-  in-memory protocol-session integration test, and a benchmark comfortably under
-  its latency targets (open, hover, completion).
+- Companion assets live under `lsp/` (excluded from the published package via
+  `.pubignore`): a VS Code client (`lsp/vscode`), an example workspace
+  (`lsp/example_workspace`), and a latency benchmark (`lsp/benchmark`).
+- Verified with `dart analyze` (clean), 17 passing tests in `test/lsp/`
+  (including full stdio and message-level protocol sessions), and a benchmark
+  comfortably under its latency targets (open, hover, completion).
 
 ## 0.1.48
 
