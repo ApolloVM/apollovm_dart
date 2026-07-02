@@ -28,6 +28,9 @@ import 'languages/csharp/csharp_runner.dart';
 import 'languages/dart/dart_generator.dart';
 import 'languages/dart/dart_parser.dart';
 import 'languages/dart/dart_runner.dart';
+import 'languages/go/go_generator.dart';
+import 'languages/go/go_parser.dart';
+import 'languages/go/go_runner.dart';
 import 'languages/java/java11/java11_generator.dart';
 import 'languages/java/java11/java11_parser.dart';
 import 'languages/java/java11/java11_runner.dart';
@@ -75,6 +78,9 @@ class ApolloVM implements VMTypeResolver {
         return ApolloParserTypeScript.instance as ApolloCodeParser<T>;
       case 'kotlin':
         return ApolloParserKotlin.instance as ApolloCodeParser<T>;
+      case 'go':
+      case 'golang':
+        return ApolloParserGo.instance as ApolloCodeParser<T>;
       case 'cs':
       case 'c#':
       case 'csharp':
@@ -229,6 +235,12 @@ class ApolloVM implements VMTypeResolver {
           this,
           importCorePackageMath: importCorePackageMath,
         );
+      case 'go':
+      case 'golang':
+        return ApolloRunnerGo(
+          this,
+          importCorePackageMath: importCorePackageMath,
+        );
       case 'cs':
       case 'c#':
       case 'csharp':
@@ -283,6 +295,9 @@ class ApolloVM implements VMTypeResolver {
         return ApolloCodeGeneratorTypeScript(codeStorage);
       case 'kotlin':
         return ApolloCodeGeneratorKotlin(codeStorage);
+      case 'go':
+      case 'golang':
+        return ApolloCodeGeneratorGo(codeStorage);
       case 'cs':
       case 'c#':
       case 'csharp':
@@ -409,6 +424,8 @@ class ApolloVM implements VMTypeResolver {
         return 'csharp';
       case 'kt':
         return 'kotlin';
+      case 'go':
+        return 'go';
       case 'wasm':
         return 'wasm';
       case 'cpp':

@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="Go struct method: arithmetic + string concat + print">
+    <source language="go">
+        <![CDATA[
+type Calc struct {
+}
+
+func (o *Calc) sum(title string, a int, b int) int {
+  total := a + b
+  msg := "sum " + title + " = " + total
+  fmt.Println(msg)
+  return total
+}
+        ]]>
+    </source>
+    <call class="Calc" function="sum" return="30">
+        ["nums", 10, 20]
+    </call>
+    <output>
+        ["sum nums = 30"]
+    </output>
+
+    <source-generated language="go"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+package main
+
+import "fmt"
+
+type Calc struct {
+}
+
+func (o *Calc) sum(title string, a int, b int) int {
+  total := a + b
+  msg := "sum " + title + " = " + total
+  fmt.Println(msg)
+  return total
+}
+
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+</test>

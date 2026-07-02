@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="Go bitwise operators">
+    <source language="go">
+        <![CDATA[
+type C struct {
+}
+
+func (o *C) run(a int, b int) int {
+  return ((a & b) | (a ^ b)) + (a << 1) + (a >> 1)
+}
+        ]]>
+    </source>
+    <call class="C" function="run" return="22">
+        [6, 3]
+    </call>
+    <output>
+        []
+    </output>
+
+    <source-generated language="go"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+package main
+
+type C struct {
+}
+
+func (o *C) run(a int, b int) int {
+  return (((a & b) | (a ^ b)) + (a << 1)) + (a >> 1)
+}
+
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+</test>

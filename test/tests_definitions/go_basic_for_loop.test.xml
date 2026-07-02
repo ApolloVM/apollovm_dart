@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="Go C-style for loop">
+    <source language="go">
+        <![CDATA[
+type C struct {
+}
+
+func (o *C) run(n int) int {
+  total := 0
+  for i := 0; i < n; i = i + 1 {
+    total = total + i
+  }
+  return total
+}
+        ]]>
+    </source>
+    <call class="C" function="run" return="10">
+        [5]
+    </call>
+    <output>
+        []
+    </output>
+
+    <source-generated language="go"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+package main
+
+type C struct {
+}
+
+func (o *C) run(n int) int {
+  total := 0
+  for i := 0; i < n; i = i + 1 {
+    total = total + i
+  }
+  return total
+}
+
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+</test>

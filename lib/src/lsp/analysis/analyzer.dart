@@ -72,6 +72,8 @@ class Analyzer {
         return 'lua';
       case 'py':
         return 'python';
+      case 'go':
+        return 'go';
       default:
         return null;
     }

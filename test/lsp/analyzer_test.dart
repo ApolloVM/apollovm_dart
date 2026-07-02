@@ -53,6 +53,7 @@ int one() { return 1; }
   test('detects language from extension', () {
     expect(Analyzer.languageOf('file:///a.dart'), 'dart');
     expect(Analyzer.languageOf('file:///a.java'), 'java');
+    expect(Analyzer.languageOf('file:///a.go'), 'go');
     expect(Analyzer.languageOf('file:///a.unknown'), isNull);
   });
 }

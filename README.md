@@ -12,7 +12,7 @@
 [![Code size](https://img.shields.io/github/languages/code-size/ApolloVM/apollovm_dart?logo=github&logoColor=white)](https://github.com/ApolloVM/apollovm_dart)
 [![License](https://img.shields.io/github/license/ApolloVM/apollovm_dart?logo=open-source-initiative&logoColor=green)](https://github.com/ApolloVM/apollovm_dart/blob/master/LICENSE)
 
-ApolloVM is a portable VM (native, JS/Web, Flutter) that can parse, translate, and execute multiple languages such as Dart, Java, Kotlin, C#, JavaScript, TypeScript, Lua, and Python. It also provides on-the-fly compilation to Wasm.
+ApolloVM is a portable VM (native, JS/Web, Flutter) that can parse, translate, and execute multiple languages such as Dart, Java, Kotlin, Go, C#, JavaScript, TypeScript, Lua, and Python. It also provides on-the-fly compilation to Wasm.
 
 -----------------------------
 
@@ -49,10 +49,10 @@ source code between all supported languages, and **compile to WebAssembly** on t
 
 ### Languages
 
-`Dart`, `Java 11`, `Kotlin`, `C#`, `JavaScript`, `TypeScript`, `Lua` and `Python`.
+`Dart`, `Java 11`, `Kotlin`, `Go`, `C#`, `JavaScript`, `TypeScript`, `Lua` and `Python`.
 
 Any supported language can be translated to any other (e.g. Java → Dart, C# → Python,
-Kotlin → JavaScript), and code can be regenerated back to its original language.
+Kotlin → JavaScript, Go → Dart), and code can be regenerated back to its original language.
 
 ### Core capabilities
 
@@ -72,30 +72,30 @@ language but not implemented yet) · 🚫 not applicable (the language has no su
 The **Wasm** column shows what the on-the-fly WebAssembly compiler currently supports
 (any source language is compiled through the same shared AST).
 
-| Feature | Dart | Java | Kotlin | C# | JS | TS | Lua | Python | Wasm |
-|---|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|
-| `if` / `else if` / `else`        | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| `for` (C-style)                  | ✅ | ✅ | 🚫  | ✅ | ✅ | ✅ | 🧩¹ | 🚫 | ✅ |
-| `for-each` / `for-in`            | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| `while`                          | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| `do` / `while`                   | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 🧩² | 🚫 | ✅ |
-| `switch` / `case`                | ✅ | ✅ | 🧩³ | ✅ | ✅ | ✅ | 🚫  | 🧩⁴ | ✅ |
-| `break`                          | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| `continue`                       | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 🚫  | ✅ | ✅ |
-| `try` / `catch` / `finally`      | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 🚫  | ✅ | ✅ |
-| `throw` / `raise`                | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 🚫  | ✅ | ✅ |
-| `async` / `await`                | ✅ | 🚫  | 🧩⁷ | ✅ | ✅ | ✅ | 🚫  | ✅ | ✅ |
-| Ternary (`? :`)                  | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 🚫  | ✅ | ✅ |
-| Arithmetic (`+ - * / %`)         | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Comparison / logical             | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Bitwise (`& \| ^ << >> ~`)       | ✅ | ✅ | 🧩⁵ | ✅ | ✅ | ✅ | 🧩⁶ | ✅ | ✅ |
-| `++` / `--`, compound assign     | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Lambdas / closures               | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Named / keyword arguments        | ✅ | 🚫  | ✅ | ✅ | 🚫  | 🚫  | 🚫  | ✅ | ✅ |
-| Parameter default values         | ✅ | 🚫  | ✅ | ✅ | 🚫  | 🚫  | 🚫  | ✅ | ✅ |
-| String interpolation / concat    | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| List & map / dict literals       | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| `null` / `None` / `nil`          | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Feature | Dart | Java | Kotlin | Go | C# | JS | TS | Lua | Python | Wasm |
+|---|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|
+| `if` / `else if` / `else`        | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `for` (C-style)                  | ✅ | ✅ | 🚫  | ✅ | ✅ | ✅ | ✅ | 🧩¹ | 🚫 | ✅ |
+| `for-each` / `for-in`            | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `while`                          | ✅ | ✅ | ✅ | 🧩⁸ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `do` / `while`                   | ✅ | ✅ | ✅ | 🧩⁹ | ✅ | ✅ | ✅ | 🧩² | 🚫 | ✅ |
+| `switch` / `case`                | ✅ | ✅ | 🧩³ | ✅ | ✅ | ✅ | ✅ | 🚫  | 🧩⁴ | ✅ |
+| `break`                          | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `continue`                       | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 🚫  | ✅ | ✅ |
+| `try` / `catch` / `finally`      | ✅ | ✅ | ✅ | 🚧 | ✅ | ✅ | ✅ | 🚫  | ✅ | ✅ |
+| `throw` / `raise`                | ✅ | ✅ | ✅ | 🚧 | ✅ | ✅ | ✅ | 🚫  | ✅ | ✅ |
+| `async` / `await`                | ✅ | 🚫  | 🧩⁷ | 🚫 | ✅ | ✅ | ✅ | 🚫  | ✅ | ✅ |
+| Ternary (`? :`)                  | ✅ | ✅ | ✅ | 🧩¹⁰ | ✅ | ✅ | ✅ | 🚫  | ✅ | ✅ |
+| Arithmetic (`+ - * / %`)         | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Comparison / logical             | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Bitwise (`& \| ^ << >> ~`)       | ✅ | ✅ | 🧩⁵ | 🧩¹¹ | ✅ | ✅ | ✅ | 🧩⁶ | ✅ | ✅ |
+| `++` / `--`, compound assign     | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Lambdas / closures               | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Named / keyword arguments        | ✅ | 🚫  | ✅ | 🚫 | ✅ | 🚫  | 🚫  | 🚫  | ✅ | ✅ |
+| Parameter default values         | ✅ | 🚫  | ✅ | 🚫 | ✅ | 🚫  | 🚫  | 🚫  | ✅ | ✅ |
+| String interpolation / concat    | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| List & map / dict literals       | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `null` / `None` / `nil`          | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 
 ¹ Lua numeric-for (`for i = a, b do`). &nbsp; ² Lua `repeat … until`. &nbsp;
 ³ Kotlin `when`. &nbsp; ⁴ Python `match` / `case`. &nbsp;
@@ -103,7 +103,14 @@ The **Wasm** column shows what the on-the-fly WebAssembly compiler currently sup
 ⁶ Lua bitwise use `&`/`|`/`~` (xor)/`<<`/`>>` and unary `~` (Lua 5.3). &nbsp;
 ⁷ Kotlin's async idiom is `suspend` / coroutines: ApolloVM generates `suspend fun`
 (dropping `await`) when translating to Kotlin, but does not yet parse Kotlin `suspend`.
-`await` unwraps the awaitable (`Future<T>` / `Promise<T>` / `Task<T>`) to `T`.
+`await` unwraps the awaitable (`Future<T>` / `Promise<T>` / `Task<T>`) to `T`. &nbsp;
+⁸ Go has no `while`; the condition-only `for cond {}` is used. &nbsp;
+⁹ Go has no `do`/`while`; emitted as `for { … if !cond { break } }`. &nbsp;
+¹⁰ Go has no `?:`/if-expression; ApolloVM emits an IIFE
+`func() any { if c { return a } else { return b } }()`. &nbsp;
+¹¹ Go bitwise use `&`/`|`/`^` (xor)/`<<`/`>>`, unary `^` for NOT and `&^` (AND-NOT).
+`try`/`catch`/`throw` (Go uses `defer`/`recover`/`panic`) and `async`/`await`
+(Go uses goroutines/channels) are not applicable / not implemented yet.
 
 ### Classes, types & OOP
 
@@ -113,17 +120,17 @@ language but not implemented yet) · 🚫 not applicable (the language has no su
 The **Wasm** column shows what the on-the-fly WebAssembly compiler currently supports
 (any source language is compiled through the same shared AST).
 
-| Feature | Dart | Java | Kotlin | C# | JS | TS | Lua | Python | Wasm |
-|---|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|
-| Classes                                                       | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 🚫  | ✅ | ✅ |
-| Fields (with initializers)                                    | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 🧩¹ | ✅ | ✅ |
-| Constructors & instantiation (`new Foo(...)` / `Foo(...)`)    | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 🧩¹ | ✅ | ✅ |
-| Methods                                                       | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Static / visibility modifiers                                 | ✅ | ✅ | 🧩³ | ✅ | 🧩² | ✅ | 🚫  | 🚫  | 🧩⁴ |
-| Inheritance (`extends`) / interfaces                          | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 🚫  | ✅ | 🚧 |
-| Enums (rich: ctor args, fields, methods)⁶                     | ✅ | ✅ | ✅ | ✅ | 🚫  | ✅ | 🚫  | ✅ | ✅⁶ |
-| Generics (generic classes + instantiation + type erasure)    | ✅ | ✅ | ✅ | ✅ | 🚫  | ✅ | 🚫  | 🚫  | 🚧 |
-| Type inference (`var` / `val` / `auto`)                       | ✅ | ✅ | ✅ | ✅ | 🚫  | ✅ | 🚫  | 🚫  | ✅⁵ |
+| Feature | Dart | Java | Kotlin | Go | C# | JS | TS | Lua | Python | Wasm |
+|---|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|
+| Classes                                                       | ✅ | ✅ | ✅ | 🧩⁷ | ✅ | ✅ | ✅ | 🚫  | ✅ | ✅ |
+| Fields (with initializers)                                    | ✅ | ✅ | ✅ | 🧩⁸ | ✅ | ✅ | ✅ | 🧩¹ | ✅ | ✅ |
+| Constructors & instantiation (`new Foo(...)` / `Foo(...)`)    | ✅ | ✅ | ✅ | 🧩⁹ | ✅ | ✅ | ✅ | 🧩¹ | ✅ | ✅ |
+| Methods                                                       | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Static / visibility modifiers                                 | ✅ | ✅ | 🧩³ | 🧩¹⁰ | ✅ | 🧩² | ✅ | 🚫  | 🚫  | 🧩⁴ |
+| Inheritance (`extends`) / interfaces                          | ✅ | ✅ | ✅ | 🚧 | ✅ | ✅ | ✅ | 🚫  | ✅ | 🚧 |
+| Enums (rich: ctor args, fields, methods)⁶                     | ✅ | ✅ | ✅ | 🚧 | ✅ | 🚫  | ✅ | 🚫  | ✅ | ✅⁶ |
+| Generics (generic classes + instantiation + type erasure)    | ✅ | ✅ | ✅ | 🚧 | ✅ | 🚫  | ✅ | 🚫  | 🚫  | 🚧 |
+| Type inference (`var` / `val` / `auto`)                       | ✅ | ✅ | ✅ | ✅ | ✅ | 🚫  | ✅ | 🚫  | 🚫  | ✅⁵ |
 
 ¹ Lua is table-based: "fields" are table entries (`obj.x`), "constructors" are factory/`setmetatable`
 idioms, methods are `function Obj:method`. &nbsp;
@@ -138,7 +145,16 @@ receiver); only static methods are callable as entry points, with no source-leve
 Java/Kotlin emit native rich enums; C#/TS/Python use a class + `static`-const-instances idiom; Wasm
 compiles entries to heap instances (a method chained directly on an entry needs a variable first).
 **Breaking change**: an entry is no longer an `int` — use `.index` (and `.value` for `= N` entries). &nbsp;
-Generics are `🚫` for JS/Lua/Python: no static type syntax to parameterize.
+Generics are `🚫` for JS/Lua/Python: no static type syntax to parameterize. &nbsp;
+⁷ Go has no classes; a class is modeled as a `type Name struct { ... }` plus receiver
+methods `func (o *Name) m(...)` (the same idiom Lua uses for tables). &nbsp;
+⁸ Go struct types can't carry inline field initializers, so initializers are moved into the
+generated `NewName` factory. &nbsp;
+⁹ Go constructors/instantiation use a `func NewName(...) *Name` factory (and `Name(...)`
+call sites), since Go has no `new`. &nbsp;
+¹⁰ Go has no `static`/visibility keywords: static methods become package-level `func`s and
+visibility follows identifier capitalization. Inheritance, rich enums and generics
+(Go embedding/`iota`/`[T any]`) are `🚧` — not implemented for Go yet.
 
 > Per-language behavior is normalized to a shared AST, so types and constructs map
 > cleanly when translating between languages (e.g. C# `string` ⇄ Dart `String`,
@@ -160,7 +176,7 @@ Now you can use the `apollovm` Dart executable:
 ```shell
 $> apollovm help
 
-ApolloVM - A compact VM for Dart, Java, Kotlin, C#, JavaScript, TypeScript, Lua and Python.
+ApolloVM - A compact VM for Dart, Java, Kotlin, Go, C#, JavaScript, TypeScript, Lua and Python.
 
 Usage: apollovm <command> [arguments]
 
@@ -284,7 +300,7 @@ even if you don't have Dart installed.
 
 ## Package Usage
 
-The ApolloVM is still in alpha stage. Below, we can see simple usage examples in Dart, Java, Kotlin, C#, JavaScript, TypeScript, Lua and Python.
+The ApolloVM is still in alpha stage. Below, we can see simple usage examples in Dart, Java, Kotlin, Go, C#, JavaScript, TypeScript, Lua and Python.
 
 ### Language: `Dart`
 
@@ -595,6 +611,84 @@ Kotlin support reaches parity with the Java feature set: top-level and class `fu
 declarations, `val`/`var` with type inference, `if`/`else`, `for (x in …)`, `while`,
 `listOf`/`mapOf` literals, and `"$x"` / `"${expr}"` string templates — all
 translatable to Dart, Java or back to Kotlin.
+
+### Language: `Go`
+
+Loading Go source code, executing it, and then converting it to Dart:
+
+```dart
+import 'package:apollovm/apollovm.dart';
+
+void main() async {
+  var vm = ApolloVM();
+
+  var codeUnit = SourceCodeUnit(
+          'go',
+          r'''
+            type Foo struct {
+            }
+
+            func (o *Foo) greet(name string, count int) {
+              msg := "Hello " + name + ", you have " + count + " messages."
+              fmt.Println(msg)
+            }
+          ''',
+          id: 'test');
+
+  var loadOK = await vm.loadCodeUnit(codeUnit);
+
+  if (!loadOK) {
+    throw StateError('Error parsing Go code!');
+  }
+
+  var goRunner = vm.createRunner('go')!;
+
+  // Map the `print` function in the VM:
+  goRunner.externalPrintFunction = (o) => print("» $o");
+
+  // `greet` is a struct method (needs a receiver instance); `classInstanceFields`
+  // provides one (here with no fields).
+  await goRunner.executeClassMethod('', 'Foo', 'greet',
+      positionalParameters: ['World', 3], classInstanceFields: const {});
+
+  print('---------------------------------------');
+
+  // Regenerate code in Dart:
+  var codeStorageDart = vm.generateAllCodeIn('dart');
+  var allSourcesDart = await codeStorageDart.writeAllSources();
+  print(allSourcesDart.toString());
+}
+```
+
+*Note: the parsed function `fmt.Println` is normalized to the VM's `print` (mapped as an external function).*
+
+Output:
+```text
+» Hello World, you have 3 messages.
+---------------------------------------
+<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+class Foo {
+
+  void greet(String name, int count) {
+    var msg = 'Hello $name, you have $count messages.';
+    print(msg);
+  }
+
+}
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+```
+
+Go is bidirectional: ApolloVM parses `.go`/`go` source into the AST, executes it, and
+generates idiomatic Go — `package main` with an `import "fmt"` when needed, type-after-name
+declarations (`func f(a int) int`, `x := …`), `for`-only control flow (`for cond {}` for
+`while`, `for { … if !cond { break } }` for `do`/`while`, `for _, x := range xs {}` for
+for-each), Go `switch` (no fall-through), slices/maps (`[]int{…}`, `map[K]V{…}`) and closures
+(`func(x int) int { … }`). Classes map to the Go idiom — a `type Name struct { … }` plus
+receiver methods `func (o *Name) m(...)` — so object-oriented code round-trips to and from
+Dart, Java, Kotlin, C#, JavaScript, TypeScript and Python.
 
 ### Language: `JavaScript`
 
@@ -1136,6 +1230,10 @@ Any help from the open-source community is always welcome and needed:
 
 - Python: extended support (comprehensions, decorators, `with` statements, `*args`/`**kwargs`, multiple assignment/returns). *Functions, classes/`self`-methods, `if`/`elif`/`else`, `while`, `for ... in`, `try`/`except`/`finally` + `raise`, lists & dicts, f-strings, keyword arguments, `lambda` expressions, conditional expressions (`a if c else b`), and `import`/`from ... import` are already supported.*
   - *See the [Python implementation (at "lib/src/languages/python")](https://github.com/ApolloVM/apollovm_dart/tree/master/lib/src/languages/python).*
+
+
+- Go: extended support (`panic`/`recover`/`defer` for `try`/`catch`/`throw`, interfaces + struct embedding for inheritance, `const`/`iota` enums, and `[T any]` generics). *Top-level and struct receiver `func`s, `struct` types + fields + factory constructors, `var`/`:=` with type inference, `if`/`else if`/`else`, `for` (C-style, condition-only, `range`, infinite), `switch`, slices/maps, closures, string `+` concatenation, and `fmt.Println` (normalized to `print`) are already supported.*
+  - *See the [Go implementation (at "lib/src/languages/go")](https://github.com/ApolloVM/apollovm_dart/tree/master/lib/src/languages/go).*
 
 
 - Package Importer.

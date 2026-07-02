@@ -8,7 +8,7 @@ let client;
 
 const LANGUAGES = [
   'dart', 'java', 'kotlin', 'csharp',
-  'javascript', 'typescript', 'lua', 'python',
+  'javascript', 'typescript', 'lua', 'python', 'go',
 ];
 
 function activate(context) {
@@ -33,7 +33,7 @@ function activate(context) {
     documentSelector: LANGUAGES.map((language) => ({ scheme: 'file', language })),
     synchronize: {
       fileEvents: workspace.createFileSystemWatcher(
-        '**/*.{dart,java,kt,cs,js,ts,lua,py}'
+        '**/*.{dart,java,kt,cs,js,ts,lua,py,go}'
       ),
     },
   };

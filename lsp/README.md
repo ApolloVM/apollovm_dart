@@ -48,8 +48,8 @@ for stdio/socket hosts, and is what `apollovm lsp` uses.
 ## Design in one paragraph
 
 ApolloVM's AST carries **no source positions** and its parser **discards
-comments**. Rather than thread source spans through all eight grammars (invasive,
-regression-prone), the server keeps the ApolloVM core **read-only** and recovers
+comments**. Rather than thread source spans through every ApolloVM grammar
+(invasive, regression-prone), the server keeps the ApolloVM core **read-only** and recovers
 geometry in a small, self-contained scanner (`lib/src/lsp/analysis/token_index.dart`)
 that re-scans the raw text for identifier/declaration positions, correlating them
 to the AST — which stays the source of truth for *semantics*. Four strictly
@@ -64,7 +64,12 @@ unresolvable core imports), `documentSymbol`, `hover` (kind, signature, type,
 documentation), `definition`. Plus working single-file `references`, `rename`,
 and a basic `completion` with local→global ranking.
 
+Files of every ApolloVM language (Dart, Java, Kotlin, C#, JavaScript,
+TypeScript, Lua, Python, and Go) are recognized and get parse diagnostics via
+their parser; the position scanner and symbol extraction are currently tuned for
+Dart and are best-effort for the others.
+
 **Follow-up:** a static resolution/type pass for type-error diagnostics and
 cross-package definition/references/rename; a workspace import graph; and
-per-language enablement for the other seven ApolloVM languages (the analysis
+per-language tuning of the scanner for the non-Dart languages (the analysis
 layer is already language-agnostic).

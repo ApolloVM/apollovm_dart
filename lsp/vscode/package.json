@@ -18,7 +18,8 @@
     "onLanguage:javascript",
     "onLanguage:typescript",
     "onLanguage:lua",
-    "onLanguage:python"
+    "onLanguage:python",
+    "onLanguage:go"
   ],
   "main": "./extension.js",
   "contributes": {
