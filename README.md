@@ -1088,6 +1088,69 @@ Generated `Wasm` bytes with description:
 
 -----------------------------
 
+## MCP Server
+
+ApolloVM ships an **MCP (Model Context Protocol)** server that exposes the VM as a
+programmable execution engine for AI agents. Agents can parse, execute, translate,
+compile, and inspect code across all supported languages through MCP tools.
+
+Start it over stdio (the standard local transport):
+
+```bash
+apollovm serve
+```
+
+or over HTTP/SSE for networked agents:
+
+```bash
+apollovm serve --http 8080          # binds 127.0.0.1:8080, SSE at /sse
+```
+
+Example MCP client configuration (e.g. for an agent/IDE):
+
+```json
+{
+  "mcpServers": {
+    "apollovm": { "command": "apollovm", "args": ["serve"] }
+  }
+}
+```
+
+### Tools
+
+| Tool | Input | Output |
+|------|-------|--------|
+| `apollo.parse` | `language`, `source` | parse `ok`, `diagnostics`, `summary` (classes/functions/imports) |
+| `apollo.execute` | `language`, `source`, `function?`, `className?`, `args?`, `timeoutMs?` | `result`, `output` (console), `diagnostics` |
+| `apollo.translate` | `from`, `to`, `source` | `generated` source |
+| `apollo.ast` | `language`, `source`, `maxDepth?` | full AST as JSON |
+| `apollo.symbols` | `language`, `source` | symbol graph (functions/classes/fields/methods/constructors) |
+| `apollo.types` | `language`, `source` | deduplicated type table (`class`/`builtin`/`unknown`) |
+| `apollo.wasm` | `language`, `source` | WebAssembly modules as base64 bytes |
+
+Supported `language` values: `dart`, `java`, `kotlin`, `csharp`, `javascript`,
+`typescript`, `lua`, `python`, `wasm`.
+
+### Security model
+
+- **File/network access is denied by construction** — executed code is only ever
+  granted `print`; no filesystem or socket bridge is exposed, and tools operate on
+  inline source strings only (never a path).
+- **Timeout / CPU** — `apollo.execute` runs inside a killable **isolate** by default,
+  so a hard wall-clock timeout is enforced even against a runaway synchronous loop
+  (`--timeout-ms`, default 5000). Other tools run in-process. Which tools use an
+  isolate is configurable (`--isolate-tools`).
+- **Input/output caps** — `--max-source-chars` (default 262144) and
+  `--max-output-chars` (default 65536) bound request/response size.
+- **Memory** — Dart has no per-isolate hard heap cap, so memory limiting is
+  best-effort; run the process with `--old_gen_heap_size=<MB>` for a hard ceiling.
+
+The embeddable API lives in `package:apollovm/apollovm_mcp.dart`
+(`ApolloMcpServer`, `serveStdio`, `HttpSseTransport`, `McpLimits`). See
+[`doc/MCP.md`](doc/MCP.md) for the full tool schemas and protocol notes.
+
+-----------------------------
+
 ## See Also
 
 ApolloVM uses [PetitParser for Dart][petitparser-pub] to define the grammars of the languages and to analyze the source codes.

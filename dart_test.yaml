@@ -21,6 +21,8 @@
 #   dart test -x wasm -x wasm-chrome  # everything except the Wasm backend
 
 tags:
+  # The MCP (Model Context Protocol) server exposing ApolloVM as agent tools.
+  mcp:
   # Backend / target.
   wasm:
     # The WebAssembly compiler + runner (native `wasm_run` or Chrome).
