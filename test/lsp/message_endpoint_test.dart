@@ -13,7 +13,8 @@ void main() {
     LspServer(endpoint); // no start(): message endpoints are push-based.
 
     Future<Map<String, Object?>> waitFor(
-        bool Function(Map<String, Object?>) pred) async {
+      bool Function(Map<String, Object?>) pred,
+    ) async {
       var seen = 0;
       for (var i = 0; i < 2000; i++) {
         while (seen < outgoing.length) {
@@ -46,12 +47,14 @@ void main() {
         'textDocument': {
           'uri': uri,
           'text': '/// The answer.\nint answer() {\n  return 42;\n}\n',
-        }
+        },
       },
     });
-    final diag = await waitFor((m) =>
-        m['method'] == 'textDocument/publishDiagnostics' &&
-        (m['params'] as Map)['uri'] == uri);
+    final diag = await waitFor(
+      (m) =>
+          m['method'] == 'textDocument/publishDiagnostics' &&
+          (m['params'] as Map)['uri'] == uri,
+    );
     expect((diag['params'] as Map)['diagnostics'], isEmpty);
 
     // documentSymbol
@@ -60,12 +63,14 @@ void main() {
       'id': 2,
       'method': 'textDocument/documentSymbol',
       'params': {
-        'textDocument': {'uri': uri}
+        'textDocument': {'uri': uri},
       },
     });
     final sym = await waitFor((m) => m['id'] == 2);
-    final names =
-        (sym['result'] as List).cast<Map>().map((s) => s['name']).toList();
+    final names = (sym['result'] as List)
+        .cast<Map>()
+        .map((s) => s['name'])
+        .toList();
     expect(names, contains('answer'));
   });
 }

@@ -8,7 +8,7 @@
 //                            stdio or sockets. Uses only `dart:async`/`convert`,
 //                            so it too compiles for the web.
 //
-// Nothing here imports `dart:io`; the stdio wiring lives in `bin/apollovm_lsp.dart`.
+// Nothing here imports `dart:io`; the stdio wiring lives in the `apollovm lsp` CLI command.
 import 'dart:async';
 import 'dart:convert';
 
@@ -34,8 +34,8 @@ class ResponseError implements Exception {
 }
 
 /// Handles an incoming request; returns the result or throws [ResponseError].
-typedef RequestHandler = FutureOr<Object?> Function(
-    String method, Object? params);
+typedef RequestHandler =
+    FutureOr<Object?> Function(String method, Object? params);
 
 /// Handles an incoming notification (no reply).
 typedef NotificationHandler = void Function(String method, Object? params);
@@ -53,8 +53,8 @@ abstract class LspEndpoint {
   Future<void> get done;
 
   /// Sends a notification to the peer.
-  void sendNotification(String method, Object? params) => writeMessage(
-      {'jsonrpc': '2.0', 'method': method, 'params': params});
+  void sendNotification(String method, Object? params) =>
+      writeMessage({'jsonrpc': '2.0', 'method': method, 'params': params});
 
   /// Writes a fully-formed JSON-RPC message to the wire.
   void writeMessage(Map<String, Object?> message);
@@ -83,10 +83,15 @@ abstract class LspEndpoint {
     // Request: must reply with the same id.
     final handler = onRequest;
     if (handler == null) {
-      writeMessage(_error(
+      writeMessage(
+        _error(
           id,
           const ResponseError(
-              ResponseError.methodNotFound, 'No request handler')));
+            ResponseError.methodNotFound,
+            'No request handler',
+          ),
+        ),
+      );
       return;
     }
     try {
@@ -96,12 +101,16 @@ abstract class LspEndpoint {
       writeMessage(_error(id, e));
     } catch (e) {
       writeMessage(
-          _error(id, ResponseError(ResponseError.internalError, e.toString())));
+        _error(id, ResponseError(ResponseError.internalError, e.toString())),
+      );
     }
   }
 
-  Map<String, Object?> _error(Object? id, ResponseError error) =>
-      {'jsonrpc': '2.0', 'id': id, 'error': error.toJson()};
+  Map<String, Object?> _error(Object? id, ResponseError error) => {
+    'jsonrpc': '2.0',
+    'id': id,
+    'error': error.toJson(),
+  };
 }
 
 /// A message-level endpoint for embedding the server in a host that already
@@ -134,7 +143,7 @@ class MessageLspEndpoint extends LspEndpoint {
 }
 
 /// A byte-stream endpoint using LSP `Content-Length` framing. Suitable for
-/// stdio (see `bin/apollovm_lsp.dart`) or a socket/WebSocket byte channel.
+/// stdio (see the `apollovm lsp` CLI command) or a socket/WebSocket byte channel.
 class StreamLspEndpoint extends LspEndpoint {
   final Stream<List<int>> _input;
   final StreamSink<List<int>> _output;
@@ -181,7 +190,9 @@ class StreamLspEndpoint extends LspEndpoint {
         continue;
       }
 
-      if (_buffer.length < bodyStart + contentLength) return; // Body incomplete.
+      if (_buffer.length < bodyStart + contentLength) {
+        return; // Body incomplete.
+      }
 
       final bodyBytes = _buffer.sublist(bodyStart, bodyStart + contentLength);
       _buffer.removeRange(0, bodyStart + contentLength);

@@ -15,8 +15,10 @@ class Position {
 
   const Position(this.line, this.character);
 
-  factory Position.fromJson(Map<String, Object?> json) =>
-      Position((json['line'] as num).toInt(), (json['character'] as num).toInt());
+  factory Position.fromJson(Map<String, Object?> json) => Position(
+    (json['line'] as num).toInt(),
+    (json['character'] as num).toInt(),
+  );
 
   Map<String, Object?> toJson() => {'line': line, 'character': character};
 
@@ -32,11 +34,14 @@ class Range {
   const Range(this.start, this.end);
 
   factory Range.fromJson(Map<String, Object?> json) => Range(
-        Position.fromJson(json['start'] as Map<String, Object?>),
-        Position.fromJson(json['end'] as Map<String, Object?>),
-      );
+    Position.fromJson(json['start'] as Map<String, Object?>),
+    Position.fromJson(json['end'] as Map<String, Object?>),
+  );
 
-  Map<String, Object?> toJson() => {'start': start.toJson(), 'end': end.toJson()};
+  Map<String, Object?> toJson() => {
+    'start': start.toJson(),
+    'end': end.toJson(),
+  };
 
   @override
   String toString() => '[$start..$end]';
@@ -77,12 +82,12 @@ class Diagnostic {
   });
 
   Map<String, Object?> toJson() => {
-        'range': range.toJson(),
-        'severity': severity,
-        'message': message,
-        'source': source,
-        if (code != null) 'code': code,
-      };
+    'range': range.toJson(),
+    'severity': severity,
+    'message': message,
+    'source': source,
+    if (code != null) 'code': code,
+  };
 }
 
 /// LSP `MarkupContent` (`plaintext` or `markdown`).
@@ -104,9 +109,9 @@ class Hover {
   const Hover(this.contents, {this.range});
 
   Map<String, Object?> toJson() => {
-        'contents': contents.toJson(),
-        if (range != null) 'range': range!.toJson(),
-      };
+    'contents': contents.toJson(),
+    if (range != null) 'range': range!.toJson(),
+  };
 }
 
 /// LSP `SymbolKind` (subset used by this server).
@@ -143,14 +148,14 @@ class DocumentSymbol {
   });
 
   Map<String, Object?> toJson() => {
-        'name': name,
-        if (detail != null) 'detail': detail,
-        'kind': kind,
-        'range': range.toJson(),
-        'selectionRange': selectionRange.toJson(),
-        if (children.isNotEmpty)
-          'children': children.map((c) => c.toJson()).toList(),
-      };
+    'name': name,
+    if (detail != null) 'detail': detail,
+    'kind': kind,
+    'range': range.toJson(),
+    'selectionRange': selectionRange.toJson(),
+    if (children.isNotEmpty)
+      'children': children.map((c) => c.toJson()).toList(),
+  };
 }
 
 /// LSP `CompletionItemKind` (subset).
@@ -185,12 +190,12 @@ class CompletionItem {
   });
 
   Map<String, Object?> toJson() => {
-        'label': label,
-        'kind': kind,
-        if (detail != null) 'detail': detail,
-        if (sortText != null) 'sortText': sortText,
-        if (documentation != null) 'documentation': documentation!.toJson(),
-      };
+    'label': label,
+    'kind': kind,
+    if (detail != null) 'detail': detail,
+    if (sortText != null) 'sortText': sortText,
+    if (documentation != null) 'documentation': documentation!.toJson(),
+  };
 }
 
 /// LSP `TextEdit`.
@@ -200,8 +205,10 @@ class TextEdit {
 
   const TextEdit(this.range, this.newText);
 
-  Map<String, Object?> toJson() =>
-      {'range': range.toJson(), 'newText': newText};
+  Map<String, Object?> toJson() => {
+    'range': range.toJson(),
+    'newText': newText,
+  };
 }
 
 /// LSP `WorkspaceEdit` (document-scoped `changes` map).
@@ -211,8 +218,8 @@ class WorkspaceEdit {
   const WorkspaceEdit(this.changes);
 
   Map<String, Object?> toJson() => {
-        'changes': changes.map(
-          (uri, edits) => MapEntry(uri, edits.map((e) => e.toJson()).toList()),
-        ),
-      };
+    'changes': changes.map(
+      (uri, edits) => MapEntry(uri, edits.map((e) => e.toJson()).toList()),
+    ),
+  };
 }

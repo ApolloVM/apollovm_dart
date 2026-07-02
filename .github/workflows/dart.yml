@@ -21,7 +21,11 @@ jobs:
       - name: Upgrade dependencies
         run: dart pub upgrade
       - name: dart format
-        run: dart format -o none --set-exit-if-changed .
+        # Scope to the package's real sources: the `lsp/` companion assets are a
+        # nested benchmark package plus example-workspace fixtures written in
+        # ApolloVM's language subset (one intentionally malformed), which the
+        # Dart formatter cannot parse. They ship excluded via `.pubignore`.
+        run: dart format -o none --set-exit-if-changed lib bin test example
       - name: dart analyze
         run: dart analyze --fatal-infos --fatal-warnings .
       - name: dependency_validator

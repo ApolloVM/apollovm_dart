@@ -1,9 +1,5 @@
 /// The status of an order.
-enum OrderStatus {
-  pending,
-  shipped,
-  delivered,
-}
+enum OrderStatus { pending, shipped, delivered }
 
 /// A customer order.
 class Order {

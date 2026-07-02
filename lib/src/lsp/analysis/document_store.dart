@@ -27,8 +27,7 @@ class DocumentStore {
 
   /// Applies `contentChanges` (full or incremental) to the open document and
   /// returns the updated text, or null if the document is not open.
-  String? applyChanges(
-      String uri, int? version, List<Object?> contentChanges) {
+  String? applyChanges(String uri, int? version, List<Object?> contentChanges) {
     final doc = _docs[uri];
     if (doc == null) return null;
 

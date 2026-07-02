@@ -89,18 +89,22 @@ class Analyzer {
     var symbols = const <SymbolInfo>[];
 
     if (parser == null) {
-      diagnostics.add(Diagnostic(
-        range: lineIndex.rangeAt(0, 0),
-        message: "No ApolloVM parser for language '$language'.",
-        severity: DiagnosticSeverity.warning,
-      ));
+      diagnostics.add(
+        Diagnostic(
+          range: lineIndex.rangeAt(0, 0),
+          message: "No ApolloVM parser for language '$language'.",
+          severity: DiagnosticSeverity.warning,
+        ),
+      );
     } else {
       ParseResult<String> result;
       try {
         result = await parser.parse(SourceCodeUnit(language, text, id: uri));
       } catch (e) {
-        result = ParseResult(SourceCodeUnit(language, text, id: uri),
-            errorMessage: e.toString());
+        result = ParseResult(
+          SourceCodeUnit(language, text, id: uri),
+          errorMessage: e.toString(),
+        );
       }
 
       if (result.isOK) {
@@ -126,7 +130,10 @@ class Analyzer {
   }
 
   Diagnostic _parseErrorDiagnostic(
-      ParseResult<String> result, LineIndex lineIndex, String text) {
+    ParseResult<String> result,
+    LineIndex lineIndex,
+    String text,
+  ) {
     final pos = result.errorPosition;
     Range range;
     if (pos != null && pos >= 0 && pos <= text.length) {
@@ -152,7 +159,10 @@ class Analyzer {
   /// Flags `dart:`-style core imports that ApolloVM cannot resolve. Relative and
   /// package imports are left unflagged pending a static import graph.
   List<Diagnostic> _importDiagnostics(
-      ASTRoot ast, String text, LineIndex lineIndex) {
+    ASTRoot ast,
+    String text,
+    LineIndex lineIndex,
+  ) {
     final out = <Diagnostic>[];
     final importManager = ApolloImportManager();
     for (final import in ast.imports) {
@@ -160,14 +170,16 @@ class Analyzer {
       if (path.startsWith('dart:') &&
           importManager.resolveCorePackage(path) == null) {
         final range = _locate(text, path, lineIndex);
-        out.add(Diagnostic(
-          range: range,
-          message:
-              "Unresolved core import '$path' (ApolloVM resolves only known "
-              "core packages such as 'dart:math').",
-          severity: DiagnosticSeverity.warning,
-          code: 'unresolved-import',
-        ));
+        out.add(
+          Diagnostic(
+            range: range,
+            message:
+                "Unresolved core import '$path' (ApolloVM resolves only known "
+                "core packages such as 'dart:math').",
+            severity: DiagnosticSeverity.warning,
+            code: 'unresolved-import',
+          ),
+        );
       }
     }
     return out;

@@ -44,7 +44,10 @@ import 'dart:math';
 
 int one() { return 1; }
 ''');
-    expect(unit.diagnostics.where((d) => d.code == 'unresolved-import'), isEmpty);
+    expect(
+      unit.diagnostics.where((d) => d.code == 'unresolved-import'),
+      isEmpty,
+    );
   });
 
   test('detects language from extension', () {

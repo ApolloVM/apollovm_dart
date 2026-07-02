@@ -25,93 +25,105 @@ User findUser(int id) {
 ''';
 
 void main() {
-  test('full LSP session: initialize → open → symbols/hover/definition → shutdown',
-      () async {
-    final input = StreamController<List<int>>();
-    final output = _OutputSink();
-    final conn = StreamLspEndpoint(input.stream, output);
-    LspServer(conn).start();
+  test(
+    'full LSP session: initialize → open → symbols/hover/definition → shutdown',
+    () async {
+      final input = StreamController<List<int>>();
+      final output = _OutputSink();
+      final conn = StreamLspEndpoint(input.stream, output);
+      LspServer(conn).start();
 
-    final line = LineIndex(_content);
-    Map<String, Object?> posOf(String needle) {
-      final p = line.positionAt(_content.indexOf(needle));
-      return {'line': p.line, 'character': p.character};
-    }
-
-    Future<Map<String, Object?>> request(int id, String method,
-        [Map<String, Object?>? params]) async {
-      _send(input, {'jsonrpc': '2.0', 'id': id, 'method': method, 'params': params});
-      return output.waitFor((m) => m['id'] == id);
-    }
-
-    void notify(String method, Map<String, Object?> params) =>
-        _send(input, {'jsonrpc': '2.0', 'method': method, 'params': params});
-
-    // initialize
-    final init = await request(1, 'initialize', {'capabilities': {}});
-    final caps = (init['result'] as Map)['capabilities'] as Map;
-    expect(caps['hoverProvider'], isTrue);
-    expect(caps['definitionProvider'], isTrue);
-    expect(caps['documentSymbolProvider'], isTrue);
-
-    notify('initialized', {});
-
-    // didOpen
-    notify('textDocument/didOpen', {
-      'textDocument': {
-        'uri': _uri,
-        'languageId': 'dart',
-        'version': 1,
-        'text': _content,
+      final line = LineIndex(_content);
+      Map<String, Object?> posOf(String needle) {
+        final p = line.positionAt(_content.indexOf(needle));
+        return {'line': p.line, 'character': p.character};
       }
-    });
 
-    // Diagnostics published (empty — the source is valid).
-    final diag = await output.waitFor((m) =>
-        m['method'] == 'textDocument/publishDiagnostics' &&
-        (m['params'] as Map)['uri'] == _uri);
-    expect((diag['params'] as Map)['diagnostics'], isEmpty);
+      Future<Map<String, Object?>> request(
+        int id,
+        String method, [
+        Map<String, Object?>? params,
+      ]) async {
+        _send(input, {
+          'jsonrpc': '2.0',
+          'id': id,
+          'method': method,
+          'params': params,
+        });
+        return output.waitFor((m) => m['id'] == id);
+      }
 
-    // documentSymbol
-    final symResp = await request(2, 'textDocument/documentSymbol', {
-      'textDocument': {'uri': _uri}
-    });
-    final symbols = (symResp['result'] as List).cast<Map>();
-    final names = symbols.map((s) => s['name']).toList();
-    expect(names, containsAll(['User', 'findUser']));
-    final user = symbols.firstWhere((s) => s['name'] == 'User');
-    final userChildren = (user['children'] as List).cast<Map>();
-    expect(userChildren.map((c) => c['name']), contains('greeting'));
+      void notify(String method, Map<String, Object?> params) =>
+          _send(input, {'jsonrpc': '2.0', 'method': method, 'params': params});
 
-    // hover over the `findUser` declaration.
-    final hoverResp = await request(3, 'textDocument/hover', {
-      'textDocument': {'uri': _uri},
-      'position': posOf('findUser'),
-    });
-    final hover = hoverResp['result'] as Map;
-    final value = (hover['contents'] as Map)['value'] as String;
-    expect(value, contains('User findUser(int id)'));
-    expect(value, contains('Finds a user by identifier'));
+      // initialize
+      final init = await request(1, 'initialize', {'capabilities': {}});
+      final caps = (init['result'] as Map)['capabilities'] as Map;
+      expect(caps['hoverProvider'], isTrue);
+      expect(caps['definitionProvider'], isTrue);
+      expect(caps['documentSymbolProvider'], isTrue);
 
-    // definition of `findUser`.
-    final defResp = await request(4, 'textDocument/definition', {
-      'textDocument': {'uri': _uri},
-      'position': posOf('findUser'),
-    });
-    final def = defResp['result'] as Map;
-    expect(def['uri'], _uri);
-    final defStart = (def['range'] as Map)['start'] as Map;
-    // Definition points at the declaration line of `findUser`.
-    final declPos = line.positionAt(_content.indexOf('findUser'));
-    expect(defStart['line'], declPos.line);
+      notify('initialized', {});
 
-    // shutdown / exit
-    final sh = await request(5, 'shutdown');
-    expect(sh['result'], isNull);
-    notify('exit', {});
+      // didOpen
+      notify('textDocument/didOpen', {
+        'textDocument': {
+          'uri': _uri,
+          'languageId': 'dart',
+          'version': 1,
+          'text': _content,
+        },
+      });
 
-    await input.close();
-  });
+      // Diagnostics published (empty — the source is valid).
+      final diag = await output.waitFor(
+        (m) =>
+            m['method'] == 'textDocument/publishDiagnostics' &&
+            (m['params'] as Map)['uri'] == _uri,
+      );
+      expect((diag['params'] as Map)['diagnostics'], isEmpty);
+
+      // documentSymbol
+      final symResp = await request(2, 'textDocument/documentSymbol', {
+        'textDocument': {'uri': _uri},
+      });
+      final symbols = (symResp['result'] as List).cast<Map>();
+      final names = symbols.map((s) => s['name']).toList();
+      expect(names, containsAll(['User', 'findUser']));
+      final user = symbols.firstWhere((s) => s['name'] == 'User');
+      final userChildren = (user['children'] as List).cast<Map>();
+      expect(userChildren.map((c) => c['name']), contains('greeting'));
+
+      // hover over the `findUser` declaration.
+      final hoverResp = await request(3, 'textDocument/hover', {
+        'textDocument': {'uri': _uri},
+        'position': posOf('findUser'),
+      });
+      final hover = hoverResp['result'] as Map;
+      final value = (hover['contents'] as Map)['value'] as String;
+      expect(value, contains('User findUser(int id)'));
+      expect(value, contains('Finds a user by identifier'));
+
+      // definition of `findUser`.
+      final defResp = await request(4, 'textDocument/definition', {
+        'textDocument': {'uri': _uri},
+        'position': posOf('findUser'),
+      });
+      final def = defResp['result'] as Map;
+      expect(def['uri'], _uri);
+      final defStart = (def['range'] as Map)['start'] as Map;
+      // Definition points at the declaration line of `findUser`.
+      final declPos = line.positionAt(_content.indexOf('findUser'));
+      expect(defStart['line'], declPos.line);
+
+      // shutdown / exit
+      final sh = await request(5, 'shutdown');
+      expect(sh['result'], isNull);
+      notify('exit', {});
+
+      await input.close();
+    },
+  );
 }
 
 void _send(StreamController<List<int>> input, Map<String, Object?> msg) {
@@ -147,8 +159,10 @@ class _OutputSink implements StreamSink<List<int>> {
     }
   }
 
-  Future<Map<String, Object?>> waitFor(bool Function(Map<String, Object?>) pred,
-      {int maxTicks = 2000}) async {
+  Future<Map<String, Object?>> waitFor(
+    bool Function(Map<String, Object?>) pred, {
+    int maxTicks = 2000,
+  }) async {
     var seen = 0;
     for (var tick = 0; tick < maxTicks; tick++) {
       while (seen < _received.length) {

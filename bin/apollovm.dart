@@ -407,4 +407,3 @@ class CommandLsp extends Command<bool> {
     return server.cleanExit;
   }
 }
-

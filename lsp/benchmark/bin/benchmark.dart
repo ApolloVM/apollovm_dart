@@ -62,10 +62,12 @@ void _report(String label, List<double> samples, double targetMs) {
   final p95 = _p95(samples);
   final ok = p95 <= targetMs;
   final mark = ok ? 'PASS' : 'WARN';
-  print('[$mark] ${label.padRight(12)} '
-      'median=${med.toStringAsFixed(2)}ms  '
-      'p95=${p95.toStringAsFixed(2)}ms  '
-      '(target ${targetMs.toStringAsFixed(0)}ms)');
+  print(
+    '[$mark] ${label.padRight(12)} '
+    'median=${med.toStringAsFixed(2)}ms  '
+    'p95=${p95.toStringAsFixed(2)}ms  '
+    '(target ${targetMs.toStringAsFixed(0)}ms)',
+  );
 }
 
 Future<void> main() async {
@@ -73,8 +75,10 @@ Future<void> main() async {
   final source = _buildSource(40); // ~40 classes, several hundred LOC.
   final analyzer = Analyzer();
 
-  print('Document: ${source.split('\n').length} lines, '
-      '${source.length} chars\n');
+  print(
+    'Document: ${source.split('\n').length} lines, '
+    '${source.length} chars\n',
+  );
 
   // Warm up the parser (grammar build is a one-time cost).
   await analyzer.analyze(uri, source);
@@ -95,26 +99,30 @@ Future<void> main() async {
   // Hover: cursor → identifier → symbol lookup + doc.
   final hoverSamples = <double>[];
   for (var i = 0; i < iterations; i++) {
-    hoverSamples.add(_timeSync(() {
-      final off = unit.lineIndex.offsetAt(hoverPos);
-      final ident = unit.tokenIndex.identifierAt(off);
-      if (ident != null) {
-        unit.symbolFor(ident.name);
-        final d = unit.tokenIndex.findDeclaration(ident.name);
-        if (d != null) unit.docs.docFor(d.fullStart);
-      }
-    }));
+    hoverSamples.add(
+      _timeSync(() {
+        final off = unit.lineIndex.offsetAt(hoverPos);
+        final ident = unit.tokenIndex.identifierAt(off);
+        if (ident != null) {
+          unit.symbolFor(ident.name);
+          final d = unit.tokenIndex.findDeclaration(ident.name);
+          if (d != null) unit.docs.docFor(d.fullStart);
+        }
+      }),
+    );
   }
 
   // Completion: assemble the candidate list from symbols + keywords.
   final completionSamples = <double>[];
   for (var i = 0; i < iterations; i++) {
-    completionSamples.add(_timeSync(() {
-      final items = <String>[];
-      for (final s in unit.symbols) {
-        items.add(s.name);
-      }
-    }));
+    completionSamples.add(
+      _timeSync(() {
+        final items = <String>[];
+        for (final s in unit.symbols) {
+          items.add(s.name);
+        }
+      }),
+    );
   }
 
   _report('open', openSamples, _openTargetMs);

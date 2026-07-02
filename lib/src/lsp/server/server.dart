@@ -41,7 +41,9 @@ class LspServer {
   // --- Requests ---
 
   Future<Object?> _handleRequest(String method, Object? params) async {
-    final p = params is Map<String, Object?> ? params : const <String, Object?>{};
+    final p = params is Map<String, Object?>
+        ? params
+        : const <String, Object?>{};
     switch (method) {
       case 'initialize':
         return _initialize();
@@ -65,10 +67,14 @@ class LspServer {
       default:
         if (_shutdownRequested) {
           throw const ResponseError(
-              ResponseError.invalidRequest, 'Server is shutting down');
+            ResponseError.invalidRequest,
+            'Server is shutting down',
+          );
         }
         throw ResponseError(
-            ResponseError.methodNotFound, "Unhandled method '$method'");
+          ResponseError.methodNotFound,
+          "Unhandled method '$method'",
+        );
     }
   }
 
@@ -94,7 +100,9 @@ class LspServer {
   // --- Notifications ---
 
   void _handleNotification(String method, Object? params) {
-    final p = params is Map<String, Object?> ? params : const <String, Object?>{};
+    final p = params is Map<String, Object?>
+        ? params
+        : const <String, Object?>{};
     switch (method) {
       case 'initialized':
         break;
@@ -102,8 +110,11 @@ class LspServer {
         final doc = p['textDocument'] as Map<String, Object?>?;
         if (doc == null) break;
         final uri = doc['uri'] as String;
-        _store.open(uri, doc['text'] as String? ?? '',
-            (doc['version'] as num?)?.toInt() ?? 0);
+        _store.open(
+          uri,
+          doc['text'] as String? ?? '',
+          (doc['version'] as num?)?.toInt() ?? 0,
+        );
         unawaited(_analyzeAndPublish(uri));
         break;
       case 'textDocument/didChange':
@@ -121,8 +132,10 @@ class LspServer {
         final uri = doc['uri'] as String;
         _store.close(uri);
         _cache.remove(uri);
-        _endpoint.sendNotification('textDocument/publishDiagnostics',
-            {'uri': uri, 'diagnostics': const []});
+        _endpoint.sendNotification('textDocument/publishDiagnostics', {
+          'uri': uri,
+          'diagnostics': const [],
+        });
         break;
       case 'exit':
         cleanExit = _shutdownRequested;
@@ -170,12 +183,18 @@ class LspServer {
   }
 
   ({int offset, IdentToken? ident, String? container})? _resolveCursor(
-      AnalyzedUnit unit, Map<String, Object?> p) {
+    AnalyzedUnit unit,
+    Map<String, Object?> p,
+  ) {
     final posJson = p['position'];
     if (posJson is! Map<String, Object?>) return null;
     final offset = unit.lineIndex.offsetAt(Position.fromJson(posJson));
     final ident = unit.tokenIndex.identifierAt(offset);
-    return (offset: offset, ident: ident, container: _containerAt(unit, offset));
+    return (
+      offset: offset,
+      ident: ident,
+      container: _containerAt(unit, offset),
+    );
   }
 
   String _uriOf(Map<String, Object?> p) =>
@@ -191,8 +210,10 @@ class LspServer {
     if (ident == null) return null;
 
     final sym = unit.symbolFor(ident.name, container: cur!.container);
-    final decl = unit.tokenIndex
-        .findDeclaration(ident.name, container: cur.container);
+    final decl = unit.tokenIndex.findDeclaration(
+      ident.name,
+      container: cur.container,
+    );
 
     final buf = StringBuffer();
     if (sym != null) {
@@ -251,8 +272,11 @@ class LspServer {
     final ident = cur?.ident;
     if (ident == null) return null;
 
-    final decl = unit.tokenIndex
-            .findDeclaration(ident.name, container: cur!.container) ??
+    final decl =
+        unit.tokenIndex.findDeclaration(
+          ident.name,
+          container: cur!.container,
+        ) ??
         unit.tokenIndex.findDeclaration(ident.name);
     if (decl == null) return null;
 
@@ -338,19 +362,23 @@ class LspServer {
     for (final s in unit.symbols) {
       // Rank: local scope (same container) first, then global.
       final isLocal = container != null && s.container == container;
-      items.add(CompletionItem(
-        label: s.name,
-        kind: _completionKind(s.category),
-        detail: s.signature,
-        sortText: '${isLocal ? '0' : '1'}_${s.name}',
-      ));
+      items.add(
+        CompletionItem(
+          label: s.name,
+          kind: _completionKind(s.category),
+          detail: s.signature,
+          sortText: '${isLocal ? '0' : '1'}_${s.name}',
+        ),
+      );
     }
     for (final kw in _keywords) {
-      items.add(CompletionItem(
-        label: kw,
-        kind: CompletionItemKind.keyword,
-        sortText: '2_$kw',
-      ));
+      items.add(
+        CompletionItem(
+          label: kw,
+          kind: CompletionItemKind.keyword,
+          sortText: '2_$kw',
+        ),
+      );
     }
 
     return {
@@ -429,8 +457,9 @@ class LspServer {
             'name': d.name,
             'kind': _symbolKind(d.kind),
             'location': Location(
-                    unit.uri, unit.lineIndex.rangeAt(d.nameStart, d.nameEnd))
-                .toJson(),
+              unit.uri,
+              unit.lineIndex.rangeAt(d.nameStart, d.nameEnd),
+            ).toJson(),
             if (d.container != null) 'containerName': d.container,
           });
         }
@@ -440,9 +469,32 @@ class LspServer {
   }
 
   static const _keywords = [
-    'class', 'enum', 'void', 'int', 'double', 'String', 'bool', 'var', 'final',
-    'const', 'return', 'if', 'else', 'for', 'while', 'switch', 'case', 'break',
-    'continue', 'new', 'this', 'super', 'true', 'false', 'null', 'import',
+    'class',
+    'enum',
+    'void',
+    'int',
+    'double',
+    'String',
+    'bool',
+    'var',
+    'final',
+    'const',
+    'return',
+    'if',
+    'else',
+    'for',
+    'while',
+    'switch',
+    'case',
+    'break',
+    'continue',
+    'new',
+    'this',
+    'super',
+    'true',
+    'false',
+    'null',
+    'import',
   ];
 }
 
@@ -465,11 +517,11 @@ class DocumentSymbolBuilder {
   });
 
   DocumentSymbol build() => DocumentSymbol(
-        name: name,
-        detail: detail,
-        kind: kind,
-        range: range,
-        selectionRange: selectionRange,
-        children: children.map((c) => c.build()).toList(),
-      );
+    name: name,
+    detail: detail,
+    kind: kind,
+    range: range,
+    selectionRange: selectionRange,
+    children: children.map((c) => c.build()).toList(),
+  );
 }

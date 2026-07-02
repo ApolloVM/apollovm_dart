@@ -60,17 +60,58 @@ class DeclSite {
 /// Keywords that begin a *statement*, so a run starting with one is never a
 /// declaration (guards against reading `return foo(...)` as a function decl).
 const _statementKeywords = {
-  'return', 'if', 'else', 'for', 'while', 'do', 'switch', 'case', 'default',
-  'break', 'continue', 'throw', 'try', 'catch', 'finally', 'new', 'await',
-  'yield', 'assert', 'import', 'export', 'part', 'library', 'package',
-  'in', 'is', 'as', 'super', 'this',
+  'return',
+  'if',
+  'else',
+  'for',
+  'while',
+  'do',
+  'switch',
+  'case',
+  'default',
+  'break',
+  'continue',
+  'throw',
+  'try',
+  'catch',
+  'finally',
+  'new',
+  'await',
+  'yield',
+  'assert',
+  'import',
+  'export',
+  'part',
+  'library',
+  'package',
+  'in',
+  'is',
+  'as',
+  'super',
+  'this',
 };
 
 /// Type/parameter modifier keywords that may lead a declaration run.
 const _modifierKeywords = {
-  'static', 'final', 'const', 'var', 'abstract', 'public', 'private',
-  'protected', 'external', 'async', 'get', 'set', 'late', 'covariant',
-  'fun', 'val', 'def', 'function', 'void',
+  'static',
+  'final',
+  'const',
+  'var',
+  'abstract',
+  'public',
+  'private',
+  'protected',
+  'external',
+  'async',
+  'get',
+  'set',
+  'late',
+  'covariant',
+  'fun',
+  'val',
+  'def',
+  'function',
+  'void',
 };
 
 const _classKeywords = {'class', 'interface', 'mixin'};
@@ -214,7 +255,10 @@ class TokenIndex {
         i++;
         while (i < n) {
           final d = text.codeUnitAt(i);
-          if (isDigit(d) || d == 0x2e || d == 0x78 || (d >= 0x61 && d <= 0x66)) {
+          if (isDigit(d) ||
+              d == 0x2e ||
+              d == 0x78 ||
+              (d >= 0x61 && d <= 0x66)) {
             i++;
           } else {
             break;
@@ -280,8 +324,7 @@ class TokenIndex {
 
     int enclosingBodyDepth() =>
         classStack.isEmpty ? -1 : classStack.last.bodyDepth;
-    String? enclosingName() =>
-        classStack.isEmpty ? null : classStack.last.name;
+    String? enclosingName() => classStack.isEmpty ? null : classStack.last.name;
     bool inEnumBody() =>
         classStack.isNotEmpty &&
         classStack.last.isEnum &&
@@ -360,15 +403,17 @@ class TokenIndex {
 
       // Enum members: identifiers directly in an enum body.
       if (inEnumBody() && t.isIdent && atBoundary) {
-        decls.add(DeclSite(
-          name: t.value,
-          kind: DeclKind.enumMember,
-          nameStart: t.start,
-          nameEnd: t.end,
-          fullStart: t.start,
-          fullEnd: t.end,
-          container: enclosingName(),
-        ));
+        decls.add(
+          DeclSite(
+            name: t.value,
+            kind: DeclKind.enumMember,
+            nameStart: t.start,
+            nameEnd: t.end,
+            fullStart: t.start,
+            fullEnd: t.end,
+            container: enclosingName(),
+          ),
+        );
         // Skip to the next comma/brace.
         i++;
         while (i < tokens.length &&
@@ -383,8 +428,7 @@ class TokenIndex {
       }
 
       // Only recognise declarations at top level or directly in a class body.
-      final atDeclLevel =
-          braceDepth == 0 || braceDepth == enclosingBodyDepth();
+      final atDeclLevel = braceDepth == 0 || braceDepth == enclosingBodyDepth();
 
       if (atBoundary && atDeclLevel && (t.isIdent)) {
         final consumed = _tryDeclaration(
@@ -435,15 +479,17 @@ class TokenIndex {
       if (j >= tokens.length || !tokens[j].isIdent) return 0;
       final nameTok = tokens[j];
       final declIndex = nextDeclIndex();
-      onDecl(DeclSite(
-        name: nameTok.value,
-        kind: isEnum ? DeclKind.enumDecl : DeclKind.classDecl,
-        nameStart: nameTok.start,
-        nameEnd: nameTok.end,
-        fullStart: first.start,
-        fullEnd: nameTok.end,
-        container: container,
-      ));
+      onDecl(
+        DeclSite(
+          name: nameTok.value,
+          kind: isEnum ? DeclKind.enumDecl : DeclKind.classDecl,
+          nameStart: nameTok.start,
+          nameEnd: nameTok.end,
+          fullStart: first.start,
+          fullEnd: nameTok.end,
+          container: container,
+        ),
+      );
       onClass(_ClassScope(nameTok.value, isEnum, declIndex));
       return j - start + 1;
     }
@@ -479,8 +525,13 @@ class TokenIndex {
         continue;
       }
       // Terminators.
-      if (t.sym('(') || t.sym(';') || t.sym('=') || t.sym('{') || t.sym('}') ||
-          t.sym(',') || t.sym(')')) {
+      if (t.sym('(') ||
+          t.sym(';') ||
+          t.sym('=') ||
+          t.sym('{') ||
+          t.sym('}') ||
+          t.sym(',') ||
+          t.sym(')')) {
         break;
       }
       j++;
@@ -496,35 +547,40 @@ class TokenIndex {
       final kind = container == null
           ? DeclKind.function
           : (isConstructor ? DeclKind.constructor : DeclKind.method);
-      onDecl(DeclSite(
-        name: nameTok.value,
-        kind: kind,
-        nameStart: nameTok.start,
-        nameEnd: nameTok.end,
-        fullStart: idents.first.start,
-        fullEnd: nameTok.end,
-        container: container,
-      ));
+      onDecl(
+        DeclSite(
+          name: nameTok.value,
+          kind: kind,
+          nameStart: nameTok.start,
+          nameEnd: nameTok.end,
+          fullStart: idents.first.start,
+          fullEnd: nameTok.end,
+          container: container,
+        ),
+      );
       return j - start; // Stop before '(' so the body braces are still seen.
     }
 
     if (terminator != null &&
         (terminator.sym(';') || terminator.sym('=') || terminator.sym(','))) {
       // Field / variable — require a type + name (or a leading modifier).
-      final hasType = idents.length >= 2 ||
+      final hasType =
+          idents.length >= 2 ||
           (start > 0 &&
               tokens[start].isIdent &&
               _modifierKeywords.contains(tokens[start].value));
       if (!hasType) return 0;
-      onDecl(DeclSite(
-        name: nameTok.value,
-        kind: container == null ? DeclKind.variable : DeclKind.field,
-        nameStart: nameTok.start,
-        nameEnd: nameTok.end,
-        fullStart: idents.first.start,
-        fullEnd: nameTok.end,
-        container: container,
-      ));
+      onDecl(
+        DeclSite(
+          name: nameTok.value,
+          kind: container == null ? DeclKind.variable : DeclKind.field,
+          nameStart: nameTok.start,
+          nameEnd: nameTok.end,
+          fullStart: idents.first.start,
+          fullEnd: nameTok.end,
+          container: container,
+        ),
+      );
       return j - start;
     }
 

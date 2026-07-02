@@ -49,66 +49,82 @@ List<SymbolInfo> collectSymbols(ASTRoot root) {
   // Top-level functions.
   for (final set in root.functions) {
     for (final f in set.functions) {
-      out.add(_invocable(f, container: null, category: SymbolCategory.function));
+      out.add(
+        _invocable(f, container: null, category: SymbolCategory.function),
+      );
     }
   }
 
   // Classes / enums and their members.
   for (final clazz in root.classes) {
     final isEnum = clazz is ASTClassEnum;
-    out.add(SymbolInfo(
-      name: clazz.name,
-      category: isEnum ? SymbolCategory.enumSym : SymbolCategory.classSym,
-      signature: _classSignature(clazz),
-      typeName: clazz.name,
-      modifiers: clazz.isAbstract ? const ['abstract'] : const [],
-    ));
+    out.add(
+      SymbolInfo(
+        name: clazz.name,
+        category: isEnum ? SymbolCategory.enumSym : SymbolCategory.classSym,
+        signature: _classSignature(clazz),
+        typeName: clazz.name,
+        modifiers: clazz.isAbstract ? const ['abstract'] : const [],
+      ),
+    );
 
     for (final field in clazz.fields) {
-      out.add(SymbolInfo(
-        name: field.name,
-        category: SymbolCategory.field,
-        container: clazz.name,
-        signature: '${_typeName(field.type)} ${field.name}',
-        typeName: _typeName(field.type),
-        modifiers: field.modifiers.modifiers,
-      ));
+      out.add(
+        SymbolInfo(
+          name: field.name,
+          category: SymbolCategory.field,
+          container: clazz.name,
+          signature: '${_typeName(field.type)} ${field.name}',
+          typeName: _typeName(field.type),
+          modifiers: field.modifiers.modifiers,
+        ),
+      );
     }
 
     for (final set in clazz.constructors) {
       for (final c in set.functions) {
-        out.add(_invocable(c,
-            container: clazz.name, category: SymbolCategory.constructor));
+        out.add(
+          _invocable(
+            c,
+            container: clazz.name,
+            category: SymbolCategory.constructor,
+          ),
+        );
       }
     }
 
     for (final set in clazz.functions) {
       for (final m in set.functions) {
-        out.add(_invocable(m,
-            container: clazz.name, category: SymbolCategory.method));
+        out.add(
+          _invocable(m, container: clazz.name, category: SymbolCategory.method),
+        );
       }
     }
 
     for (final g in clazz.getter) {
-      out.add(SymbolInfo(
-        name: g.name,
-        category: SymbolCategory.getter,
-        container: clazz.name,
-        signature: '${_typeName(g.returnType)} get ${g.name}',
-        typeName: _typeName(g.returnType),
-        modifiers: g.modifiers.modifiers,
-      ));
+      out.add(
+        SymbolInfo(
+          name: g.name,
+          category: SymbolCategory.getter,
+          container: clazz.name,
+          signature: '${_typeName(g.returnType)} get ${g.name}',
+          typeName: _typeName(g.returnType),
+          modifiers: g.modifiers.modifiers,
+        ),
+      );
     }
 
     if (clazz is ASTClassEnum) {
       for (final e in clazz.entries) {
-        out.add(SymbolInfo(
-          name: e.name,
-          category: SymbolCategory.enumMember,
-          container: clazz.name,
-          signature: '${clazz.name}.${e.name}',
-          typeName: clazz.name,
-        ));
+        out.add(
+          SymbolInfo(
+            name: e.name,
+            category: SymbolCategory.enumMember,
+            container: clazz.name,
+            signature: '${clazz.name}.${e.name}',
+            typeName: clazz.name,
+          ),
+        );
       }
     }
   }
@@ -116,8 +132,11 @@ List<SymbolInfo> collectSymbols(ASTRoot root) {
   return out;
 }
 
-SymbolInfo _invocable(ASTInvocableDeclaration f,
-    {required String? container, required SymbolCategory category}) {
+SymbolInfo _invocable(
+  ASTInvocableDeclaration f, {
+  required String? container,
+  required SymbolCategory category,
+}) {
   return SymbolInfo(
     name: f.name,
     category: category,
@@ -148,7 +167,9 @@ String _classSignature(ASTClassNormal clazz) {
     buf.write(clazz.isInterface ? 'interface ' : 'class ');
   }
   buf.write(clazz.name);
-  if (clazz.superClassName != null) buf.write(' extends ${clazz.superClassName}');
+  if (clazz.superClassName != null) {
+    buf.write(' extends ${clazz.superClassName}');
+  }
   final impls = clazz.implementsTypes;
   if (impls != null && impls.isNotEmpty) {
     buf.write(' implements ${impls.join(', ')}');

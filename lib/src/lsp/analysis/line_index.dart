@@ -56,8 +56,9 @@ class LineIndex {
     if (line < 0) return 0;
     if (line >= _lineStarts.length) return text.length;
     final base = _lineStarts[line];
-    final lineEnd =
-        line + 1 < _lineStarts.length ? _lineStarts[line + 1] : text.length;
+    final lineEnd = line + 1 < _lineStarts.length
+        ? _lineStarts[line + 1]
+        : text.length;
     final offset = base + position.character;
     if (offset < base) return base;
     if (offset > lineEnd) return lineEnd;
@@ -65,5 +66,6 @@ class LineIndex {
   }
 
   /// Builds a [Range] from a `[start, end)` offset pair.
-  Range rangeAt(int start, int end) => Range(positionAt(start), positionAt(end));
+  Range rangeAt(int start, int end) =>
+      Range(positionAt(start), positionAt(end));
 }
