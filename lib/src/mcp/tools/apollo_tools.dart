@@ -32,8 +32,21 @@ const allToolNames = <String>[
   wasmToolName,
 ];
 
-const _languageValues =
-    'dart, java, kotlin, go, csharp, javascript, typescript, lua, python, wasm';
+/// The source languages the MCP tools accept (canonical names).
+const mcpSupportedLanguages = <String>[
+  'dart',
+  'java',
+  'kotlin',
+  'go',
+  'csharp',
+  'javascript',
+  'typescript',
+  'lua',
+  'python',
+  'wasm',
+];
+
+final _languageValues = mcpSupportedLanguages.join(', ');
 
 Schema get _languageSchema =>
     Schema.string(description: 'Source language ($_languageValues).');

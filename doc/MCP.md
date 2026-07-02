@@ -9,17 +9,30 @@ It is built on the official Dart [`dart_mcp`](https://pub.dev/packages/dart_mcp)
 SDK and speaks MCP (`initialize` / `tools/list` / `tools/call`) over two
 transports.
 
-## Running
+## The `mcp` command
+
+All MCP functionality lives under the `apollovm mcp` command group:
+
+| Subcommand | Purpose |
+|------------|---------|
+| `mcp serve` | Run the MCP server over stdio (default) or HTTP/SSE (`--http`). |
+| `mcp list` | List the available tools (names/descriptions/input schemas) as JSON. |
+| `mcp call <tool>` | Invoke one tool once and print its JSON result. |
+| `mcp info` | Print server metadata (version, protocol, transports, languages, limits). |
+| `mcp schema [tool]` | Print the JSON input schema(s) for one or all tools. |
+| `mcp doctor` | Check the server/tools and report available capabilities. |
+
+### `mcp serve`
 
 ```bash
 # stdio (standard local transport)
-apollovm mcp-serve
+apollovm mcp serve
 
 # HTTP/SSE (networked agents) — binds 127.0.0.1:8080, SSE stream at /sse
-apollovm mcp-serve --http 8080 [--host 0.0.0.0]
+apollovm mcp serve --http 8080 [--host 0.0.0.0]
 ```
 
-CLI options:
+Options (shared with `mcp call`):
 
 | Option | Default | Meaning |
 |--------|---------|---------|
@@ -29,6 +42,32 @@ CLI options:
 | `--max-output-chars <n>` | `65536` | Max captured console output per execution. |
 | `--max-source-chars <n>` | `262144` | Max accepted source size. |
 | `--isolate-tools <list>` | `apollo.execute` | Comma-separated tools to run in a killable isolate. |
+
+### `mcp call`
+
+Invoke a single tool from the shell — handy for scripting/CI without an MCP client.
+Source is read from `--source`/`-s`, `--file`/`-f` (language inferred from the
+extension), or stdin. Exit code is non-zero when the result `isError`.
+
+```bash
+apollovm mcp call apollo.execute --language dart \
+  --source 'int main(List a){ print("hi"); return 42; }'
+
+apollovm mcp call apollo.translate --from go --to dart --file main.go
+
+echo 'int main(List a){ return 1; }' | apollovm mcp call apollo.parse -l dart
+```
+
+`apollo.execute` extras: `--function`, `--class-name`, `--args '<json array>'`.
+
+### `mcp list` / `mcp schema` / `mcp info` / `mcp doctor`
+
+```bash
+apollovm mcp list                 # all tool definitions (JSON)
+apollovm mcp schema apollo.wasm   # one tool's input schema (JSON)
+apollovm mcp info [--json]        # server/version/protocol/languages/limits
+apollovm mcp doctor               # environment & capability checks
+```
 
 ### Embedding
 

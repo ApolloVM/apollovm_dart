@@ -1191,13 +1191,13 @@ compile, and inspect code across all supported languages through MCP tools.
 Start it over stdio (the standard local transport):
 
 ```bash
-apollovm mcp-serve
+apollovm mcp serve
 ```
 
 or over HTTP/SSE for networked agents:
 
 ```bash
-apollovm mcp-serve --http 8080          # binds 127.0.0.1:8080, SSE at /sse
+apollovm mcp serve --http 8080          # binds 127.0.0.1:8080, SSE at /sse
 ```
 
 Example MCP client configuration (e.g. for an agent/IDE):
@@ -1205,9 +1205,28 @@ Example MCP client configuration (e.g. for an agent/IDE):
 ```json
 {
   "mcpServers": {
-    "apollovm": { "command": "apollovm", "args": ["mcp-serve"] }
+    "apollovm": { "command": "apollovm", "args": ["mcp", "serve"] }
   }
 }
+```
+
+### `mcp` subcommands
+
+| Subcommand | Purpose |
+|------------|---------|
+| `mcp serve` | Run the MCP server over stdio (default) or HTTP/SSE (`--http <port>`). |
+| `mcp list` | List the available tools (names, descriptions, input schemas) as JSON. |
+| `mcp call <tool>` | Invoke one tool once and print its JSON result — source via `--source`/`--file`/stdin, args via flags. Use it from scripts/CI with no MCP client. |
+| `mcp info` | Print server metadata: version, MCP protocol, transports, languages, limits. |
+| `mcp schema [tool]` | Print the JSON input schema(s) for one or all tools. |
+| `mcp doctor` | Check the server/tools and report capabilities (e.g. whether the native `wasm_run` lib is available to run compiled Wasm). |
+
+```bash
+# Run a tool from the shell without an MCP client:
+apollovm mcp call apollo.execute --language dart \
+  --source 'int main(List a){ print("hi"); return 42; }'
+
+apollovm mcp call apollo.translate --from go --to dart --file main.go
 ```
 
 ### Tools
