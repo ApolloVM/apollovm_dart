@@ -33,7 +33,7 @@ const allToolNames = <String>[
 ];
 
 const _languageValues =
-    'dart, java, kotlin, csharp, javascript, typescript, lua, python, wasm';
+    'dart, java, kotlin, go, csharp, javascript, typescript, lua, python, wasm';
 
 Schema get _languageSchema =>
     Schema.string(description: 'Source language ($_languageValues).');

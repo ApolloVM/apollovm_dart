@@ -229,6 +229,34 @@ class Calc {
       expect(bytes.sublist(0, 4), [0x00, 0x61, 0x73, 0x6D]);
     });
 
+    test('supports Go: execute and translate go->dart', () async {
+      const goSource = '''
+package main
+import "fmt"
+func Add(a int, b int) int {
+	return a + b
+}
+func main() {
+	fmt.Println(Add(40, 2))
+}
+''';
+
+      final exec = await client.callTool('apollo.execute', {
+        'language': 'go',
+        'source': goSource,
+      });
+      expect(exec['_isError'], isFalse);
+      expect(exec['output'], contains('42'));
+
+      final translated = await client.callTool('apollo.translate', {
+        'from': 'go',
+        'to': 'dart',
+        'source': goSource,
+      });
+      expect(translated['_isError'], isFalse);
+      expect(translated['generated'], contains('int Add(int a, int b)'));
+    });
+
     test('unknown tool name yields an error result', () async {
       final resp = await client.request('tools/call', {
         'name': 'apollo.nope',

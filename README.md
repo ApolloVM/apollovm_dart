@@ -1222,7 +1222,7 @@ Example MCP client configuration (e.g. for an agent/IDE):
 | `apollo.types` | `language`, `source` | deduplicated type table (`class`/`builtin`/`unknown`) |
 | `apollo.wasm` | `language`, `source` | WebAssembly modules as base64 bytes |
 
-Supported `language` values: `dart`, `java`, `kotlin`, `csharp`, `javascript`,
+Supported `language` values: `dart`, `java`, `kotlin`, `go`, `csharp`, `javascript`,
 `typescript`, `lua`, `python`, `wasm`.
 
 ### Security model

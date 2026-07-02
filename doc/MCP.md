@@ -54,8 +54,9 @@ All tools return a single `TextContent` whose `text` is a JSON object. Every
 payload includes an `isError` flag mirrored onto the MCP `CallToolResult.isError`.
 Common inputs are `language` and `source` (inline source string).
 
-Supported `language` values: `dart`, `java` (`java11`), `kotlin`, `csharp`
-(`cs`), `javascript` (`js`), `typescript` (`ts`), `lua`, `python` (`py`), `wasm`.
+Supported `language` values: `dart`, `java` (`java11`), `kotlin`, `go` (`golang`),
+`csharp` (`cs`), `javascript` (`js`), `typescript` (`ts`), `lua`, `python` (`py`),
+`wasm`.
 
 ### apollo.parse
 
