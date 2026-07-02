@@ -9,7 +9,7 @@
 /// can push through the server. Memory is NOT hard-capped by these values
 /// (Dart has no per-isolate heap cap) — see the `doc/MCP.md` security notes.
 class McpLimits {
-  /// Maximum wall-clock time for a single `apollo.execute` run, in milliseconds.
+  /// Maximum wall-clock time for a single `apollovm.execute` run, in milliseconds.
   ///
   /// Enforced via `Future.timeout`. ApolloVM's executor yields regularly
   /// (`FutureOr`/`resolveMapped`) so the timeout fires promptly; a purely
@@ -25,7 +25,7 @@ class McpLimits {
   /// are rejected before parsing/execution.
   final int maxSourceChars;
 
-  /// Maximum depth of the serialized AST tree (`apollo.ast`). Guards against
+  /// Maximum depth of the serialized AST tree (`apollovm.ast`). Guards against
   /// pathological/deep trees producing huge payloads.
   final int maxAstDepth;
 
@@ -34,7 +34,7 @@ class McpLimits {
   /// Isolate execution is the ONLY way to enforce a real wall-clock timeout in
   /// Dart: ApolloVM runs CPU work synchronously (no async yield), so an
   /// in-process `Future.timeout` cannot interrupt a runaway loop, but an
-  /// isolate can be `kill()`-ed. `apollo.execute` (which runs arbitrary user
+  /// isolate can be `kill()`-ed. `apollovm.execute` (which runs arbitrary user
   /// code) defaults to isolate execution; the pure/bounded tools default to
   /// in-process. Configurable per tool.
   final Set<String> isolateTools;
@@ -44,7 +44,7 @@ class McpLimits {
     this.maxOutputChars = 65536,
     this.maxSourceChars = 262144,
     this.maxAstDepth = 200,
-    this.isolateTools = const {'apollo.execute'},
+    this.isolateTools = const {'apollovm.execute'},
   });
 
   /// Whether [toolName] should run inside an isolate.

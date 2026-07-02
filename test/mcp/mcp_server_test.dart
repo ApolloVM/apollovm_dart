@@ -115,13 +115,13 @@ class Calc {
       final tools = (resp['result'] as Map)['tools'] as List;
       final names = tools.map((t) => (t as Map)['name']).toSet();
       expect(names, {
-        'apollo.parse',
-        'apollo.execute',
-        'apollo.translate',
-        'apollo.ast',
-        'apollo.symbols',
-        'apollo.types',
-        'apollo.wasm',
+        'apollovm.parse',
+        'apollovm.execute',
+        'apollovm.translate',
+        'apollovm.ast',
+        'apollovm.symbols',
+        'apollovm.types',
+        'apollovm.wasm',
       });
       for (final t in tools) {
         final schema = (t as Map)['inputSchema'] as Map;
@@ -133,8 +133,8 @@ class Calc {
   group('tools', () {
     setUp(() => client.initialize());
 
-    test('apollo.parse returns a summary for valid source', () async {
-      final r = await client.callTool('apollo.parse', {
+    test('apollovm.parse returns a summary for valid source', () async {
+      final r = await client.callTool('apollovm.parse', {
         'language': 'dart',
         'source': dartSource,
       });
@@ -145,9 +145,9 @@ class Calc {
     });
 
     test(
-      'apollo.parse on broken source returns line/column diagnostics',
+      'apollovm.parse on broken source returns line/column diagnostics',
       () async {
-        final r = await client.callTool('apollo.parse', {
+        final r = await client.callTool('apollovm.parse', {
           'language': 'dart',
           'source': 'class { oops',
         });
@@ -161,8 +161,8 @@ class Calc {
       },
     );
 
-    test('apollo.execute returns result and captured output', () async {
-      final r = await client.callTool('apollo.execute', {
+    test('apollovm.execute returns result and captured output', () async {
+      final r = await client.callTool('apollovm.execute', {
         'language': 'dart',
         'source': dartSource,
       });
@@ -171,8 +171,8 @@ class Calc {
       expect(r['output'], ['running']);
     });
 
-    test('apollo.translate dart->python produces source', () async {
-      final r = await client.callTool('apollo.translate', {
+    test('apollovm.translate dart->python produces source', () async {
+      final r = await client.callTool('apollovm.translate', {
         'from': 'dart',
         'to': 'python',
         'source': dartSource,
@@ -181,8 +181,8 @@ class Calc {
       expect(r['generated'], contains('def add'));
     });
 
-    test('apollo.ast returns the root node', () async {
-      final r = await client.callTool('apollo.ast', {
+    test('apollovm.ast returns the root node', () async {
+      final r = await client.callTool('apollovm.ast', {
         'language': 'dart',
         'source': dartSource,
       });
@@ -192,8 +192,8 @@ class Calc {
       expect(ast['classes'], contains('Calc'));
     });
 
-    test('apollo.symbols returns the symbol graph', () async {
-      final r = await client.callTool('apollo.symbols', {
+    test('apollovm.symbols returns the symbol graph', () async {
+      final r = await client.callTool('apollovm.symbols', {
         'language': 'dart',
         'source': dartSource,
       });
@@ -206,8 +206,8 @@ class Calc {
       expect(methods, containsAll(['add', 'main']));
     });
 
-    test('apollo.types returns a classified type table', () async {
-      final r = await client.callTool('apollo.types', {
+    test('apollovm.types returns a classified type table', () async {
+      final r = await client.callTool('apollovm.types', {
         'language': 'dart',
         'source': dartSource,
       });
@@ -218,16 +218,19 @@ class Calc {
       expect(byName['int'], 'builtin');
     });
 
-    test('apollo.wasm returns a base64 module with the \\0asm magic', () async {
-      final r = await client.callTool('apollo.wasm', {
-        'language': 'dart',
-        'source': 'int run(int a, int b) { return a + b; }',
-      });
-      expect(r['_isError'], isFalse);
-      final modules = r['modules'] as List;
-      final bytes = base64.decode((modules.first as Map)['base64'] as String);
-      expect(bytes.sublist(0, 4), [0x00, 0x61, 0x73, 0x6D]);
-    });
+    test(
+      'apollovm.wasm returns a base64 module with the \\0asm magic',
+      () async {
+        final r = await client.callTool('apollovm.wasm', {
+          'language': 'dart',
+          'source': 'int run(int a, int b) { return a + b; }',
+        });
+        expect(r['_isError'], isFalse);
+        final modules = r['modules'] as List;
+        final bytes = base64.decode((modules.first as Map)['base64'] as String);
+        expect(bytes.sublist(0, 4), [0x00, 0x61, 0x73, 0x6D]);
+      },
+    );
 
     test('supports Go: execute and translate go->dart', () async {
       const goSource = '''
@@ -241,14 +244,14 @@ func main() {
 }
 ''';
 
-      final exec = await client.callTool('apollo.execute', {
+      final exec = await client.callTool('apollovm.execute', {
         'language': 'go',
         'source': goSource,
       });
       expect(exec['_isError'], isFalse);
       expect(exec['output'], contains('42'));
 
-      final translated = await client.callTool('apollo.translate', {
+      final translated = await client.callTool('apollovm.translate', {
         'from': 'go',
         'to': 'dart',
         'source': goSource,
@@ -259,7 +262,7 @@ func main() {
 
     test('unknown tool name yields an error result', () async {
       final resp = await client.request('tools/call', {
-        'name': 'apollo.nope',
+        'name': 'apollovm.nope',
         'arguments': <String, Object?>{},
       });
       final result = resp['result'] as Map<String, Object?>;

@@ -29,12 +29,12 @@
   `mcp serve` (run the server over **stdio** or **HTTP/SSE** via `--http <port>`),
   `mcp list` (tool definitions), `mcp call <tool>` (one-shot tool invocation for
   scripting/CI), `mcp info`, `mcp schema`, and `mcp doctor`.
-- **Seven tools**: `apollo.parse`, `apollo.execute`, `apollo.translate`,
-  `apollo.ast`, `apollo.symbols`, `apollo.types`, `apollo.wasm` — parse, run,
+- **Seven tools**: `apollovm.parse`, `apollovm.execute`, `apollovm.translate`,
+  `apollovm.ast`, `apollovm.symbols`, `apollovm.types`, `apollovm.wasm` — parse, run,
   translate, compile to Wasm, and inspect AST / symbol graph / type table across
   all supported languages.
 - **Security model**: file/network access denied by construction (only `print` is
-  exposed; inputs are inline source only); `apollo.execute` runs in a **killable
+  exposed; inputs are inline source only); `apollovm.execute` runs in a **killable
   isolate** so a hard timeout is enforced even against runaway synchronous loops
   (per-tool configurable via `--isolate-tools`); input/output size caps
   (`--max-source-chars`, `--max-output-chars`); best-effort process-level memory.

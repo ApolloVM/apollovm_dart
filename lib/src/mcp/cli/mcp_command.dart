@@ -72,7 +72,7 @@ abstract class _McpLimitsCommand extends Command<bool> {
         help:
             'Comma-separated tools to run inside a killable isolate\n'
             '(the only way to enforce a hard timeout on runaway code).',
-        defaultsTo: 'apollo.execute',
+        defaultsTo: 'apollovm.execute',
       );
   }
 
@@ -105,6 +105,14 @@ class CommandMcpServe extends _McpLimitsCommand {
 
   @override
   final String name = 'serve';
+
+  @override
+  String get usageFooter => '''
+
+Examples:
+  apollovm mcp serve                       # stdio transport
+  apollovm mcp serve --http 8080           # HTTP/SSE on 127.0.0.1:8080
+  apollovm mcp serve --timeout-ms 10000 --isolate-tools apollovm.execute,apollovm.wasm''';
 
   CommandMcpServe() {
     argParser
@@ -159,6 +167,13 @@ class CommandMcpList extends Command<bool> {
   final String name = 'list';
 
   @override
+  String get usageFooter => '''
+
+Examples:
+  apollovm mcp list
+  apollovm mcp list | jq '.[].name'       # just the tool names''';
+
+  @override
   bool run() {
     final tools = [
       for (final tool in buildTools())
@@ -181,6 +196,13 @@ class CommandMcpSchema extends Command<bool> {
 
   @override
   final String name = 'schema';
+
+  @override
+  String get usageFooter => '''
+
+Examples:
+  apollovm mcp schema                      # every tool's input schema
+  apollovm mcp schema apollovm.execute       # one tool (bare `execute` also works)''';
 
   @override
   bool run() {
@@ -211,6 +233,13 @@ class CommandMcpInfo extends Command<bool> {
 
   @override
   final String name = 'info';
+
+  @override
+  String get usageFooter => '''
+
+Examples:
+  apollovm mcp info
+  apollovm mcp info --json''';
 
   CommandMcpInfo() {
     argParser.addFlag(
@@ -267,6 +296,17 @@ class CommandMcpCall extends _McpLimitsCommand {
   @override
   final String name = 'call';
 
+  @override
+  String get usageFooter => '''
+
+The `apollovm.` tool-name prefix is optional: `execute` == `apollovm.execute`.
+
+Examples:
+  apollovm mcp call execute -l dart -s "void main() => print('Hello!');"
+  apollovm mcp call apollovm.translate --from go --to dart --file main.go
+  apollovm mcp call execute -f app.dart --args '["a","b"]'
+  echo 'print("hi")' | apollovm mcp call parse -l python''';
+
   CommandMcpCall() {
     argParser
       ..addOption('language', abbr: 'l', help: 'Source language.')
@@ -276,13 +316,13 @@ class CommandMcpCall extends _McpLimitsCommand {
         abbr: 'f',
         help: 'Read source from a file (language inferred from extension).',
       )
-      ..addOption('from', help: 'Source language (apollo.translate).')
-      ..addOption('to', help: 'Target language (apollo.translate).')
-      ..addOption('function', help: 'Entry function (apollo.execute).')
-      ..addOption('class-name', help: 'Entry class (apollo.execute).')
+      ..addOption('from', help: 'Source language (apollovm.translate).')
+      ..addOption('to', help: 'Target language (apollovm.translate).')
+      ..addOption('function', help: 'Entry function (apollovm.execute).')
+      ..addOption('class-name', help: 'Entry class (apollovm.execute).')
       ..addOption(
         'args',
-        help: 'JSON array of positional arguments (apollo.execute).',
+        help: 'JSON array of positional arguments (apollovm.execute).',
       );
   }
 
@@ -358,6 +398,12 @@ class CommandMcpDoctor extends Command<bool> {
   final String name = 'doctor';
 
   @override
+  String get usageFooter => '''
+
+Examples:
+  apollovm mcp doctor''';
+
+  @override
   Future<bool> run() async {
     var ok = true;
 
@@ -381,26 +427,26 @@ class CommandMcpDoctor extends Command<bool> {
       'language': 'dart',
       'source': dart,
     }, limits);
-    report(parse['isError'] != true, 'apollo.parse');
+    report(parse['isError'] != true, 'apollovm.parse');
 
     final exec = await computeTool(executeToolName, {
       'language': 'dart',
       'source': dart,
     }, limits);
-    report(exec['isError'] != true, 'apollo.execute');
+    report(exec['isError'] != true, 'apollovm.execute');
 
     final translate = await computeTool(translateToolName, {
       'from': 'dart',
       'to': 'python',
       'source': dart,
     }, limits);
-    report(translate['isError'] != true, 'apollo.translate');
+    report(translate['isError'] != true, 'apollovm.translate');
 
     final wasm = await computeTool(wasmToolName, {
       'language': 'dart',
       'source': 'int run(int a, int b){ return a + b; }',
     }, limits);
-    report(wasm['isError'] != true, 'apollo.wasm (compile)');
+    report(wasm['isError'] != true, 'apollovm.wasm (compile)');
 
     // Optional: the native runtime needed to *run* compiled Wasm.
     try {
@@ -408,8 +454,8 @@ class CommandMcpDoctor extends Command<bool> {
       report(
         runtime,
         runtime
-            ? 'wasm_run native runtime available (apollo.wasm modules are runnable)'
-            : 'wasm_run native runtime missing — apollo.wasm still COMPILES; '
+            ? 'wasm_run native runtime available (apollovm.wasm modules are runnable)'
+            : 'wasm_run native runtime missing — apollovm.wasm still COMPILES; '
                   'running compiled modules needs `dart run wasm_run:setup`',
         warnOnly: !runtime,
       );
@@ -432,8 +478,8 @@ bool _wasmRuntimeSupported() {
 }
 
 /// Accepts a bare tool name (`execute`) or a fully-qualified one
-/// (`apollo.execute`) and returns the canonical `apollo.*` name.
+/// (`apollovm.execute`) and returns the canonical `apollovm.*` name.
 String _normalizeToolName(String name) {
   final n = name.trim();
-  return n.startsWith('apollo.') ? n : 'apollo.$n';
+  return n.startsWith('apollovm.') ? n : 'apollovm.$n';
 }

@@ -108,6 +108,15 @@ class CommandRun extends CommandSourceFileBase {
   @override
   final String name = 'run';
 
+  @override
+  String get usageFooter => '''
+
+Examples:
+  apollovm run script.dart
+  apollovm run app.py --function start
+  apollovm run prog.java main foo bar      # call `main` with args foo, bar
+  apollovm run module.wasm''';
+
   CommandRun() {
     argParser.addOption(
       'function',
@@ -209,6 +218,14 @@ class CommandTranslate extends CommandSourceFileBase {
   @override
   final String name = 'translate';
 
+  @override
+  String get usageFooter => '''
+
+Examples:
+  apollovm translate Foo.java --target dart
+  apollovm translate script.py --target javascript
+  apollovm translate app.go --target kotlin''';
+
   CommandTranslate() {
     argParser.addOption(
       'target',
@@ -269,6 +286,13 @@ class CommandCompile extends CommandSourceFileBase {
 
   @override
   final String name = 'compile';
+
+  @override
+  String get usageFooter => '''
+
+Examples:
+  apollovm compile calc.dart               # writes calc.wasm
+  apollovm compile calc.dart -o build/calc.wasm''';
 
   CommandCompile() {
     argParser.addOption(

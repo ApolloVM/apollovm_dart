@@ -110,8 +110,8 @@ void main() {
     test('runs the capability checks and reports the tool count', () async {
       final output = await runMcp(['doctor']);
       expect(output, contains('7 tools registered'));
-      expect(output, contains('apollo.execute'));
-      expect(output, contains('apollo.wasm'));
+      expect(output, contains('apollovm.execute'));
+      expect(output, contains('apollovm.wasm'));
     });
   });
 }

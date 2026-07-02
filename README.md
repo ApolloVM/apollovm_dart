@@ -1223,23 +1223,23 @@ Example MCP client configuration (e.g. for an agent/IDE):
 
 ```bash
 # Run a tool from the shell without an MCP client:
-apollovm mcp call apollo.execute --language dart \
+apollovm mcp call apollovm.execute --language dart \
   --source 'int main(List a){ print("hi"); return 42; }'
 
-apollovm mcp call apollo.translate --from go --to dart --file main.go
+apollovm mcp call apollovm.translate --from go --to dart --file main.go
 ```
 
 ### Tools
 
 | Tool | Input | Output |
 |------|-------|--------|
-| `apollo.parse` | `language`, `source` | parse `ok`, `diagnostics`, `summary` (classes/functions/imports) |
-| `apollo.execute` | `language`, `source`, `function?`, `className?`, `args?`, `timeoutMs?` | `result`, `output` (console), `diagnostics` |
-| `apollo.translate` | `from`, `to`, `source` | `generated` source |
-| `apollo.ast` | `language`, `source`, `maxDepth?` | full AST as JSON |
-| `apollo.symbols` | `language`, `source` | symbol graph (functions/classes/fields/methods/constructors) |
-| `apollo.types` | `language`, `source` | deduplicated type table (`class`/`builtin`/`unknown`) |
-| `apollo.wasm` | `language`, `source` | WebAssembly modules as base64 bytes |
+| `apollovm.parse` | `language`, `source` | parse `ok`, `diagnostics`, `summary` (classes/functions/imports) |
+| `apollovm.execute` | `language`, `source`, `function?`, `className?`, `args?`, `timeoutMs?` | `result`, `output` (console), `diagnostics` |
+| `apollovm.translate` | `from`, `to`, `source` | `generated` source |
+| `apollovm.ast` | `language`, `source`, `maxDepth?` | full AST as JSON |
+| `apollovm.symbols` | `language`, `source` | symbol graph (functions/classes/fields/methods/constructors) |
+| `apollovm.types` | `language`, `source` | deduplicated type table (`class`/`builtin`/`unknown`) |
+| `apollovm.wasm` | `language`, `source` | WebAssembly modules as base64 bytes |
 
 Supported `language` values: `dart`, `java`, `kotlin`, `go`, `csharp`, `javascript`,
 `typescript`, `lua`, `python`, `wasm`.
@@ -1249,7 +1249,7 @@ Supported `language` values: `dart`, `java`, `kotlin`, `go`, `csharp`, `javascri
 - **File/network access is denied by construction** — executed code is only ever
   granted `print`; no filesystem or socket bridge is exposed, and tools operate on
   inline source strings only (never a path).
-- **Timeout / CPU** — `apollo.execute` runs inside a killable **isolate** by default,
+- **Timeout / CPU** — `apollovm.execute` runs inside a killable **isolate** by default,
   so a hard wall-clock timeout is enforced even against a runaway synchronous loop
   (`--timeout-ms`, default 5000). Other tools run in-process. Which tools use an
   isolate is configurable (`--isolate-tools`).
