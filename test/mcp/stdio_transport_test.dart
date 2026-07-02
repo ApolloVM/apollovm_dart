@@ -52,7 +52,7 @@ void main() {
         'id': 2,
         'method': 'tools/call',
         'params': {
-          'name': 'apollo.execute',
+          'name': 'apollovm.execute',
           'arguments': {
             'language': 'dart',
             'source': 'int main(List a){ return 5; }',

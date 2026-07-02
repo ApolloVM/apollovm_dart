@@ -9,17 +9,30 @@ It is built on the official Dart [`dart_mcp`](https://pub.dev/packages/dart_mcp)
 SDK and speaks MCP (`initialize` / `tools/list` / `tools/call`) over two
 transports.
 
-## Running
+## The `mcp` command
+
+All MCP functionality lives under the `apollovm mcp` command group:
+
+| Subcommand | Purpose |
+|------------|---------|
+| `mcp serve` | Run the MCP server over stdio (default) or HTTP/SSE (`--http`). |
+| `mcp list` | List the available tools (names/descriptions/input schemas) as JSON. |
+| `mcp call <tool>` | Invoke one tool once and print its JSON result. |
+| `mcp info` | Print server metadata (version, protocol, transports, languages, limits). |
+| `mcp schema [tool]` | Print the JSON input schema(s) for one or all tools. |
+| `mcp doctor` | Check the server/tools and report available capabilities. |
+
+### `mcp serve`
 
 ```bash
 # stdio (standard local transport)
-apollovm serve
+apollovm mcp serve
 
 # HTTP/SSE (networked agents) — binds 127.0.0.1:8080, SSE stream at /sse
-apollovm serve --http 8080 [--host 0.0.0.0]
+apollovm mcp serve --http 8080 [--host 0.0.0.0]
 ```
 
-CLI options:
+Options (shared with `mcp call`):
 
 | Option | Default | Meaning |
 |--------|---------|---------|
@@ -28,7 +41,33 @@ CLI options:
 | `--timeout-ms <n>` | `5000` | Per-execution wall-clock timeout. |
 | `--max-output-chars <n>` | `65536` | Max captured console output per execution. |
 | `--max-source-chars <n>` | `262144` | Max accepted source size. |
-| `--isolate-tools <list>` | `apollo.execute` | Comma-separated tools to run in a killable isolate. |
+| `--isolate-tools <list>` | `apollovm.execute` | Comma-separated tools to run in a killable isolate. |
+
+### `mcp call`
+
+Invoke a single tool from the shell — handy for scripting/CI without an MCP client.
+Source is read from `--source`/`-s`, `--file`/`-f` (language inferred from the
+extension), or stdin. Exit code is non-zero when the result `isError`.
+
+```bash
+apollovm mcp call apollovm.execute --language dart \
+  --source 'int main(List a){ print("hi"); return 42; }'
+
+apollovm mcp call apollovm.translate --from go --to dart --file main.go
+
+echo 'int main(List a){ return 1; }' | apollovm mcp call apollovm.parse -l dart
+```
+
+`apollovm.execute` extras: `--function`, `--class-name`, `--args '<json array>'`.
+
+### `mcp list` / `mcp schema` / `mcp info` / `mcp doctor`
+
+```bash
+apollovm mcp list                 # all tool definitions (JSON)
+apollovm mcp schema apollovm.wasm   # one tool's input schema (JSON)
+apollovm mcp info [--json]        # server/version/protocol/languages/limits
+apollovm mcp doctor               # environment & capability checks
+```
 
 ### Embedding
 
@@ -58,7 +97,7 @@ Supported `language` values: `dart`, `java` (`java11`), `kotlin`, `go` (`golang`
 `csharp` (`cs`), `javascript` (`js`), `typescript` (`ts`), `lua`, `python` (`py`),
 `wasm`.
 
-### apollo.parse
+### apollovm.parse
 
 Input: `{ language, source }`
 
@@ -71,7 +110,7 @@ Output:
 }
 ```
 
-### apollo.execute
+### apollovm.execute
 
 Input: `{ language, source, function?, className?, args?, timeoutMs? }`
 (`function` defaults to `main`; `args` is a positional argument list.)
@@ -90,13 +129,13 @@ Output:
 `output` is the captured `print` stream. `truncated` is `true` when output hit
 `maxOutputChars`. On timeout, `isError` is `true` with a "timed out" diagnostic.
 
-### apollo.translate
+### apollovm.translate
 
 Input: `{ from, to, source }`
 
 Output: `{ "generated": "<source in the target language>", "diagnostics": [] }`
 
-### apollo.ast
+### apollovm.ast
 
 Input: `{ language, source, maxDepth? }`
 
@@ -109,7 +148,7 @@ literal `value`s.
 > **Note:** ApolloVM AST nodes carry no source positions (line/column), so none
 > are emitted per node. Positions are available only in parse-error diagnostics.
 
-### apollo.symbols
+### apollovm.symbols
 
 Input: `{ language, source }`
 
@@ -125,7 +164,7 @@ Output:
 }
 ```
 
-### apollo.types
+### apollovm.types
 
 Input: `{ language, source }`
 
@@ -136,7 +175,7 @@ Output:
 
 `kind` is `class` (declared in the unit), `builtin`, or `unknown`.
 
-### apollo.wasm
+### apollovm.wasm
 
 Input: `{ language, source }`
 
@@ -150,7 +189,7 @@ Each module's bytes are base64-encoded and begin with the `\0asm` magic
 |---------|-----------|----------|
 | File access | No file external is mapped; tools take inline source only | **Guaranteed** |
 | Network access | No socket external is mapped | **Guaranteed** |
-| Timeout / CPU | `apollo.execute` runs in a killable isolate (`Timer` + `Isolate.kill`) | **Enforced** |
+| Timeout / CPU | `apollovm.execute` runs in a killable isolate (`Timer` + `Isolate.kill`) | **Enforced** |
 | Input size | `maxSourceChars` | Enforced |
 | Output size | `maxOutputChars` (truncates) | Enforced |
 | Memory | Process-level only (`--old_gen_heap_size`) | **Best-effort** |
@@ -160,7 +199,7 @@ Each module's bytes are base64-encoded and begin with the `\0asm` magic
 ApolloVM executes CPU-bound work synchronously (its Dart dialect has no
 async-yield primitive). An in-process `Future.timeout` therefore **cannot**
 interrupt a runaway loop — the event loop is blocked and the timer never fires.
-Running `apollo.execute` inside an isolate is the only reliable way to enforce a
+Running `apollovm.execute` inside an isolate is the only reliable way to enforce a
 hard timeout: the isolate is `kill()`-ed when the deadline passes. The pure,
 bounded tools (`parse`/`ast`/`symbols`/`types`/`translate`/`wasm`) run in-process
 by default; adjust with `--isolate-tools` / `McpLimits.isolateTools`.

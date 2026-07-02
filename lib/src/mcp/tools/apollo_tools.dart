@@ -13,13 +13,13 @@ import '../serialize/symbols.dart';
 import '../serialize/types.dart';
 
 /// Canonical tool names.
-const parseToolName = 'apollo.parse';
-const executeToolName = 'apollo.execute';
-const translateToolName = 'apollo.translate';
-const astToolName = 'apollo.ast';
-const symbolsToolName = 'apollo.symbols';
-const typesToolName = 'apollo.types';
-const wasmToolName = 'apollo.wasm';
+const parseToolName = 'apollovm.parse';
+const executeToolName = 'apollovm.execute';
+const translateToolName = 'apollovm.translate';
+const astToolName = 'apollovm.ast';
+const symbolsToolName = 'apollovm.symbols';
+const typesToolName = 'apollovm.types';
+const wasmToolName = 'apollovm.wasm';
 
 /// The names of all tools this server exposes, in registration order.
 const allToolNames = <String>[
@@ -32,8 +32,21 @@ const allToolNames = <String>[
   wasmToolName,
 ];
 
-const _languageValues =
-    'dart, java, kotlin, go, csharp, javascript, typescript, lua, python, wasm';
+/// The source languages the MCP tools accept (canonical names).
+const mcpSupportedLanguages = <String>[
+  'dart',
+  'java',
+  'kotlin',
+  'go',
+  'csharp',
+  'javascript',
+  'typescript',
+  'lua',
+  'python',
+  'wasm',
+];
+
+final _languageValues = mcpSupportedLanguages.join(', ');
 
 Schema get _languageSchema =>
     Schema.string(description: 'Source language ($_languageValues).');
