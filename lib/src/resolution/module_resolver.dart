@@ -51,7 +51,8 @@ class ModuleResolver {
 
   /// Recursively resolves a module by id (memoized by the engine). Used to pull
   /// a target module's exported symbols when building this module's imports.
-  final ResolvedModule? Function(String moduleId, {String? language}) resolveDependency;
+  final ResolvedModule? Function(String moduleId, {String? language})
+  resolveDependency;
 
   ModuleResolver(this.loader, this.resolveDependency);
 
@@ -70,33 +71,39 @@ class ModuleResolver {
     for (var f in root.functions) {
       var set = root.getFunctionWithName(f.name);
       if (set != null) {
-        table.define(ResolvedSymbol(
-          name: f.name,
-          kind: SymbolKind.function,
-          moduleId: moduleId,
-          declaration: set,
-        ));
+        table.define(
+          ResolvedSymbol(
+            name: f.name,
+            kind: SymbolKind.function,
+            moduleId: moduleId,
+            declaration: set,
+          ),
+        );
       }
     }
 
     for (var clazz in root.classes) {
-      table.define(ResolvedSymbol(
-        name: clazz.name,
-        kind: clazz is ASTClassEnum
-            ? SymbolKind.enumeration
-            : (clazz.isInterface ? SymbolKind.interface : SymbolKind.klass),
-        moduleId: moduleId,
-        declaration: clazz,
-      ));
+      table.define(
+        ResolvedSymbol(
+          name: clazz.name,
+          kind: clazz is ASTClassEnum
+              ? SymbolKind.enumeration
+              : (clazz.isInterface ? SymbolKind.interface : SymbolKind.klass),
+          moduleId: moduleId,
+          declaration: clazz,
+        ),
+      );
     }
 
     for (var alias in root.typeAliases) {
-      table.define(ResolvedSymbol(
-        name: alias.name,
-        kind: SymbolKind.typeAlias,
-        moduleId: moduleId,
-        declaration: alias,
-      ));
+      table.define(
+        ResolvedSymbol(
+          name: alias.name,
+          kind: SymbolKind.typeAlias,
+          moduleId: moduleId,
+          declaration: alias,
+        ),
+      );
     }
 
     return table;
@@ -212,10 +219,7 @@ class ModuleResolver {
 
       // Whole-module alias: `import 'x' as p;` / `import * as p`.
       if (import.prefix != null) {
-        var table = SymbolTable(
-          SymbolScopeLevel.module,
-          moduleId: targetId,
-        );
+        var table = SymbolTable(SymbolScopeLevel.module, moduleId: targetId);
         for (var entry in targetExports.entries) {
           table.define(entry.value.withName(entry.key));
         }

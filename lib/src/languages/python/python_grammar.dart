@@ -167,12 +167,12 @@ class PythonGrammarDefinition extends PythonGrammarLexer {
 
   /// `a [as b], c [as d]` in a `from x import ...` statement.
   Parser<List<ASTImportedSymbol>> importNameList() =>
-      (ref0(importName) &
-              (char(',').trimHidden() & ref0(importName)).star())
+      (ref0(importName) & (char(',').trimHidden() & ref0(importName)).star())
           .map((v) {
             var first = v[0] as ASTImportedSymbol;
-            var rest = (v[1] as List)
-                .map((e) => (e as List)[1] as ASTImportedSymbol);
+            var rest = (v[1] as List).map(
+              (e) => (e as List)[1] as ASTImportedSymbol,
+            );
             return <ASTImportedSymbol>[first, ...rest];
           });
 

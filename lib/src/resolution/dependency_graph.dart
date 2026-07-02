@@ -118,8 +118,8 @@ class DependencyGraph {
               component.add(w);
               if (w == node) break;
             }
-            var isCycle = component.length > 1 ||
-                dependenciesOf(node).contains(node);
+            var isCycle =
+                component.length > 1 || dependenciesOf(node).contains(node);
             if (isCycle) sccs.add(component);
           }
           work.removeLast();

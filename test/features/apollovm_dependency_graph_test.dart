@@ -113,10 +113,18 @@ void main() {
     test('diagnostics aggregate circular-import entries', () async {
       var vm = ApolloVM();
       await vm.loadCodeUnit(
-        SourceCodeUnit('dart', "import 'b.dart';\nclass A { A(); }", id: 'a.dart'),
+        SourceCodeUnit(
+          'dart',
+          "import 'b.dart';\nclass A { A(); }",
+          id: 'a.dart',
+        ),
       );
       await vm.loadCodeUnit(
-        SourceCodeUnit('dart', "import 'a.dart';\nclass B { B(); }", id: 'b.dart'),
+        SourceCodeUnit(
+          'dart',
+          "import 'a.dart';\nclass B { B(); }",
+          id: 'b.dart',
+        ),
       );
       var ds = vm.resolve(language: 'dart');
       expect(vm.resolutionEngine.hasErrors, isTrue);

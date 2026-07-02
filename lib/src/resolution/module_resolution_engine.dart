@@ -48,7 +48,10 @@ class ModuleResolutionEngine {
 
     _inProgress.add(moduleId);
     try {
-      var moduleScope = _resolver.buildModuleScope(loaded.moduleId, loaded.root);
+      var moduleScope = _resolver.buildModuleScope(
+        loaded.moduleId,
+        loaded.root,
+      );
 
       var module = ResolvedModule(
         moduleId: loaded.moduleId,

@@ -14,10 +14,13 @@ Future<String> _gen(String language, Map<String, String> sources) async {
 
 void main() {
   group('Import/export/typedef generation', () {
-    test('Dart: show/hide/prefix imports, export, typedef round-trip', () async {
-      var out = await _gen('dart', {
-        'lib.dart': 'class A { A(); }\nclass B { B(); }\nint f(int x) { return x; }',
-        'main.dart': '''
+    test(
+      'Dart: show/hide/prefix imports, export, typedef round-trip',
+      () async {
+        var out = await _gen('dart', {
+          'lib.dart':
+              'class A { A(); }\nclass B { B(); }\nint f(int x) { return x; }',
+          'main.dart': '''
 import 'lib.dart' show A;
 import 'lib.dart' as p;
 export 'lib.dart' hide B;
@@ -26,17 +29,19 @@ typedef Id = int;
 
 int run() { return p.f(1); }
 ''',
-      });
+        });
 
-      expect(out, contains("import 'lib.dart' show A;"));
-      expect(out, contains("import 'lib.dart' as p;"));
-      expect(out, contains("export 'lib.dart' hide B;"));
-      expect(out, contains('typedef Id = int;'));
-    });
+        expect(out, contains("import 'lib.dart' show A;"));
+        expect(out, contains("import 'lib.dart' as p;"));
+        expect(out, contains("export 'lib.dart' hide B;"));
+        expect(out, contains('typedef Id = int;'));
+      },
+    );
 
     test('TypeScript: named import, export, type alias', () async {
       var out = await _gen('typescript', {
-        'user.ts': 'class User { constructor() {} }\nclass Admin { constructor() {} }',
+        'user.ts':
+            'class User { constructor() {} }\nclass Admin { constructor() {} }',
         'main.ts': '''
 import { User as U, Admin } from './user';
 export { U };
@@ -74,24 +79,29 @@ type Id = number;
       expect(out, contains('import helpers as h'));
     });
 
-    test('base no-op export/typedef generation for a language without support',
-        () async {
-      // Generating a program that has a typedef + export as Java exercises the
-      // base generator's default no-op export/type-alias emission (Java has no
-      // such concept) without crashing.
-      var vm = ApolloVM();
-      await vm.loadCodeUnit(SourceCodeUnit('dart', '''
+    test(
+      'base no-op export/typedef generation for a language without support',
+      () async {
+        // Generating a program that has a typedef + export as Java exercises the
+        // base generator's default no-op export/type-alias emission (Java has no
+        // such concept) without crashing.
+        var vm = ApolloVM();
+        await vm.loadCodeUnit(
+          SourceCodeUnit('dart', '''
 export 'other.dart';
 typedef Id = int;
 class Foo {
   Foo();
   int f(int x) { return x; }
 }
-''', id: 'main.dart'));
-      var out = (await vm.generateAllCodeIn('java11').writeAllSources()).toString();
-      expect(out, contains('class Foo'));
-      // Java output omits the Dart-only export/typedef directives.
-      expect(out, isNot(contains('typedef')));
-    });
+''', id: 'main.dart'),
+        );
+        var out = (await vm.generateAllCodeIn('java11').writeAllSources())
+            .toString();
+        expect(out, contains('class Foo'));
+        // Java output omits the Dart-only export/typedef directives.
+        expect(out, isNot(contains('typedef')));
+      },
+    );
   });
 }

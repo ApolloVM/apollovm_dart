@@ -2522,8 +2522,7 @@ class ASTExpressionObjectFunctionInvocation
     var clazz = scope.resolvePrefixedClass(prefix, name);
     if (clazz != null) {
       var ctor = clazz.getConstructor('', null, parentContext);
-      if (ctor != null &&
-          ctor.matchesParametersTypes(fSignature, false)) {
+      if (ctor != null && ctor.matchesParametersTypes(fSignature, false)) {
         return ctor;
       }
     }

@@ -14,7 +14,8 @@ import 'package:apollovm/apollovm.dart';
 void main() async {
   var vm = ApolloVM();
 
-  await vm.loadCodeUnit(SourceCodeUnit('dart', r'''
+  await vm.loadCodeUnit(
+    SourceCodeUnit('dart', r'''
 class User {
   String name;
   User(this.name);
@@ -22,15 +23,19 @@ class User {
     return 'Hi ' + name;
   }
 }
-''', id: 'user.dart'));
+''', id: 'user.dart'),
+  );
 
-  await vm.loadCodeUnit(SourceCodeUnit('dart', r'''
+  await vm.loadCodeUnit(
+    SourceCodeUnit('dart', r'''
 String shout(String s) {
   return s.toUpperCase();
 }
-''', id: 'helpers.dart'));
+''', id: 'helpers.dart'),
+  );
 
-  await vm.loadCodeUnit(SourceCodeUnit('dart', r'''
+  await vm.loadCodeUnit(
+    SourceCodeUnit('dart', r'''
 import 'user.dart' show User;
 import 'helpers.dart' as h;
 
@@ -40,7 +45,8 @@ void run() {
   print(greeting);
   print(h.shout(greeting));
 }
-''', id: 'main.dart'));
+''', id: 'main.dart'),
+  );
 
   print('--- Resolving module graph ---');
   var diagnostics = vm.resolve(language: 'dart');

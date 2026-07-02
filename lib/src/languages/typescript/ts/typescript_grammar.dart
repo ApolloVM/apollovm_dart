@@ -23,7 +23,9 @@ class TypeScriptGrammarDefinition extends TypeScriptGrammarLexer {
   Parser start() => ref0(compilationUnit).trim().end();
 
   Parser<ASTRoot> compilationUnit() =>
-      (ref0(topLevelDirective).star() & ref0(topLevelDefinition).star()).map((v) {
+      (ref0(topLevelDirective).star() & ref0(topLevelDefinition).star()).map((
+        v,
+      ) {
         var directives = v[0] as List;
         var topDef = v[1] as List;
 
@@ -222,11 +224,7 @@ class TypeScriptGrammarDefinition extends TypeScriptGrammarLexer {
 
   Parser<({String? prefix, bool wildcard, List<ASTImportedSymbol> named})>
   defaultImportClause() => identifier().map(
-    (v) => (
-      prefix: v,
-      wildcard: false,
-      named: <ASTImportedSymbol>[],
-    ),
+    (v) => (prefix: v, wildcard: false, named: <ASTImportedSymbol>[]),
   );
 
   Parser<({String? prefix, bool wildcard, List<ASTImportedSymbol> named})>
@@ -243,8 +241,9 @@ class TypeScriptGrammarDefinition extends TypeScriptGrammarLexer {
               char('}').trimHidden())
           .map((v) {
             var first = v[1] as ASTImportedSymbol;
-            var rest = (v[2] as List)
-                .map((e) => (e as List)[1] as ASTImportedSymbol);
+            var rest = (v[2] as List).map(
+              (e) => (e as List)[1] as ASTImportedSymbol,
+            );
             return <ASTImportedSymbol>[first, ...rest];
           });
 
@@ -270,10 +269,7 @@ class TypeScriptGrammarDefinition extends TypeScriptGrammarLexer {
             var symbols = body[0] as List<ASTImportedSymbol>?;
             var fromOpt = body[1] as List?;
             var path = fromOpt != null ? fromOpt[1] as String : null;
-            return ASTStatementExport(
-              path: path,
-              symbols: symbols ?? const [],
-            );
+            return ASTStatementExport(path: path, symbols: symbols ?? const []);
           });
 
   Parser<ASTTypeAlias> typeAliasDeclaration() =>

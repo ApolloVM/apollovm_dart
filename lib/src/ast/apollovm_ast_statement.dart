@@ -73,8 +73,7 @@ class ASTImportCombinator {
   int get hashCode => kind.hashCode ^ const ListEquality<String>().hash(names);
 
   @override
-  String toString() =>
-      '${isShow ? 'show' : 'hide'} ${names.join(', ')}';
+  String toString() => '${isShow ? 'show' : 'hide'} ${names.join(', ')}';
 }
 
 /// A single imported/exported symbol with an optional local alias, e.g.
@@ -141,7 +140,8 @@ class ASTStatementImport extends ASTStatement {
   /// `true` if this import selects a subset of the target's exported symbols
   /// (via `show`/named). A plain import (or a `hide`-only import) is not
   /// selective in this sense.
-  bool get isSelective => namedSymbols.isNotEmpty || combinators.any((c) => c.isShow);
+  bool get isSelective =>
+      namedSymbols.isNotEmpty || combinators.any((c) => c.isShow);
 
   /// Whether [exported] (a symbol name in the target module) is visible through
   /// this import, applying [namedSymbols] (allow-list) then `show`/`hide`
@@ -181,7 +181,9 @@ class ASTStatementImport extends ASTStatement {
     // module resolver, so they have no runtime effect here — a path that
     // resolves to neither is reported by the resolver as a `missingModule`
     // diagnostic rather than thrown at run time.
-    return parentContext.import(path).resolveMapped((_) => ASTValueVoid.instance);
+    return parentContext
+        .import(path)
+        .resolveMapped((_) => ASTValueVoid.instance);
   }
 
   @override
@@ -195,10 +197,14 @@ class ASTStatementImport extends ASTStatement {
           path == other.path &&
           prefix == other.prefix &&
           wildcard == other.wildcard &&
-          const ListEquality<ASTImportCombinator>()
-              .equals(combinators, other.combinators) &&
-          const ListEquality<ASTImportedSymbol>()
-              .equals(namedSymbols, other.namedSymbols);
+          const ListEquality<ASTImportCombinator>().equals(
+            combinators,
+            other.combinators,
+          ) &&
+          const ListEquality<ASTImportedSymbol>().equals(
+            namedSymbols,
+            other.namedSymbols,
+          );
 
   @override
   int get hashCode =>
@@ -264,9 +270,14 @@ class ASTStatementExport extends ASTStatement {
       other is ASTStatementExport &&
           runtimeType == other.runtimeType &&
           path == other.path &&
-          const ListEquality<ASTImportedSymbol>().equals(symbols, other.symbols) &&
-          const ListEquality<ASTImportCombinator>()
-              .equals(combinators, other.combinators);
+          const ListEquality<ASTImportedSymbol>().equals(
+            symbols,
+            other.symbols,
+          ) &&
+          const ListEquality<ASTImportCombinator>().equals(
+            combinators,
+            other.combinators,
+          );
 
   @override
   int get hashCode =>

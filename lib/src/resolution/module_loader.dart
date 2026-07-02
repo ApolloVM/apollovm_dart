@@ -131,9 +131,7 @@ class VMModuleLoader implements ModuleLoader {
   }
 
   String _normalizeRelative(String baseDir, String rel) {
-    var segments = <String>[
-      if (baseDir.isNotEmpty) ...baseDir.split('/'),
-    ];
+    var segments = <String>[if (baseDir.isNotEmpty) ...baseDir.split('/')];
     for (var seg in rel.split('/')) {
       if (seg == '.' || seg.isEmpty) continue;
       if (seg == '..') {

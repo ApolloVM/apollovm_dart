@@ -7,14 +7,7 @@ import '../ast/apollovm_ast_toplevel.dart';
 
 /// The kind of a resolved [ResolvedSymbol]. Covers the symbol categories the
 /// import system must resolve across all languages.
-enum SymbolKind {
-  variable,
-  function,
-  klass,
-  interface,
-  enumeration,
-  typeAlias,
-}
+enum SymbolKind { variable, function, klass, interface, enumeration, typeAlias }
 
 /// The four symbol-table scope levels, from widest to narrowest.
 ///

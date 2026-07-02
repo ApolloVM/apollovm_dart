@@ -15,10 +15,13 @@ void main() {
     });
 
     test('named symbols: selective, aliases applied', () {
-      var i = ASTStatementImport('u.dart', namedSymbols: const [
-        ASTImportedSymbol('User', alias: 'U'),
-        ASTImportedSymbol('Role'),
-      ]);
+      var i = ASTStatementImport(
+        'u.dart',
+        namedSymbols: const [
+          ASTImportedSymbol('User', alias: 'U'),
+          ASTImportedSymbol('Role'),
+        ],
+      );
       expect(i.isSelective, isTrue);
       expect(i.importsSymbol('User'), isTrue);
       expect(i.importsSymbol('Role'), isTrue);
@@ -29,16 +32,22 @@ void main() {
     });
 
     test('show combinator is selective; hide is not', () {
-      var show = ASTStatementImport('x', combinators: const [
-        ASTImportCombinator(ASTImportCombinatorKind.show, ['A']),
-      ]);
+      var show = ASTStatementImport(
+        'x',
+        combinators: const [
+          ASTImportCombinator(ASTImportCombinatorKind.show, ['A']),
+        ],
+      );
       expect(show.isSelective, isTrue);
       expect(show.importsSymbol('A'), isTrue);
       expect(show.importsSymbol('B'), isFalse);
 
-      var hide = ASTStatementImport('x', combinators: const [
-        ASTImportCombinator(ASTImportCombinatorKind.hide, ['A']),
-      ]);
+      var hide = ASTStatementImport(
+        'x',
+        combinators: const [
+          ASTImportCombinator(ASTImportCombinatorKind.hide, ['A']),
+        ],
+      );
       expect(hide.isSelective, isFalse);
       expect(hide.importsSymbol('A'), isFalse);
       expect(hide.importsSymbol('B'), isTrue);
@@ -51,12 +60,16 @@ void main() {
     });
 
     test('equality and hashCode', () {
-      var a = ASTStatementImport('x', prefix: 'p', namedSymbols: const [
-        ASTImportedSymbol('A'),
-      ]);
-      var b = ASTStatementImport('x', prefix: 'p', namedSymbols: const [
-        ASTImportedSymbol('A'),
-      ]);
+      var a = ASTStatementImport(
+        'x',
+        prefix: 'p',
+        namedSymbols: const [ASTImportedSymbol('A')],
+      );
+      var b = ASTStatementImport(
+        'x',
+        prefix: 'p',
+        namedSymbols: const [ASTImportedSymbol('A')],
+      );
       var c = ASTStatementImport('x', prefix: 'q');
       expect(a, equals(b));
       expect(a.hashCode, equals(b.hashCode));
@@ -66,8 +79,14 @@ void main() {
 
   group('ASTImportCombinator / ASTImportedSymbol', () {
     test('combinator equality, kind flags, toString', () {
-      var show = const ASTImportCombinator(ASTImportCombinatorKind.show, ['A', 'B']);
-      var show2 = const ASTImportCombinator(ASTImportCombinatorKind.show, ['A', 'B']);
+      var show = const ASTImportCombinator(ASTImportCombinatorKind.show, [
+        'A',
+        'B',
+      ]);
+      var show2 = const ASTImportCombinator(ASTImportCombinatorKind.show, [
+        'A',
+        'B',
+      ]);
       var hide = const ASTImportCombinator(ASTImportCombinatorKind.hide, ['A']);
       expect(show.isShow, isTrue);
       expect(show.isHide, isFalse);
@@ -87,16 +106,22 @@ void main() {
       expect(s.toString(), 'User as U');
       expect(plain.toString(), 'User');
       expect(s, equals(const ASTImportedSymbol('User', alias: 'U')));
-      expect(s.hashCode, equals(const ASTImportedSymbol('User', alias: 'U').hashCode));
+      expect(
+        s.hashCode,
+        equals(const ASTImportedSymbol('User', alias: 'U').hashCode),
+      );
       expect(s, isNot(equals(plain)));
     });
   });
 
   group('ASTStatementExport', () {
     test('re-export from path with combinators', () {
-      var e = ASTStatementExport(path: 'x', combinators: const [
-        ASTImportCombinator(ASTImportCombinatorKind.show, ['A']),
-      ]);
+      var e = ASTStatementExport(
+        path: 'x',
+        combinators: const [
+          ASTImportCombinator(ASTImportCombinatorKind.show, ['A']),
+        ],
+      );
       expect(e.path, 'x');
       expect(e.toString(), contains('export'));
       expect(e.toString(), contains('show A'));
@@ -125,7 +150,11 @@ void main() {
 
     test('define/lookup/parent chain', () {
       var global = SymbolTable(SymbolScopeLevel.global);
-      var module = SymbolTable(SymbolScopeLevel.module, parent: global, moduleId: 'm');
+      var module = SymbolTable(
+        SymbolScopeLevel.module,
+        parent: global,
+        moduleId: 'm',
+      );
       global.define(sym('G'));
       module.define(sym('M'));
 
@@ -156,7 +185,10 @@ void main() {
   });
 
   group('ImportScope (from a resolved module)', () {
-    Future<ImportScope> scopeOf(Map<String, String> sources, String mainId) async {
+    Future<ImportScope> scopeOf(
+      Map<String, String> sources,
+      String mainId,
+    ) async {
       var vm = ApolloVM();
       for (var e in sources.entries) {
         await vm.loadCodeUnit(SourceCodeUnit('dart', e.value, id: e.key));
