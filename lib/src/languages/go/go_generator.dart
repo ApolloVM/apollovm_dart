@@ -416,7 +416,12 @@ class ApolloCodeGeneratorGo extends ApolloCodeGenerator {
       // Inferred + value: `x := expr`.
       out.write(statement.name);
       out.write(' := ');
-      generateASTExpression(value, out: out, indent: indent, headIndented: false);
+      generateASTExpression(
+        value,
+        out: out,
+        indent: indent,
+        headIndented: false,
+      );
     } else {
       // `var x Type = expr`, `var x Type`, or `var x = expr`.
       out.write('var ');
@@ -516,7 +521,12 @@ class ApolloCodeGeneratorGo extends ApolloCodeGenerator {
     out ??= newOutput();
     if (headIndented) out.write(indent);
     out.write('return ');
-    generateASTValue(statement.value, out: out, indent: indent, headIndented: false);
+    generateASTValue(
+      statement.value,
+      out: out,
+      indent: indent,
+      headIndented: false,
+    );
     return out;
   }
 
@@ -914,7 +924,11 @@ class ApolloCodeGeneratorGo extends ApolloCodeGenerator {
     out.write('func() any { if ');
     generateASTExpression(expression.condition, out: out, headIndented: false);
     out.write(' { return ');
-    generateASTExpression(expression.valueIfTrue, out: out, headIndented: false);
+    generateASTExpression(
+      expression.valueIfTrue,
+      out: out,
+      headIndented: false,
+    );
     out.write(' } else { return ');
     generateASTExpression(
       expression.valueIfFalse,
@@ -1160,10 +1174,7 @@ class ApolloCodeGeneratorGo extends ApolloCodeGenerator {
     out.write('map[');
     generateASTType(expression.keyType ?? ASTTypeDynamic.instance, out: out);
     out.write(']');
-    generateASTType(
-      expression.valueType ?? ASTTypeDynamic.instance,
-      out: out,
-    );
+    generateASTType(expression.valueType ?? ASTTypeDynamic.instance, out: out);
     out.write('{');
 
     var entriesExpressions = expression.entriesExpressions;

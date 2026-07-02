@@ -177,7 +177,9 @@ class GoGrammarDefinition extends GoGrammarLexer {
     var statements = f.statements.toList();
     statements.removeWhere((s) {
       if (s is ASTStatementVariableDeclaration && s.name == 'o') return true;
-      if (s is ASTStatementReturnVariable && s.variable.name == 'o') return true;
+      if (s is ASTStatementReturnVariable && s.variable.name == 'o') {
+        return true;
+      }
       return false;
     });
 
@@ -208,7 +210,9 @@ class GoGrammarDefinition extends GoGrammarLexer {
   }
 
   Parser packageClause() =>
-      (packageToken().trimHidden() & identifier().trimHidden()).map((v) => null);
+      (packageToken().trimHidden() & identifier().trimHidden()).map(
+        (v) => null,
+      );
 
   Parser<ASTStatementImport?> importDecl() =>
       (importToken().trimHidden() &
@@ -262,9 +266,7 @@ class GoGrammarDefinition extends GoGrammarLexer {
           });
 
   Parser<ASTClassField> structField() =>
-      (identifier().trimHidden() &
-              type() &
-              char(';').trimHidden().optional())
+      (identifier().trimHidden() & type() & char(';').trimHidden().optional())
           .map((v) {
             var name = v[0] as String;
             var type = v[1] as ASTType;
@@ -996,7 +998,9 @@ class GoGrammarDefinition extends GoGrammarLexer {
             var entries = <MapEntry<ASTExpression, ASTExpression>>[];
             var entriesOpt = v[6];
             if (entriesOpt != null) {
-              entries.add(entriesOpt[0] as MapEntry<ASTExpression, ASTExpression>);
+              entries.add(
+                entriesOpt[0] as MapEntry<ASTExpression, ASTExpression>,
+              );
               for (var tail in (entriesOpt[1] as List)) {
                 entries.add(tail[1] as MapEntry<ASTExpression, ASTExpression>);
               }
@@ -1051,13 +1055,12 @@ class GoGrammarDefinition extends GoGrammarLexer {
           .trimHidden()
           .map((v) => getASTAssignmentOperator(v));
 
-  Parser<ASTVariable> variable() =>
-      (identifier()).map((name) {
-        if (name == 'this' || name == _currentReceiver) {
-          return ASTThisVariable();
-        }
-        return ASTScopeVariable(name);
-      }).cast<ASTVariable>();
+  Parser<ASTVariable> variable() => (identifier()).map((name) {
+    if (name == 'this' || name == _currentReceiver) {
+      return ASTThisVariable();
+    }
+    return ASTScopeVariable(name);
+  }).cast<ASTVariable>();
 
   /// Go closure used as an expression: `func(a int, b int) int { ... }`.
   Parser<ASTExpression> expressionLambda() =>
@@ -1120,8 +1123,7 @@ class GoGrammarDefinition extends GoGrammarLexer {
                   .map((_) => ASTTypeObject.instance))
           .cast<ASTType>();
 
-  Parser<ASTType> simpleType() =>
-      (identifier()).map((v) => getTypeByName(v));
+  Parser<ASTType> simpleType() => (identifier()).map((v) => getTypeByName(v));
 
   // -----------------------------------------------------------------
   // Literals.
