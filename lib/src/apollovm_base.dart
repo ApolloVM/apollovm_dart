@@ -177,10 +177,16 @@ class ApolloVM implements VMTypeResolver {
 
   ModuleResolutionEngine? _resolutionEngine;
 
-  /// The lazily-created module-resolution engine, backed by the web-safe
-  /// in-memory [VMModuleLoader].
-  ModuleResolutionEngine get resolutionEngine =>
-      _resolutionEngine ??= ModuleResolutionEngine(VMModuleLoader(this));
+  /// An optional custom [ModuleLoader] for import resolution. When set (before
+  /// the [resolutionEngine] is first used), it replaces the default web-safe
+  /// in-memory [VMModuleLoader] — e.g. a `DartPackageLoader` that resolves
+  /// `package:` imports. Leave `null` for the default in-memory behavior.
+  ModuleLoader? moduleLoader;
+
+  /// The lazily-created module-resolution engine, backed by [moduleLoader] when
+  /// set, otherwise the web-safe in-memory [VMModuleLoader].
+  ModuleResolutionEngine get resolutionEngine => _resolutionEngine ??=
+      ModuleResolutionEngine(moduleLoader ?? VMModuleLoader(this));
 
   /// Resolves the import graph of all loaded modules (optionally restricted to
   /// [language]) and returns the aggregated [ImportDiagnostic]s. Idempotent and

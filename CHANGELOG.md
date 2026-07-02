@@ -1,5 +1,26 @@
 ## 1.2.0
 
+### Optional Dart package importer (pub.dev / pubspec-compatible)
+
+- **`package:` imports can now be resolved against real pub packages**, via an
+  **optional** importer exposed at `package:apollovm/apollovm_pub.dart` (kept out
+  of the web-safe `apollovm.dart`).
+  - Pluggable `PackageProvider`: `PackageConfigProvider` (default, zero extra
+    deps — resolves through `.dart_tool/package_config.json`, exact pub
+    semantics) and `PubDevProvider` (opt-in — downloads/caches archives from
+    pub.dev or a configurable/private host, honoring pubspec version
+    constraints, best-effort).
+  - `DartPackageLoader` + `DartPackageImporter.provision()` fetch each reachable
+    `package:` import transitively and load its source into the VM; injected via
+    the new settable `ApolloVM.moduleLoader`. A generic `CompositeModuleLoader`
+    chains loaders.
+  - CLI: `apollovm run/translate --pub` (with `--pub-host` / `--pub-cache`)
+    resolves `package:` imports before executing.
+  - The optional network provider promotes `http`, `archive`, `pub_semver`,
+    `pubspec` to direct dependencies; the default provider needs none of them.
+    Web builds get no-op stubs via conditional imports.
+  - See `doc/module_resolution.md` and `example/apollovm_example_pub_importer.dart`.
+
 ### Language-agnostic package/module import system
 
 - **Cross-module imports now resolve and execute.** A source file can import
