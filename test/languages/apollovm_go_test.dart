@@ -438,4 +438,121 @@ func build() int {
       expect(ret.getValueNoContext(), equals(3));
     });
   });
+
+  // Exercises the Go-specific code-generation idioms that come from other
+  // languages' AST shapes: struct factory constructors, the ternary IIFE,
+  // prefix bitwise-NOT, `nil`, `map[...]...` literals and `+`-based string
+  // interpolation.
+  group('Go idiom generation (from other languages)', () {
+    test('Dart class + constructor -> Go struct + factory', () async {
+      const dart = r'''
+class Point {
+  int x;
+  int y = 7;
+  Point(int a, int b) {
+    this.x = a;
+    this.y = b;
+  }
+  int sum() {
+    return this.x + this.y;
+  }
+}
+''';
+      var go = _extractCodeUnit(await _translate('dart', dart, 'go'));
+      expect(go, contains('type Point struct'));
+      expect(go, contains('x int'));
+      expect(go, contains('func NewPoint(a int, b int) *Point'));
+      expect(go, contains(r'o := &Point{}'));
+      expect(go, contains('o.y = 7')); // field initializer moved to factory
+      expect(go, contains('o.x = a'));
+      expect(go, contains('return o'));
+      expect(go, contains('func (o *Point) sum() int'));
+    });
+
+    test('Dart class field initializer -> Go default factory', () async {
+      const dart = r'''
+class Counter {
+  int n = 5;
+  int get() {
+    return this.n;
+  }
+}
+''';
+      var go = _extractCodeUnit(await _translate('dart', dart, 'go'));
+      expect(go, contains('func NewCounter() *Counter'));
+      expect(go, contains('o.n = 5'));
+    });
+
+    test('Dart ternary -> Go IIFE (and runs)', () async {
+      const dart = r'''
+int pick(int a) {
+  var r = a > 5 ? 100 : 1;
+  return r;
+}
+''';
+      var go = _extractCodeUnit(await _translate('dart', dart, 'go'));
+      expect(
+        go,
+        contains('func() any { if a > 5 { return 100 } else { return 1 } }()'),
+      );
+      var ret = await _call('go', go, 'pick', positionalParameters: [10]);
+      expect(ret.getValueNoContext(), equals(100));
+    });
+
+    test('Dart bitwise-NOT -> Go prefix `^` (and runs)', () async {
+      const dart = r'''
+int f(int a) {
+  return ~a;
+}
+''';
+      var go = _extractCodeUnit(await _translate('dart', dart, 'go'));
+      expect(go, contains('return ^a'));
+      var ret = await _call('go', go, 'f', positionalParameters: [6]);
+      expect(ret.getValueNoContext(), equals(-7)); // ^6 == -7
+    });
+
+    test('Dart null -> Go nil', () async {
+      const dart = r'''
+int f() {
+  return null;
+}
+''';
+      var go = _extractCodeUnit(await _translate('dart', dart, 'go'));
+      expect(go, contains('return nil'));
+    });
+
+    test('Go map literal round-trips through Go generation', () async {
+      const src = r'''
+func build() int {
+  m := map[string]int{"a": 1, "b": 2}
+  return m["b"]
+}
+''';
+      var go = _extractCodeUnit(await _translate('go', src, 'go'));
+      expect(go, contains('map[string]int{'));
+      var ret = await _call('go', go, 'build');
+      expect(ret.getValueNoContext(), equals(2));
+    });
+
+    test('Kotlin string templates -> Go `+` concatenation', () async {
+      const kt = r'''
+fun f(x: Int): String {
+  val a = "$x"
+  val b = "${x * 2}"
+  return a + "=" + b
+}
+''';
+      var go = _extractCodeUnit(await _translate('kotlin', kt, 'go'));
+      // Lone `"$x"` -> `"" + x`; `"${x * 2}"` -> `"" + (x * 2)`.
+      expect(go, contains('"" + x'));
+      expect(go, contains('"" + (x * 2)'));
+    });
+
+    test('runner copy() yields a Go runner', () {
+      var vm = ApolloVM();
+      var runner = vm.createRunner('go')!;
+      var copy = runner.copy();
+      expect(copy.language, equals('go'));
+    });
+  });
 }
