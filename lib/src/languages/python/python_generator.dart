@@ -142,14 +142,28 @@ class ApolloCodeGeneratorPython extends ApolloCodeGenerator {
     String indent = '',
   }) {
     out ??= newOutput();
-    out.write('import ');
-    out.write(import.path);
-    var prefix = import.prefix;
-    if (prefix != null) {
-      out.write(' as ');
-      out.write(prefix);
+
+    if (import.namedSymbols.isNotEmpty) {
+      // `from x import a as b, c`
+      var specs = import.namedSymbols
+          .map((s) => s.alias != null ? '${s.name} as ${s.alias}' : s.name)
+          .join(', ');
+      out.write('from ${import.path} import $specs\n');
+    } else if (import.wildcard && import.prefix == null) {
+      // `from x import *`
+      out.write('from ${import.path} import *\n');
+    } else {
+      // `import x [as p]`
+      out.write('import ');
+      out.write(import.path);
+      var prefix = import.prefix;
+      if (prefix != null) {
+        out.write(' as ');
+        out.write(prefix);
+      }
+      out.write('\n');
     }
-    out.write('\n');
+
     return out;
   }
 

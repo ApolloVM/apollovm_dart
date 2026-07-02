@@ -111,11 +111,59 @@ class ApolloCodeGeneratorTypeScript extends ApolloCodeGenerator {
 
     out ??= newOutput();
 
-    if (prefix != null) {
+    if (prefix != null && import.wildcard) {
       out.write("import * as $prefix from '$path';\n");
+    } else if (import.namedSymbols.isNotEmpty) {
+      var specs = import.namedSymbols.map(_specifier).join(', ');
+      out.write("import { $specs } from '$path';\n");
+    } else if (prefix != null) {
+      out.write("import $prefix from '$path';\n");
     } else {
       out.write("import '$path';\n");
     }
+
+    return out;
+  }
+
+  static String _specifier(ASTImportedSymbol s) =>
+      s.alias != null ? '${s.name} as ${s.alias}' : s.name;
+
+  @override
+  StringBuffer generateASTStatementExport(
+    ASTStatementExport export, {
+    StringBuffer? out,
+    String indent = '',
+  }) {
+    out ??= newOutput();
+
+    out.write('export');
+    if (export.symbols.isNotEmpty) {
+      out.write(' { ${export.symbols.map(_specifier).join(', ')} }');
+    } else {
+      out.write(' *');
+    }
+    final path = export.path;
+    if (path != null) {
+      out.write(" from '$path'");
+    }
+    out.write(';\n');
+
+    return out;
+  }
+
+  @override
+  StringBuffer generateASTTypeAlias(
+    ASTTypeAlias typeAlias, {
+    StringBuffer? out,
+    String indent = '',
+  }) {
+    out ??= newOutput();
+
+    out.write('type ');
+    out.write(typeAlias.name);
+    out.write(' = ');
+    out.write(generateASTType(typeAlias.targetType));
+    out.write(';\n');
 
     return out;
   }

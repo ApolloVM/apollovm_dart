@@ -3,7 +3,8 @@
 // Please refer to the LICENSE and AUTHORS files for details.
 
 import 'package:async_extension/async_extension.dart';
-import 'package:collection/collection.dart' show equalsIgnoreAsciiCase;
+import 'package:collection/collection.dart'
+    show equalsIgnoreAsciiCase, ListEquality;
 
 import '../apollovm_base.dart';
 import 'apollovm_ast_base.dart';
@@ -44,25 +45,143 @@ abstract class ASTStatement with ASTNode implements ASTCodeRunner {
   void associateToType(ASTTypedNode node) {}
 }
 
-/// [ASTStatement] to import a package/library.
+/// The kind of an [ASTImportCombinator]: a `show` (allow-list) or `hide`
+/// (deny-list) clause on an import/export.
+enum ASTImportCombinatorKind { show, hide }
+
+/// A `show`/`hide` clause on an import or export, e.g. `show User, Role` or
+/// `hide Internal`. Language-agnostic: Dart `show`/`hide`, and the effect of
+/// TS/Python selective imports, normalize into this.
+class ASTImportCombinator {
+  final ASTImportCombinatorKind kind;
+  final List<String> names;
+
+  const ASTImportCombinator(this.kind, this.names);
+
+  bool get isShow => kind == ASTImportCombinatorKind.show;
+
+  bool get isHide => kind == ASTImportCombinatorKind.hide;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ASTImportCombinator &&
+          kind == other.kind &&
+          const ListEquality<String>().equals(names, other.names);
+
+  @override
+  int get hashCode => kind.hashCode ^ const ListEquality<String>().hash(names);
+
+  @override
+  String toString() =>
+      '${isShow ? 'show' : 'hide'} ${names.join(', ')}';
+}
+
+/// A single imported/exported symbol with an optional local alias, e.g.
+/// `User as U` (TS `{ User as U }`, Dart `show User`, Python
+/// `from x import User as U`). [localName] is the name the symbol is bound to
+/// in the importing module.
+class ASTImportedSymbol {
+  /// The original exported name in the source module.
+  final String name;
+
+  /// The local binding name (`null` means same as [name]).
+  final String? alias;
+
+  const ASTImportedSymbol(this.name, {this.alias});
+
+  String get localName => alias ?? name;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ASTImportedSymbol && name == other.name && alias == other.alias;
+
+  @override
+  int get hashCode => Object.hash(name, alias);
+
+  @override
+  String toString() => alias != null ? '$name as $alias' : name;
+}
+
+/// [ASTStatement] to import a package/library/module.
+///
+/// This is the canonical, language-agnostic import node. Each language's
+/// syntax normalizes into these fields:
+/// - Dart `import 'user.dart' show User;` → [namedSymbols] `[User]` (+ [combinators]).
+/// - TypeScript `import { User } from './user';` → [namedSymbols] `[User]`.
+/// - Python `from user import User` → [namedSymbols] `[User]`.
+/// - `import 'x' as p;` / `import * as p` → [prefix] `p` (+ [wildcard]).
 class ASTStatementImport extends ASTStatement {
   final String path;
 
+  /// Whole-module alias/prefix (`import 'x' as p`, `import * as p`).
   final String? prefix;
 
-  ASTStatementImport(this.path, {this.prefix});
+  /// Whole-namespace/wildcard import (`import foo.bar.*`, TS `import * as p`).
+  final bool wildcard;
+
+  /// `show`/`hide` clauses (order-preserving), used mainly for exact round-trip
+  /// generation. The resolver treats [namedSymbols] as the authoritative
+  /// selective allow-list.
+  final List<ASTImportCombinator> combinators;
+
+  /// Explicitly imported symbols with optional aliases
+  /// (`{ User as U }`, `show User`, `from x import User as U`).
+  final List<ASTImportedSymbol> namedSymbols;
+
+  ASTStatementImport(
+    this.path, {
+    this.prefix,
+    this.wildcard = false,
+    this.combinators = const [],
+    this.namedSymbols = const [],
+  });
+
+  /// `true` if this import selects a subset of the target's exported symbols
+  /// (via `show`/named). A plain import (or a `hide`-only import) is not
+  /// selective in this sense.
+  bool get isSelective => namedSymbols.isNotEmpty || combinators.any((c) => c.isShow);
+
+  /// Whether [exported] (a symbol name in the target module) is visible through
+  /// this import, applying [namedSymbols] (allow-list) then `show`/`hide`
+  /// combinators.
+  bool importsSymbol(String exported) {
+    if (namedSymbols.isNotEmpty) {
+      return namedSymbols.any((s) => s.name == exported);
+    }
+
+    var visible = true;
+    for (var c in combinators) {
+      if (c.isShow) {
+        visible = c.names.contains(exported);
+      } else {
+        if (c.names.contains(exported)) visible = false;
+      }
+    }
+    return visible;
+  }
+
+  /// The local binding name for an [exported] symbol (applies per-symbol
+  /// aliases from [namedSymbols]); defaults to [exported].
+  String localNameOf(String exported) {
+    for (var s in namedSymbols) {
+      if (s.name == exported) return s.localName;
+    }
+    return exported;
+  }
 
   @override
   Iterable<ASTNode> get children => [];
 
   @override
   FutureOr<ASTValueVoid> run(VMContext parentContext, ASTRunStatus runStatus) {
-    return parentContext.import(path).resolveMapped((ok) {
-      if (!ok) {
-        throw ApolloVMRuntimeError("Can't import: $path");
-      }
-      return ASTValueVoid.instance;
-    });
+    // Core packages (e.g. `dart:math`) register their functions at runtime via
+    // `context.import`. Cross-module imports are linked statically by the
+    // module resolver, so they have no runtime effect here — a path that
+    // resolves to neither is reported by the resolver as a `missingModule`
+    // diagnostic rather than thrown at run time.
+    return parentContext.import(path).resolveMapped((_) => ASTValueVoid.instance);
   }
 
   @override
@@ -74,15 +193,96 @@ class ASTStatementImport extends ASTStatement {
       other is ASTStatementImport &&
           runtimeType == other.runtimeType &&
           path == other.path &&
-          prefix == other.prefix;
+          prefix == other.prefix &&
+          wildcard == other.wildcard &&
+          const ListEquality<ASTImportCombinator>()
+              .equals(combinators, other.combinators) &&
+          const ListEquality<ASTImportedSymbol>()
+              .equals(namedSymbols, other.namedSymbols);
 
   @override
-  int get hashCode => Object.hash(path, prefix);
+  int get hashCode =>
+      path.hashCode ^
+      prefix.hashCode ^
+      wildcard.hashCode ^
+      const ListEquality<ASTImportCombinator>().hash(combinators) ^
+      const ListEquality<ASTImportedSymbol>().hash(namedSymbols);
 
   @override
   String toString() {
     final prefix = this.prefix;
-    return ['import "$path"', if (prefix != null) ' as $prefix', ';'].join();
+    return [
+      'import "$path"',
+      if (namedSymbols.isNotEmpty)
+        ' show ${namedSymbols.join(', ')}'
+      else
+        for (var c in combinators) ' $c',
+      if (prefix != null) ' as $prefix',
+      ';',
+    ].join();
+  }
+}
+
+/// [ASTStatement] to export (or re-export) symbols from a module.
+///
+/// - [path] `null`: re-export of this module's own symbols (`export { A, B };`).
+/// - [path] non-null: re-export from another module (`export * from './x';`,
+///   `export { A } from './x';`).
+/// - [symbols] empty with a [path]: export everything from [path] (barrel).
+///
+/// Exports are resolved statically by the module resolver; [run] is a runtime
+/// no-op so this node round-trips through generation without affecting execution.
+class ASTStatementExport extends ASTStatement {
+  /// Source module to re-export from (`null` = this module's own symbols).
+  final String? path;
+
+  /// Explicitly exported/renamed symbols (empty = export all, esp. with [path]).
+  final List<ASTImportedSymbol> symbols;
+
+  /// `show`/`hide` clauses applied to the re-export.
+  final List<ASTImportCombinator> combinators;
+
+  ASTStatementExport({
+    this.path,
+    this.symbols = const [],
+    this.combinators = const [],
+  });
+
+  @override
+  Iterable<ASTNode> get children => [];
+
+  @override
+  FutureOr<ASTValueVoid> run(VMContext parentContext, ASTRunStatus runStatus) =>
+      ASTValueVoid.instance;
+
+  @override
+  FutureOr<ASTType> resolveType(VMContext? context) => ASTTypeVoid.instance;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ASTStatementExport &&
+          runtimeType == other.runtimeType &&
+          path == other.path &&
+          const ListEquality<ASTImportedSymbol>().equals(symbols, other.symbols) &&
+          const ListEquality<ASTImportCombinator>()
+              .equals(combinators, other.combinators);
+
+  @override
+  int get hashCode =>
+      path.hashCode ^
+      const ListEquality<ASTImportedSymbol>().hash(symbols) ^
+      const ListEquality<ASTImportCombinator>().hash(combinators);
+
+  @override
+  String toString() {
+    return [
+      'export',
+      if (symbols.isNotEmpty) ' { ${symbols.join(', ')} }',
+      for (var c in combinators) ' $c',
+      if (path != null) ' "$path"',
+      ';',
+    ].join();
   }
 }
 

@@ -41,6 +41,15 @@ abstract class ApolloRunner implements VMTypeResolver {
   /// Returns a copy of this instance.
   ApolloRunner copy();
 
+  /// Ensures [codeUnit]'s module is resolved so its `ASTRoot.importScope`
+  /// (consulted by scoped cross-module symbol resolution) is populated before
+  /// execution. Recursively resolves the modules it imports as well.
+  void _ensureModuleResolved(CodeUnit codeUnit) {
+    var root = codeUnit.root;
+    if (root == null || root.importScope != null) return;
+    apolloVM.resolutionEngine.resolveModule(codeUnit.id, language: language);
+  }
+
   ApolloImportManager? createDefaultApolloImportManager() {
     var apolloImportManager = ApolloImportManager();
 
@@ -126,6 +135,8 @@ abstract class ApolloRunner implements VMTypeResolver {
     if (codeUnit == null) {
       throw StateError("Can't find class to execute: $className->$methodName");
     }
+
+    _ensureModuleResolved(codeUnit);
 
     var clazz = codeUnit.root!.getClass(className);
     if (clazz == null) {
@@ -285,6 +296,8 @@ abstract class ApolloRunner implements VMTypeResolver {
         namedParameters: namedParameters,
       );
     } else {
+      _ensureModuleResolved(codeUnit);
+
       final astRoot = codeUnit.root!;
 
       var astFunctionSet = astRoot.getFunctionWithName(functionName);

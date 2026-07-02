@@ -2503,8 +2503,39 @@ class ASTExpressionObjectFunctionInvocation
     return _functionClass!;
   }
 
+  /// If [variable] names a whole-module import prefix (`import 'x' as p; ...
+  /// p.member(...)`), resolves `member` (a top-level function or a class
+  /// constructor) in the imported module. Returns `null` when the receiver is
+  /// not an import prefix (the normal object-method path then applies).
+  ASTInvocableDeclaration? _resolvePrefixedInvocable(VMContext parentContext) {
+    var scope = parentContext.importScope;
+    if (scope == null) return null;
+
+    var prefix = variable.name;
+    if (!scope.hasPrefix(prefix)) return null;
+
+    var fSignature = _getASTFunctionSignature();
+
+    var fSet = scope.resolvePrefixedFunctionSet(prefix, name);
+    if (fSet != null) return fSet.get(fSignature, false);
+
+    var clazz = scope.resolvePrefixedClass(prefix, name);
+    if (clazz != null) {
+      var ctor = clazz.getConstructor('', null, parentContext);
+      if (ctor != null &&
+          ctor.matchesParametersTypes(fSignature, false)) {
+        return ctor;
+      }
+    }
+
+    return null;
+  }
+
   @override
   FutureOr<ASTInvocableDeclaration> _getFunction(VMContext parentContext) {
+    var prefixed = _resolvePrefixedInvocable(parentContext);
+    if (prefixed != null) return prefixed;
+
     return _getFunctionClass(parentContext).resolveMapped((clazz) {
       var fSignature = _getASTFunctionSignature();
 
@@ -2521,6 +2552,30 @@ class ASTExpressionObjectFunctionInvocation
 
   @override
   FutureOr<ASTValue> run(VMContext parentContext, ASTRunStatus runStatus) {
+    // Whole-module import prefix (`p.member(...)`): call the imported function/
+    // constructor directly (no receiver object).
+    var prefixed = _resolvePrefixedInvocable(parentContext);
+    if (prefixed != null) {
+      return _resolveArgumentsValues(
+        parentContext,
+        runStatus,
+        arguments,
+      ).resolveMapped((argumentsValues) {
+        return _resolveNamedArgumentsValues(
+          parentContext,
+          runStatus,
+        ).resolveMapped((namedValues) {
+          return _run2(
+            parentContext,
+            runStatus,
+            prefixed,
+            argumentsValues,
+            namedValues,
+          );
+        });
+      });
+    }
+
     return _getFunction(parentContext).resolveMapped((f) {
       return _resolveArgumentsValues(
         parentContext,

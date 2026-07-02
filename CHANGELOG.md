@@ -1,3 +1,28 @@
+## 0.1.49
+
+### Language-agnostic package/module import system
+
+- **Cross-module imports now resolve and execute.** A source file can import
+  symbols (classes, functions, enums, type aliases) from other loaded modules,
+  normalized into a single canonical AST regardless of language.
+  - Enriched `ASTStatementImport` (named/`show`/`hide`, wildcard, whole-module
+    prefix alias, per-symbol alias) plus new `ASTStatementExport` and
+    `ASTTypeAlias` nodes.
+  - New web-safe resolution layer (`lib/src/resolution/`): pluggable
+    `ModuleLoader` (in-memory `VMModuleLoader`), four-level `SymbolTable`s +
+    `ImportScope`, `ModuleResolver`, a `DependencyGraph` (Tarjan cycle
+    detection, Kahn topological order, incremental `affectedBy` invalidation),
+    structured `ImportDiagnostic`s (missing module/symbol, duplicate symbol,
+    circular import, invalid export), a `ResolutionCache`, and the
+    `ModuleResolutionEngine` facade.
+  - `ApolloVM.resolve()` returns aggregated diagnostics; resolution is triggered
+    lazily by the runner and invalidated incrementally on `loadCodeUnit`.
+  - Parse + generate wired for **Dart, TypeScript, and Python** (named/`show`/
+    `hide`/wildcard/alias/re-export/`typedef`); other languages keep basic
+    imports and compile unchanged against the additive AST.
+  - Golden-test harness extended for multi-`<source>` (cross-module) tests.
+  - See `doc/module_resolution.md` and `example/apollovm_example_imports.dart`.
+
 ## 0.1.48
 
 ### CLI: `run` executes `.wasm` files through the Wasm runtime

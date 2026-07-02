@@ -74,6 +74,49 @@ class ApolloCodeGeneratorDart extends ApolloCodeGenerator {
       out.write(' as ');
       out.write(prefix);
     }
+    for (var c in import.combinators) {
+      out.write(c.isShow ? ' show ' : ' hide ');
+      out.write(c.names.join(', '));
+    }
+    out.write(';\n');
+
+    return out;
+  }
+
+  @override
+  StringBuffer generateASTStatementExport(
+    ASTStatementExport export, {
+    StringBuffer? out,
+    String indent = '',
+  }) {
+    out ??= newOutput();
+
+    out.write('export');
+    final path = export.path;
+    if (path != null) {
+      out.write(" '$path'");
+    }
+    for (var c in export.combinators) {
+      out.write(c.isShow ? ' show ' : ' hide ');
+      out.write(c.names.join(', '));
+    }
+    out.write(';\n');
+
+    return out;
+  }
+
+  @override
+  StringBuffer generateASTTypeAlias(
+    ASTTypeAlias typeAlias, {
+    StringBuffer? out,
+    String indent = '',
+  }) {
+    out ??= newOutput();
+
+    out.write('typedef ');
+    out.write(typeAlias.name);
+    out.write(' = ');
+    out.write(generateASTType(typeAlias.targetType));
     out.write(';\n');
 
     return out;
