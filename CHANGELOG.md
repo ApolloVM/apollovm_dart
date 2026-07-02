@@ -1,3 +1,25 @@
+## 1.2.0
+
+### Language Server Protocol (LSP 3.17) server
+
+- **New `lsp/` tooling directory** (excluded from the published package via
+  `.pubignore`) adding a Dart-first **language server** for ApolloVM sources,
+  plus a VS Code client, an example workspace, and a benchmark harness.
+- The server keeps the ApolloVM core **read-only**: because the AST carries no
+  source positions and the parser discards comments, a small self-contained
+  scanner re-scans raw text for identifier/declaration positions and correlates
+  them back to the AST (the source of truth for semantics). Four strictly
+  separated layers keep LSP logic out of the parser — transport (JSON-RPC 2.0
+  over stdio), protocol (LSP 3.17 types), analysis (parse/index/resolve), and
+  server (handlers).
+- Implemented: `initialize`/`shutdown`, incremental diagnostics (parse +
+  unresolvable core imports), `documentSymbol`, `hover` (kind/signature/type/
+  documentation), `definition`; plus single-file `references`/`rename` and a
+  basic ranked `completion`.
+- Verified with `dart analyze` (clean), 16 passing tests including a full
+  in-memory protocol-session integration test, and a benchmark comfortably under
+  its latency targets (open, hover, completion).
+
 ## 0.1.48
 
 ### CLI: `run` executes `.wasm` files through the Wasm runtime
