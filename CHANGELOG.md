@@ -1,3 +1,26 @@
+## 1.2.0
+
+### New language: `Go`
+
+- **Added first-class Go support** — ApolloVM can now **parse**, **execute**, and
+  **translate** Go source (`.go` / `go`, alias `golang`) through the shared AST,
+  bidirectionally with every other supported language (and on-the-fly Wasm).
+- Implemented under `lib/src/languages/go/` (`go_grammar_lexer.dart`,
+  `go_grammar.dart`, `go_generator.dart`, `go_parser.dart`, `go_runner.dart`) and
+  wired into `ApolloVM` (`getParser`/`createRunner`/`createCodeGenerator` and the
+  `.go` file-extension mapping).
+- Supported: top-level and struct **receiver methods** (`func (o *Name) m(...)`),
+  `struct` types with fields and factory constructors (`func NewName(...) *Name`),
+  `var`/`:=` type inference, `if`/`else if`/`else`, the four `for` forms (C-style,
+  condition-only as `while`, `range` as for-each, infinite / `do`-`while`), Go
+  `switch` (no fall-through), slices/maps (`[]T{…}`, `map[K]V{…}`), closures, all
+  arithmetic/comparison/logical/bitwise operators, string `+` concatenation, and
+  `fmt.Println` (normalized to the VM's `print`).
+- Go has no classes: a class is modeled as a `struct` + receiver methods (the same
+  idiom Lua uses for tables), so OOP code round-trips across all languages. See the
+  README feature tables for the full per-feature matrix; `try`/`catch`/`throw`,
+  inheritance/interfaces, rich enums and generics are not yet implemented for Go.
+
 ## 0.1.48
 
 ### CLI: `run` executes `.wasm` files through the Wasm runtime
