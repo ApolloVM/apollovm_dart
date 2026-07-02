@@ -1,4 +1,4 @@
-## 0.1.49
+## 1.2.0
 
 ### MCP-native runtime: expose ApolloVM to AI agents over the Model Context Protocol
 
