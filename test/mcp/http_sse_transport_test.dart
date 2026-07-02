@@ -83,4 +83,25 @@ void main() {
     // Clean teardown: stop listening before closing the client.
     await sub.cancel();
   });
+
+  test('unknown path returns 404', () async {
+    final port = transport.port!;
+    final resp = await (await http.getUrl(
+      Uri.parse('http://127.0.0.1:$port/nope'),
+    )).close();
+    expect(resp.statusCode, HttpStatus.notFound);
+    await resp.drain<void>();
+  });
+
+  test('POST to an unknown session returns 404', () async {
+    final port = transport.port!;
+    final req = await http.postUrl(
+      Uri.parse('http://127.0.0.1:$port/message?sessionId=does-not-exist'),
+    );
+    req.headers.contentType = ContentType.json;
+    req.write('{"jsonrpc":"2.0","id":1,"method":"ping"}');
+    final resp = await req.close();
+    expect(resp.statusCode, HttpStatus.notFound);
+    await resp.drain<void>();
+  });
 }

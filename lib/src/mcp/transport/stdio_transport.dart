@@ -2,6 +2,7 @@
 // This code is governed by the Apache License, Version 2.0.
 // Please refer to the LICENSE and AUTHORS files for details.
 
+import 'dart:async';
 import 'dart:io';
 
 import 'package:dart_mcp/stdio.dart';
@@ -17,7 +18,7 @@ import '../mcp_config.dart';
 ApolloMcpServer serveStdio({
   McpLimits limits = const McpLimits(),
   Stream<List<int>>? input,
-  IOSink? output,
+  StreamSink<List<int>>? output,
 }) {
   final channel = stdioChannel(
     input: input ?? stdin,

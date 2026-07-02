@@ -88,6 +88,11 @@ class ApolloRuntime {
     String source,
   ) async {
     final vm = ApolloVM();
+    // Reject unknown languages up front: `loadCodeUnit` throws a `StateError`
+    // (rather than returning false) when there is no parser for the language.
+    if (vm.getParser<String>(language) == null) {
+      return (null, [_err('Unsupported language: $language')]);
+    }
     final codeUnit = SourceCodeUnit(language, source, id: 'mcp');
     try {
       final ok = await vm.loadCodeUnit(codeUnit);

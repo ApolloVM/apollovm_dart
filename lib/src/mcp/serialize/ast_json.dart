@@ -111,7 +111,20 @@ Map<String, Object?> astNodeToJson(
   }
 
   if (depth < maxDepth) {
-    final children = node.children.toList(growable: false);
+    // `ASTNode.children` omits some container members: an `ASTRoot` does not
+    // list its classes, and an `ASTClassNormal` lists only its methods (not its
+    // fields or constructors). Augment the walk so the tree is complete.
+    final children = <ASTNode>[
+      ...node.children,
+      ...switch (node) {
+        ASTRoot() => [...node.imports, ...node.classes],
+        ASTClassNormal() => [
+          ...node.fields,
+          for (final set in node.constructors) ...set.functions,
+        ],
+        _ => const <ASTNode>[],
+      },
+    ];
     if (children.isNotEmpty) {
       json['children'] = [
         for (var c in children)
