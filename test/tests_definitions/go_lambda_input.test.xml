@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="Go closure passed and invoked">
+    <source language="go">
+        <![CDATA[
+type C struct {
+}
+
+func (o *C) run(a int) int {
+  triple := func(x int) int {
+    return x * 3
+  }
+  return triple(a)
+}
+        ]]>
+    </source>
+    <call class="C" function="run" return="21">
+        [7]
+    </call>
+    <output>
+        []
+    </output>
+
+    <source-generated language="go"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+package main
+
+type C struct {
+}
+
+func (o *C) run(a int) int {
+  triple := func(x int) int {
+    return x * 3
+  }
+  return triple(a)
+}
+
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+</test>
