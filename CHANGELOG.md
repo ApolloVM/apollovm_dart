@@ -1,4 +1,4 @@
-## 0.1.49
+## 1.2.0
 
 ### Language-agnostic package/module import system
 
