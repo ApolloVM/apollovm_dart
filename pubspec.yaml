@@ -30,6 +30,8 @@ dependencies:
   crypto: ^3.0.7
   path: ^1.9.1
   web: ^1.1.1
+  dart_mcp: ^0.5.2
+  stream_channel: ^2.1.4
   # Optional Dart package importer (pub.dev host / `PubDevProvider`) only.
   # The default `PackageConfigProvider` uses none of these.
   http: ^1.2.0
