@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="Go for-range over a slice">
+    <source language="go">
+        <![CDATA[
+type C struct {
+}
+
+func (o *C) run() int {
+  xs := []int{2, 4, 6}
+  total := 0
+  for _, x := range xs {
+    total = total + x
+  }
+  return total
+}
+        ]]>
+    </source>
+    <call class="C" function="run" return="12">
+        []
+    </call>
+    <output>
+        []
+    </output>
+
+    <source-generated language="go"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+package main
+
+type C struct {
+}
+
+func (o *C) run() int {
+  xs := []int{2, 4, 6}
+  total := 0
+  for _, x := range xs {
+    total = total + x
+  }
+  return total
+}
+
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+</test>

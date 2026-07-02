@@ -11,7 +11,7 @@
 #                browser-only APIs or the WasmGC engine.
 #
 # Source-language tags (the language whose source a test loads / generates):
-#   dart, java, kotlin, javascript, typescript, lua, csharp, python
+#   dart, java, kotlin, go, javascript, typescript, lua, csharp, python
 #
 # Examples:
 #   dart test -x wasm-gc              # native / wasm_run CI (no GC engine)
@@ -32,6 +32,7 @@ tags:
   dart:
   java:
   kotlin:
+  go:
   javascript:
   typescript:
   lua:

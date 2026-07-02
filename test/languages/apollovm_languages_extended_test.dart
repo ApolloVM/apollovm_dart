@@ -8,6 +8,7 @@
   'python',
   'kotlin',
   'lua',
+  'go',
 ])
 library;
 

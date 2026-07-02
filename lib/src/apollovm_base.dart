@@ -28,6 +28,9 @@ import 'languages/csharp/csharp_runner.dart';
 import 'languages/dart/dart_generator.dart';
 import 'languages/dart/dart_parser.dart';
 import 'languages/dart/dart_runner.dart';
+import 'languages/go/go_generator.dart';
+import 'languages/go/go_parser.dart';
+import 'languages/go/go_runner.dart';
 import 'languages/java/java11/java11_generator.dart';
 import 'languages/java/java11/java11_parser.dart';
 import 'languages/java/java11/java11_runner.dart';
@@ -57,7 +60,7 @@ import 'resolution/symbol_table.dart';
 /// The Apollo VM.
 class ApolloVM implements VMTypeResolver {
   // ignore: non_constant_identifier_names
-  static final String VERSION = '1.2.0';
+  static final String VERSION = '1.3.0';
 
   static int _idCount = 0;
 
@@ -79,6 +82,9 @@ class ApolloVM implements VMTypeResolver {
         return ApolloParserTypeScript.instance as ApolloCodeParser<T>;
       case 'kotlin':
         return ApolloParserKotlin.instance as ApolloCodeParser<T>;
+      case 'go':
+      case 'golang':
+        return ApolloParserGo.instance as ApolloCodeParser<T>;
       case 'cs':
       case 'c#':
       case 'csharp':
@@ -268,6 +274,12 @@ class ApolloVM implements VMTypeResolver {
           this,
           importCorePackageMath: importCorePackageMath,
         );
+      case 'go':
+      case 'golang':
+        return ApolloRunnerGo(
+          this,
+          importCorePackageMath: importCorePackageMath,
+        );
       case 'cs':
       case 'c#':
       case 'csharp':
@@ -322,6 +334,9 @@ class ApolloVM implements VMTypeResolver {
         return ApolloCodeGeneratorTypeScript(codeStorage);
       case 'kotlin':
         return ApolloCodeGeneratorKotlin(codeStorage);
+      case 'go':
+      case 'golang':
+        return ApolloCodeGeneratorGo(codeStorage);
       case 'cs':
       case 'c#':
       case 'csharp':
@@ -448,6 +463,8 @@ class ApolloVM implements VMTypeResolver {
         return 'csharp';
       case 'kt':
         return 'kotlin';
+      case 'go':
+        return 'go';
       case 'wasm':
         return 'wasm';
       case 'cpp':
