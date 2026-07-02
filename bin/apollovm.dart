@@ -19,7 +19,7 @@ void main(List<String> args) async {
         ..addCommand(CommandRun())
         ..addCommand(CommandTranslate())
         ..addCommand(CommandCompile())
-        ..addCommand(CommandServe());
+        ..addCommand(CommandMcpServe());
 
   commandRunner.argParser.addFlag(
     'version',
@@ -382,15 +382,15 @@ class CommandCompile extends CommandSourceFileBase {
 /// compile/inspect capabilities to AI agents as MCP tools.
 ///
 /// Defaults to the stdio transport; pass `--http <port>` for HTTP/SSE.
-class CommandServe extends Command<bool> {
+class CommandMcpServe extends Command<bool> {
   @override
   final String description =
       'Run the ApolloVM MCP server (Model Context Protocol) over stdio or HTTP/SSE.';
 
   @override
-  final String name = 'serve';
+  final String name = 'mcp-serve';
 
-  CommandServe() {
+  CommandMcpServe() {
     argParser
       ..addOption(
         'http',

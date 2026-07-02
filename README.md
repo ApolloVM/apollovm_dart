@@ -1191,13 +1191,13 @@ compile, and inspect code across all supported languages through MCP tools.
 Start it over stdio (the standard local transport):
 
 ```bash
-apollovm serve
+apollovm mcp-serve
 ```
 
 or over HTTP/SSE for networked agents:
 
 ```bash
-apollovm serve --http 8080          # binds 127.0.0.1:8080, SSE at /sse
+apollovm mcp-serve --http 8080          # binds 127.0.0.1:8080, SSE at /sse
 ```
 
 Example MCP client configuration (e.g. for an agent/IDE):
@@ -1205,7 +1205,7 @@ Example MCP client configuration (e.g. for an agent/IDE):
 ```json
 {
   "mcpServers": {
-    "apollovm": { "command": "apollovm", "args": ["serve"] }
+    "apollovm": { "command": "apollovm", "args": ["mcp-serve"] }
   }
 }
 ```

@@ -23,7 +23,7 @@
 
 ### MCP-native runtime: expose ApolloVM to AI agents over the Model Context Protocol
 
-- **New `apollovm serve` command** starts an MCP (Model Context Protocol) server,
+- **New `apollovm mcp-serve` command** starts an MCP (Model Context Protocol) server,
   turning ApolloVM into a programmable, sandboxed execution engine for AI agents.
   Built on the official `dart_mcp` SDK; serves over **stdio** (default) or
   **HTTP/SSE** (`--http <port>`).

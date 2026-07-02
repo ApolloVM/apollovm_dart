@@ -13,10 +13,10 @@ transports.
 
 ```bash
 # stdio (standard local transport)
-apollovm serve
+apollovm mcp-serve
 
 # HTTP/SSE (networked agents) — binds 127.0.0.1:8080, SSE stream at /sse
-apollovm serve --http 8080 [--host 0.0.0.0]
+apollovm mcp-serve --http 8080 [--host 0.0.0.0]
 ```
 
 CLI options:
