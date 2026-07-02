@@ -1,4 +1,4 @@
-## 1.3.0
+## 1.2.0
 
 ### Language-agnostic package/module import system
 
@@ -22,8 +22,6 @@
     imports and compile unchanged against the additive AST.
   - Golden-test harness extended for multi-`<source>` (cross-module) tests.
   - See `doc/module_resolution.md` and `example/apollovm_example_imports.dart`.
-
-## 1.2.0
 
 ### New language: `Go`
 

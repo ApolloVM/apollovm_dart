@@ -113,8 +113,8 @@ The canonical AST, resolver, graph, diagnostics, and runtime linking are
 language-agnostic. The richer import/export/typedef **syntax** (named/`show`/
 `hide`/wildcard/alias/re-export) is currently wired for parse+generate in
 **Dart, TypeScript, and Python**. The other languages (Java, Kotlin, C#,
-JavaScript, Lua) keep their existing basic `path`[+`prefix`] imports and compile
-unchanged against the enriched AST.
+JavaScript, Lua, Go) keep their existing basic `path`[+`prefix`] imports and
+compile unchanged against the enriched AST.
 
 ## Extending
 
