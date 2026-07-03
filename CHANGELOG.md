@@ -5,20 +5,26 @@
 - **`package:` imports can now be resolved against real pub packages**, via an
   **optional** importer exposed at `package:apollovm/apollovm_pub.dart` (kept out
   of the web-safe `apollovm.dart`).
-  - Pluggable `PackageProvider`: `PackageConfigProvider` (default, zero extra
-    deps — resolves through `.dart_tool/package_config.json`, exact pub
-    semantics) and `PubDevProvider` (opt-in — downloads/caches archives from
-    pub.dev or a configurable/private host, honoring pubspec version
-    constraints, best-effort).
+  - Pluggable `PackageProvider`: `PackageConfigProvider` (default, VM-only, zero
+    extra deps — resolves through `.dart_tool/package_config.json`, exact pub
+    semantics) and **`PubDevProvider` (web-compatible)** — downloads archives
+    from pub.dev or a configurable/private/mirror host, extracts them in memory,
+    caches them (`MemoryPackageCache` by default, `FilePackageCache` on the VM),
+    and honors pubspec version constraints. Built on web-safe libraries only
+    (`http`, `archive`, `pub_semver`, `yaml` — no `dart:io`), so it runs on the
+    VM **and** in the browser.
+  - **Web/CORS**: `PubDevProvider` accepts an injectable `http.Client`, a custom
+    host, and a `rewriteUrl` hook to route requests through a CORS proxy — a
+    ready-made proxy ships in `tool/pub_cors_proxy.dart`.
   - `DartPackageLoader` + `DartPackageImporter.provision()` fetch each reachable
     `package:` import transitively and load its source into the VM; injected via
     the new settable `ApolloVM.moduleLoader`. A generic `CompositeModuleLoader`
     chains loaders.
   - CLI: `apollovm run/translate --pub` (with `--pub-host` / `--pub-cache`)
     resolves `package:` imports before executing.
-  - The optional network provider promotes `http`, `archive`, `pub_semver`,
-    `pubspec` to direct dependencies; the default provider needs none of them.
-    Web builds get no-op stubs via conditional imports.
+  - Promotes `http`, `archive`, `pub_semver`, `yaml` to direct dependencies
+    (all web-safe); only the filesystem members (`PackageConfigProvider`,
+    `FilePackageCache`) are behind conditional imports with web stubs.
   - See `doc/module_resolution.md` and `example/apollovm_example_pub_importer.dart`.
 
 ### Language-agnostic package/module import system

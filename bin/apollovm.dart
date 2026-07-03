@@ -102,11 +102,16 @@ abstract class CommandSourceFileBase extends Command<bool> {
     final host = pubHost;
     final PackageProvider provider;
     if (host != null) {
+      var cacheDir = pubCache;
       var pubspecFile = File('pubspec.yaml');
       provider = PubDevProvider(
         host: host,
-        cacheDir: pubCache,
-        pubspecPath: pubspecFile.existsSync() ? pubspecFile.path : null,
+        cache: cacheDir != null
+            ? FilePackageCache(cacheDir)
+            : MemoryPackageCache(),
+        pubspecYaml: pubspecFile.existsSync()
+            ? pubspecFile.readAsStringSync()
+            : null,
       );
     } else {
       provider = PackageConfigProvider(runPubGetIfMissing: true);

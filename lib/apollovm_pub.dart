@@ -29,6 +29,10 @@
 library;
 
 export 'src/pub/dart_package_loader.dart';
+export 'src/pub/package_cache.dart';
 export 'src/pub/package_provider.dart';
+export 'src/pub/pubdev_provider.dart';
 export 'src/resolution/composite_module_loader.dart';
+// IO-only members (`PackageConfigProvider`, `FilePackageCache`); web builds get
+// no-op/in-memory stubs. `PubDevProvider` above is web-safe and unconditional.
 export 'src/pub/pub_stub.dart' if (dart.library.io) 'src/pub/pub_io.dart';

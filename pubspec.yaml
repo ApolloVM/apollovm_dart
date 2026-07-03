@@ -32,17 +32,18 @@ dependencies:
   web: ^1.1.1
   dart_mcp: ^0.5.2
   stream_channel: ^2.1.4
-  # Optional Dart package importer (pub.dev host / `PubDevProvider`) only.
+  # Optional Dart package importer (`PubDevProvider`) only — all web-safe.
   # The default `PackageConfigProvider` uses none of these.
   http: ^1.2.0
   archive: ^4.0.0
   pub_semver: ^2.1.4
-  pubspec: ^2.3.0
+  yaml: ^3.1.2
 
 dev_dependencies:
   lints: ^6.1.0
   dependency_validator: ^5.0.5
   test: ^1.31.1
+  pubspec: ^2.3.0
   xml: ^6.6.1
   build_web_compilers: ^4.8.0
   build_runner: ^2.15.0
