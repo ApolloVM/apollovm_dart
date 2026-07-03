@@ -1,3 +1,14 @@
+## 1.2.1
+
+- Fix broken 1.2.0 package on pub.dev: the `.pubignore` pattern `lsp/` was
+  unanchored, so besides the intended root `lsp/` dev-tooling directory it also
+  stripped `lib/src/lsp/` (the LSP implementation) from the published archive,
+  making `dart pub global activate apollovm` fail to compile. The pattern is
+  now anchored as `/lsp/`.
+- `.pubignore` now also repeats the relevant `.gitignore` exclusions
+  (`*.exe`, `*.iml`, etc.), since a `.pubignore` file *replaces* `.gitignore`
+  for publishing — 1.2.0 accidentally shipped a 7 MB `bin/apollovm.exe`.
+
 ## 1.2.0
 
 ### Language Server Protocol (LSP 3.17) server

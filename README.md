@@ -114,11 +114,7 @@ The **Wasm** column shows what the on-the-fly WebAssembly compiler currently sup
 
 ### Classes, types & OOP
 
-Legend: ✅ supported · 🧩 supported via the language's idiom · 🚧 not yet supported (exists in the
-language but not implemented yet) · 🚫 not applicable (the language has no such construct).
-
-The **Wasm** column shows what the on-the-fly WebAssembly compiler currently supports
-(any source language is compiled through the same shared AST).
+Same legend and **Wasm** column semantics as the table above.
 
 | Feature | Dart | Java | Kotlin | Go | C# | JS | TS | Lua | Python | Wasm |
 |---|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|
@@ -164,7 +160,8 @@ visibility follows identifier capitalization. Inheritance, rich enums and generi
 
 ## Command Line Usage
 
-You can use the executable `apollovm` to `run` or `translate` source codes. 
+You can use the executable `apollovm` to `run`, `translate` or `compile` source
+files, and to start the [MCP](#mcp-server) and [LSP](#language-server-lsp) servers.
 
 First you should activate the package globally:
 
@@ -185,6 +182,9 @@ Global options:
 -v, --version    Show ApolloVM version.
 
 Available commands:
+  compile     Compile a source file to a binary target (WebAssembly).
+  lsp         Start the ApolloVM Language Server (LSP) over stdin/stdout.
+  mcp         ApolloVM MCP (Model Context Protocol) server and tools.
   run         Run a source file.
   translate   Translate a source file.
 
@@ -223,51 +223,9 @@ class Hello {
 <<<< [SOURCES_END] >>>>
 ```
 
-The same commands work for JavaScript (`.js`) files. To `run` a JavaScript file:
-```shell
-$> apollovm run -v test/hello_world.js foo
-## [RUN]        File: 'test/hello_world.js' ; language: javascript > main( [foo] )
-Hello World!
-- name: foo
-```
-
-To `translate` a JavaScript file to Dart:
-```shell
-$> apollovm translate -v --target dart test/hello_world.js
-## [TRANSLATE]  File: 'test/hello_world.js' ; language: javascript > targetLanguage: dart
-<<<< [SOURCES_BEGIN] >>>>
-<<<< NAMESPACE="" >>>>
-<<<< CODE_UNIT_START="/test/hello_world.js" >>>>
-class Hello {
-
-  static void main(dynamic name) {
-    print('Hello World!');
-    print('- name: ${name}');
-  }
-
-}
-<<<< CODE_UNIT_END="/test/hello_world.js" >>>>
-<<<< [SOURCES_END] >>>>
-```
-
-The same commands work for TypeScript (`.ts`) files. To `translate` a TypeScript file to Dart:
-```shell
-$> apollovm translate -v --target dart test/hello_world.ts
-## [TRANSLATE]  File: 'test/hello_world.ts' ; language: typescript > targetLanguage: dart
-<<<< [SOURCES_BEGIN] >>>>
-<<<< NAMESPACE="" >>>>
-<<<< CODE_UNIT_START="/test/hello_world.ts" >>>>
-class Hello {
-
-  static void main(String name) {
-    print('Hello World!');
-    print('- name: ${name}');
-  }
-
-}
-<<<< CODE_UNIT_END="/test/hello_world.ts" >>>>
-<<<< [SOURCES_END] >>>>
-```
+The same commands work for any supported language — the language is detected
+from the file extension (`.dart`, `.java`, `.kt`, `.go`, `.cs`, `.js`, `.ts`,
+`.lua`, `.py`), and `--target` accepts any of them.
 
 ### Compiling ApolloVM executable.
 
@@ -300,7 +258,10 @@ even if you don't have Dart installed.
 
 ## Package Usage
 
-The ApolloVM is still in alpha stage. Below, we can see simple usage examples in Dart, Java, Kotlin, Go, C#, JavaScript, TypeScript, Lua and Python.
+The examples below load source code into the VM, execute it, and regenerate it
+in another language. The first two (Dart and Java) show the full host code; the
+host code is identical for every language — only the language id passed to
+`SourceCodeUnit(...)` and `vm.createRunner(...)` changes.
 
 ### Language: `Dart`
 
@@ -539,72 +500,22 @@ class Foo {
 <<<< [SOURCES_END] >>>>
 ```
 
+The remaining languages follow the same pattern, so only each language's source
+snippet is shown. Two notes that apply below: instance (non-`static`) methods —
+Kotlin's `greet`, Go receiver methods, Lua's `Foo:main`, Python's `self`
+methods — need a class instance, provided via `classInstanceFields: const {}`;
+and each language's native print (`println`, `fmt.Println`, …) is normalized to
+the VM's `print`, mapped as an external function.
+
 ### Language: `Kotlin`
 
-Loading Kotlin source code, executing it, and then converting it to Dart:
-
-```dart
-import 'package:apollovm/apollovm.dart';
-
-void main() async {
-  var vm = ApolloVM();
-
-  var codeUnit = SourceCodeUnit(
-          'kotlin',
-          r'''
-            class Foo {
-              fun greet(name: String, count: Int) {
-                val msg = "Hello $name, you have $count messages."
-                println(msg)
-              }
-            }
-          ''',
-          id: 'test');
-
-  var loadOK = await vm.loadCodeUnit(codeUnit);
-
-  if (!loadOK) {
-    throw StateError('Error parsing Kotlin code!');
-  }
-
-  var kotlinRunner = vm.createRunner('kotlin')!;
-
-  // Map the `print` function in the VM:
-  kotlinRunner.externalPrintFunction = (o) => print("» $o");
-
-  // `greet` is an instance method (not `static`), so it needs a class instance;
-  // `classInstanceFields` provides one (here with no fields).
-  await kotlinRunner.executeClassMethod('', 'Foo', 'greet',
-      positionalParameters: ['World', 3], classInstanceFields: const {});
-
-  print('---------------------------------------');
-
-  // Regenerate code in Dart:
-  var codeStorageDart = vm.generateAllCodeIn('dart');
-  var allSourcesDart = await codeStorageDart.writeAllSources();
-  print(allSourcesDart.toString());
-}
-```
-
-*Note: the parsed function `println` is normalized to the VM's `print` (mapped as an external function).*
-
-Output:
-```text
-» Hello World, you have 3 messages.
----------------------------------------
-<<<< [SOURCES_BEGIN] >>>>
-<<<< NAMESPACE="" >>>>
-<<<< CODE_UNIT_START="/test" >>>>
+```kotlin
 class Foo {
-
-  void greet(String name, int count) {
-    final msg = 'Hello $name, you have $count messages.';
-    print(msg);
+  fun greet(name: String, count: Int) {
+    val msg = "Hello $name, you have $count messages."
+    println(msg)
   }
-
 }
-<<<< CODE_UNIT_END="/test" >>>>
-<<<< [SOURCES_END] >>>>
 ```
 
 Kotlin support reaches parity with the Java feature set: top-level and class `fun`
@@ -614,71 +525,14 @@ translatable to Dart, Java or back to Kotlin.
 
 ### Language: `Go`
 
-Loading Go source code, executing it, and then converting it to Dart:
-
-```dart
-import 'package:apollovm/apollovm.dart';
-
-void main() async {
-  var vm = ApolloVM();
-
-  var codeUnit = SourceCodeUnit(
-          'go',
-          r'''
-            type Foo struct {
-            }
-
-            func (o *Foo) greet(name string, count int) {
-              msg := "Hello " + name + ", you have " + count + " messages."
-              fmt.Println(msg)
-            }
-          ''',
-          id: 'test');
-
-  var loadOK = await vm.loadCodeUnit(codeUnit);
-
-  if (!loadOK) {
-    throw StateError('Error parsing Go code!');
-  }
-
-  var goRunner = vm.createRunner('go')!;
-
-  // Map the `print` function in the VM:
-  goRunner.externalPrintFunction = (o) => print("» $o");
-
-  // `greet` is a struct method (needs a receiver instance); `classInstanceFields`
-  // provides one (here with no fields).
-  await goRunner.executeClassMethod('', 'Foo', 'greet',
-      positionalParameters: ['World', 3], classInstanceFields: const {});
-
-  print('---------------------------------------');
-
-  // Regenerate code in Dart:
-  var codeStorageDart = vm.generateAllCodeIn('dart');
-  var allSourcesDart = await codeStorageDart.writeAllSources();
-  print(allSourcesDart.toString());
+```go
+type Foo struct {
 }
-```
 
-*Note: the parsed function `fmt.Println` is normalized to the VM's `print` (mapped as an external function).*
-
-Output:
-```text
-» Hello World, you have 3 messages.
----------------------------------------
-<<<< [SOURCES_BEGIN] >>>>
-<<<< NAMESPACE="" >>>>
-<<<< CODE_UNIT_START="/test" >>>>
-class Foo {
-
-  void greet(String name, int count) {
-    var msg = 'Hello $name, you have $count messages.';
-    print(msg);
-  }
-
+func (o *Foo) greet(name string, count int) {
+  msg := "Hello " + name + ", you have " + count + " messages."
+  fmt.Println(msg)
 }
-<<<< CODE_UNIT_END="/test" >>>>
-<<<< [SOURCES_END] >>>>
 ```
 
 Go is bidirectional: ApolloVM parses `.go`/`go` source into the AST, executes it, and
@@ -692,68 +546,13 @@ Dart, Java, Kotlin, C#, JavaScript, TypeScript and Python.
 
 ### Language: `JavaScript`
 
-Loading JavaScript (modern ES) source code, executing it, and then converting it to Dart:
-
-```dart
-import 'package:apollovm/apollovm.dart';
-
-void main() async {
-  var vm = ApolloVM();
-
-  var codeUnit = SourceCodeUnit(
-          'javascript',
-          r'''
-            class Foo {
-              static greet(name, count) {
-                let msg = `Hello ${name}, you have ${count} messages.`;
-                print(msg);
-              }
-            }
-          ''',
-          id: 'test');
-
-  var loadOK = await vm.loadCodeUnit(codeUnit);
-
-  if (!loadOK) {
-    throw StateError('Error parsing JavaScript code!');
-  }
-
-  var jsRunner = vm.createRunner('javascript')!;
-
-  // Map the `print` function in the VM:
-  jsRunner.externalPrintFunction = (o) => print("» $o");
-
-  await jsRunner.executeClassMethod('', 'Foo', 'greet',
-      positionalParameters: ['World', 3]);
-
-  print('---------------------------------------');
-
-  // Regenerate code in Dart:
-  var codeStorageDart = vm.generateAllCodeIn('dart');
-  var allSourcesDart = await codeStorageDart.writeAllSources();
-  print(allSourcesDart.toString());
-}
-```
-
-*Note: the parsed function `print` was mapped as an external function.*
-
-Output:
-```text
-» Hello World, you have 3 messages.
----------------------------------------
-<<<< [SOURCES_BEGIN] >>>>
-<<<< NAMESPACE="" >>>>
-<<<< CODE_UNIT_START="/test" >>>>
+```javascript
 class Foo {
-
-  static void greet(dynamic name, dynamic count) {
-    var msg = 'Hello ${name}, you have ${count} messages.';
+  static greet(name, count) {
+    let msg = `Hello ${name}, you have ${count} messages.`;
     print(msg);
   }
-
 }
-<<<< CODE_UNIT_END="/test" >>>>
-<<<< [SOURCES_END] >>>>
 ```
 
 JavaScript is fully bidirectional: ApolloVM can parse `.js`/`javascript` source into
@@ -768,68 +567,13 @@ plus **type annotations** (variables, parameters, return types, fields), **inter
 **enums**, and **access modifiers** (`public`/`private`/`protected`/`readonly`/`static`/
 `abstract`).
 
-Loading TypeScript source code, executing it, and then converting it to Dart:
-
-```dart
-import 'package:apollovm/apollovm.dart';
-
-void main() async {
-  var vm = ApolloVM();
-
-  var codeUnit = SourceCodeUnit(
-          'typescript',
-          r'''
-            class Foo {
-              static greet(name: string, count: number): void {
-                let msg: string = `Hello ${name}, you have ${count} messages.`;
-                print(msg);
-              }
-            }
-          ''',
-          id: 'test');
-
-  var loadOK = await vm.loadCodeUnit(codeUnit);
-
-  if (!loadOK) {
-    throw StateError('Error parsing TypeScript code!');
-  }
-
-  var tsRunner = vm.createRunner('typescript')!;
-
-  // Map the `print` function in the VM:
-  tsRunner.externalPrintFunction = (o) => print("» $o");
-
-  await tsRunner.executeClassMethod('', 'Foo', 'greet',
-      positionalParameters: ['World', 3]);
-
-  print('---------------------------------------');
-
-  // Regenerate code in Dart:
-  var codeStorageDart = vm.generateAllCodeIn('dart');
-  var allSourcesDart = await codeStorageDart.writeAllSources();
-  print(allSourcesDart.toString());
-}
-```
-
-*Note: the parsed function `print` was mapped as an external function.*
-
-Output:
-```text
-» Hello World, you have 3 messages.
----------------------------------------
-<<<< [SOURCES_BEGIN] >>>>
-<<<< NAMESPACE="" >>>>
-<<<< CODE_UNIT_START="/test" >>>>
+```typescript
 class Foo {
-
-  static void greet(String name, num count) {
-    String msg = 'Hello ${name}, you have ${count} messages.';
+  static greet(name: string, count: number): void {
+    let msg: string = `Hello ${name}, you have ${count} messages.`;
     print(msg);
   }
-
 }
-<<<< CODE_UNIT_END="/test" >>>>
-<<<< [SOURCES_END] >>>>
 ```
 
 TypeScript is bidirectional: ApolloVM parses `.ts`/`typescript` source (including
@@ -840,79 +584,17 @@ so they cross-translate between Dart, TypeScript and JavaScript.
 
 ### Language: `Lua`
 
-Loading Lua source code, executing it, and then converting it to Dart:
+```lua
+Foo = {}
+Foo.__index = Foo
 
-```dart
-import 'package:apollovm/apollovm.dart';
-
-void main() async {
-  var vm = ApolloVM();
-
-  var codeUnit = SourceCodeUnit(
-          'lua',
-          r'''
-            Foo = {}
-            Foo.__index = Foo
-
-            function Foo:main(title, a, b, c)
-              local sumAB = a + b
-              local sumABC = a + b + c
-              print(title)
-              print(sumAB)
-              print(sumABC)
-            end
-          ''',
-          id: 'test');
-
-  var loadOK = await vm.loadCodeUnit(codeUnit);
-
-  if (!loadOK) {
-    throw StateError('Error parsing Lua code!');
-  }
-
-  var luaRunner = vm.createRunner('lua')!;
-
-  // Map the `print` function in the VM:
-  luaRunner.externalPrintFunction = (o) => print("» $o");
-
-  // `Foo:main` is an instance method (uses `self`), so it needs a class
-  // instance; `classInstanceFields` provides one (here with no fields).
-  await luaRunner.executeClassMethod('', 'Foo', 'main',
-      positionalParameters: ['Sums:', 10, 20, 30], classInstanceFields: const {});
-
-  print('---------------------------------------');
-
-  // Regenerate code in Dart:
-  var codeStorageDart = vm.generateAllCodeIn('dart');
-  var allSourcesDart = await codeStorageDart.writeAllSources();
-  print(allSourcesDart.toString());
-}
-```
-
-*Note: the parsed function `print` was mapped as an external function.*
-
-Output:
-```text
-» Sums:
-» 30
-» 60
----------------------------------------
-<<<< [SOURCES_BEGIN] >>>>
-<<<< NAMESPACE="" >>>>
-<<<< CODE_UNIT_START="/test" >>>>
-class Foo {
-
-  void main(dynamic title, dynamic a, dynamic b, dynamic c) {
-    var sumAB = a + b;
-    var sumABC = (a + b) + c;
-    print(title);
-    print(sumAB);
-    print(sumABC);
-  }
-
-}
-<<<< CODE_UNIT_END="/test" >>>>
-<<<< [SOURCES_END] >>>>
+function Foo:main(title, a, b, c)
+  local sumAB = a + b
+  local sumABC = a + b + c
+  print(title)
+  print(sumAB)
+  print(sumABC)
+end
 ```
 
 Lua is bidirectional: ApolloVM parses `.lua` source into the AST, executes it, and
@@ -924,68 +606,11 @@ to and from Dart, Java, Kotlin, JavaScript and TypeScript.
 
 ### Language: `Python`
 
-Loading Python source code, executing it, and then converting it to Dart:
-
-```dart
-import 'package:apollovm/apollovm.dart';
-
-void main() async {
-  var vm = ApolloVM();
-
-  var codeUnit = SourceCodeUnit(
-          'python',
-          r'''
-            class Foo:
-                def greet(self, name, count):
-                    msg = f'Hello {name}, you have {count} messages.'
-                    print(msg)
-          ''',
-          id: 'test');
-
-  var loadOK = await vm.loadCodeUnit(codeUnit);
-
-  if (!loadOK) {
-    throw StateError('Error parsing Python code!');
-  }
-
-  var pyRunner = vm.createRunner('python')!;
-
-  // Map the `print` function in the VM:
-  pyRunner.externalPrintFunction = (o) => print("» $o");
-
-  // `greet` is an instance method (takes `self`), so it needs a class instance;
-  // `classInstanceFields` provides one (here with no fields).
-  await pyRunner.executeClassMethod('', 'Foo', 'greet',
-      positionalParameters: ['World', 3], classInstanceFields: const {});
-
-  print('---------------------------------------');
-
-  // Regenerate code in Dart:
-  var codeStorageDart = vm.generateAllCodeIn('dart');
-  var allSourcesDart = await codeStorageDart.writeAllSources();
-  print(allSourcesDart.toString());
-}
-```
-
-*Note: the parsed function `print` was mapped as an external function.*
-
-Output:
-```text
-» Hello World, you have 3 messages.
----------------------------------------
-<<<< [SOURCES_BEGIN] >>>>
-<<<< NAMESPACE="" >>>>
-<<<< CODE_UNIT_START="/test" >>>>
-class Foo {
-
-  void greet(dynamic name, dynamic count) {
-    var msg = 'Hello ${name}, you have ${count} messages.';
-    print(msg);
-  }
-
-}
-<<<< CODE_UNIT_END="/test" >>>>
-<<<< [SOURCES_END] >>>>
+```python
+class Foo:
+    def greet(self, name, count):
+        msg = f'Hello {name}, you have {count} messages.'
+        print(msg)
 ```
 
 Python is bidirectional: ApolloVM parses `.py`/`python` source into the AST, executes it,
@@ -1010,18 +635,7 @@ classes, closures, lists/maps, and `async`/`await` (via Asyncify); see the
 [feature table](#supported-features). Constructs not yet compiled to Wasm are limited to a few
 higher-level features (e.g. non-integer `switch`).*
 
-Example of Dart code compiled to Wasm:
-```dart
-int main( int a , double b ) {
-  var x = (a + b) / 2 ;
-  if (x > 1000) {
-    return -1;
-  }
-  return x ;
-}
-```
-
-Example code to compile to WebAssembly (Wasm):
+Example compiling Dart code to WebAssembly (Wasm):
 ```dart
 import 'dart:typed_data';
 import 'package:apollovm/apollovm.dart';
@@ -1264,6 +878,52 @@ The embeddable API lives in `package:apollovm/apollovm_mcp.dart`
 
 -----------------------------
 
+## Language Server (LSP)
+
+ApolloVM ships a **Language Server (LSP 3.17)** for its supported languages,
+included in the `apollovm` package as the separate library
+`package:apollovm/apollovm_lsp.dart`.
+
+Start it over stdio (for local editors):
+
+```bash
+apollovm lsp
+```
+
+The library imports no `dart:io`, so a browser IDE or an AI agent can embed the
+server and drive it with decoded JSON-RPC messages via `MessageLspEndpoint`
+(`StreamLspEndpoint` provides `Content-Length` framing for stdio/sockets):
+
+```dart
+import 'package:apollovm/apollovm_lsp.dart';
+
+final endpoint = MessageLspEndpoint((msg) => hostPort.send(msg)); // outgoing
+final server = LspServer(endpoint);
+endpoint.receive(incomingMessage); // deliver each incoming JSON-RPC object
+```
+
+A minimal VS Code client, an example workspace and a latency benchmark live in
+the repository's [`lsp/`](lsp/) directory (not part of the published package) —
+see [`lsp/README.md`](lsp/README.md) for features, design and editor setup.
+
+-----------------------------
+
+## Module Imports & Dart Package Importer
+
+ApolloVM has a language-agnostic module import system: `import` declarations in
+loaded code resolve through pluggable `ModuleLoader`s (in-memory, filesystem, or
+custom). See [`doc/module_resolution.md`](doc/module_resolution.md).
+
+For Dart code, the **opt-in** library `package:apollovm/apollovm_pub.dart` adds
+a `package:` importer that resolves dependencies from a local
+`package_config.json` (`PackageConfigProvider`) or directly from pub.dev
+(`PubDevProvider`, web-compatible) — see
+[`example/apollovm_example_pub_importer.dart`](example/apollovm_example_pub_importer.dart).
+It is intentionally not exported from `package:apollovm/apollovm.dart`, so VMs
+that don't import it stay fully sandboxed.
+
+-----------------------------
+
 ## See Also
 
 ApolloVM uses [PetitParser for Dart][petitparser-pub] to define the grammars of the languages and to analyze the source codes.
@@ -1316,9 +976,6 @@ Any help from the open-source community is always welcome and needed:
 
 - Go: extended support (`panic`/`recover`/`defer` for `try`/`catch`/`throw`, interfaces + struct embedding for inheritance, `const`/`iota` enums, and `[T any]` generics). *Top-level and struct receiver `func`s, `struct` types + fields + factory constructors, `var`/`:=` with type inference, `if`/`else if`/`else`, `for` (C-style, condition-only, `range`, infinite), `switch`, slices/maps, closures, string `+` concatenation, and `fmt.Println` (normalized to `print`) are already supported.*
   - *See the [Go implementation (at "lib/src/languages/go")](https://github.com/ApolloVM/apollovm_dart/tree/master/lib/src/languages/go).*
-
-
-- Package Importer.
 
 
 - Full Wasm support:
