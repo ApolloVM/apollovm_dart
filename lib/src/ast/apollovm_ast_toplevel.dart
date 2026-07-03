@@ -11,6 +11,7 @@ import 'package:collection/collection.dart'
 
 import '../apollovm_base.dart';
 import '../core/apollovm_core_base.dart';
+import '../resolution/symbol_table.dart';
 import 'apollovm_ast_base.dart';
 import 'apollovm_ast_expression.dart';
 import 'apollovm_ast_statement.dart';
@@ -213,6 +214,10 @@ class ASTEntryPointBlock extends ASTBlock {
       var rootStatus = ASTRunStatus();
       _rootContext = rootContext;
 
+      // Thread this module's resolved import scope onto the runtime context so
+      // scoped (prefixed and unprefixed) cross-module resolution works.
+      rootContext.importScope = _resolvedImportScope;
+
       ApolloImportManager? prevImportManager;
       if (importManager != null) {
         prevImportManager = rootContext.importManager;
@@ -248,6 +253,19 @@ class ASTEntryPointBlock extends ASTBlock {
 
   VMContext createContext(VMTypeResolver? typeResolver) =>
       VMScopeContext(this, typeResolver: typeResolver);
+
+  /// The resolved [ImportScope] of the enclosing module ([ASTRoot]). For an
+  /// [ASTRoot] entry block this is its own scope; for an [ASTClass] it walks the
+  /// `parentNode` chain up to the owning root.
+  ImportScope? get _resolvedImportScope {
+    if (this is ASTRoot) return (this as ASTRoot).importScope;
+    ASTNode? n = parentNode;
+    while (n != null) {
+      if (n is ASTRoot) return n.importScope;
+      n = n.parentNode;
+    }
+    return null;
+  }
 }
 
 /// AST base of a Class.
@@ -1107,6 +1125,48 @@ class ASTClassEnum extends ASTClassNormal {
   String toString() => 'enum $name';
 }
 
+/// A top-level type alias / typedef, e.g. Dart `typedef UserId = int;`,
+/// TypeScript `type UserId = number;`. A language-agnostic symbol whose
+/// resolved type is [targetType].
+class ASTTypeAlias with ASTNode implements ASTTypedNode {
+  final String name;
+
+  final ASTType targetType;
+
+  ASTTypeAlias(this.name, this.targetType);
+
+  @override
+  Iterable<ASTNode> get children => [targetType];
+
+  @override
+  FutureOr<ASTType> resolveType(VMContext? context) => targetType;
+
+  @override
+  FutureOr<ASTType> resolveRuntimeType(VMContext context, ASTNode? node) =>
+      targetType;
+
+  @override
+  void associateToType(ASTTypedNode node) {}
+
+  ASTNode? _parentNode;
+
+  @override
+  ASTNode? get parentNode => _parentNode;
+
+  @override
+  void resolveNode(ASTNode? parentNode) {
+    _parentNode = parentNode;
+    cacheDescendantChildren();
+  }
+
+  @override
+  ASTNode? getNodeIdentifier(String name, {ASTNode? requester}) =>
+      parentNode?.getNodeIdentifier(name, requester: requester);
+
+  @override
+  String toString() => 'typedef $name = $targetType';
+}
+
 /// An AST Root.
 ///
 /// A parse of a [CodeUnit] generates an [ASTRoot].
@@ -1118,6 +1178,10 @@ class ASTRoot extends ASTEntryPointBlock {
     super.resolveNode(parentNode);
 
     for (var e in _classes.values) {
+      e.resolveNode(this);
+    }
+
+    for (var e in _typeAliases.values) {
       e.resolveNode(this);
     }
   }
@@ -1132,6 +1196,14 @@ class ASTRoot extends ASTEntryPointBlock {
     var userClass = getClass(name);
     if (userClass != null) return userClass;
 
+    // A symbol imported from another module (class/enum/type-alias/function).
+    var imported = importScope?.resolveNode(name);
+    if (imported != null) return imported;
+
+    // A top-level type alias (`typedef`).
+    var typeAlias = _typeAliases[name];
+    if (typeAlias != null) return typeAlias;
+
     var clazz = ApolloVMCore.getClass(name);
     if (clazz != null) return clazz;
 
@@ -1140,11 +1212,90 @@ class ASTRoot extends ASTEntryPointBlock {
 
   String namespace = '';
 
+  /// The module identifier (usually the [CodeUnit.id]) this root was loaded as.
+  /// Set by the resolver; used to key the module in the dependency graph/cache.
+  String? moduleId;
+
+  /// The resolved import scope for this module (imported symbols, prefixes).
+  /// Set by the module resolver before execution; consulted by
+  /// [getNodeIdentifier] and [getFunction] before the greedy fallback.
+  ImportScope? importScope;
+
   final Set<ASTStatementImport> _imports = {};
 
   Set<ASTStatementImport> get imports => UnmodifiableSetView(_imports);
 
   void addImport(ASTStatementImport import) => _imports.add(import);
+
+  final Set<ASTStatementExport> _exports = {};
+
+  Set<ASTStatementExport> get exports => UnmodifiableSetView(_exports);
+
+  void addExport(ASTStatementExport export) {
+    _exports.add(export);
+    _exportedSymbolNames = null;
+  }
+
+  final Map<String, ASTTypeAlias> _typeAliases = <String, ASTTypeAlias>{};
+
+  List<ASTTypeAlias> get typeAliases => _typeAliases.values.toList();
+
+  void addTypeAlias(ASTTypeAlias typeAlias) {
+    _typeAliases[typeAlias.name] = typeAlias;
+    _exportedSymbolNames = null;
+  }
+
+  ASTTypeAlias? getTypeAlias(String name) => _typeAliases[name];
+
+  Set<String>? _exportedSymbolNames;
+
+  /// The set of top-level symbol names visible to importers of this module.
+  ///
+  /// When the module declares no explicit [exports], every top-level
+  /// function, class, enum, and type alias is exported (Dart/Python-style
+  /// "public by default"). When explicit `export { ... }` clauses are present,
+  /// only the listed (own, path-less) symbols are exported. Re-exports with a
+  /// [ASTStatementExport.path] are resolved by the module resolver, not here.
+  Set<String> get exportedSymbolNames {
+    var cached = _exportedSymbolNames;
+    if (cached != null) return cached;
+
+    var all = <String>{
+      ...functions.map((f) => f.name),
+      ..._classes.keys,
+      ..._typeAliases.keys,
+    };
+
+    var explicit = _exports
+        .where((e) => e.path == null && e.symbols.isNotEmpty)
+        .expand((e) => e.symbols.map((s) => s.name))
+        .toSet();
+
+    Set<String> result;
+    if (explicit.isEmpty) {
+      result = all;
+    } else {
+      // Only explicitly-exported own symbols are visible.
+      result = explicit.intersection(all);
+    }
+
+    return _exportedSymbolNames = UnmodifiableSetView(result);
+  }
+
+  /// Own top-level symbol names that are NOT declared (used by the resolver to
+  /// flag invalid exports).
+  Set<String> exportNamesNotDeclared() {
+    var all = <String>{
+      ...functions.map((f) => f.name),
+      ..._classes.keys,
+      ..._typeAliases.keys,
+    };
+    return _exports
+        .where((e) => e.path == null)
+        .expand((e) => e.symbols.map((s) => s.name))
+        .where((n) => !all.contains(n))
+        .toSet();
+  }
 
   @override
   ASTInvocableDeclaration? getFunction(
@@ -1162,6 +1313,24 @@ class ASTRoot extends ASTEntryPointBlock {
       if (constructor != null &&
           constructor.matchesParametersTypes(parametersSignature, false)) {
         return constructor;
+      }
+    }
+
+    // Symbols imported from other modules (scoped, honors show/alias/wildcard).
+    var scope = importScope ?? context.importScope;
+    if (scope != null) {
+      var importedSet = scope.resolveFunctionSet(fName);
+      if (importedSet != null) {
+        return importedSet.get(parametersSignature, false);
+      }
+
+      var importedClass = scope.resolveClass(fName);
+      if (importedClass != null) {
+        var constructor = importedClass.getConstructor('', null, context);
+        if (constructor != null &&
+            constructor.matchesParametersTypes(parametersSignature, false)) {
+          return constructor;
+        }
       }
     }
 

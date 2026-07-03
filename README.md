@@ -1182,6 +1182,88 @@ Generated `Wasm` bytes with description:
 
 -----------------------------
 
+## MCP Server
+
+ApolloVM ships an **MCP (Model Context Protocol)** server that exposes the VM as a
+programmable execution engine for AI agents. Agents can parse, execute, translate,
+compile, and inspect code across all supported languages through MCP tools.
+
+Start it over stdio (the standard local transport):
+
+```bash
+apollovm mcp serve
+```
+
+or over HTTP/SSE for networked agents:
+
+```bash
+apollovm mcp serve --http 8080          # binds 127.0.0.1:8080, SSE at /sse
+```
+
+Example MCP client configuration (e.g. for an agent/IDE):
+
+```json
+{
+  "mcpServers": {
+    "apollovm": { "command": "apollovm", "args": ["mcp", "serve"] }
+  }
+}
+```
+
+### `mcp` subcommands
+
+| Subcommand | Purpose |
+|------------|---------|
+| `mcp serve` | Run the MCP server over stdio (default) or HTTP/SSE (`--http <port>`). |
+| `mcp list` | List the available tools (names, descriptions, input schemas) as JSON. |
+| `mcp call <tool>` | Invoke one tool once and print its JSON result — source via `--source`/`--file`/stdin, args via flags. Use it from scripts/CI with no MCP client. |
+| `mcp info` | Print server metadata: version, MCP protocol, transports, languages, limits. |
+| `mcp schema [tool]` | Print the JSON input schema(s) for one or all tools. |
+| `mcp doctor` | Check the server/tools and report capabilities (e.g. whether the native `wasm_run` lib is available to run compiled Wasm). |
+
+```bash
+# Run a tool from the shell without an MCP client:
+apollovm mcp call apollovm.execute --language dart \
+  --source 'int main(List a){ print("hi"); return 42; }'
+
+apollovm mcp call apollovm.translate --from go --to dart --file main.go
+```
+
+### Tools
+
+| Tool | Input | Output |
+|------|-------|--------|
+| `apollovm.parse` | `language`, `source` | parse `ok`, `diagnostics`, `summary` (classes/functions/imports) |
+| `apollovm.execute` | `language`, `source`, `function?`, `className?`, `args?`, `timeoutMs?` | `result`, `output` (console), `diagnostics` |
+| `apollovm.translate` | `from`, `to`, `source` | `generated` source |
+| `apollovm.ast` | `language`, `source`, `maxDepth?` | full AST as JSON |
+| `apollovm.symbols` | `language`, `source` | symbol graph (functions/classes/fields/methods/constructors) |
+| `apollovm.types` | `language`, `source` | deduplicated type table (`class`/`builtin`/`unknown`) |
+| `apollovm.wasm` | `language`, `source` | WebAssembly modules as base64 bytes |
+
+Supported `language` values: `dart`, `java`, `kotlin`, `go`, `csharp`, `javascript`,
+`typescript`, `lua`, `python`, `wasm`.
+
+### Security model
+
+- **File/network access is denied by construction** — executed code is only ever
+  granted `print`; no filesystem or socket bridge is exposed, and tools operate on
+  inline source strings only (never a path).
+- **Timeout / CPU** — `apollovm.execute` runs inside a killable **isolate** by default,
+  so a hard wall-clock timeout is enforced even against a runaway synchronous loop
+  (`--timeout-ms`, default 5000). Other tools run in-process. Which tools use an
+  isolate is configurable (`--isolate-tools`).
+- **Input/output caps** — `--max-source-chars` (default 262144) and
+  `--max-output-chars` (default 65536) bound request/response size.
+- **Memory** — Dart has no per-isolate hard heap cap, so memory limiting is
+  best-effort; run the process with `--old_gen_heap_size=<MB>` for a hard ceiling.
+
+The embeddable API lives in `package:apollovm/apollovm_mcp.dart`
+(`ApolloMcpServer`, `serveStdio`, `HttpSseTransport`, `McpLimits`). See
+[`doc/MCP.md`](doc/MCP.md) for the full tool schemas and protocol notes.
+
+-----------------------------
+
 ## See Also
 
 ApolloVM uses [PetitParser for Dart][petitparser-pub] to define the grammars of the languages and to analyze the source codes.

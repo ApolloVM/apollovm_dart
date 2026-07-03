@@ -28,6 +28,55 @@
 - Verified with `dart analyze` (clean), 17 passing tests in `test/lsp/`
   (including full stdio and message-level protocol sessions), and a benchmark
   comfortably under its latency targets (open, hover, completion).
+### Optional Dart package importer (pub.dev / pubspec-compatible)
+
+- **`package:` imports can now be resolved against real pub packages**, via an
+  **optional** importer exposed at `package:apollovm/apollovm_pub.dart` (kept out
+  of the web-safe `apollovm.dart`).
+  - Pluggable `PackageProvider`: `PackageConfigProvider` (default, VM-only, zero
+    extra deps — resolves through `.dart_tool/package_config.json`, exact pub
+    semantics) and **`PubDevProvider` (web-compatible)** — downloads archives
+    from pub.dev or a configurable/private/mirror host, extracts them in memory,
+    caches them (`MemoryPackageCache` by default, `FilePackageCache` on the VM),
+    and honors pubspec version constraints. Built on web-safe libraries only
+    (`http`, `archive`, `pub_semver`, `yaml` — no `dart:io`), so it runs on the
+    VM **and** in the browser.
+  - **Web/CORS**: `PubDevProvider` accepts an injectable `http.Client`, a custom
+    host, and a `rewriteUrl` hook to route requests through a CORS proxy — a
+    ready-made proxy ships in `tool/pub_cors_proxy.dart`.
+  - `DartPackageLoader` + `DartPackageImporter.provision()` fetch each reachable
+    `package:` import transitively and load its source into the VM; injected via
+    the new settable `ApolloVM.moduleLoader`. A generic `CompositeModuleLoader`
+    chains loaders.
+  - CLI: `apollovm run/translate --pub` (with `--pub-host` / `--pub-cache`)
+    resolves `package:` imports before executing.
+  - Promotes `http`, `archive`, `pub_semver`, `yaml` to direct dependencies
+    (all web-safe); only the filesystem members (`PackageConfigProvider`,
+    `FilePackageCache`) are behind conditional imports with web stubs.
+  - See `doc/module_resolution.md` and `example/apollovm_example_pub_importer.dart`.
+
+### Language-agnostic package/module import system
+
+- **Cross-module imports now resolve and execute.** A source file can import
+  symbols (classes, functions, enums, type aliases) from other loaded modules,
+  normalized into a single canonical AST regardless of language.
+  - Enriched `ASTStatementImport` (named/`show`/`hide`, wildcard, whole-module
+    prefix alias, per-symbol alias) plus new `ASTStatementExport` and
+    `ASTTypeAlias` nodes.
+  - New web-safe resolution layer (`lib/src/resolution/`): pluggable
+    `ModuleLoader` (in-memory `VMModuleLoader`), four-level `SymbolTable`s +
+    `ImportScope`, `ModuleResolver`, a `DependencyGraph` (Tarjan cycle
+    detection, Kahn topological order, incremental `affectedBy` invalidation),
+    structured `ImportDiagnostic`s (missing module/symbol, duplicate symbol,
+    circular import, invalid export), a `ResolutionCache`, and the
+    `ModuleResolutionEngine` facade.
+  - `ApolloVM.resolve()` returns aggregated diagnostics; resolution is triggered
+    lazily by the runner and invalidated incrementally on `loadCodeUnit`.
+  - Parse + generate wired for **Dart, TypeScript, and Python** (named/`show`/
+    `hide`/wildcard/alias/re-export/`typedef`); other languages keep basic
+    imports and compile unchanged against the additive AST.
+  - Golden-test harness extended for multi-`<source>` (cross-module) tests.
+  - See `doc/module_resolution.md` and `example/apollovm_example_imports.dart`.
 
 ### New language: `Go`
 
@@ -49,6 +98,28 @@
   idiom Lua uses for tables), so OOP code round-trips across all languages. See the
   README feature tables for the full per-feature matrix; `try`/`catch`/`throw`,
   inheritance/interfaces, rich enums and generics are not yet implemented for Go.
+
+### MCP-native runtime: expose ApolloVM to AI agents over the Model Context Protocol
+
+- **New `apollovm mcp` command group** exposes ApolloVM as an MCP (Model Context
+  Protocol) server and tools, turning it into a programmable, sandboxed execution
+  engine for AI agents. Built on the official `dart_mcp` SDK. Subcommands:
+  `mcp serve` (run the server over **stdio** or **HTTP/SSE** via `--http <port>`),
+  `mcp list` (tool definitions), `mcp call <tool>` (one-shot tool invocation for
+  scripting/CI), `mcp info`, `mcp schema`, and `mcp doctor`.
+- **Seven tools**: `apollovm.parse`, `apollovm.execute`, `apollovm.translate`,
+  `apollovm.ast`, `apollovm.symbols`, `apollovm.types`, `apollovm.wasm` — parse, run,
+  translate, compile to Wasm, and inspect AST / symbol graph / type table across
+  all supported languages.
+- **Security model**: file/network access denied by construction (only `print` is
+  exposed; inputs are inline source only); `apollovm.execute` runs in a **killable
+  isolate** so a hard timeout is enforced even against runaway synchronous loops
+  (per-tool configurable via `--isolate-tools`); input/output size caps
+  (`--max-source-chars`, `--max-output-chars`); best-effort process-level memory.
+- **New public library** `package:apollovm/apollovm_mcp.dart` (`ApolloMcpServer`,
+  `serveStdio`, `HttpSseTransport`, `McpLimits`, `computeTool`).
+- Added dependency `dart_mcp: ^0.5.2` (and `stream_channel`). New `mcp`-tagged
+  integration tests under `test/mcp/`. See `doc/MCP.md`.
 
 ## 0.1.48
 

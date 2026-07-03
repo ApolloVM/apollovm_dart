@@ -69,7 +69,10 @@ TypeScript, Lua, Python, and Go) are recognized and get parse diagnostics via
 their parser; the position scanner and symbol extraction are currently tuned for
 Dart and are best-effort for the others.
 
-**Follow-up:** a static resolution/type pass for type-error diagnostics and
-cross-package definition/references/rename; a workspace import graph; and
-per-language tuning of the scanner for the non-Dart languages (the analysis
-layer is already language-agnostic).
+**Follow-up:** ApolloVM now ships a language-agnostic, web-safe module/import
+resolution system in the core (`ApolloVM.resolve()` → `List<ImportDiagnostic>`,
+`lib/src/resolution/`). The next step is to route the server's import diagnostics
+and cross-module definition/references/rename through it (replacing the current
+core-import-only heuristic), plus a static type pass for type-error diagnostics
+and per-language tuning of the position scanner for the non-Dart languages (the
+analysis layer is already language-agnostic).

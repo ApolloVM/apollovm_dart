@@ -54,17 +54,19 @@ class DartGrammarDefinition extends DartGrammarLexer {
   Parser<ASTRoot> compilationUnit() =>
       (ref0(hashbangLexicalToken).optional() &
               //ref0(libraryDirective).optional() &
-              ref0(statementImport).star() &
+              ref0(topLevelDirective).star() &
               ref0(topLevelDefinition).star())
           .map((v) {
-            var imports = v[1] as List;
+            var directives = v[1] as List;
             var topDef = v[2] as List;
 
             var root = ASTRoot();
 
-            for (var import in imports) {
-              if (import is ASTStatementImport) {
-                root.addImport(import);
+            for (var directive in directives) {
+              if (directive is ASTStatementImport) {
+                root.addImport(directive);
+              } else if (directive is ASTStatementExport) {
+                root.addExport(directive);
               }
             }
 
@@ -74,6 +76,8 @@ class DartGrammarDefinition extends DartGrammarLexer {
                   root.addFunction(def);
                 } else if (def is ASTClassNormal) {
                   root.addClass(def);
+                } else if (def is ASTTypeAlias) {
+                  root.addTypeAlias(def);
                 } else if (def is ASTStatementVariableDeclaration) {
                   root.addStatement(def);
                 }
@@ -85,8 +89,13 @@ class DartGrammarDefinition extends DartGrammarLexer {
             return root;
           });
 
+  /// A top-level directive: `import` or `export`.
+  Parser<ASTStatement> topLevelDirective() =>
+      (ref0(statementImport) | ref0(statementExport)).cast<ASTStatement>();
+
   Parser topLevelDefinition() =>
-      (enumDeclaration() |
+      (typeAliasDeclaration() |
+              enumDeclaration() |
               classDeclaration() |
               functionDeclaration() |
               statementVariableDeclaration())
@@ -116,14 +125,79 @@ class DartGrammarDefinition extends DartGrammarLexer {
   Parser<ASTStatementImport> statementImport() =>
       (importToken().trimHidden() &
               stringLexicalToken() &
+              (asToken().trimHidden() & identifier()).optional() &
+              (ref0(importShow) | ref0(importHide)).star() &
               char(';').trimHidden())
           .map((v) {
             var parsedPath = v[1] as ParsedString;
             var path =
                 parsedPath.literalString ??
                 (throw StateError("Invalid import parsed path: $parsedPath"));
-            return ASTStatementImport(path);
+
+            var asOpt = v[2] as List?;
+            var prefix = asOpt != null ? asOpt[1] as String : null;
+
+            var combinators = (v[3] as List).cast<ASTImportCombinator>();
+
+            // A `show` clause also feeds the canonical named-symbol allow-list
+            // (used by the resolver for scoping and missing-symbol diagnostics).
+            var namedSymbols = <ASTImportedSymbol>[
+              for (var c in combinators)
+                if (c.isShow) ...c.names.map((n) => ASTImportedSymbol(n)),
+            ];
+
+            return ASTStatementImport(
+              path,
+              prefix: prefix,
+              combinators: combinators,
+              namedSymbols: namedSymbols,
+            );
           });
+
+  Parser<ASTStatementExport> statementExport() =>
+      (exportToken().trimHidden() &
+              stringLexicalToken() &
+              (ref0(importShow) | ref0(importHide)).star() &
+              char(';').trimHidden())
+          .map((v) {
+            var parsedPath = v[1] as ParsedString;
+            var path =
+                parsedPath.literalString ??
+                (throw StateError("Invalid export parsed path: $parsedPath"));
+            var combinators = (v[2] as List).cast<ASTImportCombinator>();
+            return ASTStatementExport(path: path, combinators: combinators);
+          });
+
+  Parser<ASTImportCombinator> importShow() =>
+      (showToken().trimHidden() & ref0(importIdentifierList)).map(
+        (v) => ASTImportCombinator(
+          ASTImportCombinatorKind.show,
+          v[1] as List<String>,
+        ),
+      );
+
+  Parser<ASTImportCombinator> importHide() =>
+      (hideToken().trimHidden() & ref0(importIdentifierList)).map(
+        (v) => ASTImportCombinator(
+          ASTImportCombinatorKind.hide,
+          v[1] as List<String>,
+        ),
+      );
+
+  Parser<List<String>> importIdentifierList() =>
+      (identifier() & (char(',').trimHidden() & identifier()).star()).map((v) {
+        var first = v[0] as String;
+        var rest = (v[1] as List).map((e) => (e as List)[1] as String);
+        return <String>[first, ...rest];
+      });
+
+  Parser<ASTTypeAlias> typeAliasDeclaration() =>
+      (typedefToken().trimHidden() &
+              identifier() &
+              char('=').trimHidden() &
+              type() &
+              char(';').trimHidden())
+          .map((v) => ASTTypeAlias(v[1] as String, v[3] as ASTType));
 
   /// Type-parameter names of the class currently being parsed (e.g. `T` in
   /// `class Wrapper<T>`). Used by [simpleType] to erase them to `dynamic`.

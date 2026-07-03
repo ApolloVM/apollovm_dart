@@ -2,6 +2,8 @@ import 'dart:io';
 
 import 'package:apollovm/apollovm.dart';
 import 'package:apollovm/apollovm_lsp.dart';
+import 'package:apollovm/apollovm_mcp.dart';
+import 'package:apollovm/apollovm_pub.dart';
 import 'package:args/args.dart';
 import 'package:args/command_runner.dart';
 import 'package:swiss_knife/swiss_knife.dart';
@@ -19,6 +21,7 @@ void main(List<String> args) async {
         ..addCommand(CommandRun())
         ..addCommand(CommandTranslate())
         ..addCommand(CommandCompile())
+        ..addCommand(CommandMcp())
         ..addCommand(CommandLsp());
 
   commandRunner.argParser.addFlag(
@@ -65,6 +68,66 @@ abstract class CommandSourceFileBase extends Command<bool> {
           '(defaults to language of the file extension)',
       valueHelp: 'dart|java|kotlin|go|javascript|typescript|lua|python',
     );
+    argParser.addFlag(
+      'pub',
+      help:
+          'Resolve Dart `package:` imports through the optional package '
+          'importer (pub.dev-compatible).',
+      defaultsTo: false,
+      negatable: false,
+    );
+    argParser.addOption(
+      'pub-host',
+      help:
+          'Package host for `--pub` (enables the network downloader).\n'
+          'When omitted, resolves via `.dart_tool/package_config.json`.',
+      valueHelp: 'https://pub.dev',
+    );
+    argParser.addOption(
+      'pub-cache',
+      help: 'Cache directory for downloaded packages (with `--pub-host`).',
+      valueHelp: 'dir',
+    );
+  }
+
+  bool get usePub => argResults!['pub'] as bool;
+
+  String? get pubHost => argResults!['pub-host'] as String?;
+
+  String? get pubCache => argResults!['pub-cache'] as String?;
+
+  /// Installs the optional Dart package importer on [vm] and pre-loads all
+  /// reachable `package:` imports. No-op unless `--pub` is set (and Dart).
+  Future<void> installPackageImporter(ApolloVM vm) async {
+    if (!usePub || language != 'dart') return;
+
+    final host = pubHost;
+    final PackageProvider provider;
+    if (host != null) {
+      var cacheDir = pubCache;
+      var pubspecFile = File('pubspec.yaml');
+      provider = PubDevProvider(
+        host: host,
+        cache: cacheDir != null
+            ? FilePackageCache(cacheDir)
+            : MemoryPackageCache(),
+        pubspecYaml: pubspecFile.existsSync()
+            ? pubspecFile.readAsStringSync()
+            : null,
+      );
+    } else {
+      provider = PackageConfigProvider(runPubGetIfMissing: true);
+    }
+
+    var loader = DartPackageLoader(vm, provider);
+    vm.moduleLoader = loader;
+
+    var diagnostics = await loader.provision();
+    if (verbose && diagnostics.isNotEmpty) {
+      for (var d in diagnostics) {
+        _log('PUB', d.toString());
+      }
+    }
   }
 
   bool? _verbose;
@@ -107,6 +170,15 @@ class CommandRun extends CommandSourceFileBase {
 
   @override
   final String name = 'run';
+
+  @override
+  String get usageFooter => '''
+
+Examples:
+  apollovm run script.dart
+  apollovm run app.py --function start
+  apollovm run prog.java main foo bar      # call `main` with args foo, bar
+  apollovm run module.wasm''';
 
   CommandRun() {
     argParser.addOption(
@@ -159,6 +231,8 @@ class CommandRun extends CommandSourceFileBase {
       );
     }
 
+    await installPackageImporter(vm);
+
     var runner = vm.createRunner(language)!;
 
     var namespaces = vm.getLanguageNamespaces(language).namespaces;
@@ -209,6 +283,14 @@ class CommandTranslate extends CommandSourceFileBase {
   @override
   final String name = 'translate';
 
+  @override
+  String get usageFooter => '''
+
+Examples:
+  apollovm translate Foo.java --target dart
+  apollovm translate script.py --target javascript
+  apollovm translate app.go --target kotlin''';
+
   CommandTranslate() {
     argParser.addOption(
       'target',
@@ -252,6 +334,8 @@ class CommandTranslate extends CommandSourceFileBase {
       );
     }
 
+    await installPackageImporter(vm);
+
     var codeStorage = vm.generateAllCodeIn(targetLanguage);
 
     var allSources = (await codeStorage.writeAllSources()).toString();
@@ -269,6 +353,13 @@ class CommandCompile extends CommandSourceFileBase {
 
   @override
   final String name = 'compile';
+
+  @override
+  String get usageFooter => '''
+
+Examples:
+  apollovm compile calc.dart               # writes calc.wasm
+  apollovm compile calc.dart -o build/calc.wasm''';
 
   CommandCompile() {
     argParser.addOption(
@@ -315,6 +406,8 @@ class CommandCompile extends CommandSourceFileBase {
         "Can't parse source! language: $language ; sourceFilePath: $sourceFilePath",
       );
     }
+
+    await installPackageImporter(vm);
 
     var storageWasm = vm.generateAllIn<BytesOutput>('wasm');
     var wasmModules = await storageWasm.allEntries();

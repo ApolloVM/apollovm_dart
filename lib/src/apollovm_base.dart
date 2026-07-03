@@ -52,6 +52,10 @@ import 'languages/typescript/ts/typescript_runner.dart';
 import 'languages/wasm/wasm_generator.dart';
 import 'languages/wasm/wasm_parser.dart';
 import 'languages/wasm/wasm_runner.dart';
+import 'resolution/diagnostics.dart';
+import 'resolution/module_loader.dart';
+import 'resolution/module_resolution_engine.dart';
+import 'resolution/symbol_table.dart';
 
 /// The Apollo VM.
 class ApolloVM implements VMTypeResolver {
@@ -161,6 +165,43 @@ class ApolloVM implements VMTypeResolver {
     );
   }
 
+  /// All loaded [CodeUnit]s of [language] across every namespace.
+  List<CodeUnit> allCodeUnits(String language) {
+    var langNs = _languageNamespaces[language];
+    return langNs == null ? <CodeUnit>[] : langNs.allCodeUnits;
+  }
+
+  /// All loaded [CodeUnit]s across every language and namespace.
+  List<CodeUnit> allCodeUnitsAllLanguages() =>
+      _languageNamespaces.values.expand((ns) => ns.allCodeUnits).toList();
+
+  ModuleResolutionEngine? _resolutionEngine;
+
+  /// An optional custom [ModuleLoader] for import resolution. When set (before
+  /// the [resolutionEngine] is first used), it replaces the default web-safe
+  /// in-memory [VMModuleLoader] — e.g. a `DartPackageLoader` that resolves
+  /// `package:` imports. Leave `null` for the default in-memory behavior.
+  ModuleLoader? moduleLoader;
+
+  /// The lazily-created module-resolution engine, backed by [moduleLoader] when
+  /// set, otherwise the web-safe in-memory [VMModuleLoader].
+  ModuleResolutionEngine get resolutionEngine => _resolutionEngine ??=
+      ModuleResolutionEngine(moduleLoader ?? VMModuleLoader(this));
+
+  /// Resolves the import graph of all loaded modules (optionally restricted to
+  /// [language]) and returns the aggregated [ImportDiagnostic]s. Idempotent and
+  /// incremental: already-resolved modules are served from cache, and
+  /// (re)loading a [CodeUnit] invalidates the affected subgraph.
+  List<ImportDiagnostic> resolve({String? language}) {
+    var units = language != null
+        ? allCodeUnits(language)
+        : allCodeUnitsAllLanguages();
+    return resolutionEngine.resolveAll(
+      units.map((u) => u.id),
+      language: language,
+    );
+  }
+
   /// Loads [codeUnit], parsing the [CodeUnit.source] to the
   /// corresponding AST (Abstract Syntax Tree).
   /// - Returns `false` if there's no parser for the [codeUnit] language.
@@ -197,6 +238,10 @@ class ApolloVM implements VMTypeResolver {
     var codeNamespace = langNamespaces.get(namespace);
 
     codeNamespace.addCodeUnit(codeUnit);
+
+    // Incremental hook: (re)loading a unit invalidates the affected subgraph so
+    // the next resolution re-resolves only what changed.
+    _resolutionEngine?.invalidate(codeUnit.id);
 
     return true;
   }
@@ -526,6 +571,10 @@ class LanguageNamespaces {
 
   CodeNamespace? getIfLoaded(String namespace) => _namespaces[namespace];
 
+  /// All [CodeUnit]s across every namespace of this language.
+  List<CodeUnit> get allCodeUnits =>
+      _namespaces.values.expand((ns) => ns.codeUnits).toList();
+
   /// Lookup for the first class [className] in [namespace] (optional).
   ASTClassNormal? getClass(
     String className, {
@@ -606,6 +655,9 @@ class CodeNamespace {
   int get hashCode => language.hashCode ^ name.hashCode;
 
   final Set<CodeUnit> _codeUnits = {};
+
+  /// The loaded [CodeUnit]s of this namespace.
+  List<CodeUnit> get codeUnits => _codeUnits.toList();
 
   /// Adds a loaded [codeUnit].
   void addCodeUnit(CodeUnit codeUnit) {
@@ -803,6 +855,25 @@ class BinaryCodeUnit extends CodeUnit<Uint8List> {
   }
 }
 
+/// Registry of built-in core packages (e.g. `dart:math`). Shared by the runtime
+/// [ApolloImportManager] and the resolution-layer `VMModuleLoader`, so both
+/// agree on what an import path resolves to as a core package.
+class CorePackageRegistry {
+  static final Map<String, CorePackageBase Function()> _factories =
+      <String, CorePackageBase Function()>{
+        'dart:math': () => CorePackageMath(),
+      };
+
+  /// Registers a core package [factory] under an import [path].
+  static void register(String path, CorePackageBase Function() factory) =>
+      _factories[path] = factory;
+
+  static bool isCorePackage(String path) => _factories.containsKey(path);
+
+  /// Instantiates the core package for [path], or `null`.
+  static CorePackageBase? resolve(String path) => _factories[path]?.call();
+}
+
 /// A package/library import manager.
 class ApolloImportManager {
   FutureOr<bool> import(String path) {
@@ -813,13 +884,8 @@ class ApolloImportManager {
     return false;
   }
 
-  CorePackageBase? resolveCorePackage(String path) {
-    switch (path) {
-      case 'dart:math':
-        return CorePackageMath();
-    }
-    return null;
-  }
+  CorePackageBase? resolveCorePackage(String path) =>
+      CorePackageRegistry.resolve(path);
 
   bool importCorePackage(CorePackageBase corePackage) {
     final path = corePackage.path;
@@ -1127,6 +1193,15 @@ sealed class VMContext {
 
   /// The import manager.
   ApolloImportManager? importManager;
+
+  ImportScope? _importScope;
+
+  /// The resolved module import scope; inherited from [parent] when not set on
+  /// this context. Consulted by scoped symbol resolution before the greedy
+  /// fallback.
+  ImportScope? get importScope => _importScope ??= parent?.importScope;
+
+  set importScope(ImportScope? scope) => _importScope = scope;
 
   /// The external function mapper.
   ApolloExternalFunctionMapper? externalFunctionMapper;

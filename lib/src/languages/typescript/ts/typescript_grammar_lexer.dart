@@ -39,6 +39,8 @@ abstract class TypeScriptGrammarLexer extends BaseGrammarLexer {
 
   Parser forToken() => ref1(token, 'for');
 
+  Parser exportToken() => ref1(token, 'export');
+
   Parser fromToken() => ref1(token, 'from');
 
   Parser functionToken() => ref1(token, 'function');

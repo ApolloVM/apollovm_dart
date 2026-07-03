@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="TypeScript named import across modules">
+    <source language="typescript" id="user.ts"><![CDATA[
+class User {
+  name: string;
+  constructor(name: string) {
+    this.name = name;
+  }
+  greet(): string {
+    return 'Hi ' + this.name;
+  }
+}
+]]></source>
+    <source language="typescript" id="main.ts" main="true"><![CDATA[
+import { User } from './user';
+
+function run(): string {
+  let u = new User('bob');
+  return u.greet();
+}
+]]></source>
+    <call function="run" return="Hi bob" returnType="String">
+        [ ]
+    </call>
+    <output>
+        []
+    </output>
+    <source-generated language="typescript"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/user.ts" >>>>
+class User {
+
+  name: string;
+
+  constructor(name: string) {
+    this.name = name;
+  }
+
+  greet(): string {
+    return 'Hi ' + this.name;
+  }
+
+}
+<<<< CODE_UNIT_END="/user.ts" >>>>
+<<<< CODE_UNIT_START="/main.ts" >>>>
+import { User } from './user';
+
+  function run(): string {
+    let u = User('bob');
+    return u.greet();
+  }
+
+<<<< CODE_UNIT_END="/main.ts" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+</test>

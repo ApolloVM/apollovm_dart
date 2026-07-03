@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="Dart multi-file import (show + prefix alias)">
+    <source language="dart" id="user.dart"><![CDATA[
+class User {
+  String name;
+  User(this.name);
+  String greet() {
+    return 'Hi ' + name;
+  }
+}
+]]></source>
+    <source language="dart" id="helpers.dart"><![CDATA[
+String shout(String s) {
+  return s.toUpperCase();
+}
+]]></source>
+    <source language="dart" id="main.dart" main="true"><![CDATA[
+import 'user.dart' show User;
+import 'helpers.dart' as h;
+
+String run() {
+  var u = User('bob');
+  return h.shout(u.greet());
+}
+]]></source>
+    <call function="run" return="HI BOB" returnType="String">
+        [ ]
+    </call>
+    <output>
+        []
+    </output>
+    <source-generated language="dart"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/user.dart" >>>>
+class User {
+
+  String name;
+
+  User(this.name);
+
+  String greet() {
+    return 'Hi $name';
+  }
+
+}
+<<<< CODE_UNIT_END="/user.dart" >>>>
+<<<< CODE_UNIT_START="/helpers.dart" >>>>
+  String shout(String s) {
+    return s.toUpperCase();
+  }
+
+<<<< CODE_UNIT_END="/helpers.dart" >>>>
+<<<< CODE_UNIT_START="/main.dart" >>>>
+import 'user.dart' show User;
+import 'helpers.dart' as h;
+
+  String run() {
+    var u = User('bob');
+    return h.shout(u.greet());
+  }
+
+<<<< CODE_UNIT_END="/main.dart" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+</test>
