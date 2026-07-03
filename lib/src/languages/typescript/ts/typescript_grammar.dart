@@ -23,15 +23,19 @@ class TypeScriptGrammarDefinition extends TypeScriptGrammarLexer {
   Parser start() => ref0(compilationUnit).trim().end();
 
   Parser<ASTRoot> compilationUnit() =>
-      (ref0(statementImport).star() & ref0(topLevelDefinition).star()).map((v) {
-        var imports = v[0] as List;
+      (ref0(topLevelDirective).star() & ref0(topLevelDefinition).star()).map((
+        v,
+      ) {
+        var directives = v[0] as List;
         var topDef = v[1] as List;
 
         var root = ASTRoot();
 
-        for (var import in imports) {
-          if (import is ASTStatementImport) {
-            root.addImport(import);
+        for (var directive in directives) {
+          if (directive is ASTStatementImport) {
+            root.addImport(directive);
+          } else if (directive is ASTStatementExport) {
+            root.addExport(directive);
           }
         }
 
@@ -41,6 +45,8 @@ class TypeScriptGrammarDefinition extends TypeScriptGrammarLexer {
               root.addFunction(def);
             } else if (def is ASTClassNormal) {
               root.addClass(def);
+            } else if (def is ASTTypeAlias) {
+              root.addTypeAlias(def);
             } else if (def is ASTStatementVariableDeclaration) {
               root.addStatement(def);
             }
@@ -52,8 +58,13 @@ class TypeScriptGrammarDefinition extends TypeScriptGrammarLexer {
         return root;
       });
 
+  /// A top-level directive: `import` or `export`.
+  Parser<ASTStatement> topLevelDirective() =>
+      (ref0(statementImport) | ref0(statementExport)).cast<ASTStatement>();
+
   Parser topLevelDefinition() =>
-      (arrowNamedFunction() |
+      (typeAliasDeclaration() |
+              arrowNamedFunction() |
               functionDeclaration() |
               enumDeclaration() |
               interfaceDeclaration() |
@@ -173,19 +184,101 @@ class TypeScriptGrammarDefinition extends TypeScriptGrammarLexer {
               char(';').trimHidden())
           .map((v) {
             var clause = v[1] as List?;
-            var prefix = clause != null ? clause[0] as String? : null;
+            var rec = clause != null
+                ? clause[0]
+                      as ({
+                        String? prefix,
+                        bool wildcard,
+                        List<ASTImportedSymbol> named,
+                      })
+                : null;
             var path = v[2] as String;
-            return ASTStatementImport(path, prefix: prefix);
+            return ASTStatementImport(
+              path,
+              prefix: rec?.prefix,
+              wildcard: rec?.wildcard ?? false,
+              namedSymbols: rec?.named ?? const [],
+            );
           });
 
-  /// Matches `* as name` or `name` in an import; returns the binding name.
-  Parser<String?> importClause() =>
-      ((char('*').trimHidden() & string('as').trimHidden() & identifier()) |
-              identifier())
+  /// Parses an import clause into the canonical model:
+  /// - `* as p` → whole-module alias `p` (wildcard).
+  /// - `{ A, B as C }` → named symbols (with aliases).
+  /// - `X` (default import) → whole-module alias `X`.
+  Parser<({String? prefix, bool wildcard, List<ASTImportedSymbol> named})>
+  importClause() =>
+      (ref0(namespaceImportClause) |
+              ref0(namedImportClause) |
+              ref0(defaultImportClause))
+          .cast();
+
+  Parser<({String? prefix, bool wildcard, List<ASTImportedSymbol> named})>
+  namespaceImportClause() =>
+      (char('*').trimHidden() & asToken().trimHidden() & identifier()).map(
+        (v) => (
+          prefix: v[2] as String,
+          wildcard: true,
+          named: <ASTImportedSymbol>[],
+        ),
+      );
+
+  Parser<({String? prefix, bool wildcard, List<ASTImportedSymbol> named})>
+  defaultImportClause() => identifier().map(
+    (v) => (prefix: v, wildcard: false, named: <ASTImportedSymbol>[]),
+  );
+
+  Parser<({String? prefix, bool wildcard, List<ASTImportedSymbol> named})>
+  namedImportClause() => namedBindings().map(
+    (named) => (prefix: null, wildcard: false, named: named),
+  );
+
+  /// `{ A, B as C }` → list of imported symbols with optional aliases.
+  Parser<List<ASTImportedSymbol>> namedBindings() =>
+      (char('{').trimHidden() &
+              ref0(importSpecifier) &
+              (char(',').trimHidden() & ref0(importSpecifier)).star() &
+              char(',').trimHidden().optional() &
+              char('}').trimHidden())
           .map((v) {
-            if (v is List) return v[2] as String;
-            return v as String;
+            var first = v[1] as ASTImportedSymbol;
+            var rest = (v[2] as List).map(
+              (e) => (e as List)[1] as ASTImportedSymbol,
+            );
+            return <ASTImportedSymbol>[first, ...rest];
           });
+
+  /// `A` or `A as B`.
+  Parser<ASTImportedSymbol> importSpecifier() =>
+      (identifier() & (asToken().trimHidden() & identifier()).optional()).map((
+        v,
+      ) {
+        var name = v[0] as String;
+        var asOpt = v[1] as List?;
+        var alias = asOpt != null ? asOpt[1] as String : null;
+        return ASTImportedSymbol(name, alias: alias);
+      });
+
+  Parser<ASTStatementExport> statementExport() =>
+      (exportToken().trimHidden() &
+              ((char('*').trimHidden().map((_) => null) | namedBindings()) &
+                  (fromToken().trimHidden() & stringPathLexicalToken())
+                      .optional()) &
+              char(';').trimHidden())
+          .map((v) {
+            var body = v[1] as List;
+            var symbols = body[0] as List<ASTImportedSymbol>?;
+            var fromOpt = body[1] as List?;
+            var path = fromOpt != null ? fromOpt[1] as String : null;
+            return ASTStatementExport(path: path, symbols: symbols ?? const []);
+          });
+
+  Parser<ASTTypeAlias> typeAliasDeclaration() =>
+      (typeToken().trimHidden() &
+              identifier() &
+              char('=').trimHidden() &
+              type() &
+              char(';').trimHidden())
+          .map((v) => ASTTypeAlias(v[1] as String, v[3] as ASTType));
 
   Parser<ASTFunctionDeclaration> functionDeclaration() =>
       (asyncToken().trimHidden().optional() &

@@ -1,5 +1,55 @@
 ## 1.2.0
 
+### Optional Dart package importer (pub.dev / pubspec-compatible)
+
+- **`package:` imports can now be resolved against real pub packages**, via an
+  **optional** importer exposed at `package:apollovm/apollovm_pub.dart` (kept out
+  of the web-safe `apollovm.dart`).
+  - Pluggable `PackageProvider`: `PackageConfigProvider` (default, VM-only, zero
+    extra deps — resolves through `.dart_tool/package_config.json`, exact pub
+    semantics) and **`PubDevProvider` (web-compatible)** — downloads archives
+    from pub.dev or a configurable/private/mirror host, extracts them in memory,
+    caches them (`MemoryPackageCache` by default, `FilePackageCache` on the VM),
+    and honors pubspec version constraints. Built on web-safe libraries only
+    (`http`, `archive`, `pub_semver`, `yaml` — no `dart:io`), so it runs on the
+    VM **and** in the browser.
+  - **Web/CORS**: `PubDevProvider` accepts an injectable `http.Client`, a custom
+    host, and a `rewriteUrl` hook to route requests through a CORS proxy — a
+    ready-made proxy ships in `tool/pub_cors_proxy.dart`.
+  - `DartPackageLoader` + `DartPackageImporter.provision()` fetch each reachable
+    `package:` import transitively and load its source into the VM; injected via
+    the new settable `ApolloVM.moduleLoader`. A generic `CompositeModuleLoader`
+    chains loaders.
+  - CLI: `apollovm run/translate --pub` (with `--pub-host` / `--pub-cache`)
+    resolves `package:` imports before executing.
+  - Promotes `http`, `archive`, `pub_semver`, `yaml` to direct dependencies
+    (all web-safe); only the filesystem members (`PackageConfigProvider`,
+    `FilePackageCache`) are behind conditional imports with web stubs.
+  - See `doc/module_resolution.md` and `example/apollovm_example_pub_importer.dart`.
+
+### Language-agnostic package/module import system
+
+- **Cross-module imports now resolve and execute.** A source file can import
+  symbols (classes, functions, enums, type aliases) from other loaded modules,
+  normalized into a single canonical AST regardless of language.
+  - Enriched `ASTStatementImport` (named/`show`/`hide`, wildcard, whole-module
+    prefix alias, per-symbol alias) plus new `ASTStatementExport` and
+    `ASTTypeAlias` nodes.
+  - New web-safe resolution layer (`lib/src/resolution/`): pluggable
+    `ModuleLoader` (in-memory `VMModuleLoader`), four-level `SymbolTable`s +
+    `ImportScope`, `ModuleResolver`, a `DependencyGraph` (Tarjan cycle
+    detection, Kahn topological order, incremental `affectedBy` invalidation),
+    structured `ImportDiagnostic`s (missing module/symbol, duplicate symbol,
+    circular import, invalid export), a `ResolutionCache`, and the
+    `ModuleResolutionEngine` facade.
+  - `ApolloVM.resolve()` returns aggregated diagnostics; resolution is triggered
+    lazily by the runner and invalidated incrementally on `loadCodeUnit`.
+  - Parse + generate wired for **Dart, TypeScript, and Python** (named/`show`/
+    `hide`/wildcard/alias/re-export/`typedef`); other languages keep basic
+    imports and compile unchanged against the additive AST.
+  - Golden-test harness extended for multi-`<source>` (cross-module) tests.
+  - See `doc/module_resolution.md` and `example/apollovm_example_imports.dart`.
+
 ### New language: `Go`
 
 - **Added first-class Go support** — ApolloVM can now **parse**, **execute**, and

@@ -95,6 +95,22 @@ abstract class ApolloCodeGenerator
       out.write('\n');
     }
 
+    var exports = root.exports;
+    if (exports.isNotEmpty) {
+      for (var export in exports) {
+        generateASTStatementExport(export, out: out);
+      }
+      out.write('\n');
+    }
+
+    var typeAliases = root.typeAliases;
+    if (typeAliases.isNotEmpty) {
+      for (var typeAlias in typeAliases) {
+        generateASTTypeAlias(typeAlias, out: out);
+      }
+      out.write('\n');
+    }
+
     generateASTBlock(root, out: out, withBrackets: false);
 
     for (var clazz in root.classes) {
@@ -195,6 +211,21 @@ abstract class ApolloCodeGenerator
     StringBuffer? out,
     String indent = '',
   });
+
+  /// Emits an `export`/re-export directive. Default: no-op (languages without
+  /// an export concept produce no exports, so nothing is emitted).
+  StringBuffer generateASTStatementExport(
+    ASTStatementExport export, {
+    StringBuffer? out,
+    String indent = '',
+  }) => out ??= newOutput();
+
+  /// Emits a top-level type alias / `typedef`. Default: no-op.
+  StringBuffer generateASTTypeAlias(
+    ASTTypeAlias typeAlias, {
+    StringBuffer? out,
+    String indent = '',
+  }) => out ??= newOutput();
 
   @override
   StringBuffer generateASTClass(

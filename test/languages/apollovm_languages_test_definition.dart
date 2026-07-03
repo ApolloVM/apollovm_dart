@@ -21,9 +21,17 @@ class TestDefinition implements Comparable<TestDefinition> {
 
   String get title => rootElement.getAttribute('title')!;
 
-  XmlElement get source => rootElement.findElements('source').first;
+  /// All `<source>` elements (a test may declare several for multi-file /
+  /// cross-module scenarios). Single-source tests have exactly one.
+  List<XmlElement> get sources => rootElement.findElements('source').toList();
+
+  XmlElement get source => sources.first;
 
   String get language => source.getAttribute('language')!;
+
+  /// The `id` (usually a file path / module id) of a `<source>`, or `'test'`.
+  static String sourceId(XmlElement source) =>
+      source.getAttribute('id') ?? 'test';
 
   bool get autoImportDartMath =>
       parseBool(source.getAttribute('auto-import-dart-math')) ?? false;
@@ -127,16 +135,20 @@ Future<void> runTestDefinitions(List<TestDefinition> testDefinitions) async {
 
           var vm = ApolloVM();
 
-          var codeUnit = SourceCodeUnit(
-            language,
-            testDefinition.sourceCode,
-            id: 'test',
-          );
+          // Load every `<source>` (one for single-file tests, several for
+          // multi-file/cross-module tests). Each is filed under its `id`.
+          for (var source in testDefinition.sources) {
+            var codeUnit = SourceCodeUnit(
+              language,
+              source.innerText,
+              id: TestDefinition.sourceId(source),
+            );
 
-          print('-- Loading source code');
-          var loadOK = await vm.loadCodeUnit(codeUnit);
+            print('-- Loading source code: ${codeUnit.id}');
+            var loadOK = await vm.loadCodeUnit(codeUnit);
 
-          expect(loadOK, isTrue, reason: "Error loading '$language ' code!");
+            expect(loadOK, isTrue, reason: "Error loading '$language ' code!");
+          }
 
           var runner = vm.createRunner(
             language,
