@@ -1,3 +1,14 @@
-# The LSP server, VS Code extension, example workspace and benchmark are
-# development tooling and are not part of the published `apollovm` package.
-lsp/
+# The VS Code extension, example workspace and benchmark under the root
+# `lsp/` directory are development tooling and are not part of the published
+# `apollovm` package. The leading `/` anchors the pattern to the package root
+# so that `lib/src/lsp/` (the LSP implementation library) IS published.
+/lsp/
+
+# NOTE: when `.pubignore` exists it REPLACES `.gitignore` for publishing,
+# so relevant `.gitignore` exclusions must be repeated here.
+*.exe
+*.iml
+.DS_Store
+build/
+doc/api/
+articles/
