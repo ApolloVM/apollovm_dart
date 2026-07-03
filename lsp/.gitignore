@@ -1,0 +1,4 @@
+lsp/apollovm_lsp/.dart_tool/
+lsp/benchmark/.dart_tool/
+lsp/*/pubspec.lock
+lsp/vscode/node_modules/

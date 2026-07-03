@@ -1,5 +1,37 @@
 ## 1.2.0
 
+### Language Server Protocol (LSP 3.17) server
+
+- **A Dart-first language server is now part of the `apollovm` package**, exposed
+  as a separate library `package:apollovm/apollovm_lsp.dart` (the existing
+  `package:apollovm/apollovm.dart` exports are unchanged). Source lives in
+  `lib/src/lsp/`.
+- **Runnable two ways.** Locally over stdio via a new CLI subcommand
+  `apollovm lsp`; and **embedded / web** — the library imports no `dart:io`, so a
+  browser IDE or an AI agent can drive it with decoded JSON-RPC messages via
+  `MessageLspEndpoint` (no byte framing). `StreamLspEndpoint` provides
+  `Content-Length` framing for stdio/sockets. Both share a transport-agnostic
+  `LspEndpoint`.
+- The server keeps the ApolloVM core **read-only**: because the AST carries no
+  source positions and the parser discards comments, a small self-contained
+  scanner re-scans raw text for identifier/declaration positions and correlates
+  them back to the AST (the source of truth for semantics). Four strictly
+  separated layers keep LSP logic out of the parser — transport, protocol (LSP
+  3.17 types), analysis (parse/index/resolve), and server (handlers).
+- Implemented: `initialize`/`shutdown`, incremental diagnostics (parse +
+  unresolvable core imports), `documentSymbol`, `hover` (kind/signature/type/
+  documentation), `definition`; plus single-file `references`/`rename` and a
+  basic ranked `completion`.
+- Parse-error diagnostics are located precisely: since the core parser reports a
+  generic "end of input expected" at offset 0 for most structural mistakes, the
+  server runs a bracket-balance analysis to underline the real culprit (e.g. an
+  unclosed `(`/`{`) with a hint, instead of pointing at the top of the file.
+- Companion assets live under `lsp/` (excluded from the published package via
+  `.pubignore`): a VS Code client (`lsp/vscode`), an example workspace
+  (`lsp/example_workspace`), and a latency benchmark (`lsp/benchmark`).
+- Verified with `dart analyze` (clean), 17 passing tests in `test/lsp/`
+  (including full stdio and message-level protocol sessions), and a benchmark
+  comfortably under its latency targets (open, hover, completion).
 ### Optional Dart package importer (pub.dev / pubspec-compatible)
 
 - **`package:` imports can now be resolved against real pub packages**, via an

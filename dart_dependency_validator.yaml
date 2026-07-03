@@ -1,0 +1,6 @@
+# The `lsp/` companion assets (VS Code client, nested benchmark package, and
+# example-workspace fixtures written in ApolloVM's language subset — one
+# intentionally malformed) are not part of the published package and must not be
+# scanned for dependency usage.
+exclude:
+  - 'lsp/**'

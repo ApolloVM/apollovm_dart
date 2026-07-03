@@ -1,0 +1,45 @@
+{
+  "name": "apollovm-lsp",
+  "displayName": "ApolloVM Language Server",
+  "description": "Diagnostics, hover, go-to-definition and symbols for ApolloVM sources.",
+  "version": "0.1.0",
+  "publisher": "apollovm",
+  "engines": {
+    "vscode": "^1.75.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "activationEvents": [
+    "onLanguage:dart",
+    "onLanguage:java",
+    "onLanguage:kotlin",
+    "onLanguage:csharp",
+    "onLanguage:javascript",
+    "onLanguage:typescript",
+    "onLanguage:lua",
+    "onLanguage:python",
+    "onLanguage:go"
+  ],
+  "main": "./extension.js",
+  "contributes": {
+    "configuration": {
+      "title": "ApolloVM LSP",
+      "properties": {
+        "apollovmLsp.dartExecutable": {
+          "type": "string",
+          "default": "dart",
+          "description": "Path to the Dart SDK executable used to launch the server."
+        },
+        "apollovmLsp.serverEntrypoint": {
+          "type": "string",
+          "default": "",
+          "description": "Absolute path to the apollovm CLI (bin/apollovm.dart), started as `apollovm lsp`. Defaults to the repo-root apollovm package."
+        }
+      }
+    }
+  },
+  "dependencies": {
+    "vscode-languageclient": "^9.0.1"
+  }
+}
