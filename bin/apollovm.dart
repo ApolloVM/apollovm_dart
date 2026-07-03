@@ -20,7 +20,7 @@ void main(List<String> args) async {
         ..addCommand(CommandRun())
         ..addCommand(CommandTranslate())
         ..addCommand(CommandCompile())
-        ..addCommand(CommandServe());
+        ..addCommand(CommandMcp());
 
   commandRunner.argParser.addFlag(
     'version',
@@ -164,6 +164,15 @@ class CommandRun extends CommandSourceFileBase {
   @override
   final String name = 'run';
 
+  @override
+  String get usageFooter => '''
+
+Examples:
+  apollovm run script.dart
+  apollovm run app.py --function start
+  apollovm run prog.java main foo bar      # call `main` with args foo, bar
+  apollovm run module.wasm''';
+
   CommandRun() {
     argParser.addOption(
       'function',
@@ -267,6 +276,14 @@ class CommandTranslate extends CommandSourceFileBase {
   @override
   final String name = 'translate';
 
+  @override
+  String get usageFooter => '''
+
+Examples:
+  apollovm translate Foo.java --target dart
+  apollovm translate script.py --target javascript
+  apollovm translate app.go --target kotlin''';
+
   CommandTranslate() {
     argParser.addOption(
       'target',
@@ -329,6 +346,13 @@ class CommandCompile extends CommandSourceFileBase {
 
   @override
   final String name = 'compile';
+
+  @override
+  String get usageFooter => '''
+
+Examples:
+  apollovm compile calc.dart               # writes calc.wasm
+  apollovm compile calc.dart -o build/calc.wasm''';
 
   CommandCompile() {
     argParser.addOption(
@@ -437,105 +461,5 @@ class CommandCompile extends CommandSourceFileBase {
       return '$base.$moduleName$suffix';
     }
     return '$outputPath.$moduleName$suffix';
-  }
-}
-
-/// Runs the ApolloVM MCP server, exposing the VM's parse/execute/translate/
-/// compile/inspect capabilities to AI agents as MCP tools.
-///
-/// Defaults to the stdio transport; pass `--http <port>` for HTTP/SSE.
-class CommandServe extends Command<bool> {
-  @override
-  final String description =
-      'Run the ApolloVM MCP server (Model Context Protocol) over stdio or HTTP/SSE.';
-
-  @override
-  final String name = 'serve';
-
-  CommandServe() {
-    argParser
-      ..addOption(
-        'http',
-        help:
-            'Serve over HTTP/SSE on the given port instead of stdio.\n'
-            '(omit to use the stdio transport)',
-        valueHelp: 'port',
-      )
-      ..addOption(
-        'host',
-        help: 'Host/interface to bind for --http.',
-        defaultsTo: '127.0.0.1',
-      )
-      ..addOption(
-        'timeout-ms',
-        help: 'Execution timeout, in milliseconds.',
-        defaultsTo: '5000',
-      )
-      ..addOption(
-        'max-output-chars',
-        help: 'Maximum captured console output per execution.',
-        defaultsTo: '65536',
-      )
-      ..addOption(
-        'max-source-chars',
-        help: 'Maximum accepted source size, in characters.',
-        defaultsTo: '262144',
-      )
-      ..addOption(
-        'isolate-tools',
-        help:
-            'Comma-separated tools to run inside a killable isolate\n'
-            '(the only way to enforce a hard timeout on runaway code).',
-        defaultsTo: 'apollo.execute',
-      );
-  }
-
-  int _intOption(String name) {
-    var raw = argResults![name] as String?;
-    var value = raw != null ? int.tryParse(raw.trim()) : null;
-    if (value == null) {
-      throw StateError("Invalid integer for --$name: $raw");
-    }
-    return value;
-  }
-
-  @override
-  Future<bool> run() async {
-    var isolateTools = (argResults!['isolate-tools'] as String)
-        .split(',')
-        .map((e) => e.trim())
-        .where((e) => e.isNotEmpty)
-        .toSet();
-
-    var limits = McpLimits(
-      timeoutMs: _intOption('timeout-ms'),
-      maxOutputChars: _intOption('max-output-chars'),
-      maxSourceChars: _intOption('max-source-chars'),
-      isolateTools: isolateTools,
-    );
-
-    var httpPort = argResults!['http'] as String?;
-
-    if (httpPort != null) {
-      var port = int.tryParse(httpPort.trim());
-      if (port == null) {
-        throw StateError("Invalid port for --http: $httpPort");
-      }
-      var host = argResults!['host'] as String;
-
-      var transport = HttpSseTransport(limits: limits);
-      await transport.start(port: port, host: host);
-      // `stderr` so stdout stays clean for any tooling that scrapes it.
-      stderr.writeln(
-        'ApolloVM MCP server (HTTP/SSE) listening on http://$host:$port/sse',
-      );
-      // Serve until the process is terminated.
-      await Completer<void>().future;
-      return true;
-    }
-
-    var server = serveStdio(limits: limits);
-    await server.done;
-    return true;
   }
 }

@@ -12,6 +12,7 @@
 library;
 
 export 'src/mcp/apollo_mcp_server.dart';
+export 'src/mcp/cli/mcp_command.dart';
 export 'src/mcp/mcp_config.dart';
 export 'src/mcp/runtime/isolate_executor.dart'
     show computeToolIsolated, runToolInIsolate;

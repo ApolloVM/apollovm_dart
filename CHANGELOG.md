@@ -67,16 +67,18 @@
 
 ### MCP-native runtime: expose ApolloVM to AI agents over the Model Context Protocol
 
-- **New `apollovm serve` command** starts an MCP (Model Context Protocol) server,
-  turning ApolloVM into a programmable, sandboxed execution engine for AI agents.
-  Built on the official `dart_mcp` SDK; serves over **stdio** (default) or
-  **HTTP/SSE** (`--http <port>`).
-- **Seven tools**: `apollo.parse`, `apollo.execute`, `apollo.translate`,
-  `apollo.ast`, `apollo.symbols`, `apollo.types`, `apollo.wasm` — parse, run,
+- **New `apollovm mcp` command group** exposes ApolloVM as an MCP (Model Context
+  Protocol) server and tools, turning it into a programmable, sandboxed execution
+  engine for AI agents. Built on the official `dart_mcp` SDK. Subcommands:
+  `mcp serve` (run the server over **stdio** or **HTTP/SSE** via `--http <port>`),
+  `mcp list` (tool definitions), `mcp call <tool>` (one-shot tool invocation for
+  scripting/CI), `mcp info`, `mcp schema`, and `mcp doctor`.
+- **Seven tools**: `apollovm.parse`, `apollovm.execute`, `apollovm.translate`,
+  `apollovm.ast`, `apollovm.symbols`, `apollovm.types`, `apollovm.wasm` — parse, run,
   translate, compile to Wasm, and inspect AST / symbol graph / type table across
   all supported languages.
 - **Security model**: file/network access denied by construction (only `print` is
-  exposed; inputs are inline source only); `apollo.execute` runs in a **killable
+  exposed; inputs are inline source only); `apollovm.execute` runs in a **killable
   isolate** so a hard timeout is enforced even against runaway synchronous loops
   (per-tool configurable via `--isolate-tools`); input/output size caps
   (`--max-source-chars`, `--max-output-chars`); best-effort process-level memory.
