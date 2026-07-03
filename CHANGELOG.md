@@ -22,6 +22,10 @@
   unresolvable core imports), `documentSymbol`, `hover` (kind/signature/type/
   documentation), `definition`; plus single-file `references`/`rename` and a
   basic ranked `completion`.
+- Parse-error diagnostics are located precisely: since the core parser reports a
+  generic "end of input expected" at offset 0 for most structural mistakes, the
+  server runs a bracket-balance analysis to underline the real culprit (e.g. an
+  unclosed `(`/`{`) with a hint, instead of pointing at the top of the file.
 - Companion assets live under `lsp/` (excluded from the published package via
   `.pubignore`): a VS Code client (`lsp/vscode`), an example workspace
   (`lsp/example_workspace`), and a latency benchmark (`lsp/benchmark`).

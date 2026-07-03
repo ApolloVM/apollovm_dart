@@ -6,6 +6,7 @@ import 'package:apollovm/apollovm.dart';
 import '../protocol/protocol.dart';
 import 'doc_extractor.dart';
 import 'line_index.dart';
+import 'parse_error_locator.dart';
 import 'symbols.dart';
 import 'token_index.dart';
 
@@ -136,24 +137,21 @@ class Analyzer {
     LineIndex lineIndex,
     String text,
   ) {
-    final pos = result.errorPosition;
-    Range range;
-    if (pos != null && pos >= 0 && pos <= text.length) {
-      final start = lineIndex.positionAt(pos);
-      // Highlight to end of the token/line for visibility.
-      var end = pos;
-      while (end < text.length &&
-          text.codeUnitAt(end) != 0x0a &&
-          end < pos + 1) {
-        end++;
-      }
-      range = Range(start, lineIndex.positionAt(end == pos ? pos + 1 : end));
-    } else {
-      range = lineIndex.rangeAt(0, 1);
-    }
+    // ApolloVM's parser usually reports "end of input expected" at offset 0, so
+    // recover a meaningful location (e.g. the unclosed bracket) in the LSP layer.
+    final loc = locateParseError(
+      text,
+      parserPosition: result.errorPosition,
+      parserMessage: result.errorMessage,
+    );
+    final base = (result.errorMessage ?? 'Parse error.')
+        .split('\n')
+        .first
+        .trim();
+    final message = loc.hint != null ? '$base — ${loc.hint}' : base;
     return Diagnostic(
-      range: range,
-      message: result.errorMessage ?? 'Parse error.',
+      range: lineIndex.rangeAt(loc.rangeStart, loc.rangeEnd),
+      message: message,
       code: 'parse-error',
     );
   }

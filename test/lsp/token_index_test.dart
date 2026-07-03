@@ -69,4 +69,57 @@ enum Color { red, green, blue }
         .toList();
     expect(members, ['red', 'green', 'blue']);
   });
+
+  test('recognises top-level variables (var / final) and class fields', () {
+    final idx = TokenIndex.scan('''
+var count = 0;
+final int limit = 10;
+class Config {
+  static final int max = 5;
+}
+''');
+    final kinds = {for (final d in idx.declarations) d.name: d.kind};
+    expect(kinds['count'], DeclKind.variable);
+    expect(kinds['limit'], DeclKind.variable);
+    expect(kinds['max'], DeclKind.field);
+    expect(kinds['Config'], DeclKind.classDecl);
+  });
+
+  test('handles generic return types and a constructor', () {
+    final idx = TokenIndex.scan('''
+class Box {
+  Box(int n) {}
+  List<int> items() {
+    return [];
+  }
+}
+''');
+    final box = idx.declarations.firstWhere((d) => d.name == 'Box');
+    // Constructor: member named like its class.
+    expect(
+      idx.declarations.any(
+        (d) => d.name == 'Box' && d.kind == DeclKind.constructor,
+      ),
+      isTrue,
+    );
+    expect(box.kind, DeclKind.classDecl);
+    final items = idx.declarations.firstWhere((d) => d.name == 'items');
+    expect(items.kind, DeclKind.method);
+    expect(items.container, 'Box');
+  });
+
+  test('skips annotations without losing the following declaration', () {
+    final idx = TokenIndex.scan('''
+class S {
+  @Deprecated("x")
+  int old() {
+    return 0;
+  }
+}
+''');
+    expect(
+      idx.declarations.any((d) => d.name == 'old' && d.container == 'S'),
+      isTrue,
+    );
+  });
 }

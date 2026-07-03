@@ -26,6 +26,7 @@ export 'src/lsp/analysis/analyzer.dart';
 export 'src/lsp/analysis/doc_extractor.dart';
 export 'src/lsp/analysis/document_store.dart';
 export 'src/lsp/analysis/line_index.dart';
+export 'src/lsp/analysis/parse_error_locator.dart';
 export 'src/lsp/analysis/symbols.dart';
 export 'src/lsp/analysis/token_index.dart';
 export 'src/lsp/protocol/protocol.dart';
