@@ -60,6 +60,10 @@ class LspServer {
         return _completion(p);
       case 'textDocument/references':
         return _references(p);
+      case 'textDocument/documentHighlight':
+        return _documentHighlight(p);
+      case 'textDocument/prepareRename':
+        return _prepareRename(p);
       case 'textDocument/rename':
         return _rename(p);
       case 'workspace/symbol':
@@ -87,7 +91,9 @@ class LspServer {
         'definitionProvider': true,
         'documentSymbolProvider': true,
         'referencesProvider': true,
-        'renameProvider': true,
+        'documentHighlightProvider': true,
+        // `prepareProvider` advertises `textDocument/prepareRename`.
+        'renameProvider': {'prepareProvider': true},
         'workspaceSymbolProvider': true,
         'completionProvider': {
           'triggerCharacters': ['.'],
@@ -423,6 +429,49 @@ class LspServer {
         if (t.name == ident.name)
           Location(uri, unit.lineIndex.rangeAt(t.start, t.end)).toJson(),
     ];
+  }
+
+  // --- Feature: document highlight (occurrences of the cursor's name) ---
+
+  Future<List<Object?>> _documentHighlight(Map<String, Object?> p) async {
+    final unit = await _unit(_uriOf(p));
+    if (unit == null) return const [];
+    final cur = _resolveCursor(unit, p);
+    final ident = cur?.ident;
+    if (ident == null) return const [];
+
+    // Occurrences that coincide with a declaration's name are `Write`; the rest
+    // are `Read`.
+    final declStarts = <int>{
+      for (final d in unit.tokenIndex.declarations)
+        if (d.name == ident.name) d.nameStart,
+    };
+
+    return [
+      for (final t in unit.tokenIndex.identifiers)
+        if (t.name == ident.name)
+          DocumentHighlight(
+            unit.lineIndex.rangeAt(t.start, t.end),
+            kind: declStarts.contains(t.start)
+                ? DocumentHighlightKind.write
+                : DocumentHighlightKind.read,
+          ).toJson(),
+    ];
+  }
+
+  // --- Feature: prepare rename (validate the target under the cursor) ---
+
+  Future<Map<String, Object?>?> _prepareRename(Map<String, Object?> p) async {
+    final unit = await _unit(_uriOf(p));
+    if (unit == null) return null;
+    final cur = _resolveCursor(unit, p);
+    final ident = cur?.ident;
+    if (ident == null) return null;
+
+    return {
+      'range': unit.lineIndex.rangeAt(ident.start, ident.end).toJson(),
+      'placeholder': ident.name,
+    };
   }
 
   // --- Feature: rename (in-file, name-scoped) ---

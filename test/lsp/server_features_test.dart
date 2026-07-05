@@ -193,4 +193,75 @@ void main() {
     final error = resp['error'] as Map;
     expect(error['code'], ResponseError.methodNotFound);
   });
+
+  test('initialize advertises the new providers', () async {
+    final c = _Client();
+    final resp = await c.request('initialize');
+    final caps = (resp['result'] as Map)['capabilities'] as Map;
+    expect(caps['documentHighlightProvider'], isTrue);
+    expect((caps['renameProvider'] as Map)['prepareProvider'], isTrue);
+  });
+
+  test('documentHighlight returns read occurrences of the name', () async {
+    final c = _Client();
+    await c.open(_uri, _content);
+    final resp = await c.request('textDocument/documentHighlight', {
+      'textDocument': _td(_uri),
+      'position': c.pos(3, 24), // the `name` parameter
+    });
+    final highlights = (resp['result'] as List).cast<Map>();
+    // `name` appears as the parameter and in `return name;`.
+    expect(highlights.length, 2);
+    // A parameter is not a tracked declaration, so both are Read.
+    expect(
+      highlights.every((h) => h['kind'] == DocumentHighlightKind.read),
+      isTrue,
+    );
+  });
+
+  test('documentHighlight marks a declaration occurrence as write', () async {
+    final c = _Client();
+    await c.open(_uri, _content);
+    final resp = await c.request('textDocument/documentHighlight', {
+      'textDocument': _td(_uri),
+      'position': c.pos(9, 5), // `makeId`, a top-level function
+    });
+    final highlights = (resp['result'] as List).cast<Map>();
+    expect(highlights, hasLength(1));
+    expect(highlights.single['kind'], DocumentHighlightKind.write);
+  });
+
+  test('documentHighlight off any identifier is empty', () async {
+    final c = _Client();
+    await c.open(_uri, _content);
+    final resp = await c.request('textDocument/documentHighlight', {
+      'textDocument': _td(_uri),
+      'position': c.pos(7, 0), // blank line between the two declarations
+    });
+    expect(resp['result'], isEmpty);
+  });
+
+  test('prepareRename returns the target range and placeholder', () async {
+    final c = _Client();
+    await c.open(_uri, _content);
+    final resp = await c.request('textDocument/prepareRename', {
+      'textDocument': _td(_uri),
+      'position': c.pos(3, 24), // the `name` parameter
+    });
+    final result = resp['result'] as Map;
+    expect(result['placeholder'], 'name');
+    final range = Range.fromJson(result['range'] as Map<String, Object?>);
+    expect(range.start.line, 3);
+    expect(range.end.character - range.start.character, 'name'.length);
+  });
+
+  test('prepareRename off any identifier is null', () async {
+    final c = _Client();
+    await c.open(_uri, _content);
+    final resp = await c.request('textDocument/prepareRename', {
+      'textDocument': _td(_uri),
+      'position': c.pos(7, 0),
+    });
+    expect(resp['result'], isNull);
+  });
 }

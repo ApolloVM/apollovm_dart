@@ -1,3 +1,40 @@
+## 1.3.0
+
+### Language Server Protocol — new server features
+
+- **`textDocument/documentHighlight`** — highlights every occurrence of the
+  identifier under the cursor, marking the declaration site as `Write` and other
+  uses as `Read` (`documentHighlightProvider` capability).
+- **`textDocument/prepareRename`** — validates a rename target, returning its
+  range and placeholder, or null when the cursor is not on an identifier
+  (advertised via the rename provider's `prepareProvider`).
+
+### Language Server Protocol — client
+
+- **New `LspClient`** in `package:apollovm/apollovm_lsp.dart`: a JSON-RPC client
+  that consumes the ApolloVM `LspServer`. It correlates responses to the
+  requests it sends, streams server-pushed diagnostics
+  (`Stream<PublishDiagnosticsParams> get diagnostics`), and exposes typed
+  helpers — `initialize`, `didOpen`/`didChange`/`didClose`, `hover`,
+  `definition`, `documentSymbol`, `completion`, `references`,
+  `documentHighlight`, `prepareRename`, `rename`, `workspaceSymbol`,
+  `shutdown`/`exit` — plus low-level `sendRequest`/`sendNotification`.
+- **`LspClient.inProcess()`** pairs a client with a fresh `LspServer` over a
+  linked `MessageLspEndpoint` pair, all in one isolate — no subprocess, no
+  `dart:io`. The client works over any `LspEndpoint`, so an out-of-process
+  server can be driven with `LspClient(StreamLspEndpoint(out, in))`.
+- `LspEndpoint` now routes JSON-RPC *responses* (previously ignored) to a new
+  `onResponse` hook, enabling the client role. Pure-server usage is unchanged.
+- Protocol data types gained `fromJson` factories (`Hover`, `Location`,
+  `Diagnostic`, `DocumentSymbol`, `CompletionItem`, `TextEdit`, `WorkspaceEdit`),
+  and new types were added: `InitializeResult`, `ServerInfo`,
+  `PublishDiagnosticsParams`, `WorkspaceSymbol`, `CompletionList`,
+  `DocumentHighlight`/`DocumentHighlightKind`, `PrepareRenameResult`.
+- New example [`example/apollovm_example_lsp.dart`](example/apollovm_example_lsp.dart)
+  drives a full session (handshake, diagnostics, symbols, hover, definition,
+  completion, highlight, prepare-rename, rename) through
+  `LspClient.inProcess()`.
+
 ## 1.2.1
 
 - Fix broken 1.2.0 package on pub.dev: the `.pubignore` pattern `lsp/` was
