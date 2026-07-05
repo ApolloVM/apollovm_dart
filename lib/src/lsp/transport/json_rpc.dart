@@ -40,11 +40,20 @@ typedef RequestHandler =
 /// Handles an incoming notification (no reply).
 typedef NotificationHandler = void Function(String method, Object? params);
 
+/// Handles an incoming response to a request we sent (client role). Receives the
+/// full decoded message, including its `id` and either `result` or `error`.
+typedef ResponseHandler = void Function(Map<String, Object?> message);
+
 /// Transport-agnostic JSON-RPC 2.0 endpoint. Subclasses supply the wire by
 /// implementing [writeMessage] and feeding decoded messages to [handleMessage].
 abstract class LspEndpoint {
   RequestHandler? onRequest;
   NotificationHandler? onNotification;
+
+  /// Invoked for a JSON-RPC response (a message with an `id` but no `method`),
+  /// i.e. the peer's reply to a request this endpoint sent. Set by [LspClient];
+  /// left null by a pure server, which never issues requests.
+  ResponseHandler? onResponse;
 
   /// Begins consuming input. No-op for push-based endpoints (e.g. web).
   void listen() {}
@@ -66,7 +75,9 @@ abstract class LspEndpoint {
     final id = message['id'];
 
     if (method is! String) {
-      // A response to a server->client request; unused for now.
+      // A response to a request we sent (client role); the server role leaves
+      // [onResponse] null and simply ignores it.
+      if (id != null) onResponse?.call(message);
       return;
     }
 

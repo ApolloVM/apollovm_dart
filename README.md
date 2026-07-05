@@ -902,6 +902,36 @@ final server = LspServer(endpoint);
 endpoint.receive(incomingMessage); // deliver each incoming JSON-RPC object
 ```
 
+To *consume* the server, use `LspClient`. It correlates responses to requests,
+streams server-pushed diagnostics, and offers typed helpers (`hover`,
+`definition`, `documentSymbol`, `completion`, `references`, `documentHighlight`,
+`prepareRename`, `rename`, `workspaceSymbol`). `LspClient.inProcess()` pairs a
+client with a fresh server in the same isolate — no subprocess, no `dart:io`:
+
+```dart
+import 'package:apollovm/apollovm_lsp.dart';
+
+final client = LspClient.inProcess();
+client.diagnostics.listen((d) => print('${d.uri}: ${d.diagnostics.length} problems'));
+
+await client.initialize();
+client.initialized();
+client.didOpen('file:///Foo.dart', source);
+
+final hover = await client.hover('file:///Foo.dart', Position(2, 13));
+print(hover?.contents.value);
+
+await client.shutdown();
+client.exit();
+```
+
+For an out-of-process server, wrap its transport instead —
+`LspClient(StreamLspEndpoint(process.stdout, process.stdin))..start()`.
+
+A runnable, self-contained walkthrough (handshake, diagnostics, document
+symbols, hover, go-to-definition, completion and rename) is in
+[`example/apollovm_example_lsp.dart`](example/apollovm_example_lsp.dart).
+
 A minimal VS Code client, an example workspace and a latency benchmark live in
 the repository's [`lsp/`](lsp/) directory (not part of the published package) —
 see [`lsp/README.md`](lsp/README.md) for features, design and editor setup.
