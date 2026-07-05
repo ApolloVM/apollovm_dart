@@ -6,7 +6,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:apollovm/apollovm.dart' show ApolloVM;
-import 'package:apollovm/apollovm_mcp.dart';
+import 'package:apollovm/apollovm_mcp_io.dart';
 import 'package:args/command_runner.dart';
 import 'package:test/test.dart';
 

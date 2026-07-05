@@ -9,13 +9,20 @@
 /// `apollovm.translate`, `apollovm.ast`, `apollovm.symbols`, `apollovm.types`,
 /// `apollovm.wasm`), plus a set of `apollovm.lsp.*` tools that let an agent
 /// inspect code the way an editor does (diagnostics, outline, hover,
-/// definition, references, completion and workspace-wide symbol search) — all
-/// over stdio or HTTP/SSE, with a configurable security model (per-tool isolate
-/// execution, timeout, and input/output limits).
+/// definition, references, completion and workspace-wide symbol search).
+///
+/// This library is **web-safe**: it imports no `dart:io` and no `dart:isolate`,
+/// so a browser IDE or an embedded agent can run the server and all tools
+/// in-process. Construct an [ApolloMcpServer] on any `StreamChannel<String>`.
+/// On native, tools flagged by [McpLimits.isolateTools] run in a killable
+/// isolate for a hard timeout; on the web they run in-process with a
+/// cooperative timeout (see `isolate_executor.dart`).
+///
+/// The native-only transports and CLI (stdio, HTTP/SSE, the `mcp` command)
+/// live in `package:apollovm/apollovm_mcp_io.dart`, which requires `dart:io`.
 library;
 
 export 'src/mcp/apollo_mcp_server.dart';
-export 'src/mcp/cli/mcp_command.dart';
 export 'src/mcp/mcp_config.dart';
 export 'src/mcp/runtime/isolate_executor.dart'
     show computeToolIsolated, runToolInIsolate;
@@ -23,5 +30,3 @@ export 'src/mcp/runtime/lsp_runtime.dart' show LspRuntime;
 export 'src/mcp/tools/apollo_tools.dart' show allToolNames, computeTool;
 export 'src/mcp/tools/lsp_tools.dart'
     show buildLspTools, computeLspTool, isLspTool, lspToolNames;
-export 'src/mcp/transport/http_sse_transport.dart';
-export 'src/mcp/transport/stdio_transport.dart';
