@@ -1,3 +1,25 @@
+## 1.4.0
+
+### Language Server Protocol — in-process API (no socket)
+
+- **New `LspService`** in `package:apollovm/apollovm_lsp.dart`: a
+  document-oriented facade that embeds an in-process `LspServer` and exposes the
+  language features as plain typed Dart calls — **no transport, no socket and no
+  `initialize`/`initialized` handshake to run by hand**. Being `dart:io`-free it
+  runs unchanged in a browser (compiled to JS) or an AI agent.
+  - One-shot `analyze(uri, text)` returns the buffer's diagnostics directly;
+    `open`/`change`/`close` manage documents (versions tracked automatically);
+    every query resolves against the current buffer.
+  - Typed helpers: `hover`, `definition`, `documentSymbols`, `completion`,
+    `references`, `documentHighlight`, `prepareRename`, `rename`,
+    `workspaceSymbols`, plus a `diagnostics` stream and a `ready`
+    (`InitializeResult`) future.
+  - `LspService.wrap(client)` layers the same convenience over an existing
+    `LspClient` (e.g. one connected to a remote server).
+- New example
+  [`example/apollovm_example_lsp_api.dart`](example/apollovm_example_lsp_api.dart)
+  drives the whole flow through `LspService` with no transport wiring.
+
 ## 1.3.0
 
 ### Language Server Protocol — new server features
