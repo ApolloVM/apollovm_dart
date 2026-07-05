@@ -11,6 +11,7 @@ import '../runtime/apollo_runtime.dart';
 import '../serialize/ast_json.dart';
 import '../serialize/symbols.dart';
 import '../serialize/types.dart';
+import 'lsp_tools.dart';
 
 /// Canonical tool names.
 const parseToolName = 'apollovm.parse';
@@ -21,7 +22,8 @@ const symbolsToolName = 'apollovm.symbols';
 const typesToolName = 'apollovm.types';
 const wasmToolName = 'apollovm.wasm';
 
-/// The names of all tools this server exposes, in registration order.
+/// The names of all tools this server exposes, in registration order: the core
+/// VM tools followed by the `apollovm.lsp.*` code-inspection tools.
 const allToolNames = <String>[
   parseToolName,
   executeToolName,
@@ -30,6 +32,7 @@ const allToolNames = <String>[
   symbolsToolName,
   typesToolName,
   wasmToolName,
+  ...lspToolNames,
 ];
 
 /// The source languages the MCP tools accept (canonical names).
@@ -153,6 +156,7 @@ List<Tool> buildTools() => [
       required: ['language', 'source'],
     ),
   ),
+  ...buildLspTools(),
 ];
 
 String _str(Map<String, Object?> args, String key, [String fallback = '']) =>
@@ -168,6 +172,8 @@ Future<Map<String, Object?>> computeTool(
   Map<String, Object?> args,
   McpLimits limits,
 ) async {
+  if (isLspTool(name)) return computeLspTool(name, args, limits);
+
   final rt = ApolloRuntime(limits: limits);
 
   switch (name) {

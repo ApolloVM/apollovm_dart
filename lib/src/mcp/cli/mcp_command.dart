@@ -14,6 +14,7 @@ import '../../../apollovm.dart' show ApolloVM, WasmRuntime;
 import '../mcp_config.dart';
 import '../runtime/isolate_executor.dart';
 import '../tools/apollo_tools.dart';
+import '../tools/lsp_tools.dart';
 import '../transport/http_sse_transport.dart';
 import '../transport/stdio_transport.dart';
 
@@ -323,6 +324,18 @@ Examples:
       ..addOption(
         'args',
         help: 'JSON array of positional arguments (apollovm.execute).',
+      )
+      ..addOption(
+        'line',
+        help: 'Zero-based cursor line (apollovm.lsp.* positional tools).',
+      )
+      ..addOption(
+        'character',
+        help: 'Zero-based cursor character (apollovm.lsp.* positional tools).',
+      )
+      ..addOption(
+        'query',
+        help: 'Symbol query (apollovm.lsp.workspaceSymbols).',
       );
   }
 
@@ -352,6 +365,16 @@ Examples:
       args['from'] = argResults!['from'] ?? language;
       args['to'] = argResults!['to'];
       args['source'] = source;
+    } else if (toolName == lspWorkspaceSymbolsToolName) {
+      // The CLI wraps the single provided source as a one-file workspace.
+      args['query'] = argResults!['query'] ?? '';
+      args['files'] = [
+        <String, Object?>{
+          'uri': file ?? 'file:///mcp/source',
+          'source': source,
+          'language': ?language,
+        },
+      ];
     } else {
       args['language'] = language;
       args['source'] = source;
@@ -366,6 +389,10 @@ Examples:
         if (rawArgs != null) {
           args['args'] = jsonDecode(rawArgs) as List;
         }
+      } else if (lspToolNames.contains(toolName)) {
+        args['line'] = int.tryParse(argResults!['line'] as String? ?? '') ?? 0;
+        args['character'] =
+            int.tryParse(argResults!['character'] as String? ?? '') ?? 0;
       }
     }
 

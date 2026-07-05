@@ -1,5 +1,28 @@
 ## 1.4.0
 
+### MCP — code-inspection tools (LSP)
+
+- **The MCP server now exposes ApolloVM's LSP features as `apollovm.lsp.*`
+  tools**, so an AI agent can inspect code the way an editor does. Results carry
+  precise LSP line/character ranges.
+  - `apollovm.lsp.diagnostics` — errors/warnings with ranges.
+  - `apollovm.lsp.symbols` — document outline (nested symbols + ranges).
+  - `apollovm.lsp.hover` — signature, type and documentation at a position.
+  - `apollovm.lsp.definition` — declaration location at a position.
+  - `apollovm.lsp.references` — all references at a position.
+  - `apollovm.lsp.completion` — completion proposals at a position.
+  - `apollovm.lsp.workspaceSymbols` — symbol search across multiple in-memory
+    files (codebase-wide lookup).
+- Each tool is stateless and web-safe (backed by the in-process `LspService`;
+  no socket, no `dart:io`), runs in-process or inside an isolate like the other
+  bounded tools, and honors the existing `maxSourceChars` limit. The parser is
+  selected from the `language` argument, so a mismatched URI cannot change it.
+- New public API in `package:apollovm/apollovm_mcp.dart`: `LspRuntime`,
+  `buildLspTools`, `computeLspTool`, `isLspTool`, `lspToolNames`. The CLI
+  `apollovm mcp call` gained `--line`, `--character` and `--query` flags.
+- New example
+  [`example/apollovm_example_mcp_lsp.dart`](example/apollovm_example_mcp_lsp.dart).
+
 ### Language Server Protocol — in-process API (no socket)
 
 - **New `LspService`** in `package:apollovm/apollovm_lsp.dart`: a
