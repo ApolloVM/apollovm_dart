@@ -29,9 +29,13 @@ final class ApolloMcpServer extends MCPServer with ToolsSupport {
           version: ApolloVM.VERSION,
         ),
         instructions:
-            'ApolloVM programmable execution engine. Tools: '
-            '${allToolNames.join(', ')}. All operate on inline source strings; '
-            'no file or network access is granted to executed code.',
+            'ApolloVM programmable execution engine and code-inspection server. '
+            'Core tools parse, execute, translate and compile source; the '
+            '`apollovm.lsp.*` tools inspect it like an editor (diagnostics, '
+            'outline, hover, definition, references, completion and '
+            'workspace-wide symbol search). Tools: ${allToolNames.join(', ')}. '
+            'All operate on inline source strings; no file or network access is '
+            'granted to executed code.',
       ) {
     for (final tool in buildTools()) {
       registerTool(tool, (request) => _handle(tool.name, request));

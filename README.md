@@ -858,6 +858,27 @@ apollovm mcp call apollovm.translate --from go --to dart --file main.go
 Supported `language` values: `dart`, `java`, `kotlin`, `go`, `csharp`, `javascript`,
 `typescript`, `lua`, `python`, `wasm`.
 
+#### Code-inspection tools (LSP)
+
+The `apollovm.lsp.*` tools let an agent inspect code the way an editor does —
+backed by ApolloVM's in-process Language Server (results carry precise LSP
+line/character ranges). They accept the same `language` values above (except
+`wasm`).
+
+| Tool | Input | Output |
+|------|-------|--------|
+| `apollovm.lsp.diagnostics` | `language`, `source`, `uri?` | `diagnostics` (with ranges), `ok` |
+| `apollovm.lsp.symbols` | `language`, `source`, `uri?` | document outline (nested symbols + ranges) |
+| `apollovm.lsp.hover` | `language`, `source`, `line`, `character`, `uri?` | `hover` (signature, type, doc) |
+| `apollovm.lsp.definition` | `language`, `source`, `line`, `character`, `uri?` | `definition` location |
+| `apollovm.lsp.references` | `language`, `source`, `line`, `character`, `includeDeclaration?`, `uri?` | `references` |
+| `apollovm.lsp.completion` | `language`, `source`, `line`, `character`, `uri?` | `completion` items |
+| `apollovm.lsp.workspaceSymbols` | `query`, `files: [{uri, source, language?}]` | matching `symbols` across the files |
+
+`apollovm.lsp.workspaceSymbols` takes multiple in-memory files, enabling
+codebase-wide symbol search. See
+[`example/apollovm_example_mcp_lsp.dart`](example/apollovm_example_mcp_lsp.dart).
+
 ### Security model
 
 - **File/network access is denied by construction** — executed code is only ever

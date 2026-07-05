@@ -109,20 +109,15 @@ class Calc {
       expect(serverInfo['version'], ApolloVM.VERSION);
     });
 
-    test('tools/list returns the 7 tools each with an inputSchema', () async {
+    test('tools/list returns all tools each with an inputSchema', () async {
       await client.initialize();
       final resp = await client.request('tools/list');
       final tools = (resp['result'] as Map)['tools'] as List;
       final names = tools.map((t) => (t as Map)['name']).toSet();
-      expect(names, {
-        'apollovm.parse',
-        'apollovm.execute',
-        'apollovm.translate',
-        'apollovm.ast',
-        'apollovm.symbols',
-        'apollovm.types',
-        'apollovm.wasm',
-      });
+      expect(names, allToolNames.toSet());
+      // The core VM tools and the LSP inspection tools are both advertised.
+      expect(names, containsAll(['apollovm.parse', 'apollovm.wasm']));
+      expect(names, containsAll(lspToolNames));
       for (final t in tools) {
         final schema = (t as Map)['inputSchema'] as Map;
         expect(schema['properties'], isNotEmpty);

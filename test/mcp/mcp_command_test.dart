@@ -109,7 +109,7 @@ void main() {
   group('mcp doctor', () {
     test('runs the capability checks and reports the tool count', () async {
       final output = await runMcp(['doctor']);
-      expect(output, contains('7 tools registered'));
+      expect(output, contains('${allToolNames.length} tools registered'));
       expect(output, contains('apollovm.execute'));
       expect(output, contains('apollovm.wasm'));
     });
