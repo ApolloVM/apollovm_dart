@@ -264,4 +264,106 @@ void main() {
     });
     expect(resp['result'], isNull);
   });
+
+  group('all symbol categories/kinds', () {
+    // A source exercising fields, a constructor, enum members and a top-level
+    // variable, so the server's category/kind mappings are all hit.
+    const richUri = 'file:///ws/rich.dart';
+    const rich = '''
+class Dog {
+  int age;
+  Dog(int a) { this.age = a; }
+  int bark(int n) { return n; }
+}
+enum Color { red, green, blue }
+int topVar = 3;
+int makeAge(int seed) { return seed; }
+''';
+
+    Position posOf(String needle, {int occurrence = 1}) {
+      final line = LineIndex(rich);
+      var index = -1;
+      for (var i = 0; i < occurrence; i++) {
+        index = rich.indexOf(needle, index + 1);
+      }
+      return line.positionAt(index);
+    }
+
+    Map<String, Object?> posMap(String needle, {int occurrence = 1}) {
+      final p = posOf(needle, occurrence: occurrence);
+      return {'line': p.line, 'character': p.character};
+    }
+
+    test('documentSymbol maps variable and enum-member kinds', () async {
+      final c = _Client();
+      await c.open(richUri, rich);
+      final resp = await c.request('textDocument/documentSymbol', {
+        'textDocument': _td(richUri),
+      });
+      final roots = (resp['result'] as List).cast<Map>();
+      final byName = {for (final s in roots) s['name']: s};
+
+      expect(byName['topVar']?['kind'], SymbolKind.variable);
+      final color = byName['Color']!;
+      final members = (color['children'] as List).cast<Map>();
+      expect(members.map((m) => m['name']), containsAll(['red', 'green']));
+      expect(members.first['kind'], SymbolKind.enumMember);
+    });
+
+    test('completion maps every present symbol category', () async {
+      final c = _Client();
+      await c.open(richUri, rich);
+      final resp = await c.request('textDocument/completion', {
+        'textDocument': _td(richUri),
+        'position': posMap('return n'), // inside bark's body
+      });
+      final items = ((resp['result'] as Map)['items'] as List).cast<Map>();
+      final kinds = items.map((i) => i['kind']).toSet();
+      // field (age), enum member (green), method (bark), function (makeAge),
+      // class (Dog), enum (Color) are all present in the document.
+      expect(
+        kinds,
+        containsAll([
+          CompletionItemKind.field,
+          CompletionItemKind.enumMember,
+          CompletionItemKind.method,
+          CompletionItemKind.function,
+        ]),
+      );
+    });
+
+    test('hover labels a field and an enum member', () async {
+      final c = _Client();
+      await c.open(richUri, rich);
+
+      final field = await c.request('textDocument/hover', {
+        'textDocument': _td(richUri),
+        'position': posMap('age'), // the `int age;` field
+      });
+      expect(
+        ((field['result'] as Map)['contents'] as Map)['value'],
+        contains('Field'),
+      );
+
+      final member = await c.request('textDocument/hover', {
+        'textDocument': _td(richUri),
+        'position': posMap('green'),
+      });
+      expect(
+        ((member['result'] as Map)['contents'] as Map)['value'],
+        contains('Enum value'),
+      );
+    });
+
+    test('completion on an unopened document is empty', () async {
+      final c = _Client();
+      final resp = await c.request('textDocument/completion', {
+        'textDocument': _td('file:///ws/never-opened.dart'),
+        'position': {'line': 0, 'character': 0},
+      });
+      final result = resp['result'] as Map;
+      expect(result['items'], isEmpty);
+      expect(result['isIncomplete'], isFalse);
+    });
+  });
 }

@@ -291,4 +291,129 @@ void main() {
       expect(result.serverInfo?.name, 'apollovm-lsp');
     },
   );
+
+  group('LspClient (edge cases)', () {
+    test('exposes the underlying endpoint and a done future', () async {
+      final client = LspClient.inProcess();
+      addTearDown(client.dispose);
+      expect(client.endpoint, isA<LspEndpoint>());
+      expect(client.done, isA<Future<void>>());
+    });
+
+    test('initialize forwards rootUri and initializationOptions', () async {
+      final client = LspClient.inProcess();
+      addTearDown(client.dispose);
+      final result = await client.initialize(
+        rootUri: 'file:///ws',
+        initializationOptions: const {'trace': 'off'},
+      );
+      expect(result.serverInfo?.name, 'apollovm-lsp');
+    });
+
+    test('definition parses a list-shaped response', () async {
+      final client = _clientWithPeer((method, _) {
+        expect(method, 'textDocument/definition');
+        return [
+          Location(
+            'file:///a.dart',
+            const Range(Position(1, 2), Position(1, 6)),
+          ).toJson(),
+        ];
+      });
+      addTearDown(client.dispose);
+      final def = await client.definition(
+        'file:///a.dart',
+        const Position(0, 0),
+      );
+      expect(def, isNotNull);
+      expect(def!.range.start.line, 1);
+      expect(def.range.end.character, 6);
+    });
+
+    test('completion parses a bare-list response', () async {
+      final client = _clientWithPeer((method, _) {
+        expect(method, 'textDocument/completion');
+        return [
+          const CompletionItem(
+            label: 'foo',
+            kind: CompletionItemKind.function,
+          ).toJson(),
+        ];
+      });
+      addTearDown(client.dispose);
+      final list = await client.completion(
+        'file:///a.dart',
+        const Position(0, 0),
+      );
+      expect(list.isIncomplete, isFalse);
+      expect(list.items.single.label, 'foo');
+    });
+
+    test('answers a server->client request via onServerRequest', () async {
+      final replies = <Map<String, Object?>>[];
+      final client = _clientWithPeer(null, onPeerResponse: replies.add);
+      addTearDown(client.dispose);
+      client.onServerRequest = (method, params) => {'echo': method};
+
+      _peerSend(client, {
+        'jsonrpc': '2.0',
+        'id': 55,
+        'method': 'window/showMessageRequest',
+        'params': const {'a': 1},
+      });
+      await pumpEventQueue();
+
+      expect(replies, hasLength(1));
+      expect(replies.single['id'], 55);
+      expect(
+        (replies.single['result'] as Map)['echo'],
+        'window/showMessageRequest',
+      );
+    });
+
+    test('rejects a server->client request with no handler', () async {
+      final replies = <Map<String, Object?>>[];
+      final client = _clientWithPeer(null, onPeerResponse: replies.add);
+      addTearDown(client.dispose);
+
+      _peerSend(client, {
+        'jsonrpc': '2.0',
+        'id': 56,
+        'method': 'foo/bar',
+        'params': null,
+      });
+      await pumpEventQueue();
+
+      expect(replies, hasLength(1));
+      expect(
+        (replies.single['error'] as Map)['code'],
+        ResponseError.methodNotFound,
+      );
+    });
+  });
+}
+
+/// Peer endpoints registered per client, so a test can push a server->client
+/// message into the client via [_peerSend].
+final _peers = <LspClient, MessageLspEndpoint>{};
+
+/// Builds a client whose peer answers requests with [peerOnRequest] and, when
+/// given, forwards the client's responses to [onPeerResponse].
+LspClient _clientWithPeer(
+  RequestHandler? peerOnRequest, {
+  ResponseHandler? onPeerResponse,
+}) {
+  late final MessageLspEndpoint peer;
+  final clientEndpoint = MessageLspEndpoint((m) => peer.receive(m));
+  peer = MessageLspEndpoint((m) => clientEndpoint.receive(m));
+  peer.onRequest = peerOnRequest;
+  peer.onResponse = onPeerResponse;
+  final client = LspClient(clientEndpoint)..start();
+  _peers[client] = peer;
+  return client;
+}
+
+/// Sends [message] from the peer into [client] as if the server originated it.
+void _peerSend(LspClient client, Map<String, Object?> message) {
+  _peers[client]!.writeMessage(message);
 }
