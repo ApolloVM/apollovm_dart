@@ -32,6 +32,16 @@
 /// client.didOpen('file:///Foo.dart', source);
 /// final hover = await client.hover('file:///Foo.dart', Position(2, 13));
 /// ```
+///
+/// For the simplest embedding — no transport, no socket, no handshake to run by
+/// hand — use [LspService], a document-oriented facade ideal for a web app or an
+/// AI agent:
+///
+/// ```dart
+/// final lsp = LspService();
+/// final errors = await lsp.analyze('file:///Foo.dart', source);
+/// final hover = await lsp.hover('file:///Foo.dart', Position(2, 13));
+/// ```
 library;
 
 export 'src/lsp/analysis/analyzer.dart';
@@ -44,4 +54,5 @@ export 'src/lsp/analysis/token_index.dart';
 export 'src/lsp/client/client.dart';
 export 'src/lsp/protocol/protocol.dart';
 export 'src/lsp/server/server.dart';
+export 'src/lsp/service/service.dart';
 export 'src/lsp/transport/json_rpc.dart';

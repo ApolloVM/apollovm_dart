@@ -928,9 +928,41 @@ client.exit();
 For an out-of-process server, wrap its transport instead —
 `LspClient(StreamLspEndpoint(process.stdout, process.stdin))..start()`.
 
-A runnable, self-contained walkthrough (handshake, diagnostics, document
-symbols, hover, go-to-definition, completion and rename) is in
-[`example/apollovm_example_lsp.dart`](example/apollovm_example_lsp.dart).
+### In-process API — no socket, no handshake (web / agents)
+
+For the simplest embedding, use **`LspService`**: a document-oriented facade
+over an in-process server. There is no transport to wire, no socket to open and
+no `initialize` handshake to run by hand — construct it, hand it code, ask
+questions. Being `dart:io`-free, it runs unchanged in the browser.
+
+```dart
+import 'package:apollovm/apollovm_lsp.dart';
+
+final lsp = LspService();
+
+// One-shot: analyze a buffer and get its diagnostics.
+final errors = await lsp.analyze('file:///Foo.dart', source);
+
+// Or query features against the current buffer.
+final hover = await lsp.hover('file:///Foo.dart', Position(2, 13));
+final outline = await lsp.documentSymbols('file:///Foo.dart');
+final edit = await lsp.rename('file:///Foo.dart', Position(2, 13), 'compute');
+
+lsp.change('file:///Foo.dart', edited); // update as the buffer changes
+await lsp.dispose();
+```
+
+`LspService` exposes `analyze`, `open`/`change`/`close`, a `diagnostics` stream,
+and typed `hover`, `definition`, `documentSymbols`, `completion`, `references`,
+`documentHighlight`, `prepareRename`, `rename` and `workspaceSymbols`. Use
+`LspService.wrap(client)` to layer the same convenience over a client connected
+to a remote (out-of-process) server.
+
+Runnable walkthroughs are in
+[`example/apollovm_example_lsp_api.dart`](example/apollovm_example_lsp_api.dart)
+(the `LspService` API) and
+[`example/apollovm_example_lsp.dart`](example/apollovm_example_lsp.dart) (the
+lower-level `LspClient`).
 
 A minimal VS Code client, an example workspace and a latency benchmark live in
 the repository's [`lsp/`](lsp/) directory (not part of the published package) —
