@@ -363,28 +363,48 @@ class LspServer {
     if (unit == null) return {'isIncomplete': false, 'items': const []};
     final cur = _resolveCursor(unit, p);
     final container = cur?.container;
+    final cursorOffset = cur?.offset ?? -1;
 
     final items = <CompletionItem>[];
-    for (final s in unit.symbols) {
-      // Rank: local scope (same container) first, then global.
-      final isLocal = container != null && s.container == container;
+    final seen = <String>{};
+
+    void add(String label, int kind, {String? detail, required String rank}) {
+      if (label.isEmpty || !seen.add(label)) return;
       items.add(
         CompletionItem(
-          label: s.name,
-          kind: _completionKind(s.category),
-          detail: s.signature,
-          sortText: '${isLocal ? '0' : '1'}_${s.name}',
+          label: label,
+          kind: kind,
+          detail: detail,
+          sortText: '${rank}_$label',
         ),
       );
     }
-    for (final kw in _keywords) {
-      items.add(
-        CompletionItem(
-          label: kw,
-          kind: CompletionItemKind.keyword,
-          sortText: '2_$kw',
-        ),
+
+    // 1. Declared symbols from the AST (richest: real kind + signature).
+    //    Rank local scope (same container) first, then the rest.
+    for (final s in unit.symbols) {
+      final isLocal = container != null && s.container == container;
+      add(
+        s.name,
+        _completionKind(s.category),
+        detail: s.signature,
+        rank: isLocal ? '0' : '1',
       );
+    }
+
+    // 2. Identifiers harvested from the raw token stream. Unlike the AST
+    //    symbols these survive a *failed* parse — the common case while typing —
+    //    and surface local variables and parameters the symbol table omits.
+    //    Skip the partial token under the cursor (the word being typed).
+    for (final t in unit.tokenIndex.identifiers) {
+      if (cursorOffset >= t.start && cursorOffset <= t.end) continue;
+      if (_keywordSet.contains(t.name)) continue;
+      add(t.name, CompletionItemKind.variable, rank: '2');
+    }
+
+    // 3. Language keywords.
+    for (final kw in _keywords) {
+      add(kw, CompletionItemKind.keyword, rank: '3');
     }
 
     return {
@@ -516,6 +536,8 @@ class LspServer {
     }
     return out;
   }
+
+  static final Set<String> _keywordSet = _keywords.toSet();
 
   static const _keywords = [
     'class',
