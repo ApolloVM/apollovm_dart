@@ -319,6 +319,10 @@ class TokenIndex {
     final decls = <DeclSite>[];
     // Stack of open class/enum bodies: (name, bodyDepth, isEnum, declIndex).
     final classStack = <_ClassScope>[];
+    // Stack of open function/method/constructor bodies: (declIndex, bodyDepth).
+    // Lets a member's `fullEnd` be extended to its body's closing `}` (so the
+    // declaration range covers the whole method, not just its signature).
+    final bodyStack = <_BodyScope>[];
     var braceDepth = 0;
     var atBoundary = true;
 
@@ -331,6 +335,9 @@ class TokenIndex {
         braceDepth == classStack.last.bodyDepth;
 
     _ClassScope? pendingClass;
+    // Index of a member whose body brace is expected next (armed once its
+    // parameter list has been consumed); `null` when no body is pending.
+    int? pendingBody;
 
     var i = 0;
     while (i < tokens.length) {
@@ -371,24 +378,36 @@ class TokenIndex {
           pc.bodyDepth = braceDepth;
           classStack.add(pc);
           pendingClass = null;
+        } else if (pendingBody != null) {
+          bodyStack.add(_BodyScope(pendingBody, braceDepth));
+          pendingBody = null;
         }
         atBoundary = true;
         i++;
         continue;
       }
       if (t.sym('}')) {
+        // Close any function/method bodies ending at this depth.
+        while (bodyStack.isNotEmpty && bodyStack.last.bodyDepth == braceDepth) {
+          final closed = bodyStack.removeLast();
+          decls[closed.declIndex].fullEnd = t.end;
+        }
         // Close any class bodies at this depth.
         while (classStack.isNotEmpty &&
             classStack.last.bodyDepth == braceDepth) {
           final closed = classStack.removeLast();
           decls[closed.declIndex].fullEnd = t.end;
         }
+        pendingBody = null;
         braceDepth--;
         atBoundary = true;
         i++;
         continue;
       }
       if (t.sym(';')) {
+        // A `;` before the body brace means the member has no body (abstract
+        // method, `=>` expression body, field): drop the pending arm.
+        pendingBody = null;
         atBoundary = true;
         i++;
         continue;
@@ -442,6 +461,31 @@ class TokenIndex {
         if (consumed > 0) {
           i += consumed;
           atBoundary = false;
+          // For a function/method/constructor, `_tryDeclaration` stops before
+          // the parameter list. Skip its balanced `( ... )` here (so nested
+          // named-parameter braces aren't mistaken for the body) and arm body
+          // tracking so the next `{` is recorded as this member's body.
+          pendingBody = null;
+          final added = decls.last;
+          if (added.kind == DeclKind.function ||
+              added.kind == DeclKind.method ||
+              added.kind == DeclKind.constructor) {
+            if (i < tokens.length && tokens[i].sym('(')) {
+              var depth = 0;
+              while (i < tokens.length) {
+                if (tokens[i].sym('(')) {
+                  depth++;
+                } else if (tokens[i].sym(')')) {
+                  depth--;
+                  i++;
+                  if (depth == 0) break;
+                  continue;
+                }
+                i++;
+              }
+            }
+            pendingBody = decls.length - 1;
+          }
           continue;
         }
       }
@@ -594,4 +638,10 @@ class _ClassScope {
   final int declIndex;
   int bodyDepth = -1;
   _ClassScope(this.name, this.isEnum, this.declIndex);
+}
+
+class _BodyScope {
+  final int declIndex;
+  final int bodyDepth;
+  _BodyScope(this.declIndex, this.bodyDepth);
 }

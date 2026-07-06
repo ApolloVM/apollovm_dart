@@ -1,3 +1,27 @@
+## 1.6.0
+
+### Language Server — member-aware completion and full-body symbol ranges
+
+- **`documentSymbol` ranges now span a member's whole body, not just its
+  signature.** Previously only class/enum declarations had their `range`
+  extended to the closing `}`; a function/method/constructor stopped at the end
+  of its name, so an editor "select symbol" or outline action only highlighted
+  the signature. The token indexer now tracks member bodies too — skipping the
+  parameter list first, so Dart named-parameter braces (`{ ... }`) are not
+  mistaken for the body — and extends `fullEnd` to the body's closing `}`.
+  Bodyless members (abstract/`;`-terminated) are left unchanged. The narrower
+  `selectionRange` (the name) is untouched.
+- **Completion on `this.` / `super.` proposes the enclosing type's members.**
+  A member-access position is now recognized and answered with just that type's
+  fields and methods (with their real kinds), instead of the full grab-bag of
+  every identifier plus keywords.
+- **Completion keeps real symbol kinds even when the buffer does not parse.**
+  The `this.` case leaves the source unparseable, which had emptied the AST
+  symbol table and degraded every proposal to a plain identifier. Completion now
+  also draws on the token-index declarations (which survive a failed parse), so
+  methods and fields keep their proper kinds mid-edit. Local variables and
+  parameters continue to be surfaced from the raw token stream.
+
 ## 1.5.0
 
 ### Language Server — better completion and parse-error locations

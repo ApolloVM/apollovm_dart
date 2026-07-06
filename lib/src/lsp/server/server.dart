@@ -365,6 +365,8 @@ class LspServer {
     final container = cur?.container;
     final cursorOffset = cur?.offset ?? -1;
 
+    final decls = unit.tokenIndex.declarations;
+
     final items = <CompletionItem>[];
     final seen = <String>{};
 
@@ -380,6 +382,31 @@ class LspServer {
       );
     }
 
+    Map<String, Object?> result() => {
+      'isIncomplete': false,
+      'items': items.map((i) => i.toJson()).toList(),
+    };
+
+    // Member access `<receiver>.<partial>`: for `this`/`super`, propose only
+    // the enclosing type's members (with their real kinds) — never keywords or
+    // unrelated globals. This works even while the buffer does not parse (the
+    // usual state right after typing `.`), because it reads the token-index
+    // declarations rather than the AST.
+    final receiver = _memberAccessReceiver(unit.text, cursorOffset);
+    if (receiver == 'this' || receiver == 'super') {
+      for (final d in decls) {
+        if (d.kind == DeclKind.constructor) continue; // not reached via `this.`
+        final isMember = container != null
+            ? d.container == container
+            : d.container != null;
+        if (!isMember) continue;
+        add(d.name, _declCompletionKind(d.kind), rank: '0');
+      }
+      // Only commit to member-only results if we actually found members;
+      // otherwise fall through to the general proposals below.
+      if (items.isNotEmpty) return result();
+    }
+
     // 1. Declared symbols from the AST (richest: real kind + signature).
     //    Rank local scope (same container) first, then the rest.
     for (final s in unit.symbols) {
@@ -392,25 +419,86 @@ class LspServer {
       );
     }
 
-    // 2. Identifiers harvested from the raw token stream. Unlike the AST
-    //    symbols these survive a *failed* parse — the common case while typing —
-    //    and surface local variables and parameters the symbol table omits.
-    //    Skip the partial token under the cursor (the word being typed).
+    // 2. Token-index declarations. Unlike the AST symbols these survive a
+    //    *failed* parse — the common case while typing — so methods and fields
+    //    keep their real kinds instead of degrading to plain identifiers.
+    for (final d in decls) {
+      final isLocal = container != null && d.container == container;
+      add(d.name, _declCompletionKind(d.kind), rank: isLocal ? '0' : '1');
+    }
+
+    // 3. Identifiers harvested from the raw token stream: local variables and
+    //    parameters the symbol table omits. Skip the partial token under the
+    //    cursor (the word being typed).
     for (final t in unit.tokenIndex.identifiers) {
       if (cursorOffset >= t.start && cursorOffset <= t.end) continue;
       if (_keywordSet.contains(t.name)) continue;
       add(t.name, CompletionItemKind.variable, rank: '2');
     }
 
-    // 3. Language keywords.
+    // 4. Language keywords.
     for (final kw in _keywords) {
       add(kw, CompletionItemKind.keyword, rank: '3');
     }
 
-    return {
-      'isIncomplete': false,
-      'items': items.map((i) => i.toJson()).toList(),
-    };
+    return result();
+  }
+
+  /// If the caret sits in a member-access position `<receiver>.<partial>`,
+  /// returns the receiver identifier (e.g. `this`, `super`, a variable name, or
+  /// `''` for a non-identifier receiver). Returns `null` when the caret is not
+  /// after a `.`.
+  static String? _memberAccessReceiver(String text, int offset) {
+    if (offset < 0 || offset > text.length) return null;
+    var i = offset;
+    // Skip the partial member identifier being typed.
+    while (i > 0 && _isIdentChar(text.codeUnitAt(i - 1))) {
+      i--;
+    }
+    // Require a '.' (possibly after inline spaces) immediately to the left.
+    var j = i;
+    while (j > 0 && _isInlineSpace(text.codeUnitAt(j - 1))) {
+      j--;
+    }
+    if (j == 0 || text.codeUnitAt(j - 1) != 0x2e /* . */ ) return null;
+    j--; // consume the '.'
+    while (j > 0 && _isInlineSpace(text.codeUnitAt(j - 1))) {
+      j--;
+    }
+    final end = j;
+    while (j > 0 && _isIdentChar(text.codeUnitAt(j - 1))) {
+      j--;
+    }
+    return text.substring(j, end);
+  }
+
+  static bool _isIdentChar(int c) =>
+      c == 0x5f || // _
+      (c >= 0x30 && c <= 0x39) || // 0-9
+      (c >= 0x41 && c <= 0x5a) || // A-Z
+      (c >= 0x61 && c <= 0x7a); // a-z
+
+  static bool _isInlineSpace(int c) => c == 0x20 || c == 0x09;
+
+  int _declCompletionKind(DeclKind k) {
+    switch (k) {
+      case DeclKind.classDecl:
+        return CompletionItemKind.classKind;
+      case DeclKind.enumDecl:
+        return CompletionItemKind.enumKind;
+      case DeclKind.function:
+        return CompletionItemKind.function;
+      case DeclKind.method:
+        return CompletionItemKind.method;
+      case DeclKind.constructor:
+        return CompletionItemKind.constructor;
+      case DeclKind.field:
+        return CompletionItemKind.field;
+      case DeclKind.variable:
+        return CompletionItemKind.variable;
+      case DeclKind.enumMember:
+        return CompletionItemKind.enumMember;
+    }
   }
 
   int _completionKind(SymbolCategory c) {
