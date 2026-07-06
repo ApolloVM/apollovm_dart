@@ -413,6 +413,57 @@ class Box {
       },
     );
 
+    test(
+      'enum members after the constant list are parsed as real members',
+      () async {
+        // Everything after the `;` that ends the constant list — fields,
+        // constructors, methods — must be recognized like class members (with
+        // real kinds and full-body ranges), not swallowed as enum constants.
+        const src = '''
+enum Color {
+  red, green, blue;
+
+  final int code;
+  const Color(this.code);
+
+  int doubled() {
+    return code * 2;
+  }
+}
+''';
+        const uri = 'file:///ws/enum.dart';
+        final c = _Client();
+        await c.open(uri, src);
+        final resp = await c.request('textDocument/documentSymbol', {
+          'textDocument': _td(uri),
+        });
+        final color = (resp['result'] as List).cast<Map>().firstWhere(
+          (s) => s['name'] == 'Color',
+        );
+        final children = (color['children'] as List).cast<Map>();
+        final byName = {for (final m in children) m['name']: m};
+
+        // The three constants stay enum members.
+        for (final name in ['red', 'green', 'blue']) {
+          expect(byName[name]?['kind'], SymbolKind.enumMember);
+        }
+        // The trailing members get their real kinds — not enumMember.
+        expect(byName['code']?['kind'], SymbolKind.field);
+        expect(byName['Color']?['kind'], SymbolKind.constructor);
+        expect(byName['doubled']?['kind'], SymbolKind.method);
+
+        // The method's range spans its body (line 7 is the closing `  }`).
+        final doubled = Range.fromJson(
+          (byName['doubled']!['range'] as Map).cast<String, Object?>(),
+        );
+        expect(
+          doubled.end.line,
+          8,
+          reason: 'enum method range must include its body',
+        );
+      },
+    );
+
     test('completion maps every present symbol category', () async {
       final c = _Client();
       await c.open(richUri, rich);
