@@ -1,3 +1,9 @@
+## 1.4.2
+
+- Docs: fix the **ApolloVM Web Demo** link — the live playground is served at the
+  site root (`https://apollovm.github.io/apollovm_web_example/`), not the old
+  `/www/` path.
+
 ## 1.4.1
 
 ### MCP — web compatibility
