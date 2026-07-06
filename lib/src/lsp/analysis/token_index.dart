@@ -465,8 +465,14 @@ class TokenIndex {
         // A `;` directly in an enum body ends its constant list; everything
         // after it is a regular member.
         if (inEnumBody()) classStack.last.enumConstantsDone = true;
-        // A `;` before the body brace means the member has no body (abstract
-        // method, `=>` expression body, field): drop the pending arm.
+        // A member still pending here has no `{ ... }` body (an abstract method,
+        // or a `;`-terminated constructor such as `const Foo(this.x);` or a
+        // redirecting `Foo.zero() : this(0);`). Extend its range to this `;` so
+        // the whole signature — parameters and any initializer list — is
+        // selectable, then drop the pending arm.
+        if (pendingBody != null) {
+          decls[pendingBody].fullEnd = t.end;
+        }
         pendingBody = null;
         atBoundary = true;
         i++;
