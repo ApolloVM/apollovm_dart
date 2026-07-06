@@ -338,6 +338,81 @@ int makeAge(int seed) { return seed; }
       expect(members.first['kind'], SymbolKind.enumMember);
     });
 
+    test(
+      'documentSymbol range spans a member body, not just its signature',
+      () async {
+        final c = _Client();
+        await c.open(richUri, rich);
+        final resp = await c.request('textDocument/documentSymbol', {
+          'textDocument': _td(richUri),
+        });
+        final roots = (resp['result'] as List).cast<Map>();
+        final byName = {for (final s in roots) s['name']: s};
+
+        Range rangeOf(Map sym) =>
+            Range.fromJson((sym['range'] as Map).cast<String, Object?>());
+        Range selOf(Map sym) => Range.fromJson(
+          (sym['selectionRange'] as Map).cast<String, Object?>(),
+        );
+
+        // Top-level function: the range must reach the closing brace on its line,
+        // well past the name in `selectionRange`.
+        final makeAge = byName['makeAge']!;
+        expect(rangeOf(makeAge).end.line, selOf(makeAge).end.line);
+        expect(
+          rangeOf(makeAge).end.character,
+          greaterThan(selOf(makeAge).end.character),
+          reason: 'range should include the { return seed; } body',
+        );
+
+        // Method inside a class: same expectation for `bark`.
+        final dog = byName['Dog']!;
+        final bark = (dog['children'] as List).cast<Map>().firstWhere(
+          (m) => m['name'] == 'bark',
+        );
+        expect(
+          rangeOf(bark).end.character,
+          greaterThan(selOf(bark).end.character),
+          reason: 'method range should include its body',
+        );
+      },
+    );
+
+    test(
+      'documentSymbol range skips named-parameter braces to reach the body',
+      () async {
+        // The `{ ... }` of Dart named parameters must not be mistaken for the
+        // method body; the range should extend to the real body's closing brace.
+        const named = '''
+class Box {
+  int add({int a = 1, int b = 2}) {
+    return a + b;
+  }
+}
+''';
+        const namedUri = 'file:///ws/named.dart';
+        final c = _Client();
+        await c.open(namedUri, named);
+        final resp = await c.request('textDocument/documentSymbol', {
+          'textDocument': _td(namedUri),
+        });
+        final roots = (resp['result'] as List).cast<Map>();
+        final box = roots.firstWhere((s) => s['name'] == 'Box');
+        final add = (box['children'] as List).cast<Map>().firstWhere(
+          (m) => m['name'] == 'add',
+        );
+        final range = Range.fromJson(
+          (add['range'] as Map).cast<String, Object?>(),
+        );
+        // `named` line 3 (0-based) is the method's closing `  }`.
+        expect(
+          range.end.line,
+          3,
+          reason: 'range must reach the body brace, not the params brace',
+        );
+      },
+    );
+
     test('completion maps every present symbol category', () async {
       final c = _Client();
       await c.open(richUri, rich);
@@ -358,6 +433,60 @@ int makeAge(int seed) { return seed; }
           CompletionItemKind.function,
         ]),
       );
+    });
+
+    test('completion after `this.` proposes only the class members', () async {
+      // `this.` leaves the buffer unparseable; completion must still surface
+      // the enclosing class's members (with real kinds) and nothing else.
+      const memberSrc = '''
+class Dog {
+  int age = 0;
+  int legs = 4;
+  int bark(int n) {
+    this.
+    return n;
+  }
+}
+''';
+      const memberUri = 'file:///ws/member.dart';
+      final c = _Client();
+      await c.open(memberUri, memberSrc);
+      final resp = await c.request('textDocument/completion', {
+        'textDocument': _td(memberUri),
+        'position': {'line': 4, 'character': 9}, // right after `this.`
+      });
+      final items = ((resp['result'] as Map)['items'] as List).cast<Map>();
+      final byName = {for (final i in items) i['label']: i['kind']};
+
+      // Exactly the members of Dog, with their real kinds — no keywords, no
+      // unrelated globals.
+      expect(byName.keys, unorderedEquals(['age', 'legs', 'bark']));
+      expect(byName['age'], CompletionItemKind.field);
+      expect(byName['legs'], CompletionItemKind.field);
+      expect(byName['bark'], CompletionItemKind.method);
+    });
+
+    test('completion offers local variables and parameters', () async {
+      const localSrc = '''
+class Dog {
+  int bark(int n) {
+    var local = 1;
+    var x = 0;
+    return n;
+  }
+}
+''';
+      const localUri = 'file:///ws/local.dart';
+      final c = _Client();
+      await c.open(localUri, localSrc);
+      final resp = await c.request('textDocument/completion', {
+        'textDocument': _td(localUri),
+        'position': {'line': 4, 'character': 4}, // start of the `return` line
+      });
+      final items = ((resp['result'] as Map)['items'] as List).cast<Map>();
+      final labels = items.map((i) => i['label']).toSet();
+      // The local variable, a second local, and the parameter are all offered.
+      expect(labels, containsAll(['local', 'x', 'n']));
     });
 
     test('hover labels a field and an enum member', () async {
