@@ -333,6 +333,11 @@ class TokenIndex {
         classStack.isNotEmpty &&
         classStack.last.isEnum &&
         braceDepth == classStack.last.bodyDepth;
+    // True only while scanning the enum's constant list (before the `;` that
+    // ends it). After that `;`, an enum body holds ordinary members (fields,
+    // constructors, methods) that must be recognised like class members.
+    bool inEnumConstantList() =>
+        inEnumBody() && !classStack.last.enumConstantsDone;
 
     _ClassScope? pendingClass;
     // Index of a member whose body brace is expected next (armed once its
@@ -405,6 +410,9 @@ class TokenIndex {
         continue;
       }
       if (t.sym(';')) {
+        // A `;` directly in an enum body ends its constant list; everything
+        // after it is a regular member.
+        if (inEnumBody()) classStack.last.enumConstantsDone = true;
         // A `;` before the body brace means the member has no body (abstract
         // method, `=>` expression body, field): drop the pending arm.
         pendingBody = null;
@@ -413,15 +421,15 @@ class TokenIndex {
         continue;
       }
       if (t.sym(',')) {
-        // Commas separate entries only inside an enum body; elsewhere (e.g.
-        // parameter lists) they must not open a new declaration boundary.
-        atBoundary = inEnumBody();
+        // Commas separate entries only within an enum's constant list;
+        // elsewhere (e.g. parameter lists) they must not open a new boundary.
+        atBoundary = inEnumConstantList();
         i++;
         continue;
       }
 
-      // Enum members: identifiers directly in an enum body.
-      if (inEnumBody() && t.isIdent && atBoundary) {
+      // Enum constants: identifiers in the enum's constant list (before `;`).
+      if (inEnumConstantList() && t.isIdent && atBoundary) {
         decls.add(
           DeclSite(
             name: t.value,
@@ -637,6 +645,9 @@ class _ClassScope {
   final bool isEnum;
   final int declIndex;
   int bodyDepth = -1;
+  // For enums: set once the constant list's terminating `;` is seen, after
+  // which members are parsed like class members rather than enum constants.
+  bool enumConstantsDone = false;
   _ClassScope(this.name, this.isEnum, this.declIndex);
 }
 
