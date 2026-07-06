@@ -87,11 +87,39 @@ void main() {
     final result = resp['result'] as Map;
     final items = (result['items'] as List).cast<Map>();
     final labels = items.map((i) => i['label']).toSet();
+    // Declared symbols from the AST.
     expect(labels, containsAll(['User', 'makeId', 'greet']));
+    // Identifiers harvested from the token stream — locals/params the symbol
+    // table omits, e.g. the `name` parameter and `seed`.
+    expect(labels, containsAll(['name', 'seed']));
     expect(labels, contains('class')); // keyword
+    // A harvested identifier is a variable (kind 6), ranked after symbols
+    // (0_/1_) and before keywords.
+    final nameItem = items.firstWhere((i) => i['label'] == 'name');
+    expect(nameItem['kind'], 6);
+    expect((nameItem['sortText'] as String).startsWith('2_'), isTrue);
     // Keywords sort last.
     final kw = items.firstWhere((i) => i['label'] == 'class');
-    expect((kw['sortText'] as String).startsWith('2_'), isTrue);
+    expect((kw['sortText'] as String).startsWith('3_'), isTrue);
+  });
+
+  test('completion still works when the buffer does not parse', () async {
+    final c = _Client();
+    // Missing `;` — the parse fails, so there are no AST symbols; completion
+    // must fall back to identifiers harvested from the raw token stream.
+    const broken =
+        'int run() {\n'
+        '  var greeting = 1;\n'
+        '  var total = greeting\n' // no `;` -> parse error
+        '}\n';
+    await c.open(_uri, broken);
+    final resp = await c.request('textDocument/completion', {
+      'textDocument': _td(_uri),
+      'position': c.pos(2, 22), // end of `greeting`
+    });
+    final items = ((resp['result'] as Map)['items'] as List).cast<Map>();
+    final labels = items.map((i) => i['label']).toSet();
+    expect(labels, containsAll(['greeting', 'total', 'run']));
   });
 
   test('references finds all same-name occurrences in the file', () async {

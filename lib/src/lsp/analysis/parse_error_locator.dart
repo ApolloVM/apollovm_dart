@@ -23,12 +23,19 @@ class ParseErrorLocation {
   });
 }
 
+/// Languages where a statement must end in `;`, so a missing terminator is a
+/// real, locatable error (unlike Kotlin's optional `;`, JavaScript's ASI, or
+/// Lua/Python which have none).
+const _semicolonLanguages = {'dart', 'java', 'java11', 'csharp'};
+
 /// Picks the best error location for [text], given the parser's own
-/// [parserPosition]/[parserMessage] (which may be unreliable).
+/// [parserPosition]/[parserMessage] (which may be unreliable). [language]
+/// enables language-specific recovery (e.g. a missing `;`).
 ParseErrorLocation locateParseError(
   String text, {
   int? parserPosition,
   String? parserMessage,
+  String? language,
 }) {
   final structural = _bracketImbalance(text);
   final msg = (parserMessage ?? '').toLowerCase();
@@ -46,14 +53,25 @@ ParseErrorLocation locateParseError(
   if (parserConcrete) {
     offset = parserPosition;
   } else if (structural != null) {
+    // A bracket imbalance is the most fundamental structural fault — trust it.
     offset = structural.offset;
     hint = structural.hint;
-  } else if (parserPosition != null &&
-      parserPosition > 0 &&
-      parserPosition <= text.length) {
-    offset = parserPosition;
   } else {
-    offset = _firstMeaningfulOffset(text);
+    // Brackets balance but the parse still failed. Try to pin a missing
+    // statement terminator before giving up on a precise location.
+    final missing = (language != null && _semicolonLanguages.contains(language))
+        ? _missingTerminator(text)
+        : null;
+    if (missing != null) {
+      offset = missing.offset;
+      hint = missing.hint;
+    } else if (parserPosition != null &&
+        parserPosition > 0 &&
+        parserPosition <= text.length) {
+      offset = parserPosition;
+    } else {
+      offset = _firstMeaningfulOffset(text);
+    }
   }
 
   final (start, end) = _tokenRange(text, offset);
@@ -64,6 +82,156 @@ ParseErrorLocation locateParseError(
     hint: hint,
   );
 }
+
+/// Finds a likely missing statement terminator (`;`) in [text] for a
+/// `;`-required language, returning where the terminator should go (the end of
+/// the offending value) and a hint, or null when nothing is confidently found.
+///
+/// Deliberately conservative — it only fires when a statement clearly ends in a
+/// value (identifier, number or string literal) on one line and the next
+/// significant token starts a new statement (an identifier or `}`), skipping
+/// every continuation shape (operators, `.`, `?`, `:`, `,`, an open bracket, a
+/// continuation keyword like `return`, or an annotation). A false negative just
+/// falls back to the old behaviour; a false positive would mislocate, so the
+/// guards err toward silence.
+({int offset, String hint})? _missingTerminator(String text) {
+  final n = text.length;
+  var i = 0;
+  var line = 0;
+
+  int? lastSig; // last significant code unit
+  var lastSigOff = -1;
+  var lastSigLine = -1;
+  var lastWord = '';
+  var lastWasAnnotation = false;
+
+  while (i < n) {
+    final c = text.codeUnitAt(i);
+
+    if (c == 0x0a) {
+      line++;
+      i++;
+      continue;
+    }
+    if (c == 0x0d || c == 0x20 || c == 0x09) {
+      i++;
+      continue;
+    }
+
+    // Comments.
+    if (c == 0x2f && i + 1 < n) {
+      final c2 = text.codeUnitAt(i + 1);
+      if (c2 == 0x2f) {
+        i += 2;
+        while (i < n && text.codeUnitAt(i) != 0x0a) {
+          i++;
+        }
+        continue;
+      }
+      if (c2 == 0x2a) {
+        i += 2;
+        while (i + 1 < n &&
+            !(text.codeUnitAt(i) == 0x2a && text.codeUnitAt(i + 1) == 0x2f)) {
+          if (text.codeUnitAt(i) == 0x0a) line++;
+          i++;
+        }
+        i += 2;
+        continue;
+      }
+    }
+
+    // A string literal counts as a value end.
+    if (c == 0x27 || c == 0x22) {
+      final end = _skipString(text, i);
+      for (var k = i; k < end && k < n; k++) {
+        if (text.codeUnitAt(k) == 0x0a) line++;
+      }
+      lastSig = c;
+      lastSigOff = end - 1;
+      lastSigLine = line;
+      lastWord = '';
+      lastWasAnnotation = false;
+      i = end;
+      continue;
+    }
+
+    // A new significant token begins on a later line than the previous one:
+    // decide whether a `;` is missing in between.
+    if (lastSig != null &&
+        line > lastSigLine &&
+        _isValueEnd(lastSig) &&
+        !lastWasAnnotation &&
+        !_continuationKeywords.contains(lastWord) &&
+        _isStatementStart(c)) {
+      return (offset: lastSigOff, hint: "expected ';'");
+    }
+
+    // Advance, recording the new last-significant token.
+    if (_isIdentPart(c)) {
+      final s = i;
+      while (i < n && _isIdentPart(text.codeUnitAt(i))) {
+        i++;
+      }
+      lastWord = text.substring(s, i);
+      lastWasAnnotation = s > 0 && text.codeUnitAt(s - 1) == 0x40; // '@'
+      lastSig = text.codeUnitAt(i - 1);
+      lastSigOff = i - 1;
+      lastSigLine = line;
+      continue;
+    }
+
+    lastSig = c;
+    lastSigOff = i;
+    lastSigLine = line;
+    lastWord = '';
+    lastWasAnnotation = false;
+    i++;
+  }
+
+  return null;
+}
+
+/// Keywords that legitimately end a line with more to follow, so a newline after
+/// them is not a missing terminator.
+const _continuationKeywords = {
+  'return',
+  'throw',
+  'yield',
+  'new',
+  'await',
+  'else',
+  'in',
+  'is',
+  'as',
+  'extends',
+  'implements',
+  'with',
+  'on',
+  'case',
+  'default',
+  'do',
+  'try',
+  'finally',
+  'get',
+  'set',
+  'async',
+  'sync',
+  'operator',
+  'typedef',
+};
+
+/// Whether [c] can end a value/expression (identifier char, digit, or a quote
+/// standing in for a string literal).
+bool _isValueEnd(int c) => _isIdentPart(c) || c == 0x22 || c == 0x27;
+
+/// Whether [c] can start a new statement: an identifier start or a `}` (a value
+/// immediately before a closing brace also wants its `;`).
+bool _isStatementStart(int c) =>
+    (c >= 0x41 && c <= 0x5a) ||
+    (c >= 0x61 && c <= 0x7a) ||
+    c == 0x5f ||
+    c == 0x24 ||
+    c == 0x7d;
 
 /// Scans brackets (`()[]{}`) skipping strings and comments. Returns the first
 /// unexpected/mismatched closer, or the outermost unclosed opener at EOF.

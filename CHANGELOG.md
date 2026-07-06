@@ -1,3 +1,26 @@
+## 1.5.0
+
+### Language Server — better completion and parse-error locations
+
+- **Completion now surfaces in-scope identifiers, and works while the buffer does
+  not parse.** Previously `textDocument/completion` only offered AST symbols
+  (top-level/members) plus keywords — so mid-edit, when the parse fails (the
+  common case), it fell back to keywords only. It now also harvests identifiers
+  from the raw token stream, which survives a failed parse and includes local
+  variables and parameters the symbol table omits. Results are de-duplicated and
+  ranked: local-scope symbols, then other symbols, then harvested identifiers,
+  then keywords. The partial token under the cursor is skipped.
+- **Parse-error diagnostics locate a missing `;`.** ApolloVM's PEG parser reports
+  a generic "end of input expected" at offset `0` for most structural mistakes;
+  the LSP layer already recovered the real position for bracket imbalances, and
+  now also for a missing statement terminator in `;`-required languages (Dart,
+  Java, C#). A balanced-but-unterminated statement is pinned to the end of the
+  offending value (with an `expected ';'` hint) instead of defaulting to the top
+  of the file. The heuristic is conservative — it skips continuation shapes
+  (operators, `.`, `?`, `:`, `,`, open brackets, continuation keywords like
+  `return`, and annotations) and does not apply to languages where `;` is
+  optional/absent (Kotlin, JavaScript, Lua, Python).
+
 ## 1.4.2
 
 - Docs: fix the **ApolloVM Web Demo** link — the live playground is served at the

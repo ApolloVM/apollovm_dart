@@ -115,7 +115,9 @@ class Analyzer {
         symbols = collectSymbols(ast!);
         diagnostics.addAll(_importDiagnostics(ast, text, lineIndex));
       } else {
-        diagnostics.add(_parseErrorDiagnostic(result, lineIndex, text));
+        diagnostics.add(
+          _parseErrorDiagnostic(result, lineIndex, text, language),
+        );
       }
     }
 
@@ -136,13 +138,16 @@ class Analyzer {
     ParseResult<String> result,
     LineIndex lineIndex,
     String text,
+    String language,
   ) {
     // ApolloVM's parser usually reports "end of input expected" at offset 0, so
-    // recover a meaningful location (e.g. the unclosed bracket) in the LSP layer.
+    // recover a meaningful location (e.g. the unclosed bracket, or a missing
+    // `;`) in the LSP layer.
     final loc = locateParseError(
       text,
       parserPosition: result.errorPosition,
       parserMessage: result.errorMessage,
+      language: language,
     );
     final base = (result.errorMessage ?? 'Parse error.')
         .split('\n')

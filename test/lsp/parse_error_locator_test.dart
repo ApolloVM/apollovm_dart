@@ -146,5 +146,58 @@ void main() {
       expect(d.range.start.character, expected.character);
       expect(d.message, contains('never closed'));
     });
+
+    test(
+      'a missing ";" reports on the offending line, not the top of file',
+      () async {
+        const src = 'void main() {\n  var x = 10\n  var y = 20;\n}\n';
+        final unit = await analyzer.analyze('file:///bad.dart', src);
+        expect(unit.ast, isNull);
+        final d = unit.diagnostics.single;
+        // Lands on `10` (line 1) whose statement lacks a `;`, not line 0.
+        final expected = unit.lineIndex.positionAt(src.indexOf('10'));
+        expect(d.range.start.line, 1);
+        expect(d.range.start.character, expected.character);
+        expect(d.message, contains("expected ';'"));
+      },
+    );
+  });
+
+  group('locateParseError — missing terminator (unit)', () {
+    ParseErrorLocation locate(String src, String language) => locateParseError(
+      src,
+      parserPosition: 0,
+      parserMessage: 'end of input expected',
+      language: language,
+    );
+
+    test('locates a missing ";" at the end of the offending value', () {
+      const src = 'void main() {\n  var x = 10\n  var y = 20;\n}\n';
+      final loc = locate(src, 'dart');
+      expect(loc.rangeStart, src.indexOf('10'));
+      expect(loc.hint, contains("expected ';'"));
+    });
+
+    test('locates a missing ";" before a closing brace', () {
+      const src = 'void main() {\n  var x = 1\n}\n';
+      final loc = locate(src, 'dart');
+      expect(loc.rangeStart, src.indexOf('1'));
+      expect(loc.hint, contains("expected ';'"));
+    });
+
+    test('does not invent a ";" for languages that do not require it', () {
+      const src = 'fun main() {\n  val x = 10\n  val y = 20\n}\n';
+      expect(locate(src, 'kotlin').hint, isNull);
+    });
+
+    test('a continuation keyword across lines is not a missing terminator', () {
+      const src = 'int f() {\n  return\n    1 + 2;\n}\n';
+      expect(locate(src, 'dart').hint, isNull);
+    });
+
+    test('an operator-led continuation line is not flagged', () {
+      const src = 'int f() {\n  var a = 1;\n  var b = a\n    + a;\n}\n';
+      expect(locate(src, 'dart').hint, isNull);
+    });
   });
 }
