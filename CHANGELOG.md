@@ -1,3 +1,17 @@
+## 1.6.1
+
+### Language Server — enum members after the constant list
+
+- **Enum members declared after the constant list are now recognized as real
+  members.** Everything after the `;` that ends an enum's constant list (fields,
+  constructors, methods) was being swallowed as bogus enum constants (named
+  `int`, `const`, `final`, …), so `documentSymbol` gave enum methods no body
+  range and did not recognize enum constructors at all. The token indexer now
+  tracks the constant-list terminator per enum: after it, identifiers in the
+  enum body are parsed like class members — real kinds and full-body ranges.
+  Pure-constant enums (`enum E { a, b, c }`) are unaffected; class constructors
+  were already handled correctly.
+
 ## 1.6.0
 
 ### Language Server — member-aware completion and full-body symbol ranges
