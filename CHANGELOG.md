@@ -1,3 +1,17 @@
+## 1.6.2
+
+### Language Server — expression-body member ranges
+
+- **Members with an expression body are now fully covered by their
+  `documentSymbol` range.** A `=> expr;` member (Dart/C#) previously stopped at
+  its name, and a brace-less `= expr` member (Kotlin) even swallowed the next
+  member because the scanner never recovered. The token indexer now consumes the
+  expression: the `=>` form extends to its terminating `;`, and the brace-less
+  `=` form is bounded to the end of its line (so the following member is still
+  recognized). Balanced `()`/`[]`/`{}` inside the expression (e.g. a map literal
+  body `=> {1: 2}`) are handled without corrupting brace tracking. Works for
+  both class and enum members.
+
 ## 1.6.1
 
 ### Language Server — enum members after the constant list

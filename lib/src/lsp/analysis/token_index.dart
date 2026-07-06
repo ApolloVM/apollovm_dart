@@ -122,7 +122,10 @@ class _Tok {
   final String value;
   final int start;
   final int end;
-  const _Tok(this.type, this.value, this.start, this.end);
+  // Whether a newline separates this token from the previous one. Used to
+  // bound brace-less expression bodies (Kotlin `fun f() = expr`) to their line.
+  bool nlBefore = false;
+  _Tok(this.type, this.value, this.start, this.end);
   bool get isIdent => type == 0;
   bool sym(String s) => type == 1 && value == s;
 }
@@ -181,6 +184,16 @@ class TokenIndex {
     final n = text.length;
     var i = 0;
 
+    // Set when a newline has been skipped since the previous token; stamped on
+    // the next emitted token (and then cleared).
+    var pendingNl = false;
+    void add(int type, String value, int start, int end) {
+      final t = _Tok(type, value, start, end);
+      t.nlBefore = pendingNl;
+      pendingNl = false;
+      tokens.add(t);
+    }
+
     bool isIdentStart(int c) =>
         (c >= 0x41 && c <= 0x5a) ||
         (c >= 0x61 && c <= 0x7a) ||
@@ -194,6 +207,7 @@ class TokenIndex {
 
       // Whitespace.
       if (c == 0x20 || c == 0x09 || c == 0x0a || c == 0x0d) {
+        if (c == 0x0a) pendingNl = true;
         i++;
         continue;
       }
@@ -212,6 +226,7 @@ class TokenIndex {
           i += 2;
           var depth = 1;
           while (i < n && depth > 0) {
+            if (text.codeUnitAt(i) == 0x0a) pendingNl = true;
             if (i + 1 < n &&
                 text.codeUnitAt(i) == 0x2f &&
                 text.codeUnitAt(i + 1) == 0x2a) {
@@ -234,7 +249,7 @@ class TokenIndex {
       if (c == 0x27 || c == 0x22) {
         final start = i;
         i = _skipString(text, i);
-        tokens.add(_Tok(2, text.substring(start, i), start, i));
+        add(2, text.substring(start, i), start, i);
         continue;
       }
 
@@ -245,7 +260,7 @@ class TokenIndex {
         while (i < n && isIdentPart(text.codeUnitAt(i))) {
           i++;
         }
-        tokens.add(_Tok(0, text.substring(start, i), start, i));
+        add(0, text.substring(start, i), start, i);
         continue;
       }
 
@@ -264,12 +279,12 @@ class TokenIndex {
             break;
           }
         }
-        tokens.add(_Tok(3, text.substring(start, i), start, i));
+        add(3, text.substring(start, i), start, i);
         continue;
       }
 
       // Single-character symbol.
-      tokens.add(_Tok(1, text[i], i, i + 1));
+      add(1, text[i], i, i + 1);
       i++;
     }
     return tokens;
@@ -344,9 +359,46 @@ class TokenIndex {
     // parameter list has been consumed); `null` when no body is pending.
     int? pendingBody;
 
+    // Expression-body tracking (`=> expr;` in Dart/C#, `= expr` in Kotlin). When
+    // a member has an expression body instead of a `{ ... }` block, we extend
+    // its `fullEnd` across the whole expression so the declaration is fully
+    // selectable. `exprMember` is the member's decl index; `exprArrow` marks the
+    // `=>` form (terminated by `;`) vs. the brace-less `=` form (bounded by the
+    // end of its line); `exprDepth` balances `()[]{}` opened inside the
+    // expression so the terminator/enclosing `}` is only honoured at depth 0.
+    int? exprMember;
+    var exprArrow = false;
+    var exprDepth = 0;
+
     var i = 0;
     while (i < tokens.length) {
       final t = tokens[i];
+
+      // Consume an in-progress expression body.
+      if (exprMember != null) {
+        if (exprDepth == 0 && (t.sym('}') || (!exprArrow && t.nlBefore))) {
+          // The enclosing block's `}` or a new line (brace-less form) ends the
+          // expression; do not consume this token — fall through to reprocess
+          // it as the start of the next declaration.
+          exprMember = null;
+          atBoundary = true;
+        } else if (exprDepth == 0 && t.sym(';')) {
+          decls[exprMember].fullEnd = t.end;
+          exprMember = null;
+          atBoundary = true;
+          i++;
+          continue;
+        } else {
+          if (t.sym('(') || t.sym('[') || t.sym('{')) {
+            exprDepth++;
+          } else if (t.sym(')') || t.sym(']') || t.sym('}')) {
+            exprDepth--;
+          }
+          decls[exprMember].fullEnd = t.end;
+          i++;
+          continue;
+        }
+      }
 
       // Annotations/metadata (`@Override`, `@Deprecated("x")`) precede a
       // declaration and must not clear the boundary flag.
@@ -425,6 +477,20 @@ class TokenIndex {
         // elsewhere (e.g. parameter lists) they must not open a new boundary.
         atBoundary = inEnumConstantList();
         i++;
+        continue;
+      }
+
+      // A pending member with an expression body: `=> expr` (Dart/C#) or a
+      // brace-less `= expr` (Kotlin). Start consuming the expression so the
+      // member's range covers it (handled at the top of the loop).
+      if (pendingBody != null && t.sym('=')) {
+        final arrow = i + 1 < tokens.length && tokens[i + 1].sym('>');
+        exprMember = pendingBody;
+        exprArrow = arrow;
+        exprDepth = 0;
+        pendingBody = null;
+        atBoundary = false;
+        i += arrow ? 2 : 1; // consume '=' (and '>' of '=>')
         continue;
       }
 

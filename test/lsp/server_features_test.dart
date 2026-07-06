@@ -464,6 +464,69 @@ enum Color {
       },
     );
 
+    test(
+      'documentSymbol range covers expression bodies (class and enum)',
+      () async {
+        // `=> expr;` and Kotlin's brace-less `= expr` members must be fully
+        // selectable: the range spans the expression, not just the signature.
+        const src = '''
+class Foo {
+  int square(int n) => n * n;
+  Map<int, int> pairs() => {1: 2, 3: 4};
+}
+enum Sign {
+  pos, neg;
+  int doubled() => index * 2;
+}
+class Calc {
+  fun sum(a: Int, b: Int) = a + b
+  fun run() {
+    print(sum(1, 2));
+  }
+}
+''';
+        const uri = 'file:///ws/expr.dart';
+        final c = _Client();
+        await c.open(uri, src);
+        final resp = await c.request('textDocument/documentSymbol', {
+          'textDocument': _td(uri),
+        });
+        final roots = (resp['result'] as List).cast<Map>();
+
+        Map childOf(String parent, String child) =>
+            ((roots.firstWhere((s) => s['name'] == parent)['children'] as List)
+                    .cast<Map>())
+                .firstWhere((m) => m['name'] == child);
+        Range rangeOf(Map m) =>
+            Range.fromJson((m['range'] as Map).cast<String, Object?>());
+
+        // Class `=> expr;` reaches past the `;` (line 1 ends at `;`).
+        final square = rangeOf(childOf('Foo', 'square'));
+        expect(square.end.line, 1);
+        expect(square.end.character, greaterThan(28));
+
+        // Map-literal body: balanced braces don't corrupt the following member.
+        final pairs = rangeOf(childOf('Foo', 'pairs'));
+        expect(pairs.end.line, 2);
+
+        // Enum expression-body method includes its expression.
+        final doubled = rangeOf(childOf('Sign', 'doubled'));
+        expect(doubled.end.line, 6);
+        expect(doubled.end.character, greaterThan(18));
+
+        // Kotlin brace-less `= expr` is bounded to its own line and does not
+        // swallow the next member — `run` is recognized with its own block body.
+        final sum = rangeOf(childOf('Calc', 'sum'));
+        expect(
+          sum.end.line,
+          9,
+          reason: 'brace-less body must stop at its line',
+        );
+        final run = rangeOf(childOf('Calc', 'run'));
+        expect(run.end.line, 12, reason: 'run keeps its own block body');
+      },
+    );
+
     test('completion maps every present symbol category', () async {
       final c = _Client();
       await c.open(richUri, rich);
