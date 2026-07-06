@@ -35,7 +35,7 @@ ApolloVM is a portable VM (native, JS/Web, Flutter) that can parse, translate, a
 
 Experience ApolloVM in action right from your browser:
 
-- Explore the [ApolloVM Web Demo](https://apollovm.github.io/apollovm_web_example/www/)
+- Explore the [ApolloVM Web Demo](https://apollovm.github.io/apollovm_web_example/)
 
 If you prefer to run the demo on your local machine:
 - Follow the step-by-step instructions available in the [GitHub Repository](https://github.com/ApolloVM/apollovm_web_example).
