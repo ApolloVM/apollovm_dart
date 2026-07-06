@@ -23,6 +23,26 @@
 - New example
   [`example/apollovm_example_mcp_lsp.dart`](example/apollovm_example_mcp_lsp.dart).
 
+### MCP — web compatibility
+
+- **`package:apollovm/apollovm_mcp.dart` is now fully web-safe** — it imports no
+  `dart:io` and no `dart:isolate`, so the MCP server and every `apollovm.*` /
+  `apollovm.lsp.*` tool compile and run in a browser (dart2js / DDC). Construct
+  `ApolloMcpServer` on any `StreamChannel<String>` (e.g. a web `MessageChannel`)
+  and drive all tools in-process.
+- The `dart:io`-only pieces moved to a new **`package:apollovm/apollovm_mcp_io.dart`**
+  (which re-exports `apollovm_mcp.dart`): `serveStdio`, `HttpSseTransport` and
+  the `CommandMcp` CLI group. Native embedders and the `apollovm` CLI import
+  this; nothing else changes for them.
+- The per-tool timeout executor is now platform-selected (mirroring
+  `wasm_runtime.dart`): a killable-isolate executor on native, and an in-process
+  executor with a cooperative timeout on the web (no `dart:isolate`). Tools in
+  `McpLimits.isolateTools` therefore still run, degrading to a soft timeout on
+  the web.
+- New cross-platform test `test/mcp/web_compat_test.dart` runs the tools, the
+  in-process `LspClient` and the server under `dart test --platform chrome`,
+  guarding the web-safe surface against future `dart:io`/`dart:isolate` leaks.
+
 ### Language Server Protocol — in-process API (no socket)
 
 - **New `LspService`** in `package:apollovm/apollovm_lsp.dart`: a

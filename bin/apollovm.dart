@@ -2,7 +2,7 @@ import 'dart:io';
 
 import 'package:apollovm/apollovm.dart';
 import 'package:apollovm/apollovm_lsp.dart';
-import 'package:apollovm/apollovm_mcp.dart';
+import 'package:apollovm/apollovm_mcp_io.dart';
 import 'package:apollovm/apollovm_pub.dart';
 import 'package:args/args.dart';
 import 'package:args/command_runner.dart';
