@@ -23,6 +23,8 @@
 tags:
   # The MCP (Model Context Protocol) server exposing ApolloVM as agent tools.
   mcp:
+  # The web-safe repository/workspace abstraction (adapters, service, RPC).
+  repository:
   # Backend / target.
   wasm:
     # The WebAssembly compiler + runner (native `wasm_run` or Chrome).

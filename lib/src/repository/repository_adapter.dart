@@ -41,6 +41,14 @@ class RepoCapabilities {
     this.isRemote = false,
   });
 
+  factory RepoCapabilities.fromJson(Map<String, Object?> json) =>
+      RepoCapabilities(
+        canWrite: json['canWrite'] == true,
+        canGitMutate: json['canGitMutate'] == true,
+        supportsGit: json['supportsGit'] == true,
+        isRemote: json['isRemote'] == true,
+      );
+
   Map<String, Object?> toJson() => <String, Object?>{
     'canWrite': canWrite,
     'canGitMutate': canGitMutate,
@@ -86,6 +94,15 @@ class RepoFile {
     this.truncated = false,
   });
 
+  factory RepoFile.fromJson(Map<String, Object?> json) => RepoFile(
+    path: json['path'] as String,
+    content: json['content'] as String,
+    totalLines: (json['totalLines'] as num).toInt(),
+    startLine: (json['startLine'] as num?)?.toInt(),
+    endLine: (json['endLine'] as num?)?.toInt(),
+    truncated: json['truncated'] == true,
+  );
+
   Map<String, Object?> toJson() => <String, Object?>{
     'path': path,
     'content': content,
@@ -110,6 +127,13 @@ class RepoEntry {
     required this.isDir,
     this.size,
   });
+
+  factory RepoEntry.fromJson(Map<String, Object?> json) => RepoEntry(
+    path: json['path'] as String,
+    name: json['name'] as String,
+    isDir: json['isDir'] == true,
+    size: (json['size'] as num?)?.toInt(),
+  );
 
   Map<String, Object?> toJson() => <String, Object?>{
     'path': path,
@@ -139,6 +163,15 @@ class RepoStat {
     this.modified,
   });
 
+  factory RepoStat.fromJson(Map<String, Object?> json) => RepoStat(
+    path: json['path'] as String,
+    exists: json['exists'] == true,
+    isDir: json['isDir'] == true,
+    size: (json['size'] as num).toInt(),
+    lineCount: (json['lineCount'] as num).toInt(),
+    modified: json['modified'] as String?,
+  );
+
   Map<String, Object?> toJson() => <String, Object?>{
     'path': path,
     'exists': exists,
@@ -164,6 +197,12 @@ class RepoEdit {
     required this.replacements,
     this.appliedAtLine,
   });
+
+  factory RepoEdit.fromJson(Map<String, Object?> json) => RepoEdit(
+    path: json['path'] as String,
+    replacements: (json['replacements'] as num).toInt(),
+    appliedAtLine: (json['appliedAtLine'] as num?)?.toInt(),
+  );
 
   Map<String, Object?> toJson() => <String, Object?>{
     'path': path,
@@ -198,6 +237,15 @@ class TextMatch {
     this.after = const [],
   });
 
+  factory TextMatch.fromJson(Map<String, Object?> json) => TextMatch(
+    path: json['path'] as String,
+    line: (json['line'] as num).toInt(),
+    column: (json['column'] as num).toInt(),
+    text: json['text'] as String,
+    before: (json['before'] as List?)?.cast<String>() ?? const [],
+    after: (json['after'] as List?)?.cast<String>() ?? const [],
+  );
+
   Map<String, Object?> toJson() => <String, Object?>{
     'path': path,
     'line': line,
@@ -225,6 +273,12 @@ class GitStatusEntry {
     required this.staged,
   });
 
+  factory GitStatusEntry.fromJson(Map<String, Object?> json) => GitStatusEntry(
+    path: json['path'] as String,
+    status: json['status'] as String,
+    staged: json['staged'] == true,
+  );
+
   Map<String, Object?> toJson() => <String, Object?>{
     'path': path,
     'status': status,
@@ -245,6 +299,13 @@ class GitCommit {
     required this.date,
     required this.subject,
   });
+
+  factory GitCommit.fromJson(Map<String, Object?> json) => GitCommit(
+    hash: json['hash'] as String,
+    author: json['author'] as String,
+    date: json['date'] as String,
+    subject: json['subject'] as String,
+  );
 
   Map<String, Object?> toJson() => <String, Object?>{
     'hash': hash,
@@ -268,6 +329,13 @@ class GitBlameLine {
     required this.content,
   });
 
+  factory GitBlameLine.fromJson(Map<String, Object?> json) => GitBlameLine(
+    line: (json['line'] as num).toInt(),
+    hash: json['hash'] as String,
+    author: json['author'] as String,
+    content: json['content'] as String,
+  );
+
   Map<String, Object?> toJson() => <String, Object?>{
     'line': line,
     'hash': hash,
@@ -282,6 +350,11 @@ class GitResult {
   final String output;
 
   const GitResult({required this.ok, this.output = ''});
+
+  factory GitResult.fromJson(Map<String, Object?> json) => GitResult(
+    ok: json['ok'] == true,
+    output: (json['output'] as String?) ?? '',
+  );
 
   Map<String, Object?> toJson() => <String, Object?>{
     'ok': ok,

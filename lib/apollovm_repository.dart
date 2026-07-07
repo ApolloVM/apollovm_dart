@@ -27,6 +27,8 @@ library;
 
 export 'src/repository/in_memory_repository_adapter.dart';
 export 'src/repository/permission_guard.dart';
+export 'src/repository/remote_repository_adapter.dart';
 export 'src/repository/repo_config.dart';
 export 'src/repository/repository_adapter.dart';
+export 'src/repository/repository_rpc.dart';
 export 'src/repository/repository_service.dart';
