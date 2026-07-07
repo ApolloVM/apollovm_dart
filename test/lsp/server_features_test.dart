@@ -527,6 +527,71 @@ class Calc {
       },
     );
 
+    test(
+      'documentSymbol range covers a body-less constructor signature',
+      () async {
+        // A constructor with no `{ }` body must still be fully selectable: its
+        // range spans the parameters (and any initializer list), for both class
+        // and enum constructors, as well as abstract methods.
+        const src = '''
+class Foo {
+  final int x;
+  const Foo(this.x);
+  Foo.zero() : this(0);
+  void abstractOne(int a, String b);
+}
+enum Color {
+  red, green;
+  final int code;
+  const Color(this.code);
+}
+''';
+        const uri = 'file:///ws/ctor.dart';
+        final c = _Client();
+        await c.open(uri, src);
+        final resp = await c.request('textDocument/documentSymbol', {
+          'textDocument': _td(uri),
+        });
+        final roots = (resp['result'] as List).cast<Map>();
+
+        Map childOf(String parent, String child) =>
+            ((roots.firstWhere((s) => s['name'] == parent)['children'] as List)
+                    .cast<Map>())
+                .firstWhere((m) => m['name'] == child);
+        Range rangeOf(Map m) =>
+            Range.fromJson((m['range'] as Map).cast<String, Object?>());
+
+        // `const Foo(this.x);` — the range must extend past the parameter list
+        // (well past the end of the name `Foo` at character 13).
+        final ctor = rangeOf(childOf('Foo', 'Foo'));
+        expect(ctor.end.line, 2);
+        expect(
+          ctor.end.character,
+          greaterThan(13),
+          reason: 'body-less constructor must include its parameters',
+        );
+
+        // Redirecting `Foo.zero() : this(0);` includes the initializer list.
+        final zero = rangeOf(childOf('Foo', 'zero'));
+        expect(zero.end.line, 3);
+        expect(zero.end.character, greaterThan(12));
+
+        // Abstract method signature includes its parameters.
+        final abstractOne = rangeOf(childOf('Foo', 'abstractOne'));
+        expect(abstractOne.end.line, 4);
+        expect(abstractOne.end.character, greaterThan(18));
+
+        // Enum body-less constructor includes its parameters too.
+        final enumCtor = rangeOf(childOf('Color', 'Color'));
+        expect(enumCtor.end.line, 9);
+        expect(
+          enumCtor.end.character,
+          greaterThan(14),
+          reason: 'enum constructor must include its parameters',
+        );
+      },
+    );
+
     test('completion maps every present symbol category', () async {
       final c = _Client();
       await c.open(richUri, rich);
