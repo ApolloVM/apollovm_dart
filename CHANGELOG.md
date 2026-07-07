@@ -1,3 +1,15 @@
+## 1.6.3
+
+### Language Server — body-less constructor/method ranges
+
+- **A member with no `{ ... }` body is now fully covered by its `documentSymbol`
+  range.** A `;`-terminated constructor (`const Foo(this.x);`, a redirecting
+  `Foo.zero() : this(0);`) or an abstract method previously stopped its range at
+  the name, so selecting it excluded the parameters. The range now extends to
+  the terminating `;`, covering the whole signature — parameters and any
+  initializer list. Applies to class and enum constructors alike; bodied and
+  expression-bodied members are unchanged.
+
 ## 1.6.2
 
 ### Language Server — expression-body member ranges
