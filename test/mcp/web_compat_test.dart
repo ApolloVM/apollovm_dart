@@ -63,6 +63,35 @@ void main() {
       expect(lspToolNames, isNotEmpty);
       expect(buildLspTools().map((t) => t.name), containsAll(lspToolNames));
     });
+
+    test('repository tools run web-safe over the in-memory adapter', () async {
+      // InMemoryRepositoryAdapter, PermissionGuard and RepoRuntime are all in
+      // the web-safe surface; a dart:io leak would fail compilation here.
+      final adapter = InMemoryRepositoryAdapter({'lib/main.dart': _src});
+      final repo = RepoRuntime(PermissionGuard(adapter));
+
+      final read = await repo.call('apollovm.fs.read', {
+        'path': 'lib/main.dart',
+      });
+      expect(read['isError'], isFalse);
+      expect(read['content'], _src);
+
+      final outline = await repo.call('apollovm.code.outline', {
+        'path': 'lib/main.dart',
+      });
+      expect(outline['isError'], isFalse);
+      expect(
+        (outline['symbols'] as List).map((s) => (s as Map)['name']),
+        contains('Greeter'),
+      );
+
+      // Writes are gated off by default.
+      final blocked = await repo.call('apollovm.fs.write', {
+        'path': 'x.dart',
+        'content': '',
+      });
+      expect(blocked['isError'], isTrue);
+    });
   });
 
   test('LspClient.inProcess drives the server in one isolate', () async {

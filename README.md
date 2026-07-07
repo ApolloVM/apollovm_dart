@@ -879,6 +879,54 @@ line/character ranges). They accept the same `language` values above (except
 codebase-wide symbol search. See
 [`example/apollovm_example_mcp_lsp.dart`](example/apollovm_example_mcp_lsp.dart).
 
+### Workspace / repository tools
+
+Start the server with `--workspace <dir>` to additionally expose tools that work
+on **real files in a repository**, so a coding agent can explore, search,
+navigate and version-control the codebase without shelling out to POSIX:
+
+```bash
+apollovm mcp serve --workspace .                       # read-only
+apollovm mcp serve --workspace . --allow-write --allow-git-write
+```
+
+| Group | Tools | Replaces |
+|-------|-------|----------|
+| `apollovm.fs.*` | `read`, `list`, `find`, `stat`, `write`, `edit`, `mkdir`, `move`, `delete` | `cat`/`ls`/`find`/`sed`/`mv`/`rm` |
+| `apollovm.search.*` | `text` (regex), `symbols` (**language-aware**) | `grep` |
+| `apollovm.code.*` | `outline`, `definition`, `references`, `hover`, `diagnostics`, `workspaceSymbols` | editor navigation |
+| `apollovm.git.*` | `status`, `diff`, `log`, `show`, `blame`, `add`, `commit`, `checkout`, `restore` | the `git` CLI |
+
+`search.symbols` and `code.*` reuse ApolloVM's parsers/LSP, so they match
+*declarations* (not comment/string text) with precise ranges. Everything is
+**read-only by default**; writes and git mutations are opt-in
+(`--allow-write` / `--allow-git-write`). Paths are confined to the workspace root
+(`..`/absolute rejected), and `fs.edit` supports an `atLine` safety anchor. See
+[`doc/MCP.md`](doc/MCP.md#workspace-tools) for details.
+
+These tools are a thin JSON layer over a **standalone repository library** — the
+features are **not MCP-exclusive**. A web IDE, editor, agent or test can use them
+directly via `RepositoryService` (a typed façade over a pluggable
+`RepositoryAdapter`):
+
+```dart
+import 'package:apollovm/apollovm_repository_io.dart'; // web: apollovm_repository.dart
+
+final repo = RepositoryService(
+  LocalRepositoryAdapter('.'),                 // or InMemoryRepositoryAdapter(files)
+  config: const RepoConfig(allowWrite: true),
+);
+final outline = await repo.outline('lib/foo.dart');   // typed, language-aware
+final hits = await repo.searchText('TODO', glob: 'lib/**');
+print(await repo.gitStatus());
+await repo.close();
+```
+
+`RepositoryAdapter` backends: `LocalRepositoryAdapter` (`dart:io` + `git`),
+`InMemoryRepositoryAdapter` (web-safe), or a future remote/web backend — enabling
+file edits and git commands from the browser. A `PermissionGuard` enforces the
+`RepoConfig` uniformly across backends.
+
 ### Security model
 
 - **File/network access is denied by construction** — executed code is only ever

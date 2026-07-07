@@ -8,11 +8,16 @@ import 'dart:io';
 
 import 'package:args/command_runner.dart';
 import 'package:collection/collection.dart' show IterableExtension;
-import 'package:dart_mcp/server.dart' show ProtocolVersion;
+import 'package:dart_mcp/server.dart' show ProtocolVersion, Tool;
 
 import '../../../apollovm.dart' show ApolloVM, WasmRuntime;
+import '../../repository/local_repository_adapter.dart';
+import '../../repository/permission_guard.dart';
+import '../../repository/repo_config.dart';
+import '../../repository/repository_adapter.dart';
 import '../mcp_config.dart';
 import '../runtime/isolate_executor.dart';
+import '../runtime/repo_runtime.dart';
 import '../tools/apollo_tools.dart';
 import '../tools/lsp_tools.dart';
 import '../transport/http_sse_transport.dart';
@@ -98,8 +103,56 @@ abstract class _McpLimitsCommand extends Command<bool> {
   );
 }
 
+/// Adds the shared `--workspace` / `--allow-write` / `--allow-git-write` /
+/// `--require-line-match` options and builds the repository backend from them.
+mixin _WorkspaceOptions on Command<bool> {
+  void addWorkspaceOptions() {
+    argParser
+      ..addOption(
+        'workspace',
+        help:
+            'Enable the file/repository tools (apollovm.fs.*, search.*, code.*, '
+            'git.*) rooted at this directory. Omit to stay inline-source-only.',
+        valueHelp: 'dir',
+      )
+      ..addFlag(
+        'allow-write',
+        help:
+            'Permit mutating filesystem tools (fs.write/edit/mkdir/move/delete).',
+        negatable: false,
+      )
+      ..addFlag(
+        'allow-git-write',
+        help: 'Permit mutating git tools (git.add/commit/checkout/restore).',
+        negatable: false,
+      )
+      ..addFlag(
+        'require-line-match',
+        help: 'Require every fs.edit to pin its expected line via `atLine`.',
+        negatable: false,
+      );
+  }
+
+  RepoConfig get repoConfig => RepoConfig(
+    allowWrite: argResults!['allow-write'] as bool,
+    allowGitMutation: argResults!['allow-git-write'] as bool,
+    requireLineMatch: argResults!['require-line-match'] as bool,
+  );
+
+  /// The permission-guarded workspace adapter, or null when `--workspace` was
+  /// not given.
+  RepositoryAdapter? get repository {
+    final ws = argResults!['workspace'] as String?;
+    if (ws == null) return null;
+    return PermissionGuard(
+      LocalRepositoryAdapter(ws, config: repoConfig),
+      config: repoConfig,
+    );
+  }
+}
+
 /// `apollovm mcp serve` — run the MCP server over stdio or HTTP/SSE.
-class CommandMcpServe extends _McpLimitsCommand {
+class CommandMcpServe extends _McpLimitsCommand with _WorkspaceOptions {
   @override
   final String description =
       'Run the MCP server over stdio (default) or HTTP/SSE (`--http`).';
@@ -129,11 +182,14 @@ Examples:
         help: 'Host/interface to bind for --http.',
         defaultsTo: '127.0.0.1',
       );
+    addWorkspaceOptions();
   }
 
   @override
   Future<bool> run() async {
     final limits = this.limits;
+    final repository = this.repository;
+    final repoConfig = this.repoConfig;
     final httpPort = argResults!['http'] as String?;
 
     if (httpPort != null) {
@@ -143,7 +199,11 @@ Examples:
       }
       final host = argResults!['host'] as String;
 
-      final transport = HttpSseTransport(limits: limits);
+      final transport = HttpSseTransport(
+        limits: limits,
+        repository: repository,
+        repoConfig: repoConfig,
+      );
       await transport.start(port: port, host: host);
       stderr.writeln(
         'ApolloVM MCP server (HTTP/SSE) listening on http://$host:$port/sse',
@@ -152,7 +212,11 @@ Examples:
       return true;
     }
 
-    final server = serveStdio(limits: limits);
+    final server = serveStdio(
+      limits: limits,
+      repository: repository,
+      repoConfig: repoConfig,
+    );
     await server.done;
     return true;
   }
@@ -171,13 +235,24 @@ class CommandMcpList extends Command<bool> {
   String get usageFooter => '''
 
 Examples:
-  apollovm mcp list
+  apollovm mcp list                       # core + LSP tools
+  apollovm mcp list --workspace .         # also the fs/search/code/git tools
   apollovm mcp list | jq '.[].name'       # just the tool names''';
+
+  CommandMcpList() {
+    argParser.addOption(
+      'workspace',
+      help:
+          'Also list the workspace/repository tools (as enabled by serving '
+          'with --workspace).',
+      valueHelp: 'dir',
+    );
+  }
 
   @override
   bool run() {
     final tools = [
-      for (final tool in buildTools())
+      for (final tool in _listedTools(argResults!['workspace'] != null))
         <String, Object?>{
           'name': tool.name,
           'description': tool.description,
@@ -188,6 +263,18 @@ Examples:
     return true;
   }
 }
+
+/// The tool definitions the CLI lists/serves: the core + LSP tools always, and
+/// the workspace/repository tools only when a workspace is configured (i.e. an
+/// adapter would be provided).
+List<Tool> _listedTools(bool withRepo) => [
+  ...buildTools(),
+  if (withRepo) ...buildRepoTools(),
+];
+
+/// Every tool name the CLI recognizes: the inline core/LSP tools plus the
+/// workspace/repository tools (available when serving with `--workspace`).
+const _allKnownToolNames = <String>[...allToolNames, ...repoToolNames];
 
 /// `apollovm mcp schema [tool]` — print the JSON input schema(s) for tools.
 class CommandMcpSchema extends Command<bool> {
@@ -203,19 +290,31 @@ class CommandMcpSchema extends Command<bool> {
 
 Examples:
   apollovm mcp schema                      # every tool's input schema
-  apollovm mcp schema apollovm.execute       # one tool (bare `execute` also works)''';
+  apollovm mcp schema apollovm.execute       # one tool (bare `execute` also works)
+  apollovm mcp schema apollovm.fs.read --workspace .   # a repository tool''';
+
+  CommandMcpSchema() {
+    argParser.addOption(
+      'workspace',
+      help: 'Include the workspace/repository tool schemas.',
+      valueHelp: 'dir',
+    );
+  }
 
   @override
   bool run() {
-    final tools = buildTools();
+    // A specific repository tool can be inspected by name even without a
+    // workspace; the full dump only includes them when a workspace is set.
     final rest = argResults!.rest;
+    final withRepo = argResults!['workspace'] != null || rest.isNotEmpty;
+    final tools = _listedTools(withRepo);
 
     if (rest.isNotEmpty) {
       final wanted = _normalizeToolName(rest.first);
       final tool = tools.where((t) => t.name == wanted).firstOrNull;
       if (tool == null) {
         throw StateError(
-          'Unknown tool: ${rest.first}. Known: ${allToolNames.join(', ')}',
+          'Unknown tool: ${rest.first}. Known: ${_allKnownToolNames.join(', ')}',
         );
       }
       print(_json.convert(tool.inputSchema));
@@ -243,22 +342,31 @@ Examples:
   apollovm mcp info --json''';
 
   CommandMcpInfo() {
-    argParser.addFlag(
-      'json',
-      help: 'Output as JSON instead of text.',
-      negatable: false,
-    );
+    argParser
+      ..addFlag(
+        'json',
+        help: 'Output as JSON instead of text.',
+        negatable: false,
+      )
+      ..addOption(
+        'workspace',
+        help: 'Report the workspace/repository tools as enabled.',
+        valueHelp: 'dir',
+      );
   }
 
   @override
   bool run() {
     const limits = McpLimits();
+    // The repository tools are enabled only when a workspace is configured.
+    final withRepo = argResults!['workspace'] != null;
     final info = <String, Object?>{
       'server': 'apollovm-mcp',
       'version': ApolloVM.VERSION,
       'protocol': ProtocolVersion.latestSupported.versionString,
       'transports': ['stdio', 'http-sse'],
       'tools': allToolNames,
+      if (withRepo) 'repositoryTools': repoToolNames,
       'languages': mcpSupportedLanguages,
       'limits': {
         'timeoutMs': limits.timeoutMs,
@@ -275,6 +383,14 @@ Examples:
       print('protocol:   ${info['protocol']}');
       print('transports: ${(info['transports'] as List).join(', ')}');
       print('tools:      ${(info['tools'] as List).join(', ')}');
+      if (withRepo) {
+        print('repo tools: ${(info['repositoryTools'] as List).join(', ')}');
+      } else {
+        print(
+          'repo tools: ${repoToolNames.length} available with --workspace '
+          '(fs/search/code/git)',
+        );
+      }
       print('languages:  ${(info['languages'] as List).join(', ')}');
       final l = info['limits'] as Map;
       print(
@@ -289,7 +405,7 @@ Examples:
 }
 
 /// `apollovm mcp call <tool>` — invoke one tool once and print its JSON result.
-class CommandMcpCall extends _McpLimitsCommand {
+class CommandMcpCall extends _McpLimitsCommand with _WorkspaceOptions {
   @override
   final String description =
       'Invoke a single MCP tool once and print its JSON result.';
@@ -336,7 +452,14 @@ Examples:
       ..addOption(
         'query',
         help: 'Symbol query (apollovm.lsp.workspaceSymbols).',
+      )
+      ..addOption(
+        'json-args',
+        help:
+            'Full JSON arguments object for the tool (used by the '
+            'apollovm.fs.*/search.*/code.*/git.* tools).',
       );
+    addWorkspaceOptions();
   }
 
   @override
@@ -346,10 +469,29 @@ Examples:
       throw StateError('Missing tool name. Usage: apollovm mcp call <tool>');
     }
     final toolName = _normalizeToolName(rest.first);
-    if (!allToolNames.contains(toolName)) {
+    if (!_allKnownToolNames.contains(toolName)) {
       throw StateError(
-        'Unknown tool: ${rest.first}. Known: ${allToolNames.join(', ')}',
+        'Unknown tool: ${rest.first}. Known: ${_allKnownToolNames.join(', ')}',
       );
+    }
+
+    // Workspace/repository tools take a JSON args object and need an adapter.
+    if (isRepoTool(toolName)) {
+      final repository = this.repository;
+      if (repository == null) {
+        throw StateError(
+          'The tool $toolName requires a workspace: pass --workspace <dir>.',
+        );
+      }
+      final rawArgs = argResults!['json-args'] as String?;
+      final args = rawArgs == null
+          ? <String, Object?>{}
+          : (jsonDecode(rawArgs) as Map).cast<String, Object?>();
+      final runtime = RepoRuntime(repository);
+      final result = await runtime.call(toolName, args);
+      print(_json.convert(result));
+      if (result['isError'] == true) exitCode = 1;
+      return result['isError'] != true;
     }
 
     final file = argResults!['file'] as String?;

@@ -8,6 +8,8 @@ import 'dart:io';
 
 import 'package:stream_channel/stream_channel.dart';
 
+import '../../repository/repo_config.dart';
+import '../../repository/repository_adapter.dart';
 import '../apollo_mcp_server.dart';
 import '../mcp_config.dart';
 
@@ -43,11 +45,20 @@ class _Session {
 class HttpSseTransport {
   final McpLimits limits;
 
+  /// Optional workspace/repository backend shared by all sessions (exposes the
+  /// `apollovm.fs.*`/`search.*`/`code.*`/`git.*` tools when set).
+  final RepositoryAdapter? repository;
+  final RepoConfig repoConfig;
+
   final Map<String, _Session> _sessions = {};
   HttpServer? _server;
   int _sessionCounter = 0;
 
-  HttpSseTransport({this.limits = const McpLimits()});
+  HttpSseTransport({
+    this.limits = const McpLimits(),
+    this.repository,
+    this.repoConfig = const RepoConfig(),
+  });
 
   /// The bound address, available after [start].
   InternetAddress? get address => _server?.address;
@@ -109,7 +120,12 @@ class HttpSseTransport {
     outgoing.stream.listen((message) => writeFrame('message', message));
 
     final channel = StreamChannel<String>(incoming.stream, outgoing.sink);
-    final server = ApolloMcpServer(channel, limits: limits);
+    final server = ApolloMcpServer(
+      channel,
+      limits: limits,
+      repository: repository,
+      repoConfig: repoConfig,
+    );
     _sessions[sessionId] = _Session(response, incoming, outgoing, server);
 
     // Tell the client where to POST its messages.

@@ -1,3 +1,40 @@
+## 1.7.0
+
+### Repository features — read, search, navigate, edit and version-control a codebase
+
+- **New standalone libraries `package:apollovm/apollovm_repository.dart`
+  (web-safe) and `apollovm_repository_io.dart` (adds the on-disk adapter).** The
+  repository features are **not MCP-exclusive** — a web IDE, a desktop editor, an
+  agent or a test can use them directly via **`RepositoryService`**, a typed
+  façade returning typed results (no MCP/JSON). It bundles the filesystem/search/
+  git operations of a pluggable `RepositoryAdapter` with **language-aware** code
+  navigation (`outline`/`definition`/`references`/`hover`/`diagnostics`/
+  `workspaceSymbols`/`searchSymbols`) powered by ApolloVM's parsers via an
+  in-process `LspService`.
+- **Pluggable backend.** `RepositoryAdapter` implementations: `LocalRepositoryAdapter`
+  (`dart:io` + `git`), `InMemoryRepositoryAdapter` (web-safe), plus room for a
+  remote/web backend — enabling file edits and git commands from the browser. A
+  `PermissionGuard` decorator enforces a `RepoConfig` uniformly across backends.
+
+### MCP — the same features as agent tools
+
+- **New `apollovm.fs.*`, `apollovm.search.*`, `apollovm.code.*` and
+  `apollovm.git.*` tools** are a thin JSON layer over `RepositoryService`, letting
+  an agent read, search, navigate, edit and version-control real files instead of
+  shelling out to POSIX (`cat`, `ls`, `find`, `grep`, `sed`, `git`). Enabled by
+  serving with `--workspace <dir>` (or by passing a `RepositoryAdapter` to
+  `ApolloMcpServer`/`serveStdio`/`HttpSseTransport`); with no workspace the server
+  stays inline-source-only exactly as before.
+- **Security.** Read-only by default; filesystem writes and git mutations are
+  opt-in (`--allow-write` / `--allow-git-write`). Paths are confined to the
+  workspace root (`..`/absolute rejected), `git` is invoked with an argument list
+  (never a shell) pinned to the root, and `fs.edit` accepts an `atLine` safety
+  anchor (made mandatory by `--require-line-match`).
+- The repository tools are surfaced **only when a workspace/adapter is
+  configured**: the server registers them only when given a `RepositoryAdapter`,
+  and the `apollovm mcp list`/`schema`/`info` CLI advertise them only with
+  `--workspace`. `mcp call` invokes them via `--json-args` + `--workspace`.
+
 ## 1.6.3
 
 ### Language Server — body-less constructor/method ranges

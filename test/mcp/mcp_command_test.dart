@@ -27,13 +27,29 @@ Future<String> runMcp(List<String> args) async {
 
 void main() {
   group('mcp list', () {
-    test('emits all seven tool definitions with input schemas', () async {
-      final tools = jsonDecode(await runMcp(['list'])) as List;
-      expect(tools.map((t) => (t as Map)['name']), containsAll(allToolNames));
-      for (final t in tools) {
-        expect((t as Map)['inputSchema'], isA<Map>());
-        expect((t['inputSchema'] as Map)['properties'], isNotEmpty);
-      }
+    test(
+      'emits the core + LSP tools (no repo tools without a workspace)',
+      () async {
+        final tools = jsonDecode(await runMcp(['list'])) as List;
+        final names = tools.map((t) => (t as Map)['name']);
+        expect(names, containsAll(allToolNames));
+        // The repository tools are only surfaced when a workspace is configured.
+        expect(names, isNot(contains('apollovm.fs.read')));
+        for (final t in tools) {
+          // Every tool advertises an object input schema (properties may be empty
+          // for no-argument tools such as apollovm.git.status).
+          expect((t as Map)['inputSchema'], isA<Map>());
+          expect((t['inputSchema'] as Map)['properties'], isA<Map>());
+        }
+      },
+    );
+
+    test('includes the repository tools with --workspace', () async {
+      final tools =
+          jsonDecode(await runMcp(['list', '--workspace', '.'])) as List;
+      final names = tools.map((t) => (t as Map)['name']);
+      expect(names, containsAll(allToolNames));
+      expect(names, containsAll(repoToolNames));
     });
   });
 
