@@ -76,24 +76,34 @@ void main() {
       },
     );
 
-    test('searchSymbols reflects an edit on the same service instance', () async {
-      final writable = RepositoryService(
-        InMemoryRepositoryAdapter(Map.of(_fixture)),
-        config: const RepoConfig(allowWrite: true),
-      );
-      addTearDown(writable.close);
+    test(
+      'searchSymbols reflects an edit on the same service instance',
+      () async {
+        final writable = RepositoryService(
+          InMemoryRepositoryAdapter(Map.of(_fixture)),
+          config: const RepoConfig(allowWrite: true),
+        );
+        addTearDown(writable.close);
 
-      expect(await writable.searchSymbols('Greeter', kind: 'class'), isNotEmpty);
+        expect(
+          await writable.searchSymbols('Greeter', kind: 'class'),
+          isNotEmpty,
+        );
 
-      await writable.edit('lib/foo.dart', 'class Greeter', 'class Salutation');
+        await writable.edit(
+          'lib/foo.dart',
+          'class Greeter',
+          'class Salutation',
+        );
 
-      // The long-lived service must see the rename, not a stale buffer.
-      expect(await writable.searchSymbols('Greeter', kind: 'class'), isEmpty);
-      expect(
-        await writable.searchSymbols('Salutation', kind: 'class'),
-        isNotEmpty,
-      );
-    });
+        // The long-lived service must see the rename, not a stale buffer.
+        expect(await writable.searchSymbols('Greeter', kind: 'class'), isEmpty);
+        expect(
+          await writable.searchSymbols('Salutation', kind: 'class'),
+          isNotEmpty,
+        );
+      },
+    );
 
     test('writes are read-only by default, allowed via RepoConfig', () async {
       expect(repo.capabilities.canWrite, isFalse);
