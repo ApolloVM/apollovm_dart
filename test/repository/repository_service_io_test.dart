@@ -64,6 +64,26 @@ void main() {
       );
     });
 
+    test('git read operations flow through the service', () async {
+      final repo = RepositoryService(LocalRepositoryAdapter(dir.path));
+      addTearDown(repo.close);
+
+      expect(await repo.gitStatus(), isEmpty); // clean tree
+
+      File('${dir.path}/lib/bar.dart').writeAsStringSync('int add() => 0;\n');
+      final status = await repo.gitStatus();
+      expect(status.any((e) => e.path == 'lib/bar.dart'), isTrue);
+      expect(
+        await repo.gitDiff(path: 'lib/bar.dart'),
+        contains('int add() => 0;'),
+      );
+      expect(
+        await repo.gitShow(rev: 'HEAD', path: 'lib/foo.dart'),
+        contains('class Greeter'),
+      );
+      expect(await repo.gitBlame('lib/foo.dart'), isNotEmpty);
+    });
+
     test('git mutation gated by RepoConfig.allowGitMutation', () async {
       File('${dir.path}/lib/bar.dart').writeAsStringSync('int add() => 0;\n');
 

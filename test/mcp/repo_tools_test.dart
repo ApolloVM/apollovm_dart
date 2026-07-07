@@ -127,6 +127,155 @@ void main() {
       expect(allowed['isError'], isFalse);
     });
   });
+
+  // The MCP JSON layer for the tools not exercised above: fs mutation, all
+  // language-aware code.* navigation, the remaining git.* verbs, and the
+  // unknown-tool path — driven over a real git fixture.
+  group('MCP layer (RepoRuntime) — remaining tools', () {
+    const calc =
+        'class Foo {\n'
+        '  /// Doubles [x] and adds [y].\n'
+        '  static int calc(int x, int y) {\n'
+        '    var doubled = x * 2;\n'
+        '    return doubled + y;\n'
+        '  }\n'
+        '\n'
+        '  static int run() {\n'
+        '    return calc(10, 5);\n'
+        '  }\n'
+        '}\n';
+
+    late Directory dir;
+    late RepositoryAdapter adapter;
+
+    setUp(() async {
+      dir = await Directory.systemTemp.createTemp('apollovm_mcp_rest_');
+      for (final e in {..._fixture, 'lib/calc.dart': calc}.entries) {
+        final f = File('${dir.path}/${e.key}');
+        f.parent.createSync(recursive: true);
+        f.writeAsStringSync(e.value);
+      }
+      await _git(dir, ['init']);
+      await _git(dir, ['config', 'user.email', 't@t.dev']);
+      await _git(dir, ['config', 'user.name', 'Test']);
+      await _git(dir, ['add', '.']);
+      await _git(dir, ['commit', '-m', 'initial']);
+      adapter = LocalRepositoryAdapter(dir.path);
+    });
+    tearDown(() => dir.deleteSync(recursive: true));
+
+    RepoRuntime rw() => _runtime(
+      adapter,
+      config: const RepoConfig(allowWrite: true, allowGitMutation: true),
+    );
+
+    test('fs.list returns directory entries', () async {
+      final r = await _runtime(
+        adapter,
+      ).call('apollovm.fs.list', {'path': 'lib'});
+      expect(r['isError'], isFalse);
+      final names = (r['entries'] as List).map((e) => (e as Map)['name']);
+      expect(names, contains('calc.dart'));
+    });
+
+    test('fs.mkdir / move / delete', () async {
+      expect(
+        (await rw().call('apollovm.fs.mkdir', {'path': 'newdir'}))['ok'],
+        isTrue,
+      );
+      await rw().call('apollovm.fs.write', {
+        'path': 'newdir/f.txt',
+        'content': 'hi',
+      });
+      expect(
+        (await rw().call('apollovm.fs.move', {
+          'from': 'newdir/f.txt',
+          'to': 'newdir/g.txt',
+        }))['ok'],
+        isTrue,
+      );
+      expect(
+        (await rw().call('apollovm.fs.delete', {'path': 'newdir'}))['ok'],
+        isTrue,
+      );
+    });
+
+    test('code.diagnostics / definition / hover / references', () async {
+      final diag = await _runtime(
+        adapter,
+      ).call('apollovm.code.diagnostics', {'path': 'lib/calc.dart'});
+      expect(diag['isError'], isFalse);
+      expect(diag['ok'], isTrue);
+
+      final def = await _runtime(adapter).call('apollovm.code.definition', {
+        'path': 'lib/calc.dart',
+        'line': 8,
+        'character': 11,
+      });
+      expect(((def['definition'] as Map)['range'] as Map)['start'], isA<Map>());
+
+      final hover = await _runtime(adapter).call('apollovm.code.hover', {
+        'path': 'lib/calc.dart',
+        'line': 2,
+        'character': 13,
+      });
+      expect(hover['hover'], isNotNull);
+
+      final refs = await _runtime(adapter).call('apollovm.code.references', {
+        'path': 'lib/calc.dart',
+        'line': 2,
+        'character': 13,
+      });
+      expect((refs['references'] as List), hasLength(2));
+    });
+
+    test('code.workspaceSymbols auto-loads the repo', () async {
+      final r = await _runtime(
+        adapter,
+      ).call('apollovm.code.workspaceSymbols', {'query': 'Foo'});
+      expect(r['isError'], isFalse);
+      expect(
+        (r['symbols'] as List).map((s) => (s as Map)['name']),
+        contains('Foo'),
+      );
+    });
+
+    test('git.diff / show', () async {
+      File('${dir.path}/lib/bar.dart').writeAsStringSync('int add() => 0;\n');
+      final diff = await _runtime(adapter).call('apollovm.git.diff', {});
+      expect(diff['diff'], contains('int add() => 0;'));
+
+      final show = await _runtime(
+        adapter,
+      ).call('apollovm.git.show', {'rev': 'HEAD', 'path': 'lib/calc.dart'});
+      expect(show['content'], contains('static int calc'));
+    });
+
+    test('git.commit / checkout / restore', () async {
+      File('${dir.path}/lib/bar.dart').writeAsStringSync('int add() => 1;\n');
+      final commit = await rw().call('apollovm.git.commit', {
+        'message': 'tweak',
+        'paths': ['lib/bar.dart'],
+      });
+      expect(commit['isError'], isFalse);
+
+      File('${dir.path}/lib/bar.dart').writeAsStringSync('int add() => 2;\n');
+      final restore = await rw().call('apollovm.git.restore', {
+        'paths': ['lib/bar.dart'],
+      });
+      expect(restore['isError'], isFalse);
+
+      final checkout = await rw().call('apollovm.git.checkout', {
+        'rev': 'HEAD',
+      });
+      expect(checkout['isError'], isFalse);
+    });
+
+    test('an unknown repository tool is an error', () async {
+      final r = await _runtime(adapter).call('apollovm.fs.bogus', {});
+      expect(r['isError'], isTrue);
+    });
+  });
 }
 
 /// The filesystem/search/code tests, parameterized over an adapter [make]r.

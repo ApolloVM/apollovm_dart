@@ -163,8 +163,16 @@ class InMemoryRepositoryAdapter implements RepositoryAdapter {
     final src = normalizeRepoPath(from);
     final dst = normalizeRepoPath(to);
     final content = _files.remove(src);
-    if (content == null) throw RepoException('File not found: $from');
-    _files[dst] = content;
+    if (content != null) {
+      _files[dst] = content;
+      return;
+    }
+    // Move a "directory": re-key everything under `src/` to `dst/`.
+    final under = _files.keys.where((f) => f.startsWith('$src/')).toList();
+    if (under.isEmpty) throw RepoException('Path not found: $from');
+    for (final f in under) {
+      _files['$dst${f.substring(src.length)}'] = _files.remove(f)!;
+    }
   }
 
   @override
