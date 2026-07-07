@@ -8,9 +8,10 @@ import 'dart:io';
 
 import 'package:stream_channel/stream_channel.dart';
 
+import '../../repository/repo_config.dart';
+import '../../repository/repository_adapter.dart';
 import '../apollo_mcp_server.dart';
 import '../mcp_config.dart';
-import '../repo/repository_adapter.dart';
 
 /// A single client session: the SSE response used to push server→client
 /// messages, and the incoming controller fed by the client's POSTs.

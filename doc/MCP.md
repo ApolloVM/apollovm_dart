@@ -233,12 +233,18 @@ optional `atLine` anchor: the replacement only applies if `oldString` occurs on
 that 1-based line, guarding against wrong-occurrence or stale edits.
 `--require-line-match` makes the anchor mandatory.
 
-**Pluggable backend.** The tools talk to a `RepositoryAdapter`, so the same
-surface runs against a local checkout (`LocalRepositoryAdapter`), an in-memory
-fixture (`InMemoryRepositoryAdapter`, web-safe), or a future remote/web backend —
-enabling file edits and git commands from the browser without changing any tool.
-A `PermissionGuard` decorator enforces the `RepoConfig` (read-only by default)
-regardless of backend.
+**Not MCP-exclusive.** These tools are a thin JSON layer over a **standalone**
+repository library (`package:apollovm/apollovm_repository.dart`, web-safe; add
+`apollovm_repository_io.dart` for the on-disk adapter). A web IDE, editor, agent
+or test can use the same features directly via `RepositoryService` — a typed
+façade returning typed results instead of MCP JSON.
+
+**Pluggable backend.** The service/tools talk to a `RepositoryAdapter`, so the
+same surface runs against a local checkout (`LocalRepositoryAdapter`), an
+in-memory fixture (`InMemoryRepositoryAdapter`, web-safe), or a future remote/web
+backend — enabling file edits and git commands from the browser without changing
+any tool. A `PermissionGuard` decorator enforces the `RepoConfig` (read-only by
+default) regardless of backend.
 
 ## Security model
 

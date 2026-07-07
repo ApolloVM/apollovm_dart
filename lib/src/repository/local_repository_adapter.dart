@@ -5,7 +5,7 @@
 import 'dart:convert';
 import 'dart:io';
 
-import '../mcp_config.dart';
+import 'repo_config.dart';
 import 'repo_paths.dart';
 import 'repository_adapter.dart';
 

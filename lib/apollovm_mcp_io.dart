@@ -18,7 +18,7 @@
 library;
 
 export 'apollovm_mcp.dart';
+export 'apollovm_repository_io.dart'; // adds the on-disk LocalRepositoryAdapter
 export 'src/mcp/cli/mcp_command.dart';
-export 'src/mcp/repo/local_repository_adapter.dart';
 export 'src/mcp/transport/http_sse_transport.dart';
 export 'src/mcp/transport/stdio_transport.dart';

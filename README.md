@@ -901,9 +901,31 @@ apollovm mcp serve --workspace . --allow-write --allow-git-write
 *declarations* (not comment/string text) with precise ranges. Everything is
 **read-only by default**; writes and git mutations are opt-in
 (`--allow-write` / `--allow-git-write`). Paths are confined to the workspace root
-(`..`/absolute rejected), and `fs.edit` supports an `atLine` safety anchor. The
-tools run against a pluggable `RepositoryAdapter` (local, in-memory, or a future
-remote/web backend). See [`doc/MCP.md`](doc/MCP.md#workspace-tools) for details.
+(`..`/absolute rejected), and `fs.edit` supports an `atLine` safety anchor. See
+[`doc/MCP.md`](doc/MCP.md#workspace-tools) for details.
+
+These tools are a thin JSON layer over a **standalone repository library** — the
+features are **not MCP-exclusive**. A web IDE, editor, agent or test can use them
+directly via `RepositoryService` (a typed façade over a pluggable
+`RepositoryAdapter`):
+
+```dart
+import 'package:apollovm/apollovm_repository_io.dart'; // web: apollovm_repository.dart
+
+final repo = RepositoryService(
+  LocalRepositoryAdapter('.'),                 // or InMemoryRepositoryAdapter(files)
+  config: const RepoConfig(allowWrite: true),
+);
+final outline = await repo.outline('lib/foo.dart');   // typed, language-aware
+final hits = await repo.searchText('TODO', glob: 'lib/**');
+print(await repo.gitStatus());
+await repo.close();
+```
+
+`RepositoryAdapter` backends: `LocalRepositoryAdapter` (`dart:io` + `git`),
+`InMemoryRepositoryAdapter` (web-safe), or a future remote/web backend — enabling
+file edits and git commands from the browser. A `PermissionGuard` enforces the
+`RepoConfig` uniformly across backends.
 
 ### Security model
 

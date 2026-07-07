@@ -11,10 +11,11 @@ import 'package:collection/collection.dart' show IterableExtension;
 import 'package:dart_mcp/server.dart' show ProtocolVersion, Tool;
 
 import '../../../apollovm.dart' show ApolloVM, WasmRuntime;
+import '../../repository/local_repository_adapter.dart';
+import '../../repository/permission_guard.dart';
+import '../../repository/repo_config.dart';
+import '../../repository/repository_adapter.dart';
 import '../mcp_config.dart';
-import '../repo/local_repository_adapter.dart';
-import '../repo/permission_guard.dart';
-import '../repo/repository_adapter.dart';
 import '../runtime/isolate_executor.dart';
 import '../runtime/repo_runtime.dart';
 import '../tools/apollo_tools.dart';
@@ -486,7 +487,7 @@ Examples:
       final args = rawArgs == null
           ? <String, Object?>{}
           : (jsonDecode(rawArgs) as Map).cast<String, Object?>();
-      final runtime = RepoRuntime(repository, limits: this.limits);
+      final runtime = RepoRuntime(repository);
       final result = await runtime.call(toolName, args);
       print(_json.convert(result));
       if (result['isError'] == true) exitCode = 1;

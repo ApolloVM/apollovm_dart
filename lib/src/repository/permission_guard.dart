@@ -2,7 +2,7 @@
 // This code is governed by the Apache License, Version 2.0.
 // Please refer to the LICENSE and AUTHORS files for details.
 
-import '../mcp_config.dart';
+import 'repo_config.dart';
 import 'repository_adapter.dart';
 
 /// A [RepositoryAdapter] decorator that enforces a [RepoConfig] over any inner

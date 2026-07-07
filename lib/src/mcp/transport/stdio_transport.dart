@@ -7,9 +7,10 @@ import 'dart:io';
 
 import 'package:dart_mcp/stdio.dart';
 
+import '../../repository/repo_config.dart';
+import '../../repository/repository_adapter.dart';
 import '../apollo_mcp_server.dart';
 import '../mcp_config.dart';
-import '../repo/repository_adapter.dart';
 
 /// Starts an [ApolloMcpServer] over stdio (the standard local MCP transport),
 /// reading newline-delimited JSON-RPC from [input] and writing to [output]

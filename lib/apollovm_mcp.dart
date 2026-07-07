@@ -22,11 +22,12 @@
 /// live in `package:apollovm/apollovm_mcp_io.dart`, which requires `dart:io`.
 library;
 
+// The repository features are a standalone library; re-exported here for
+// convenience so MCP embedders get the adapters, RepoConfig and
+// RepositoryService without a second import.
+export 'apollovm_repository.dart';
 export 'src/mcp/apollo_mcp_server.dart';
 export 'src/mcp/mcp_config.dart';
-export 'src/mcp/repo/in_memory_repository_adapter.dart';
-export 'src/mcp/repo/permission_guard.dart';
-export 'src/mcp/repo/repository_adapter.dart';
 export 'src/mcp/runtime/isolate_executor.dart'
     show computeToolIsolated, runToolInIsolate;
 export 'src/mcp/runtime/lsp_runtime.dart' show LspRuntime;

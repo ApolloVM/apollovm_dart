@@ -8,9 +8,10 @@ import 'package:apollovm/apollovm.dart' show ApolloVM;
 import 'package:dart_mcp/server.dart';
 import 'package:stream_channel/stream_channel.dart';
 
+import '../repository/permission_guard.dart';
+import '../repository/repo_config.dart';
+import '../repository/repository_adapter.dart';
 import 'mcp_config.dart';
-import 'repo/permission_guard.dart';
-import 'repo/repository_adapter.dart';
 import 'runtime/isolate_executor.dart';
 import 'runtime/repo_runtime.dart';
 import 'tools/apollo_tools.dart';
@@ -46,7 +47,6 @@ final class ApolloMcpServer extends MCPServer with ToolsSupport {
                repository is PermissionGuard
                    ? repository
                    : PermissionGuard(repository, config: repoConfig),
-               limits: limits,
              ),
        super.fromStreamChannel(
          implementation: Implementation(
