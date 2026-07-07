@@ -22,8 +22,10 @@
   workspace root (`..`/absolute rejected), `git` is invoked with an argument list
   (never a shell) pinned to the root, and `fs.edit` accepts an `atLine` safety
   anchor (made mandatory by `--require-line-match`).
-- The `apollovm mcp call` CLI can now invoke the repository tools via
-  `--json-args` with `--workspace`; `mcp list`/`schema`/`info` advertise them.
+- The repository tools are surfaced **only when a workspace/adapter is
+  configured**: the server registers them only when given a `RepositoryAdapter`,
+  and the `apollovm mcp list`/`schema`/`info` CLI advertise them only with
+  `--workspace`. `mcp call` invokes them via `--json-args` + `--workspace`.
 
 ## 1.6.3
 

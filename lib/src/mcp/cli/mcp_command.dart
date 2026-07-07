@@ -8,7 +8,7 @@ import 'dart:io';
 
 import 'package:args/command_runner.dart';
 import 'package:collection/collection.dart' show IterableExtension;
-import 'package:dart_mcp/server.dart' show ProtocolVersion;
+import 'package:dart_mcp/server.dart' show ProtocolVersion, Tool;
 
 import '../../../apollovm.dart' show ApolloVM, WasmRuntime;
 import '../mcp_config.dart';
@@ -234,13 +234,24 @@ class CommandMcpList extends Command<bool> {
   String get usageFooter => '''
 
 Examples:
-  apollovm mcp list
+  apollovm mcp list                       # core + LSP tools
+  apollovm mcp list --workspace .         # also the fs/search/code/git tools
   apollovm mcp list | jq '.[].name'       # just the tool names''';
+
+  CommandMcpList() {
+    argParser.addOption(
+      'workspace',
+      help:
+          'Also list the workspace/repository tools (as enabled by serving '
+          'with --workspace).',
+      valueHelp: 'dir',
+    );
+  }
 
   @override
   bool run() {
     final tools = [
-      for (final tool in [...buildTools(), ...buildRepoTools()])
+      for (final tool in _listedTools(argResults!['workspace'] != null))
         <String, Object?>{
           'name': tool.name,
           'description': tool.description,
@@ -251,6 +262,14 @@ Examples:
     return true;
   }
 }
+
+/// The tool definitions the CLI lists/serves: the core + LSP tools always, and
+/// the workspace/repository tools only when a workspace is configured (i.e. an
+/// adapter would be provided).
+List<Tool> _listedTools(bool withRepo) => [
+  ...buildTools(),
+  if (withRepo) ...buildRepoTools(),
+];
 
 /// Every tool name the CLI recognizes: the inline core/LSP tools plus the
 /// workspace/repository tools (available when serving with `--workspace`).
@@ -270,12 +289,24 @@ class CommandMcpSchema extends Command<bool> {
 
 Examples:
   apollovm mcp schema                      # every tool's input schema
-  apollovm mcp schema apollovm.execute       # one tool (bare `execute` also works)''';
+  apollovm mcp schema apollovm.execute       # one tool (bare `execute` also works)
+  apollovm mcp schema apollovm.fs.read --workspace .   # a repository tool''';
+
+  CommandMcpSchema() {
+    argParser.addOption(
+      'workspace',
+      help: 'Include the workspace/repository tool schemas.',
+      valueHelp: 'dir',
+    );
+  }
 
   @override
   bool run() {
-    final tools = [...buildTools(), ...buildRepoTools()];
+    // A specific repository tool can be inspected by name even without a
+    // workspace; the full dump only includes them when a workspace is set.
     final rest = argResults!.rest;
+    final withRepo = argResults!['workspace'] != null || rest.isNotEmpty;
+    final tools = _listedTools(withRepo);
 
     if (rest.isNotEmpty) {
       final wanted = _normalizeToolName(rest.first);
@@ -310,23 +341,31 @@ Examples:
   apollovm mcp info --json''';
 
   CommandMcpInfo() {
-    argParser.addFlag(
-      'json',
-      help: 'Output as JSON instead of text.',
-      negatable: false,
-    );
+    argParser
+      ..addFlag(
+        'json',
+        help: 'Output as JSON instead of text.',
+        negatable: false,
+      )
+      ..addOption(
+        'workspace',
+        help: 'Report the workspace/repository tools as enabled.',
+        valueHelp: 'dir',
+      );
   }
 
   @override
   bool run() {
     const limits = McpLimits();
+    // The repository tools are enabled only when a workspace is configured.
+    final withRepo = argResults!['workspace'] != null;
     final info = <String, Object?>{
       'server': 'apollovm-mcp',
       'version': ApolloVM.VERSION,
       'protocol': ProtocolVersion.latestSupported.versionString,
       'transports': ['stdio', 'http-sse'],
       'tools': allToolNames,
-      'repositoryTools': repoToolNames,
+      if (withRepo) 'repositoryTools': repoToolNames,
       'languages': mcpSupportedLanguages,
       'limits': {
         'timeoutMs': limits.timeoutMs,
@@ -343,10 +382,14 @@ Examples:
       print('protocol:   ${info['protocol']}');
       print('transports: ${(info['transports'] as List).join(', ')}');
       print('tools:      ${(info['tools'] as List).join(', ')}');
-      print(
-        'repo tools: ${(info['repositoryTools'] as List).join(', ')} '
-        '(with --workspace)',
-      );
+      if (withRepo) {
+        print('repo tools: ${(info['repositoryTools'] as List).join(', ')}');
+      } else {
+        print(
+          'repo tools: ${repoToolNames.length} available with --workspace '
+          '(fs/search/code/git)',
+        );
+      }
       print('languages:  ${(info['languages'] as List).join(', ')}');
       final l = info['limits'] as Map;
       print(

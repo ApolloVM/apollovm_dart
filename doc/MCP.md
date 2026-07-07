@@ -75,7 +75,8 @@ apollovm mcp call apollovm.search.symbols --workspace . \
 ### `mcp list` / `mcp schema` / `mcp info` / `mcp doctor`
 
 ```bash
-apollovm mcp list                 # all tool definitions (JSON)
+apollovm mcp list                 # core + LSP tool definitions (JSON)
+apollovm mcp list --workspace .   # also the fs/search/code/git tools
 apollovm mcp schema apollovm.wasm   # one tool's input schema (JSON)
 apollovm mcp info [--json]        # server/version/protocol/languages/limits
 apollovm mcp doctor               # environment & capability checks
