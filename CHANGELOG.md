@@ -1,3 +1,31 @@
+## 1.8.0
+
+### Remote repository backend — edit and version-control a project from the browser
+
+The 1.7.0 repository features left "room for a remote/web backend"; this release
+adds it, so a web IDE (or any Dart host) can drive a real project over the wire.
+
+- **New `RemoteRepositoryAdapter`** (web-safe, in
+  `package:apollovm/apollovm_repository.dart`): a `RepositoryAdapter` that talks
+  to a repository server over HTTP, implementing the full interface (filesystem,
+  search, git). Connect with
+  `RemoteRepositoryAdapter.connect('http://host:port')`; it reports
+  `RepoCapabilities.isRemote`. Backed by `package:http`, so it runs in the
+  browser.
+- **New `RepositoryRpc`** (web-safe): a transport-agnostic JSON dispatcher that
+  maps `{op, ...args}` requests to a `RepositoryService`. A shared `Op` constant
+  set is the single source of truth for the wire contract, so server and client
+  can't drift.
+- **`fromJson` on every repository value type** (`RepoFile`, `RepoEntry`,
+  `RepoStat`, `RepoEdit`, `TextMatch`, `RepoCapabilities`, and the git types),
+  completing the JSON round-trip alongside the existing `toJson`.
+- **New `tool/repository_server.dart`**: a lightweight HTTP server exposing a
+  local checkout (via `LocalRepositoryAdapter`) over `POST /rpc`, with reflected,
+  permissive CORS so a browser app on another origin can reach it. Flags:
+  `--workspace`, `--allow-write`, `--allow-git-write`, `--port`, `--address`.
+  The server remains the authority on permissions regardless of what a client
+  requests.
+
 ## 1.7.0
 
 ### Repository features — read, search, navigate, edit and version-control a codebase
