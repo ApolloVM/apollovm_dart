@@ -1,3 +1,30 @@
+## 1.7.0
+
+### MCP — workspace/repository tools for coding agents
+
+- **New `apollovm.fs.*`, `apollovm.search.*`, `apollovm.code.*` and
+  `apollovm.git.*` tools** let an agent read, search, navigate, edit and
+  version-control real files in a repository — instead of shelling out to POSIX
+  (`cat`, `ls`, `find`, `grep`, `sed`, `git`). They return structured JSON.
+  Enabled by serving with `--workspace <dir>` (or by passing a
+  `RepositoryAdapter` to `ApolloMcpServer`/`serveStdio`/`HttpSseTransport`); with
+  no workspace the server stays inline-source-only exactly as before.
+- **Language-aware navigation.** `search.symbols` and the `code.*` tools reuse
+  ApolloVM's parsers and `LspService`, so they match *declarations* (not
+  comment/string mentions) with precise ranges — a real improvement over `grep`.
+- **Pluggable backend.** The tools talk to a `RepositoryAdapter` interface:
+  `LocalRepositoryAdapter` (`dart:io` + `git`), `InMemoryRepositoryAdapter`
+  (web-safe), or a future remote/web backend — enabling file edits and git
+  commands from the browser without changing any tool. A `PermissionGuard`
+  decorator enforces a `RepoConfig` uniformly across backends.
+- **Security.** Read-only by default; filesystem writes and git mutations are
+  opt-in (`--allow-write` / `--allow-git-write`). Paths are confined to the
+  workspace root (`..`/absolute rejected), `git` is invoked with an argument list
+  (never a shell) pinned to the root, and `fs.edit` accepts an `atLine` safety
+  anchor (made mandatory by `--require-line-match`).
+- The `apollovm mcp call` CLI can now invoke the repository tools via
+  `--json-args` with `--workspace`; `mcp list`/`schema`/`info` advertise them.
+
 ## 1.6.3
 
 ### Language Server — body-less constructor/method ranges

@@ -879,6 +879,32 @@ line/character ranges). They accept the same `language` values above (except
 codebase-wide symbol search. See
 [`example/apollovm_example_mcp_lsp.dart`](example/apollovm_example_mcp_lsp.dart).
 
+### Workspace / repository tools
+
+Start the server with `--workspace <dir>` to additionally expose tools that work
+on **real files in a repository**, so a coding agent can explore, search,
+navigate and version-control the codebase without shelling out to POSIX:
+
+```bash
+apollovm mcp serve --workspace .                       # read-only
+apollovm mcp serve --workspace . --allow-write --allow-git-write
+```
+
+| Group | Tools | Replaces |
+|-------|-------|----------|
+| `apollovm.fs.*` | `read`, `list`, `find`, `stat`, `write`, `edit`, `mkdir`, `move`, `delete` | `cat`/`ls`/`find`/`sed`/`mv`/`rm` |
+| `apollovm.search.*` | `text` (regex), `symbols` (**language-aware**) | `grep` |
+| `apollovm.code.*` | `outline`, `definition`, `references`, `hover`, `diagnostics`, `workspaceSymbols` | editor navigation |
+| `apollovm.git.*` | `status`, `diff`, `log`, `show`, `blame`, `add`, `commit`, `checkout`, `restore` | the `git` CLI |
+
+`search.symbols` and `code.*` reuse ApolloVM's parsers/LSP, so they match
+*declarations* (not comment/string text) with precise ranges. Everything is
+**read-only by default**; writes and git mutations are opt-in
+(`--allow-write` / `--allow-git-write`). Paths are confined to the workspace root
+(`..`/absolute rejected), and `fs.edit` supports an `atLine` safety anchor. The
+tools run against a pluggable `RepositoryAdapter` (local, in-memory, or a future
+remote/web backend). See [`doc/MCP.md`](doc/MCP.md#workspace-tools) for details.
+
 ### Security model
 
 - **File/network access is denied by construction** — executed code is only ever

@@ -24,9 +24,14 @@ library;
 
 export 'src/mcp/apollo_mcp_server.dart';
 export 'src/mcp/mcp_config.dart';
+export 'src/mcp/repo/in_memory_repository_adapter.dart';
+export 'src/mcp/repo/permission_guard.dart';
+export 'src/mcp/repo/repository_adapter.dart';
 export 'src/mcp/runtime/isolate_executor.dart'
     show computeToolIsolated, runToolInIsolate;
 export 'src/mcp/runtime/lsp_runtime.dart' show LspRuntime;
+export 'src/mcp/runtime/repo_runtime.dart'
+    show RepoRuntime, buildRepoTools, isRepoTool, repoToolNames;
 export 'src/mcp/tools/apollo_tools.dart' show allToolNames, computeTool;
 export 'src/mcp/tools/lsp_tools.dart'
     show buildLspTools, computeLspTool, isLspTool, lspToolNames;

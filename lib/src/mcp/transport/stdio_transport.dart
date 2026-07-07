@@ -9,17 +9,28 @@ import 'package:dart_mcp/stdio.dart';
 
 import '../apollo_mcp_server.dart';
 import '../mcp_config.dart';
+import '../repo/repository_adapter.dart';
 
 /// Starts an [ApolloMcpServer] over stdio (the standard local MCP transport),
 /// reading newline-delimited JSON-RPC from [input] and writing to [output]
 /// (defaulting to this process's stdin/stdout).
+///
+/// Pass a [repository] (with an optional [repoConfig]) to additionally expose
+/// the workspace/repository tools over this transport.
 ///
 /// Returns the running server; await its `done` to know when the peer closes.
 ApolloMcpServer serveStdio({
   McpLimits limits = const McpLimits(),
   Stream<List<int>>? input,
   StreamSink<List<int>>? output,
+  RepositoryAdapter? repository,
+  RepoConfig repoConfig = const RepoConfig(),
 }) {
   final channel = stdioChannel(input: input ?? stdin, output: output ?? stdout);
-  return ApolloMcpServer(channel, limits: limits);
+  return ApolloMcpServer(
+    channel,
+    limits: limits,
+    repository: repository,
+    repoConfig: repoConfig,
+  );
 }

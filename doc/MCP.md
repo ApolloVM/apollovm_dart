@@ -42,6 +42,10 @@ Options (shared with `mcp call`):
 | `--max-output-chars <n>` | `65536` | Max captured console output per execution. |
 | `--max-source-chars <n>` | `262144` | Max accepted source size. |
 | `--isolate-tools <list>` | `apollovm.execute` | Comma-separated tools to run in a killable isolate. |
+| `--workspace <dir>` | *(off)* | Enable the file/repository tools rooted at `<dir>` (see [Workspace tools](#workspace-tools)). |
+| `--allow-write` | *(off)* | Permit mutating filesystem tools (`fs.write`/`edit`/`mkdir`/`move`/`delete`). |
+| `--allow-git-write` | *(off)* | Permit mutating git tools (`git.add`/`commit`/`checkout`/`restore`). |
+| `--require-line-match` | *(off)* | Require every `fs.edit` to pin its expected line via `atLine`. |
 
 ### `mcp call`
 
@@ -59,6 +63,14 @@ echo 'int main(List a){ return 1; }' | apollovm mcp call apollovm.parse -l dart
 ```
 
 `apollovm.execute` extras: `--function`, `--class-name`, `--args '<json array>'`.
+
+The [workspace tools](#workspace-tools) take a full JSON args object via
+`--json-args` and require `--workspace <dir>`:
+
+```bash
+apollovm mcp call apollovm.search.symbols --workspace . \
+  --json-args '{"query":"ApolloVM","kind":"class"}'
+```
 
 ### `mcp list` / `mcp schema` / `mcp info` / `mcp doctor`
 
@@ -183,11 +195,57 @@ Output: `{ "modules": [ { "name": "mcp", "base64": "<wasm bytes>" } ] }`.
 Each module's bytes are base64-encoded and begin with the `\0asm` magic
 (`00 61 73 6D`).
 
+## Workspace tools
+
+When the server is started with `--workspace <dir>` (or an embedder passes a
+`RepositoryAdapter`), it additionally exposes tools that operate on **real files
+in a repository** — so a coding agent can explore, search, navigate and
+version-control the codebase without shelling out to POSIX (`cat`, `ls`, `find`,
+`grep`, `sed`, `git`). All paths are workspace-relative and confined to the root
+(`..` traversal and absolute paths are rejected). Results are structured JSON.
+
+```bash
+# read-only exploration of the current repo, over stdio
+apollovm mcp serve --workspace .
+
+# allow edits + git mutation
+apollovm mcp serve --workspace . --allow-write --allow-git-write
+
+# one-shot from the shell (repo tools take a JSON args object)
+apollovm mcp call apollovm.fs.read --workspace . \
+  --json-args '{"path":"pubspec.yaml","startLine":1,"endLine":3}'
+```
+
+| Group | Tools | Replaces |
+|-------|-------|----------|
+| `apollovm.fs.*` | `read`, `list`, `find`, `stat`, `write`†, `edit`†, `mkdir`†, `move`†, `delete`† | `cat`/`ls`/`find`/`stat`/`>`/`sed`/`mkdir`/`mv`/`rm` |
+| `apollovm.search.*` | `text` (regex), `symbols` (language-aware declaration search) | `grep -rn`, symbol greps |
+| `apollovm.code.*` | `outline`, `definition`, `references`, `hover`, `diagnostics`, `workspaceSymbols` | manual reading / editor navigation |
+| `apollovm.git.*` | `status`, `diff`, `log`, `show`, `blame`, `add`‡, `commit`‡, `checkout`‡, `restore`‡ | the `git` CLI |
+
+† requires `--allow-write`  ‡ requires `--allow-git-write`
+
+**Language-aware advantage.** `search.symbols` and `code.*` use ApolloVM's own
+parsers/LSP, so they find *declarations* (not comment/string mentions) and give
+precise ranges — a real improvement over text `grep`. `fs.edit` accepts an
+optional `atLine` anchor: the replacement only applies if `oldString` occurs on
+that 1-based line, guarding against wrong-occurrence or stale edits.
+`--require-line-match` makes the anchor mandatory.
+
+**Pluggable backend.** The tools talk to a `RepositoryAdapter`, so the same
+surface runs against a local checkout (`LocalRepositoryAdapter`), an in-memory
+fixture (`InMemoryRepositoryAdapter`, web-safe), or a future remote/web backend —
+enabling file edits and git commands from the browser without changing any tool.
+A `PermissionGuard` decorator enforces the `RepoConfig` (read-only by default)
+regardless of backend.
+
 ## Security model
 
 | Concern | Mechanism | Strength |
 |---------|-----------|----------|
-| File access | No file external is mapped; tools take inline source only | **Guaranteed** |
+| File access (core tools) | No file external is mapped; tools take inline source only | **Guaranteed** |
+| File access (workspace tools) | Off unless `--workspace` is given; paths confined to the root, `..`/absolute rejected; writes off unless `--allow-write` | **Enforced** |
+| Git mutation | Off unless `--allow-git-write`; `git` invoked with an argument list (no shell), `cwd` pinned to the root | **Enforced** |
 | Network access | No socket external is mapped | **Guaranteed** |
 | Timeout / CPU | `apollovm.execute` runs in a killable isolate (`Timer` + `Isolate.kill`) | **Enforced** |
 | Input size | `maxSourceChars` | Enforced |
