@@ -70,12 +70,12 @@ class Calc {
 ///    and Go no `for` loop.
 ///  - Python cannot parse the lambda it generates; JS and TS cannot parse the
 ///    map literal they generate.
-///  - A class with a field makes Go emit a `func NewC() *C { o := &C{} … }`
-///    factory, and the Go grammar has no `&T{}` composite literal.
 ///  - The Lua generator emits `a + b` for string concatenation and `s.m()` for
 ///    a method call, where Lua wants `a .. b` and `s:m()`.
 const _roundTripSource = r'''
 class Calc {
+
+  int base = 10;
 
   int branches(int a) {
     if (a > 10) { return 1; } else if (a > 5) { return 2; } else { return 3; }

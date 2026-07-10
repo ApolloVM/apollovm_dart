@@ -30,6 +30,11 @@ import "fmt"
 type Calc struct {
 }
 
+func NewCalc() *Calc {
+  o := &Calc{}
+  return o
+}
+
 func (o *Calc) sum(title string, a int, b int) int {
   total := a + b
   msg := "sum " + title + " = " + total

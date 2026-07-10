@@ -1,9 +1,9 @@
 ## 1.9.1
 
-### Core-library and generator fixes found by a coverage pass
+### Core-library, Go and generator fixes found by a coverage pass
 
-Line coverage of `lib/` went from 83.4% to 84.6%. The tests written to get there
-surfaced three real defects:
+Line coverage of `lib/` went from 83.4% to 84.7%. The tests written to get there
+surfaced six real defects:
 
 - **`String.length`, `String.isEmpty`, `String.isNotEmpty` and `int`/`double`
   `sign` only worked when *called*** (`s.length()`), not when read as the
@@ -21,16 +21,34 @@ surfaced three real defects:
   every subclass and already drifting from them — the base `generateASTRoot`
   never learned to emit extensions. The dispatchers are now abstract or removed.
 
+**Go constructors did not work at all.** Three defects compounded:
+
+- The grammar had no `&T{}` composite literal, so *any* Go source containing a
+  `func NewFoo() *Foo { o := &Foo{} ... }` factory — the shape the Go generator
+  itself emits — failed to parse. `&T{}` (the zero-valued form) now parses as
+  the struct's no-argument constructor.
+- A `NewFoo(...)` call site resolved to a top-level function that no longer
+  existed, because the declaration had already been folded into the struct's
+  constructor. It now resolves to the constructor, and inside a factory the
+  local `o` binds to the instance under construction.
+- The generator emitted `p := Point(a, 1)`, which is not Go. Instantiation now
+  emits the factory call `NewPoint(a, 1)`, and every struct gets a factory so
+  the call always resolves.
+
+**The Go generator rewrote a shadowing parameter as a field.**
+`Point(int x) { this.x = x; }` generated `o.x = o.x`, silently assigning the
+field to itself. A parameter now shadows a same-named field.
+
 New tests: the core runtime library (`dart:math`, and every `String`, `int`,
-`double`, `List` and `Map` member), and a generator matrix asserting that a
-program exercising most AST node kinds generates in all nine languages and that
-the generated source parses back.
+`double`, `List` and `Map` member); Go constructors end-to-end; and a generator
+matrix asserting that a program exercising most AST node kinds generates in all
+nine languages and that the generated source parses back.
 
 Known gaps this pass documented but did not fix: several grammars parse only a
 subset of what their own generator emits (Lua has no `for`/`while` rule and
-emits `+` for string concatenation; Python cannot parse the lambda it generates;
-Go has no `&T{}` composite literal, so it cannot read back the constructor
-factory it emits). See `test/unit/apollovm_generator_matrix_test.dart`.
+emits `+` for string concatenation and `s.m()` for method calls; Python cannot
+parse the lambda it generates; JS/TS cannot parse the map literal they
+generate). See `test/unit/apollovm_generator_matrix_test.dart`.
 
 ## 1.9.0
 

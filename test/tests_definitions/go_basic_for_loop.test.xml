@@ -29,6 +29,11 @@ package main
 type C struct {
 }
 
+func NewC() *C {
+  o := &C{}
+  return o
+}
+
 func (o *C) run(n int) int {
   total := 0
   for i := 0; i < n; i = i + 1 {

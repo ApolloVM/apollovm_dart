@@ -69,6 +69,16 @@ class GoGrammarDefinition extends GoGrammarLexer {
   /// `_classTypeParameters`), cleared afterwards.
   String? _currentReceiver;
 
+  /// Struct names declared so far in the compilation unit. Go's own generated
+  /// code always declares a struct before its factory and before any use, so
+  /// tracking them as they are parsed is enough to recognize `&Name{}` and to
+  /// map a `NewName(...)` call onto the struct's constructor.
+  final Set<String> _structNames = <String>{};
+
+  /// The local name the Go generator gives the instance under construction in a
+  /// factory: `o := &Foo{}`.
+  static const String _constructorReceiverName = 'o';
+
   @override
   Parser start() => ref0(compilationUnit).trim().end();
 
@@ -155,6 +165,15 @@ class GoGrammarDefinition extends GoGrammarLexer {
             return root;
           });
 
+  /// `NewFoo` names the factory constructor of the struct `Foo`; the shared AST
+  /// invokes a constructor by its class name, so the call site is rewritten.
+  /// Returns `null` when [name] is an ordinary function.
+  String? _structConstructorName(String name) {
+    if (!name.startsWith('New') || name.length <= 3) return null;
+    var owner = name.substring(3);
+    return _structNames.contains(owner) ? owner : null;
+  }
+
   /// A top-level function is a constructor when it is named `New<Struct>` and
   /// `<Struct>` is a declared struct.
   static String? _constructorOwner(
@@ -176,9 +195,14 @@ class GoGrammarDefinition extends GoGrammarLexer {
   ) {
     var statements = f.statements.toList();
     statements.removeWhere((s) {
-      if (s is ASTStatementVariableDeclaration && s.name == 'o') return true;
-      if (s is ASTStatementReturnVariable && s.variable.name == 'o') {
+      if (s is ASTStatementVariableDeclaration &&
+          s.name == _constructorReceiverName) {
         return true;
+      }
+      // `return o` parses as `return this`, since `o` is bound as the receiver.
+      if (s is ASTStatementReturnVariable) {
+        var v = s.variable;
+        return v is ASTThisVariable || v.name == _constructorReceiverName;
       }
       return false;
     });
@@ -262,6 +286,7 @@ class GoGrammarDefinition extends GoGrammarLexer {
           .map((v) {
             var name = v[1] as String;
             var fields = (v[4] as List).cast<ASTClassField>().toList();
+            _structNames.add(name);
             return _StructDecl(name, fields);
           });
 
@@ -313,7 +338,16 @@ class GoGrammarDefinition extends GoGrammarLexer {
   /// `func name(params) ret { body }` — a top-level function.
   Parser<ASTFunctionDeclaration> functionDeclaration() =>
       (funcToken().trimHidden() &
-              identifier() &
+              identifier().map((name) {
+                // Inside a `func NewFoo(...) *Foo` factory the local `o` of the
+                // `o := &Foo{}` scaffolding *is* the instance under
+                // construction, so bind it as the receiver before the body
+                // parses. `_toConstructor` strips the scaffolding afterwards.
+                _currentReceiver = _structConstructorName(name) != null
+                    ? _constructorReceiverName
+                    : null;
+                return name;
+              }) &
               functionParametersDeclaration() &
               type().optional() &
               codeBlock())
@@ -322,6 +356,7 @@ class GoGrammarDefinition extends GoGrammarLexer {
             var parameters = v[2] as ASTFunctionParametersDeclaration;
             var returnType = (v[3] as ASTType?) ?? ASTTypeVoid.instance;
             var block = v[4] as ASTBlock;
+            _currentReceiver = null;
             return ASTFunctionDeclaration(
               name,
               parameters,
@@ -721,6 +756,7 @@ class GoGrammarDefinition extends GoGrammarLexer {
               expressionVariableDirectOperation() |
               expressionObjectFieldAssignment() |
               expressionVariableAssigment() |
+              expressionStructLiteral() |
               expressionFunctionInvocation() |
               expressionObjectEntryFunctionInvocation() |
               expressionVariableEntryAccess() |
@@ -787,6 +823,22 @@ class GoGrammarDefinition extends GoGrammarLexer {
         (v) => v[1] as ASTExpression,
       );
 
+  /// The zero-valued composite literal of a declared struct: `&Foo{}`.
+  ///
+  /// Go has no `new`; this is how an instance is created, and it is what the Go
+  /// generator emits inside a `func NewFoo() *Foo` factory. It maps to the
+  /// struct's no-argument constructor. Only the empty-brace form is supported;
+  /// field-initializing literals (`&Foo{x: 1}`) are not.
+  Parser<ASTExpression> expressionStructLiteral() =>
+      (char('&').trimHidden() &
+              identifier() &
+              char('{').trimHidden() &
+              char('}').trimHidden())
+          .map((v) {
+            var name = v[1] as String;
+            return ASTExpressionLocalFunctionInvocation(name, []);
+          });
+
   Parser<ASTExpressionGroupFunctionInvocation>
   expressionGroupFunctionInvocation() =>
       (ref0(expressionGroup) &
@@ -850,7 +902,9 @@ class GoGrammarDefinition extends GoGrammarLexer {
               );
             }
 
-            var name = normalizeFunctionName(rawName);
+            var name =
+                _structConstructorName(rawName) ??
+                normalizeFunctionName(rawName);
 
             if (obj != null && obj != 'this' && obj != _currentReceiver) {
               var variable = ASTScopeVariable(obj);

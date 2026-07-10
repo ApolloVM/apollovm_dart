@@ -30,6 +30,11 @@ package main
 type C struct {
 }
 
+func NewC() *C {
+  o := &C{}
+  return o
+}
+
 func (o *C) run() int {
   xs := []int{2, 4, 6}
   total := 0

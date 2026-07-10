@@ -147,8 +147,10 @@ Generics are `🚫` for JS/Lua/Python: no static type syntax to parameterize. &n
 methods `func (o *Name) m(...)` (the same idiom Lua uses for tables). &nbsp;
 ⁸ Go struct types can't carry inline field initializers, so initializers are moved into the
 generated `NewName` factory. &nbsp;
-⁹ Go constructors/instantiation use a `func NewName(...) *Name` factory (and `Name(...)`
-call sites), since Go has no `new`. &nbsp;
+⁹ Go constructors/instantiation use a `func NewName(...) *Name` factory (built around the
+zero-valued composite literal `&Name{}`), and call sites read `NewName(...)`, since Go has
+no `new`. Every struct gets a factory, so instantiation always resolves. Only the empty-brace
+composite literal is parsed; field-initializing literals (`&Name{x: 1}`) are not. &nbsp;
 ¹⁰ Go has no `static`/visibility keywords: static methods become package-level `func`s and
 visibility follows identifier capitalization. Inheritance, rich enums and generics
 (Go embedding/`iota`/`[T any]`) are `🚧` — not implemented for Go yet. &nbsp;
