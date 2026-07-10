@@ -98,6 +98,10 @@ Map<String, Object?> astNodeToJson(
       json['constructors'] = node.constructorsNames;
     case ASTInvocableDeclaration():
       json.addAll(invocableToJson(node));
+    case ASTGetterDeclaration():
+      json['name'] = node.name;
+      json['returnType'] = typeToJson(node.returnType);
+      json['modifiers'] = modifiersToJson(node.modifiers);
     case ASTClassField():
       json['name'] = node.name;
       json['type'] = typeToJson(node.type);

@@ -1064,12 +1064,6 @@ class ASTValueAsString<T> extends ASTValue<String> {
   Iterable<ASTNode> get children => [value];
 
   @override
-  void resolveNode(ASTNode? parentNode) {
-    super.resolveNode(parentNode);
-    value.resolveNode(this);
-  }
-
-  @override
   FutureOr<String> getValue(VMContext context) {
     return value
         .getValue(context)
@@ -1104,14 +1098,6 @@ class ASTValuesListAsString extends ASTValue<String> {
 
   @override
   Iterable<ASTNode> get children => [...values];
-
-  @override
-  void resolveNode(ASTNode? parentNode) {
-    super.resolveNode(parentNode);
-    for (var v in values) {
-      v.resolveNode(this);
-    }
-  }
 
   @override
   FutureOr<String> getValue(VMContext context) {

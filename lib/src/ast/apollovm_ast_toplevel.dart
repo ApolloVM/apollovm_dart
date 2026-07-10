@@ -1277,9 +1277,9 @@ class ASTExtension extends ASTBlock {
     try {
       return set.get(parametersSignature, false);
     } on StateError {
-      // Name declared, but no overload accepts this signature.
-      return null;
-    } on ApolloVMRuntimeError {
+      // Name declared, but the single declaration rejects this signature.
+      // (With several overloads the set falls back to the first one, as it
+      // does for class methods.)
       return null;
     }
   }

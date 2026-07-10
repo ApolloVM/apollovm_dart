@@ -29,6 +29,8 @@ Supporting changes:
 - Fixed: expressions interpolated into a string (`'${a.doubled()}'`) were never linked into the
   AST `parentNode` chain, so they could not resolve anything reached through it.
 - Extensions appear in LSP document symbols and in the MCP AST serialization.
+- MCP: an `ASTGetterDeclaration` now serializes its name, return type and
+  modifiers instead of appearing as an anonymous node.
 
 ## 1.8.0
 

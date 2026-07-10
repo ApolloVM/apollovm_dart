@@ -2,6 +2,7 @@
 library;
 
 import 'package:apollovm/apollovm.dart';
+import 'package:apollovm/src/apollovm_code_storage.dart';
 import 'package:test/test.dart';
 
 Future<ApolloVM> _load(String src, {String language = 'dart'}) async {
@@ -214,6 +215,51 @@ void main() {
         throwsA(isA<StateError>()),
       );
     });
+
+    test(
+      'a call no extension overload accepts reports the original error',
+      () async {
+        // The sole `plus(int)` declaration rejects a `String` argument, so the
+        // receiver's own class-lookup error surfaces instead.
+        expect(
+          () => _run(
+            'extension NumExt on int { int plus(int a) { return this + a; } }\n'
+            "int run() { var a = 1; return a.plus('x'); }",
+          ),
+          throwsA(isA<StateError>()),
+        );
+      },
+    );
+
+    test(
+      'getter on a receiver whose core class throws on unknown getters',
+      () async {
+        // `CoreClassList.getGetter` throws (rather than returning null) for an
+        // unknown getter; the extension must still be found.
+        expect(
+          await _run('''
+          extension ListExt on List {
+            int get doubledLength { return this.length * 2; }
+          }
+          int run() { var l = [1, 2, 3]; return l.doubledLength; }
+        '''),
+          equals(6),
+        );
+      },
+    );
+
+    test(
+      'an unknown getter on such a receiver reports the original error',
+      () async {
+        expect(
+          () => _run(
+            'extension ListExt on List { int get doubledLength { return 1; } }\n'
+            'int run() { var l = [1]; return l.nope; }',
+          ),
+          throwsA(isA<StateError>()),
+        );
+      },
+    );
   });
 
   group('Extension code generation', () {
@@ -231,6 +277,58 @@ void main() {
       }
     });
 
+    test('Wasm rejects an extension', () async {
+      var vm = await _load(
+        'extension NumExt on int { int doubled() { return this * 2; } }',
+      );
+      expect(
+        () => vm.generateAllIn<BytesOutput>('wasm'),
+        throwsA(isA<UnsupportedSyntaxError>()),
+      );
+    });
+
+    test('a language without getters rejects a class getter', () async {
+      var vm = await _load('class C { int get x { return 1; } }');
+      expect(
+        () => vm.generateAllCodeIn('java11').writeAllSources(),
+        throwsA(isA<UnsupportedSyntaxError>()),
+      );
+    });
+
+    test('an unnamed extension round-trips and is named for C#', () async {
+      var vm = await _load(
+        'extension on int { int doubled() { return this * 2; } }',
+      );
+
+      var dart = (await vm.generateAllCodeIn('dart').writeAllSources())
+          .toString();
+      expect(dart, contains('extension on int {'));
+
+      var kotlin = (await vm.generateAllCodeIn('kotlin').writeAllSources())
+          .toString();
+      expect(kotlin, contains('fun Int.doubled(): Int {'));
+
+      // C# needs a class name; one is synthesized from the extended type.
+      var csharp = (await vm.generateAllCodeIn('csharp').writeAllSources())
+          .toString();
+      expect(csharp, contains('static class intExtension {'));
+      expect(csharp, contains('public static int doubled(this int self) {'));
+    });
+
+    test('generateASTNode dispatches an ASTExtension', () async {
+      var root = await _parseRoot(
+        'extension NumExt on int { int doubled() { return this * 2; } }',
+      );
+      var generator = ApolloVM().createCodeGenerator(
+        'dart',
+        ApolloSourceCodeStorageMemory(),
+      )!;
+
+      // No `out` buffer: the generator must create one.
+      var code = generator.generateASTNode(root.extensions.single).toString();
+      expect(code, startsWith('extension NumExt on int {'));
+    });
+
     test(
       'C# rejects an extension getter (it has no extension property)',
       () async {
@@ -241,6 +339,85 @@ void main() {
           () => vm.generateAllCodeIn('csharp').writeAllSources(),
           throwsA(isA<UnsupportedSyntaxError>()),
         );
+      },
+    );
+  });
+
+  group('C# extension class', () {
+    Future<ParseResult<String>> parseCSharp(String src) => ApolloVM()
+        .getParser<String>('csharp')!
+        .parse(SourceCodeUnit('csharp', src, id: 'test'));
+
+    // A malformed extension aborts the parse (as `modifiers()` already does for
+    // duplicated modifiers) rather than silently falling back to a plain class.
+    test('a `this` parameter requires a `static` class', () async {
+      expect(
+        () => parseCSharp('''
+          class NumExt {
+            public static int Doubled(this int self) { return self * 2; }
+          }
+        '''),
+        throwsA(
+          isA<SyntaxError>().having(
+            (e) => e.toString(),
+            'message',
+            contains('must be `static`'),
+          ),
+        ),
+      );
+    });
+
+    test('one static class may not extend several types', () async {
+      expect(
+        () => parseCSharp('''
+          static class Ext {
+            public static int Doubled(this int self) { return self * 2; }
+            public static string Shout(this string self) { return self; }
+          }
+        '''),
+        throwsA(
+          isA<SyntaxError>().having(
+            (e) => e.toString(),
+            'message',
+            contains('extends multiple types'),
+          ),
+        ),
+      );
+    });
+
+    test('a plain static class is still a class, not an extension', () async {
+      var result = await parseCSharp('''
+        static class Util {
+          public static int Twice(int a) { return a * 2; }
+        }
+      ''');
+      expect(result.isOK, isTrue, reason: result.errorMessage);
+      expect(result.root!.extensions, isEmpty);
+      expect(result.root!.classesNames, equals(['Util']));
+    });
+
+    test(
+      'a local named `self` outside an extension is a normal variable',
+      () async {
+        var vm = await _load('''
+        static class Ext {
+          public static int Doubled(this int self) { return self * 2; }
+        }
+        class Foo {
+          int test(int a) { var self = a; return self + 1; }
+        }
+      ''', language: 'csharp');
+
+        var res = await vm
+            .createRunner('csharp')!
+            .executeClassMethod(
+              '',
+              'Foo',
+              'test',
+              positionalParameters: [41],
+              classInstanceFields: const {},
+            );
+        expect(res.getValueNoContext(), equals(42));
       },
     );
   });
