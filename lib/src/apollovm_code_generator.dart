@@ -425,6 +425,14 @@ abstract class ApolloCodeGenerator
   String normalizeTypeName(String typeName, [String? callingFunction]) =>
       typeName;
 
+  /// Rewrites a member identifier (a field, getter, setter or method name)
+  /// written after a `.` so it is legal in the target language.
+  ///
+  /// Default: unchanged. A language whose reserved words may not be used as
+  /// identifiers (Go) overrides this to escape them, and must apply the same
+  /// rewrite where it emits the matching declaration.
+  String normalizeIdentifier(String name) => name;
+
   @override
   String normalizeTypeFunction(String typeName, String functionName) =>
       functionName;
@@ -1950,6 +1958,8 @@ abstract class ApolloCodeGenerator
     if (expression.variable.isTypeIdentifier) {
       var typeIdentifier = expression.variable.typeIdentifier;
       functionName = normalizeTypeFunction(typeIdentifier!.name, functionName);
+    } else {
+      functionName = normalizeIdentifier(functionName);
     }
 
     generateASTVariable(
@@ -2127,6 +2137,8 @@ abstract class ApolloCodeGenerator
     if (expression.variable.isTypeIdentifier) {
       var typeIdentifier = expression.variable.typeIdentifier;
       getterName = normalizeTypeFunction(typeIdentifier!.name, getterName);
+    } else {
+      getterName = normalizeIdentifier(getterName);
     }
 
     generateASTVariable(
@@ -2162,7 +2174,7 @@ abstract class ApolloCodeGenerator
       headIndented: false,
     );
     out.write('.');
-    out.write(expression.name);
+    out.write(normalizeIdentifier(expression.name));
 
     var op = getASTAssignmentOperatorText(expression.operator);
     out.write(' ');

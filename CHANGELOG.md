@@ -1,3 +1,44 @@
+## 1.9.2
+
+### Go — a class with a field-initializing constructor now survives Dart -> Go
+
+Three defects made `Dart -> Go -> parse -> run` fail (or, worse, silently
+produce the wrong answer) for programs the 1.9.1 fixtures did not cover.
+
+- **A field-initializing constructor parameter was dropped.** Dart's
+  `Point(this.x, this.y)` shorthand generated
+  `func NewPoint(x int, y int) *Point { o := &Point{}; return o }` — the
+  arguments were never assigned, so every field stayed zero-valued and the
+  program ran to a wrong result rather than failing. The factory now emits
+  `o.x = x` for each `this.` parameter, after the field's declared initial
+  value so an explicit argument wins. The long-hand form
+  (`Point(int x, int y) { this.x = x; }`) was already correct.
+- **A source identifier colliding with a Go keyword emitted invalid Go.** A
+  Dart `var map = ...` or a field named `type` became `map := ...` /
+  `o.type`, which does not parse — `map` and `type` are two of Go's 25
+  reserved words. Such a name is now escaped with a trailing `_`
+  (`map_`, `type_`) at every site: declarations, reads, parameters, struct
+  fields, methods and the members written after a `.`.
+- **Structs were emitted after the functions that call them.** ApolloVM's Go
+  parser resolves `NewPoint(...)` against the declarations it has already
+  seen, so a top-level function emitted first could not resolve the struct.
+  `generateASTRoot` now emits structs (and their factories) before the
+  top-level function block.
+
+Supporting change:
+
+- New `ApolloGenerator.normalizeIdentifier(String)` hook, applied by the base
+  generator to the member names written after a `.` (fields, getters, setters
+  and methods). It is the identity for every language except Go, which uses it
+  to escape reserved words, so a declaration and its uses always agree.
+
+#### Known gap
+
+ApolloVM's Go parser remains order-dependent: hand-written Go that calls
+`NewPoint(...)` *before* declaring `type Point struct` still fails to resolve,
+though Go itself is order-independent. The generator no longer produces that
+shape.
+
 ## 1.9.1
 
 ### Core-library, Java 11 and Go fixes found by a coverage pass
