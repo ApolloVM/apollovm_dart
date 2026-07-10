@@ -1,0 +1,112 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="Extension methods">
+    <source language="dart">
+        <![CDATA[
+
+            extension NumExt on int {
+
+              int doubled() {
+                return this * 2;
+              }
+
+              int plus(int a) {
+                return this + a;
+              }
+
+            }
+
+            class Foo {
+
+              void test(int a) {
+                var b = a.doubled();
+                var c = a.plus(1);
+                print('b: $b ; c: $c');
+              }
+            }
+
+        ]]>
+    </source>
+    <call class="Foo" function="test">
+        [ 21 ]
+    </call>
+    <output>
+        ["b: 42 ; c: 22"]
+    </output>
+    <source-generated language="dart"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+class Foo {
+
+  void test(int a) {
+    var b = a.doubled();
+    var c = a.plus(1);
+    print('b: $b ; c: $c');
+  }
+
+}
+extension NumExt on int {
+
+  int doubled() {
+    return this * 2;
+  }
+
+  int plus(int a) {
+    return this + a;
+  }
+
+}
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+
+    <source-generated language="kotlin"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+class Foo {
+
+  fun test(a: Int) {
+    var b = a.doubled()
+    var c = a.plus(1)
+    print("b: $b ; c: $c")
+  }
+
+}
+fun Int.doubled(): Int {
+  return this * 2
+}
+
+fun Int.plus(a: Int): Int {
+  return this + a
+}
+
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+
+    <source-generated language="csharp"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+class Foo {
+
+  void test(int a) {
+    var b = a.doubled();
+    var c = a.plus(1);
+    print("b: " + b + " ; c: " + c);
+  }
+
+}
+static class NumExt {
+
+  public static int doubled(this int self) {
+    return self * 2;
+  }
+
+  public static int plus(this int self, int a) {
+    return self + a;
+  }
+
+}
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+</test>

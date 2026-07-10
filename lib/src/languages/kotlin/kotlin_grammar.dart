@@ -73,9 +73,33 @@ class KotlinGrammarDefinition extends KotlinGrammarLexer {
           }
         }
 
+        // Kotlin declares extension members one at a time (`fun Int.a()`,
+        // `val Int.b`), so they are grouped by receiver into one ASTExtension
+        // each — the same shape the Go grammar builds from receiver methods.
+        var extensionsByReceiver = <String, ASTExtension>{};
+
         for (var defList in topDef) {
           for (var def in defList) {
-            if (def is ASTFunctionDeclaration) {
+            if (def is _ExtensionMember) {
+              var extension = extensionsByReceiver.putIfAbsent(
+                def.receiverType.name,
+                () {
+                  var e = ASTExtension(
+                    '${def.receiverType.name}Ext',
+                    def.receiverType,
+                  );
+                  root.addExtension(e);
+                  return e;
+                },
+              );
+
+              var member = def.member;
+              if (member is ASTClassGetterDeclaration) {
+                extension.addGetter(member);
+              } else if (member is ASTFunctionDeclaration) {
+                extension.addFunction(member);
+              }
+            } else if (def is ASTFunctionDeclaration) {
               root.addFunction(def);
             } else if (def is ASTClassNormal) {
               root.addClass(def);
@@ -103,10 +127,89 @@ class KotlinGrammarDefinition extends KotlinGrammarLexer {
 
   Parser topLevelDefinition() =>
       (enumDeclaration() |
+              extensionFunctionDeclaration() |
+              extensionPropertyDeclaration() |
               functionDeclaration() |
               classDeclaration() |
               statementVariableDeclaration())
           .plus();
+
+  /// An extension function: `fun Int.doubled(): Int { return this * 2 }`.
+  ///
+  /// Yields a receiver-tagged member; [compilationUnit] groups the members of
+  /// each receiver into a single [ASTExtension].
+  Parser extensionFunctionDeclaration() =>
+      (memberModifiers() &
+              funToken().trimHidden() &
+              type() &
+              char('.') &
+              identifier() &
+              functionParametersDeclaration() &
+              (char(':').trimHidden() & type()).optional() &
+              codeBlock())
+          .map((v) {
+            var modifiers = v[0] as ASTModifiers;
+            var receiverType = v[2] as ASTType;
+            var name = v[4] as String;
+            var parameters = v[5] as ASTFunctionParametersDeclaration;
+            var returnType = (v[6]?[1] as ASTType?) ?? ASTTypeVoid.instance;
+            var block = v[7] as ASTBlock;
+
+            // Not `static`: an extension function has a receiver (`this`).
+            return _ExtensionMember(
+              receiverType,
+              ASTClassFunctionDeclaration(
+                null,
+                name,
+                parameters,
+                returnType,
+                block: block,
+                modifiers: modifiers,
+              ),
+            );
+          });
+
+  /// An extension property (read-only): `val Int.twice: Int get() = this * 2`,
+  /// or with a block body `get() { return this * 2 }`. `var` extension
+  /// properties (with a setter) are not supported.
+  Parser extensionPropertyDeclaration() =>
+      (memberModifiers() &
+              valToken().trimHidden() &
+              type() &
+              char('.') &
+              identifier() &
+              char(':').trimHidden() &
+              type() &
+              getToken().trimHidden() &
+              char('(').trimHidden() &
+              char(')').trimHidden() &
+              (getterAssignedBody() | codeBlock()))
+          .map((v) {
+            var modifiers = v[0] as ASTModifiers;
+            var receiverType = v[2] as ASTType;
+            var name = v[4] as String;
+            var returnType = v[6] as ASTType;
+            var block = v[10] as ASTBlock;
+
+            return _ExtensionMember(
+              receiverType,
+              ASTClassGetterDeclaration(
+                null,
+                name,
+                returnType,
+                block: block,
+                modifiers: modifiers,
+              ),
+            );
+          });
+
+  /// Expression-bodied getter: `get() = <expr>` desugars to `{ return <expr> }`.
+  Parser<ASTBlock> getterAssignedBody() =>
+      (char('=').trimHidden() & ref0(expression)).map((v) {
+        var value = v[1] as ASTExpression;
+        return ASTBlock(null)
+          ..addAllStatements([ASTStatementReturnWithExpression(value)]);
+      });
 
   /// Kotlin enum class:
   /// `enum class Name[(val p: T, ...)] { A[(args)], B; members }`.
@@ -1416,4 +1519,15 @@ class KotlinGrammarDefinition extends KotlinGrammarLexer {
       }
     }
   }
+}
+
+/// A parsed extension member tagged with its receiver type, produced by
+/// [KotlinGrammarDefinition.extensionFunctionDeclaration] and
+/// [KotlinGrammarDefinition.extensionPropertyDeclaration]. Kotlin has no
+/// extension *block*, so members are grouped by receiver in `compilationUnit`.
+class _ExtensionMember {
+  final ASTType receiverType;
+  final ASTNode member;
+
+  _ExtensionMember(this.receiverType, this.member);
 }

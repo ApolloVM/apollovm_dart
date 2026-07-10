@@ -1,0 +1,82 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="Extension getter">
+    <source language="dart">
+        <![CDATA[
+
+            extension NumExt on int {
+
+              int doubled() {
+                return this * 2;
+              }
+
+              int get twice {
+                return doubled();
+              }
+
+            }
+
+            class Foo {
+
+              void test(int a) {
+                var b = a.twice;
+                print('b: $b');
+              }
+            }
+
+        ]]>
+    </source>
+    <call class="Foo" function="test">
+        [ 21 ]
+    </call>
+    <output>
+        ["b: 42"]
+    </output>
+    <source-generated language="dart"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+class Foo {
+
+  void test(int a) {
+    var b = a.twice;
+    print('b: $b');
+  }
+
+}
+extension NumExt on int {
+
+  int doubled() {
+    return this * 2;
+  }
+
+  int get twice {
+    return doubled();
+  }
+
+}
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+
+    <source-generated language="kotlin"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+class Foo {
+
+  fun test(a: Int) {
+    var b = a.twice
+    print("b: $b")
+  }
+
+}
+fun Int.doubled(): Int {
+  return this * 2
+}
+
+val Int.twice: Int get() {
+  return doubled()
+}
+
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+</test>

@@ -127,6 +127,7 @@ Same legend and **Wasm** column semantics as the table above.
 | Enums (rich: ctor args, fields, methods)⁶                     | ✅ | ✅ | ✅ | 🚧 | ✅ | 🚫  | ✅ | 🚫  | ✅ | ✅⁶ |
 | Generics (generic classes + instantiation + type erasure)    | ✅ | ✅ | ✅ | 🚧 | ✅ | 🚫  | ✅ | 🚫  | 🚫  | 🚧 |
 | Type inference (`var` / `val` / `auto`)                       | ✅ | ✅ | ✅ | ✅ | ✅ | 🚫  | ✅ | 🚫  | 🚫  | ✅⁵ |
+| Extensions (methods + getters)¹¹                              | ✅ | 🚫  | ✅ | 🚫  | 🧩¹² | 🚫  | 🚫  | 🚫  | 🚫  | 🚧 |
 
 ¹ Lua is table-based: "fields" are table entries (`obj.x`), "constructors" are factory/`setmetatable`
 idioms, methods are `function Obj:method`. &nbsp;
@@ -150,7 +151,16 @@ generated `NewName` factory. &nbsp;
 call sites), since Go has no `new`. &nbsp;
 ¹⁰ Go has no `static`/visibility keywords: static methods become package-level `func`s and
 visibility follows identifier capitalization. Inheritance, rich enums and generics
-(Go embedding/`iota`/`[T any]`) are `🚧` — not implemented for Go yet.
+(Go embedding/`iota`/`[T any]`) are `🚧` — not implemented for Go yet. &nbsp;
+¹¹ Members added to an existing type (a core type like `int`/`String`, or a user class) from
+outside its declaration: Dart `extension E on T { ... }`, Kotlin top-level `fun T.m()` and
+`val T.g: R get()`, C# `static class E { static R M(this T self) }`. A class member always wins
+over an extension member, and an extension is visible only within its own module (not carried
+across `import`). The languages marked `🚫` have no equivalent construct — prototype patching,
+monkey patching and metatables are not the same thing — so generating an extension for them
+throws `UnsupportedSyntaxError` rather than emitting a semantically different shim. &nbsp;
+¹² C# has no extension *property*, so an extension declaring a getter cannot be emitted as C#;
+its methods round-trip, with `this`/`self` translated both ways.
 
 > Per-language behavior is normalized to a shared AST, so types and constructs map
 > cleanly when translating between languages (e.g. C# `string` ⇄ Dart `String`,

@@ -100,6 +100,113 @@ class ApolloCodeGeneratorCSharp extends ApolloCodeGenerator {
     return out;
   }
 
+  /// The name of the self-parameter of the extension method being generated.
+  /// While set, `this` is rendered as that identifier — C# extension methods
+  /// receive the instance as a parameter, not as `this`.
+  String? _extensionSelfName;
+
+  /// C# has no extension *block*: an extension is a `static class` whose
+  /// methods take a `this`-qualified first parameter.
+  ///
+  /// C# has no extension properties, so an extension declaring getters (from
+  /// Dart or Kotlin) cannot be expressed.
+  @override
+  StringBuffer generateASTExtension(
+    ASTExtension extension, {
+    StringBuffer? out,
+    String indent = '',
+  }) {
+    out ??= newOutput();
+
+    if (extension.getter.isNotEmpty) {
+      throw UnsupportedSyntaxError(
+        'C# has no extension property: ${extension.getter.map((g) => g.name).join(', ')}',
+      );
+    }
+
+    var name = extension.name ?? '${extension.targetType.name}Extension';
+    var indent2 = '$indent  ';
+
+    out.write(indent);
+    out.write('static class ');
+    out.write(name);
+    out.write(' {\n\n');
+
+    for (var set in extension.functions) {
+      for (var f in set.functions) {
+        if (f is ASTClassFunctionDeclaration) {
+          _generateExtensionMethod(f, extension.targetType, out, indent2);
+        }
+      }
+    }
+
+    out.write(indent);
+    out.write('}\n');
+
+    return out;
+  }
+
+  void _generateExtensionMethod(
+    ASTClassFunctionDeclaration f,
+    ASTType targetType,
+    StringBuffer out,
+    String indent,
+  ) {
+    const selfName = 'self';
+
+    _extensionSelfName = selfName;
+    StringBuffer blockCode;
+    try {
+      blockCode = generateASTBlock(f, indent: indent, withBrackets: false);
+    } finally {
+      _extensionSelfName = null;
+    }
+
+    out.write(indent);
+    out.write('public static ');
+    if (f.modifiers.isAsync) out.write('async ');
+    out.write(generateASTType(f.returnType));
+    out.write(' ');
+    out.write(f.name);
+
+    out.write('(this ');
+    out.write(generateASTType(targetType));
+    out.write(' $selfName');
+    if (f.parametersSize > 0) {
+      out.write(', ');
+      generateASTParametersDeclaration(f.parameters, out: out);
+    }
+    out.write(') {\n');
+    out.write(blockCode);
+    out.write(indent);
+    out.write('}\n\n');
+  }
+
+  @override
+  StringBuffer generateASTVariable(
+    ASTVariable variable, {
+    String? callingFunction,
+    StringBuffer? out,
+    String indent = '',
+    bool headIndented = true,
+  }) {
+    var selfName = _extensionSelfName;
+    if (selfName != null && variable is ASTThisVariable) {
+      out ??= newOutput();
+      if (headIndented) out.write(indent);
+      out.write(selfName);
+      return out;
+    }
+
+    return super.generateASTVariable(
+      variable,
+      callingFunction: callingFunction,
+      out: out,
+      indent: indent,
+      headIndented: headIndented,
+    );
+  }
+
   @override
   StringBuffer generateASTClass(
     ASTClassNormal clazz, {

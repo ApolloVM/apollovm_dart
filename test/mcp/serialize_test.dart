@@ -60,6 +60,18 @@ Set<String> _nodeTypes(Map<String, Object?> json) {
   return types;
 }
 
+/// Every `name` in a serialized AST tree.
+Set<String> _names(Map<String, Object?> json) {
+  final names = <String>{if (json['name'] is String) json['name'] as String};
+  final children = json['children'] as List?;
+  if (children != null) {
+    for (final c in children) {
+      names.addAll(_names(c as Map<String, Object?>));
+    }
+  }
+  return names;
+}
+
 void main() {
   group('valueToJson', () {
     test('passes primitives through', () {
@@ -176,6 +188,41 @@ void main() {
       final root = await _parse(_richSource);
       final shallow = astNodeToJson(root, maxDepth: 0);
       expect(shallow.containsKey('children'), isFalse);
+    });
+
+    test('serializes extensions, their methods and getters', () async {
+      final root = await _parse('''
+        extension NumExt on int {
+          int doubled() { return this * 2; }
+          int get twice { return this * 2; }
+        }
+        extension on String { String shout() { return this; } }
+      ''');
+
+      final json = astNodeToJson(root, maxDepth: 500);
+      expect(json['extensions'], equals(['NumExt', 'on String']));
+
+      final extensions = (json['children'] as List)
+          .cast<Map<String, Object?>>()
+          .where((c) => c['node'] == 'ASTExtension')
+          .toList();
+      expect(extensions, hasLength(2));
+
+      final numExt = extensions.first;
+      expect(numExt['name'], 'NumExt');
+      expect((numExt['on'] as Map)['name'], 'int');
+
+      // The unnamed extension carries no `name`, only its extended type.
+      expect(extensions.last.containsKey('name'), isFalse);
+      expect((extensions.last['on'] as Map)['name'], 'String');
+
+      // Both the method and the getter are walked (methods sit inside an
+      // `ASTFunctionSet`, so look at the whole subtree).
+      expect(
+        _nodeTypes(numExt),
+        anyElement(startsWith('ASTClassGetterDeclaration')),
+      );
+      expect(_names(numExt), containsAll(['doubled', 'twice']));
     });
 
     test('serializes generic types recursively', () async {

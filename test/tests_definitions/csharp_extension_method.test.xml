@@ -1,0 +1,112 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="Extension methods (static class with `this` parameter)">
+    <source language="csharp">
+        <![CDATA[
+
+            static class NumExt {
+
+              public static int Doubled(this int self) {
+                return self * 2;
+              }
+
+              public static int Plus(this int self, int by) {
+                return self + by;
+              }
+
+            }
+
+            class Foo {
+
+              void test(int a) {
+                var b = a.Doubled();
+                var c = a.Plus(1);
+                print("b: " + b + " ; c: " + c);
+              }
+            }
+
+        ]]>
+    </source>
+    <call class="Foo" function="test">
+        [ 21 ]
+    </call>
+    <output>
+        ["b: 42 ; c: 22"]
+    </output>
+    <source-generated language="csharp"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+class Foo {
+
+  void test(int a) {
+    var b = a.Doubled();
+    var c = a.Plus(1);
+    print("b: " + b + " ; c: " + c);
+  }
+
+}
+static class NumExt {
+
+  public static int Doubled(this int self) {
+    return self * 2;
+  }
+
+  public static int Plus(this int self, int by) {
+    return self + by;
+  }
+
+}
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+
+    <source-generated language="dart"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+class Foo {
+
+  void test(int a) {
+    var b = a.Doubled();
+    var c = a.Plus(1);
+    print('b: $b ; c: $c');
+  }
+
+}
+extension NumExt on int {
+
+  int Doubled() {
+    return this * 2;
+  }
+
+  int Plus(int by) {
+    return this + by;
+  }
+
+}
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+
+    <source-generated language="kotlin"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+class Foo {
+
+  fun test(a: Int) {
+    var b = a.Doubled()
+    var c = a.Plus(1)
+    print("b: " + b + " ; c: " + c)
+  }
+
+}
+public fun Int.Doubled(): Int {
+  return this * 2
+}
+
+public fun Int.Plus(by: Int): Int {
+  return this + by
+}
+
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+</test>

@@ -14,6 +14,16 @@ enum Color { red, green, blue }
 int makeAge(int seed) { return seed; }
 ''';
 
+const _srcExtensions = '''
+extension NumExt on int {
+  int doubled() { return this * 2; }
+  int get twice { return this * 2; }
+}
+extension on String {
+  String shout() { return this; }
+}
+''';
+
 void main() {
   test(
     'collectSymbols captures classes, members, enum and functions',
@@ -69,5 +79,28 @@ void main() {
     );
     // Unknown name resolves to null.
     expect(unit.symbolFor('doesNotExist'), isNull);
+  });
+
+  test('collectSymbols captures extensions and their members', () async {
+    final unit = await Analyzer().analyze('file:///e.dart', _srcExtensions);
+    final byName = {
+      for (final s in unit.symbols) '${s.container}:${s.name}': s,
+    };
+
+    final ext = byName['null:NumExt']!;
+    expect(ext.category, SymbolCategory.classSym);
+    expect(ext.signature, 'extension NumExt on int');
+    expect(ext.typeName, 'int');
+
+    expect(byName['NumExt:doubled']!.category, SymbolCategory.method);
+    expect(byName['NumExt:doubled']!.signature, 'int doubled()');
+
+    expect(byName['NumExt:twice']!.category, SymbolCategory.getter);
+    expect(byName['NumExt:twice']!.signature, 'int get twice');
+
+    // An unnamed extension contributes no symbol of its own; its members are
+    // contained by the extended type.
+    expect(byName.keys.where((k) => k.endsWith(':')), isEmpty);
+    expect(byName['String:shout']!.category, SymbolCategory.method);
   });
 }

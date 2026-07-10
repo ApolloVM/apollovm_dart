@@ -13,6 +13,128 @@ import 'apollovm_ast_type.dart';
 import 'apollovm_ast_value.dart';
 import 'apollovm_ast_variable.dart';
 
+/// The [ASTRoot] enclosing [node], reached through the `parentNode` chain set
+/// by `ASTRoot.resolveNode`, or `null` for a detached node.
+///
+/// Used by the invocation expressions to reach the module's extension registry.
+ASTRoot? _resolveASTRoot(ASTNode node) {
+  for (ASTNode? n = node; n != null; n = n.parentNode) {
+    if (n is ASTRoot) return n;
+  }
+  return null;
+}
+
+/// Resolves the method [name] on the receiver's class [clazz], falling back to
+/// an extension method declared by the enclosing module. A class member always
+/// wins over an extension member.
+///
+/// The core classes (`CoreClassInt`, `CoreClassString`, …) signal an unknown
+/// member by throwing rather than returning `null`, so that throw is captured
+/// and rethrown unchanged when no extension applies — a program without
+/// extensions fails exactly as it did before.
+ASTInvocableDeclaration? _resolveFunctionOrExtension(
+  ASTNode node,
+  ASTClass clazz,
+  String name,
+  ASTFunctionSignature parametersSignature,
+  VMContext context,
+) {
+  ASTInvocableDeclaration? f;
+  StateError? classLookupError;
+
+  try {
+    f = clazz.getFunction(name, parametersSignature, context);
+  } on StateError catch (e) {
+    classLookupError = e;
+  }
+
+  if (f != null) return f;
+
+  var extensionFunction = _resolveASTRoot(
+    node,
+  )?.getExtensionFunction(clazz, name, parametersSignature);
+  if (extensionFunction != null) return extensionFunction;
+
+  if (classLookupError != null) throw classLookupError;
+  return null;
+}
+
+/// The class of the `this` instance reachable from [context], or `null` outside
+/// a class/extension member.
+ASTClass? _receiverClass(VMContext context) {
+  var instance = context.getClassInstance();
+  if (instance == null) return null;
+  if (instance is ASTClassInstance) return instance.clazz;
+
+  try {
+    return instance.type.getClass();
+  } on StateError {
+    return null;
+  }
+}
+
+/// Resolves an unqualified call — `doubled()` or, in the languages that desugar
+/// it that way, `this.doubled()` — against the scope chain, falling back to an
+/// extension method on the receiver's class. This is what lets one extension
+/// member call another.
+///
+/// See [_resolveFunctionOrExtension] on why the class lookup's throw is
+/// captured rather than treated as an error.
+ASTInvocableDeclaration? _resolveLocalFunctionOrExtension(
+  ASTNode node,
+  VMContext context,
+  String name,
+  ASTFunctionSignature parametersSignature,
+) {
+  ASTInvocableDeclaration? f;
+  StateError? contextLookupError;
+
+  try {
+    f = context.getFunction(name, parametersSignature);
+  } on StateError catch (e) {
+    contextLookupError = e;
+  }
+
+  if (f != null) return f;
+
+  var receiverClass = _receiverClass(context);
+  if (receiverClass != null) {
+    var extensionFunction = _resolveASTRoot(
+      node,
+    )?.getExtensionFunction(receiverClass, name, parametersSignature);
+    if (extensionFunction != null) return extensionFunction;
+  }
+
+  if (contextLookupError != null) throw contextLookupError;
+  return null;
+}
+
+/// Resolves the getter [name] on the receiver's class [clazz], falling back to
+/// an extension getter. See [_resolveFunctionOrExtension].
+ASTGetterDeclaration? _resolveGetterOrExtension(
+  ASTNode node,
+  ASTClass clazz,
+  String name,
+  VMContext context,
+) {
+  ASTGetterDeclaration? g;
+  StateError? classLookupError;
+
+  try {
+    g = clazz.getGetter(name, context);
+  } on StateError catch (e) {
+    classLookupError = e;
+  }
+
+  if (g != null) return g;
+
+  var extensionGetter = _resolveASTRoot(node)?.getExtensionGetter(clazz, name);
+  if (extensionGetter != null) return extensionGetter;
+
+  if (classLookupError != null) throw classLookupError;
+  return null;
+}
+
 /// Base for AST expressions.
 abstract class ASTExpression with ASTNode implements ASTCodeRunner {
   static FutureOr<ASTType> typeFromExpressions(
@@ -267,6 +389,14 @@ class ASTExpressionLiteral extends ASTExpression {
 
   @override
   Iterable<ASTNode> get children => [value];
+
+  @override
+  void resolveNode(ASTNode? parentNode) {
+    super.resolveNode(parentNode);
+    // A string literal can hold interpolated expressions; resolving the value
+    // links them into the `parentNode` chain up to the `ASTRoot`.
+    value.resolveNode(this);
+  }
 
   @override
   FutureOr<ASTType> resolveType(VMContext? context) =>
@@ -2284,7 +2414,12 @@ class ASTExpressionLocalFunctionInvocation
   FutureOr<ASTValue> run(VMContext parentContext, ASTRunStatus runStatus) {
     // A declared function (including named arrow functions) takes precedence.
     var fSignature = _getASTFunctionSignature();
-    var declared = parentContext.getFunction(name, fSignature);
+    var declared = _resolveLocalFunctionOrExtension(
+      this,
+      parentContext,
+      name,
+      fSignature,
+    );
     if (declared != null) {
       return super.run(parentContext, runStatus);
     }
@@ -2336,7 +2471,12 @@ class ASTExpressionLocalFunctionInvocation
   @override
   ASTInvocableDeclaration _getFunction(VMContext parentContext) {
     var fSignature = _getASTFunctionSignature();
-    var f = parentContext.getFunction(name, fSignature);
+    var f = _resolveLocalFunctionOrExtension(
+      this,
+      parentContext,
+      name,
+      fSignature,
+    );
 
     if (f == null) {
       throw ApolloVMRuntimeError(
@@ -2391,7 +2531,13 @@ class ASTExpressionChainFunctionInvocation
     return _getFunctionClass(previousValue).resolveMapped((clazz) {
       var fSignature = _getASTFunctionSignature();
 
-      var f = clazz.getFunction(name, fSignature, parentContext);
+      var f = _resolveFunctionOrExtension(
+        this,
+        clazz,
+        name,
+        fSignature,
+        parentContext,
+      );
 
       if (f == null) {
         throw ApolloVMRuntimeError(
@@ -2538,7 +2684,16 @@ class ASTExpressionObjectFunctionInvocation
     return _getFunctionClass(parentContext).resolveMapped((clazz) {
       var fSignature = _getASTFunctionSignature();
 
-      var f = clazz.getFunction(name, fSignature, parentContext);
+      // This is the path for `x.doubled()` and for `this.doubled()` from inside
+      // an extension body.
+      var f = _resolveFunctionOrExtension(
+        this,
+        clazz,
+        name,
+        fSignature,
+        parentContext,
+      );
+
       if (f == null) {
         throw ApolloVMRuntimeError(
           "Can't find class[${clazz.name}] function[$name( $fSignature )] for object!",
@@ -2987,7 +3142,8 @@ class ASTExpressionObjectGetterAccess extends ASTExpressionGetterAccess
   @override
   FutureOr<ASTGetterDeclaration> _getGetter(VMContext parentContext) {
     return _getGetterClass(parentContext).resolveMapped((clazz) {
-      var g = clazz.getGetter(name, parentContext);
+      var g = _resolveGetterOrExtension(this, clazz, name, parentContext);
+
       if (g == null) {
         return _getVariableValue(parentContext).resolveMapped((obj) {
           throw ApolloVMRuntimeError(

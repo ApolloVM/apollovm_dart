@@ -77,6 +77,14 @@ Map<String, Object?> astNodeToJson(
       json['classes'] = node.classesNames;
       json['functions'] = node.functions.map((f) => f.name).toList();
       json['imports'] = node.imports.map((i) => i.path).toList();
+      if (node.extensions.isNotEmpty) {
+        json['extensions'] = node.extensions
+            .map((e) => e.name ?? 'on ${e.targetType.name}')
+            .toList();
+      }
+    case ASTExtension():
+      if (node.name != null) json['name'] = node.name;
+      json['on'] = typeToJson(node.targetType);
     case ASTClassNormal():
       json['name'] = node.name;
       json['kind'] = node.kind.name;
@@ -90,6 +98,10 @@ Map<String, Object?> astNodeToJson(
       json['constructors'] = node.constructorsNames;
     case ASTInvocableDeclaration():
       json.addAll(invocableToJson(node));
+    case ASTGetterDeclaration():
+      json['name'] = node.name;
+      json['returnType'] = typeToJson(node.returnType);
+      json['modifiers'] = modifiersToJson(node.modifiers);
     case ASTClassField():
       json['name'] = node.name;
       json['type'] = typeToJson(node.type);
@@ -117,7 +129,8 @@ Map<String, Object?> astNodeToJson(
     final children = <ASTNode>[
       ...node.children,
       ...switch (node) {
-        ASTRoot() => [...node.imports, ...node.classes],
+        // `ASTExtension.children` already lists its own methods and getters.
+        ASTRoot() => [...node.imports, ...node.classes, ...node.extensions],
         ASTClassNormal() => [
           ...node.fields,
           for (final set in node.constructors) ...set.functions,

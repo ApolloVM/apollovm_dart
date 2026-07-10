@@ -317,6 +317,10 @@ class ASTBlock extends ASTStatement {
     for (var e in _functions.values) {
       e.resolveNode(this);
     }
+
+    for (var e in _getters.values) {
+      e.resolveNode(this);
+    }
   }
 
   @override
@@ -472,6 +476,9 @@ class ASTBlock extends ASTStatement {
 
     _functions.clear();
     addAllFunctions(other._functions.values.expand((e) => e.functions));
+
+    _getters.clear();
+    addAllGetters(other._getters.values);
 
     _statements.clear();
     addAllStatements(other._statements);

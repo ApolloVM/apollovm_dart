@@ -45,6 +45,8 @@ abstract class KotlinGrammarLexer extends BaseGrammarLexer {
 
   // Whole-word match so identifiers like `value`/`variant` are not read as
   // `val`/`var` followed by the rest (which mangled constructor/field names).
+  Parser getToken() => _wordKeyword('get');
+
   Parser valToken() => _wordKeyword('val');
 
   Parser varToken() => _wordKeyword('var');

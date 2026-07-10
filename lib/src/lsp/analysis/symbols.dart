@@ -129,6 +129,45 @@ List<SymbolInfo> collectSymbols(ASTRoot root) {
     }
   }
 
+  // Extensions and their members. An unnamed extension has no symbol of its
+  // own, but its members are still listed, contained by the extended type.
+  for (final extension in root.extensions) {
+    final targetName = extension.targetType.name;
+    final container = extension.name ?? targetName;
+
+    if (extension.name != null) {
+      out.add(
+        SymbolInfo(
+          name: extension.name!,
+          category: SymbolCategory.classSym,
+          signature: 'extension ${extension.name} on $targetName',
+          typeName: targetName,
+        ),
+      );
+    }
+
+    for (final set in extension.functions) {
+      for (final m in set.functions) {
+        out.add(
+          _invocable(m, container: container, category: SymbolCategory.method),
+        );
+      }
+    }
+
+    for (final g in extension.getter) {
+      out.add(
+        SymbolInfo(
+          name: g.name,
+          category: SymbolCategory.getter,
+          container: container,
+          signature: '${_typeName(g.returnType)} get ${g.name}',
+          typeName: _typeName(g.returnType),
+          modifiers: g.modifiers.modifiers,
+        ),
+      );
+    }
+  }
+
   return out;
 }
 

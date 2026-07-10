@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="Extension function and property">
+    <source language="kotlin">
+        <![CDATA[
+
+            fun Int.doubled(): Int {
+              return this * 2
+            }
+
+            val Int.twice: Int get() = this * 2
+
+            class Foo {
+
+              fun test(a: Int) {
+                var b = a.doubled()
+                var c = a.twice
+                println("b: $b ; c: $c")
+              }
+            }
+
+        ]]>
+    </source>
+    <call class="Foo" function="test">
+        [ 21 ]
+    </call>
+    <output>
+        ["b: 42 ; c: 42"]
+    </output>
+    <source-generated language="kotlin"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+class Foo {
+
+  fun test(a: Int) {
+    var b = a.doubled()
+    var c = a.twice
+    print("b: $b ; c: $c")
+  }
+
+}
+fun Int.doubled(): Int {
+  return this * 2
+}
+
+val Int.twice: Int get() {
+  return this * 2
+}
+
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+
+    <source-generated language="dart"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+class Foo {
+
+  void test(int a) {
+    var b = a.doubled();
+    var c = a.twice;
+    print('b: $b ; c: $c');
+  }
+
+}
+extension intExt on int {
+
+  int doubled() {
+    return this * 2;
+  }
+
+  int get twice {
+    return this * 2;
+  }
+
+}
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+</test>

@@ -798,6 +798,14 @@ class ASTClassNormal extends ASTClass<VMObject> {
   }
 
   @override
+  void addGetter(ASTGetterDeclaration g) {
+    if (g is ASTClassGetterDeclaration) {
+      g.clazz = this;
+    }
+    super.addGetter(g);
+  }
+
+  @override
   ASTClassField? getField(String name, {bool caseInsensitive = false}) {
     var field = _fields[name];
 
@@ -1167,6 +1175,122 @@ class ASTTypeAlias with ASTNode implements ASTTypedNode {
   String toString() => 'typedef $name = $targetType';
 }
 
+/// AST of an extension: members declared for an existing type from outside its
+/// declaration. Sources: Dart `extension E on T {}`, Kotlin `fun T.m()` /
+/// `val T.g: R get()`, C# `static class E { static R M(this T self) }`.
+///
+/// Deliberately **not** an [ASTClass]: the [ASTClass] constructor calls
+/// `type.setClass(this)`, which would either throw (the target type already has
+/// a class) or hijack the target's type. For the same reason the members are
+/// never added onto the target [ASTClass] — the core classes (`CoreClassInt`,
+/// `CoreClassString`, …) are process-wide singletons, so injecting `int.doubled`
+/// there would leak the extension into every other module. Instead extensions
+/// are registered on the declaring [ASTRoot] and consulted only as a *fallback*
+/// when normal member lookup misses. See [ASTRoot.getExtensionFunction].
+///
+/// Members are stored in the inherited [ASTBlock] maps, so overload resolution
+/// (via [ASTFunctionSet]) and getter lookup come for free.
+///
+/// Scope: instance methods and getters. Not static members, operators or
+/// setters. Extensions are visible only within their own module (they are not
+/// carried across `import`).
+class ASTExtension extends ASTBlock {
+  /// The extension name. Optional: Dart allows unnamed extensions, and Kotlin
+  /// has no name at all (one is synthesized when grouping by receiver).
+  final String? name;
+
+  /// The extended type (the `on` clause / the receiver).
+  final ASTType targetType;
+
+  ASTClass? _targetClass;
+
+  /// The [ASTClass] of [targetType], resolved by [resolveNode].
+  ASTClass? get targetClass => _targetClass;
+
+  ASTExtension(this.name, this.targetType) : super(null);
+
+  @override
+  Iterable<ASTNode> get children => [...super.children, ...getter];
+
+  @override
+  void resolveNode(ASTNode? parentNode) {
+    super.resolveNode(parentNode);
+
+    _targetClass ??= _resolveTargetClass();
+    var targetClass = _targetClass;
+
+    // Binding each member's `clazz` to the *target* class is what makes the
+    // existing dispatch work unchanged: `objectCall` builds a
+    // `VMClassContext(clazz!)` and `setClassInstance(receiver)`, so `this`
+    // resolves to the receiver — including a primitive one.
+    for (var set in functions) {
+      for (var f in set.functions) {
+        if (f is ASTClassFunctionDeclaration) {
+          f.clazz = targetClass;
+        }
+      }
+    }
+
+    for (var g in getter) {
+      if (g is ASTClassGetterDeclaration) {
+        g.clazz = targetClass;
+      }
+    }
+  }
+
+  ASTRoot? get _root {
+    for (ASTNode? node = parentNode; node != null; node = node.parentNode) {
+      if (node is ASTRoot) return node;
+    }
+    return null;
+  }
+
+  /// A user class comes from the enclosing [ASTRoot]; a core type (`int`,
+  /// `String`, …) from [ASTType.getClass], which delegates to [ApolloVMCore].
+  ASTClass? _resolveTargetClass() {
+    var userClass = _root?.getClass(targetType.name);
+    if (userClass != null) return userClass;
+
+    try {
+      return targetType.getClass();
+    } on StateError {
+      // An unknown target type: the extension is simply never applicable.
+      return null;
+    }
+  }
+
+  /// Whether this extension extends [clazz].
+  ///
+  /// Subtype matching (an `on num` extension applying to an `int` receiver) is
+  /// not implemented.
+  bool matchesReceiver(ASTClass clazz) =>
+      identical(clazz, _targetClass) || clazz.name == targetType.name;
+
+  /// The extension method [name] matching [parametersSignature], or `null`.
+  ASTInvocableDeclaration? findFunction(
+    String name,
+    ASTFunctionSignature parametersSignature,
+  ) {
+    var set = getFunctionWithName(name);
+    if (set == null) return null;
+
+    try {
+      return set.get(parametersSignature, false);
+    } on StateError {
+      // Name declared, but the single declaration rejects this signature.
+      // (With several overloads the set falls back to the first one, as it
+      // does for class methods.)
+      return null;
+    }
+  }
+
+  /// The extension getter [name], or `null`.
+  ASTGetterDeclaration? findGetter(String name) => getGetterWithName(name);
+
+  @override
+  String toString() => 'ASTExtension[${name ?? ''}]on[$targetType]';
+}
+
 /// An AST Root.
 ///
 /// A parse of a [CodeUnit] generates an [ASTRoot].
@@ -1184,6 +1308,48 @@ class ASTRoot extends ASTEntryPointBlock {
     for (var e in _typeAliases.values) {
       e.resolveNode(this);
     }
+
+    for (var e in _extensions) {
+      e.resolveNode(this);
+    }
+  }
+
+  final List<ASTExtension> _extensions = <ASTExtension>[];
+
+  /// The extensions declared by this module, in declaration order.
+  List<ASTExtension> get extensions => UnmodifiableListView(_extensions);
+
+  void addExtension(ASTExtension extension) {
+    _extensions.add(extension);
+    _exportedSymbolNames = null;
+  }
+
+  /// Resolves an extension method [name] for a receiver of class [receiver].
+  ///
+  /// Called by the invocation expressions only after the receiver's own class
+  /// lookup has missed, so a class member always wins over an extension member.
+  ASTInvocableDeclaration? getExtensionFunction(
+    ASTClass receiver,
+    String name,
+    ASTFunctionSignature parametersSignature,
+  ) {
+    for (var extension in _extensions) {
+      if (!extension.matchesReceiver(receiver)) continue;
+      var f = extension.findFunction(name, parametersSignature);
+      if (f != null) return f;
+    }
+    return null;
+  }
+
+  /// Resolves an extension getter [name] for a receiver of class [receiver].
+  /// See [getExtensionFunction].
+  ASTGetterDeclaration? getExtensionGetter(ASTClass receiver, String name) {
+    for (var extension in _extensions) {
+      if (!extension.matchesReceiver(receiver)) continue;
+      var g = extension.findGetter(name);
+      if (g != null) return g;
+    }
+    return null;
   }
 
   @override
@@ -1260,11 +1426,7 @@ class ASTRoot extends ASTEntryPointBlock {
     var cached = _exportedSymbolNames;
     if (cached != null) return cached;
 
-    var all = <String>{
-      ...functions.map((f) => f.name),
-      ..._classes.keys,
-      ..._typeAliases.keys,
-    };
+    var all = _ownSymbolNames();
 
     var explicit = _exports
         .where((e) => e.path == null && e.symbols.isNotEmpty)
@@ -1282,14 +1444,19 @@ class ASTRoot extends ASTEntryPointBlock {
     return _exportedSymbolNames = UnmodifiableSetView(result);
   }
 
+  /// Every top-level symbol name declared by this module. Unnamed extensions
+  /// (Dart allows them) contribute nothing, as they cannot be referenced.
+  Set<String> _ownSymbolNames() => <String>{
+    ...functions.map((f) => f.name),
+    ..._classes.keys,
+    ..._typeAliases.keys,
+    ..._extensions.map((e) => e.name).nonNulls,
+  };
+
   /// Own top-level symbol names that are NOT declared (used by the resolver to
   /// flag invalid exports).
   Set<String> exportNamesNotDeclared() {
-    var all = <String>{
-      ...functions.map((f) => f.name),
-      ..._classes.keys,
-      ..._typeAliases.keys,
-    };
+    var all = _ownSymbolNames();
     return _exports
         .where((e) => e.path == null)
         .expand((e) => e.symbols.map((s) => s.name))
