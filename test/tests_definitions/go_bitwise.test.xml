@@ -25,6 +25,11 @@ package main
 type C struct {
 }
 
+func NewC() *C {
+  o := &C{}
+  return o
+}
+
 func (o *C) run(a int, b int) int {
   return (((a & b) | (a ^ b)) + (a << 1)) + (a >> 1)
 }

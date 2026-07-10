@@ -51,6 +51,11 @@ package main
 type C struct {
 }
 
+func NewC() *C {
+  o := &C{}
+  return o
+}
+
 func (o *C) run() int {
   sum := 0
   i := 0

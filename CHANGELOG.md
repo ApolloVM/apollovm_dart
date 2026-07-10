@@ -1,3 +1,82 @@
+## 1.9.1
+
+### Core-library, Java 11 and Go fixes found by a coverage pass
+
+Line coverage of `lib/` went from 83.4% to 84.7%. The number is the least
+interesting part: writing the tests surfaced seven real defects, all fixed here.
+
+#### Core library
+
+- **`String.length`, `String.isEmpty`, `String.isNotEmpty` and the `sign` of
+  `int`/`double` only worked when *called*.** `s.length()` worked and `s.length`
+  threw — the opposite of how Dart, Kotlin and C# source reads. `List` and `Map`
+  already exposed theirs as getters. They are now getters *and* methods, so
+  Java-style `s.length()` keeps working.
+
+#### Java 11
+
+- **The grammar crashed on the diamond form of a collection literal.**
+  `new HashMap<>(){{ put("a", 1); }}` — exactly what the Java generator emits for
+  a Dart map literal — handed the `'>'` character to a cast expecting an
+  `ASTType` and threw a raw `TypeError`. A separate typo made the map literal's
+  diamond alternative match `<<` instead of `<>`. Generic type arguments are now
+  picked out by type rather than by position, in all four list/map literal rules.
+  A Dart map literal now round-trips through Java.
+
+#### Go — constructors did not work at all, in either direction
+
+- **The grammar had no `&T{}` composite literal**, so *any* Go source containing
+  a `func NewFoo() *Foo { o := &Foo{} ... }` factory — the exact shape the Go
+  generator emits — failed to parse. The zero-valued form now parses as the
+  struct's no-argument constructor. Field-initializing literals (`&Foo{x: 1}`)
+  remain unsupported.
+- **A `NewFoo(...)` call site resolved to a top-level function that no longer
+  existed**, since the declaration had already been folded into the struct's
+  constructor. It now resolves to the constructor.
+- **Inside a factory, `o` was a plain local**, so `o.x = x` failed with "Can't
+  find variable: 'o'". It is now bound as the receiver before the body parses,
+  which the factory-to-constructor conversion already assumed.
+- **The generator rewrote a shadowing parameter as a field.**
+  `Point(int x) { this.x = x; }` emitted `o.x = o.x`, silently assigning the
+  field to itself. A parameter now shadows a same-named field.
+- **The generator emitted `p := Point(a, 1)`, which is not Go.** Instantiation
+  now emits the factory call `p := NewPoint(a, 1)`, and every struct gets a
+  factory (a field-less struct used to get none) so the call always resolves.
+  This is the only change to the expected output of the `go_*.test.xml`
+  fixtures.
+
+Dart -> Go -> parse -> run now works end to end.
+
+#### Cleanup
+
+- **`ApolloGenerator` carried ~140 lines of dead dispatch** (`generateASTNode`,
+  `generateASTRoot`, `generateASTType`, `generateASTStatement`,
+  `generateASTBranch`, `generateASTExpression`, `generateASTValue`). Every one
+  was shadowed by both subclasses, and they had already drifted: the base
+  `generateASTRoot` never learned to emit extensions, so a future third
+  generator would have silently dropped them. They are now abstract, or removed
+  where nothing dispatches through the base.
+
+#### Tests
+
+- The core runtime library: `dart:math`, and every `String`, `int`, `double`,
+  `List` and `Map` member, in both getter and method form where both exist.
+- Go constructors: the factory and its composite literal, running a factory, the
+  shadowing fix, and a full Dart -> Go -> parse -> run round-trip.
+- A generator matrix asserting that a program exercising most AST node kinds
+  generates in all nine languages and that the generated source parses back.
+  This is what found the Java 11 and Go defects.
+
+#### Known gaps, documented but not fixed
+
+Several grammars parse only a subset of what their own generator emits: the Lua
+generator emits `a + b` for string concatenation and `s.m()` for method calls,
+where Lua wants `a .. b` and `s:m()` (Lua classes are already marked unsupported
+in the README matrix, so that generator is outside the stated contract); Python
+cannot parse the lambda it generates; JS and TS cannot parse the map literal
+they generate. Each is listed in
+`test/unit/apollovm_generator_matrix_test.dart`.
+
 ## 1.9.0
 
 ### Extensions — add methods and getters to an existing type

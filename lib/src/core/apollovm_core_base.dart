@@ -410,6 +410,12 @@ class CoreClassString extends CoreClassPrimitive<String> {
   late final ASTExternalClassFunction _functionIsEmpty;
   late final ASTExternalClassFunction _functionIsNotEmpty;
 
+  // `length`/`isEmpty`/`isNotEmpty` are properties in Dart/Kotlin/C# and
+  // methods in Java (`s.length()`), so they are exposed both ways.
+  late final ASTExternalClassGetter _getterLength;
+  late final ASTExternalClassGetter _getterIsEmpty;
+  late final ASTExternalClassGetter _getterIsNotEmpty;
+
   late final ASTExternalClassFunction _functionSubstring;
   late final ASTExternalClassFunction _functionIndexOf;
   late final ASTExternalClassFunction _functionStartsWith;
@@ -474,6 +480,24 @@ class CoreClassString extends CoreClassPrimitive<String> {
       'isNotEmpty',
       ASTTypeBool.instance,
       (String o) => o.isNotEmpty,
+    );
+
+    _getterLength = _externalClassGetter(
+      'length',
+      ASTTypeInt.instance,
+      (Object? o) => o is String ? o.length : null,
+    );
+
+    _getterIsEmpty = _externalClassGetter(
+      'isEmpty',
+      ASTTypeBool.instance,
+      (Object? o) => o is String ? o.isEmpty : null,
+    );
+
+    _getterIsNotEmpty = _externalClassGetter(
+      'isNotEmpty',
+      ASTTypeBool.instance,
+      (Object? o) => o is String ? o.isNotEmpty : null,
     );
 
     _functionSubstring = _externalClassFunctionArgs2(
@@ -644,6 +668,24 @@ class CoreClassString extends CoreClassPrimitive<String> {
   }
 
   @override
+  ASTGetterDeclaration? getGetter(
+    String fName,
+    VMContext context, {
+    bool caseInsensitive = false,
+  }) {
+    switch (fName) {
+      case 'length':
+        return _getterLength;
+      case 'isEmpty':
+        return _getterIsEmpty;
+      case 'isNotEmpty':
+        return _getterIsNotEmpty;
+    }
+
+    throw StateError("Can't find core getter: $coreName.$fName");
+  }
+
+  @override
   ASTFunctionDeclaration? getFunction(
     String fName,
     ASTFunctionSignature parametersSignature,
@@ -734,6 +776,9 @@ class CoreClassInt extends CoreClassPrimitive<int> {
   late final ASTExternalClassFunction _functionClamp;
   late final ASTExternalClassFunction _functionRemainder;
   late final ASTExternalClassFunction _functionToRadixString;
+
+  /// `sign` is a property in Dart; also kept as a method for Java-style calls.
+  late final ASTExternalClassGetter _getterSign;
   late final ASTExternalClassFunction _functionToDouble;
 
   CoreClassInt._() : super(ASTTypeInt.instance, 'int') {
@@ -783,6 +828,12 @@ class CoreClassInt extends CoreClassPrimitive<int> {
       (int self) => self.sign,
     );
 
+    _getterSign = _externalClassGetter(
+      'sign',
+      ASTTypeInt.instance,
+      (Object? o) => o is int ? o.sign : null,
+    );
+
     _functionClamp = _externalClassFunctionArgs2(
       'clamp',
       ASTTypeInt.instance,
@@ -810,6 +861,20 @@ class CoreClassInt extends CoreClassPrimitive<int> {
       ASTTypeDouble.instance,
       (int self) => self.toDouble(),
     );
+  }
+
+  @override
+  ASTGetterDeclaration? getGetter(
+    String fName,
+    VMContext context, {
+    bool caseInsensitive = false,
+  }) {
+    switch (fName) {
+      case 'sign':
+        return _getterSign;
+    }
+
+    throw StateError("Can't find core getter: $coreName.$fName");
   }
 
   @override
@@ -872,6 +937,9 @@ class CoreClassDouble extends CoreClassPrimitive<double> {
   late final ASTExternalClassFunction _functionClamp;
   late final ASTExternalClassFunction _functionRemainder;
   late final ASTExternalClassFunction _functionToStringAsFixed;
+
+  /// `sign` is a property in Dart; also kept as a method for Java-style calls.
+  late final ASTExternalClassGetter _getterSign;
   late final ASTExternalClassFunction _functionToStringAsExponential;
   late final ASTExternalClassFunction _functionToStringAsPrecision;
   late final ASTExternalClassFunction _functionToInt;
@@ -939,6 +1007,12 @@ class CoreClassDouble extends CoreClassPrimitive<double> {
       'sign',
       ASTTypeDouble.instance,
       (double self) => self.sign,
+    );
+
+    _getterSign = _externalClassGetter(
+      'sign',
+      ASTTypeDouble.instance,
+      (Object? o) => o is double ? o.sign : null,
     );
 
     _functionClamp = _externalClassFunctionArgs2(
@@ -1036,6 +1110,20 @@ class CoreClassDouble extends CoreClassPrimitive<double> {
       ASTTypeInt.instance,
       (double self) => self.truncate(),
     );
+  }
+
+  @override
+  ASTGetterDeclaration? getGetter(
+    String fName,
+    VMContext context, {
+    bool caseInsensitive = false,
+  }) {
+    switch (fName) {
+      case 'sign':
+        return _getterSign;
+    }
+
+    throw StateError("Can't find core getter: $coreName.$fName");
   }
 
   @override

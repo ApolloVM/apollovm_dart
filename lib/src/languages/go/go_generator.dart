@@ -31,6 +31,29 @@ class ApolloCodeGeneratorGo extends ApolloCodeGenerator {
   /// Method names of the struct currently being generated (for `o.method()`).
   Set<String> _currentClassMethods = const {};
 
+  /// Names of every struct (class) in the program being generated. Go has no
+  /// `new`, so instantiating `Point(...)` is emitted as its factory
+  /// `NewPoint(...)`.
+  Set<String> _programStructNames = const {};
+
+  /// Parameter names of the member currently being generated. A parameter
+  /// shadows a same-named field, so `Point(int x) { this.x = x; }` must emit
+  /// `o.x = x`, not `o.x = o.x`.
+  Set<String> _currentMemberParameters = const {};
+
+  /// Generates [f]'s body with its parameters registered as shadowing names.
+  StringBuffer _generateMemberBlock(ASTInvocableDeclaration f, String indent) {
+    var previous = _currentMemberParameters;
+    _currentMemberParameters = f.parameters.allParameters
+        .map((p) => p.name)
+        .toSet();
+    try {
+      return generateASTBlock(f, indent: indent, withBrackets: false);
+    } finally {
+      _currentMemberParameters = previous;
+    }
+  }
+
   /// Name of the struct currently being generated (for the receiver type).
   String? _currentClassName;
 
@@ -77,6 +100,8 @@ class ApolloCodeGeneratorGo extends ApolloCodeGenerator {
     bool withBrackets = true,
   }) {
     out ??= newOutput();
+
+    _programStructNames = root.classes.map((c) => c.name).toSet();
 
     out.write('package main\n\n');
 
@@ -169,13 +194,15 @@ class ApolloCodeGeneratorGo extends ApolloCodeGenerator {
     var fieldInits = fields.whereType<ASTClassFieldWithInitialValue>().toList();
     var constructors = clazz.constructors.toList();
 
+    // Every struct gets a factory, so `Point(...)` always has a `NewPoint(...)`
+    // to call — see [generateASTExpressionLocalFunctionInvocation].
     if (constructors.isNotEmpty) {
       for (var c in constructors) {
         for (var ctor in c.functions) {
           _generateConstructor(ctor, name, fieldInits, out, indent);
         }
       }
-    } else if (fieldInits.isNotEmpty) {
+    } else {
       _generateDefaultConstructor(name, fieldInits, out, indent);
     }
 
@@ -189,6 +216,7 @@ class ApolloCodeGeneratorGo extends ApolloCodeGenerator {
     _currentClassName = null;
     _currentClassFields = const {};
     _currentClassMethods = const {};
+    _currentMemberParameters = const {};
 
     return out;
   }
@@ -199,7 +227,7 @@ class ApolloCodeGeneratorGo extends ApolloCodeGenerator {
     StringBuffer out,
     String indent,
   ) {
-    var blockCode = generateASTBlock(f, indent: indent, withBrackets: false);
+    var blockCode = _generateMemberBlock(f, indent);
 
     out.write('func (');
     out.write(_receiver);
@@ -226,7 +254,7 @@ class ApolloCodeGeneratorGo extends ApolloCodeGenerator {
     StringBuffer out,
     String indent,
   ) {
-    var blockCode = generateASTBlock(ctor, indent: indent, withBrackets: false);
+    var blockCode = _generateMemberBlock(ctor, indent);
 
     out.write('func New');
     out.write(className);
@@ -998,6 +1026,27 @@ class ApolloCodeGeneratorGo extends ApolloCodeGenerator {
       return out;
     }
 
+    // Instantiating a struct calls its factory: `Point(...)` -> `NewPoint(...)`.
+    if (_programStructNames.contains(expression.name)) {
+      out ??= newOutput();
+      if (headIndented) out.write(indent);
+      out.write('New');
+      out.write(expression.name);
+      out.write('(');
+      var arguments = expression.arguments;
+      for (var i = 0; i < arguments.length; ++i) {
+        if (i > 0) out.write(', ');
+        generateASTExpression(
+          arguments[i],
+          out: out,
+          indent: '$indent  ',
+          headIndented: false,
+        );
+      }
+      out.write(')');
+      return out;
+    }
+
     // Sibling-method calls inside a struct method become `o.method(...)`.
     if (_currentClassMethods.contains(expression.name)) {
       out ??= newOutput();
@@ -1035,9 +1084,11 @@ class ApolloCodeGeneratorGo extends ApolloCodeGenerator {
     String indent = '',
     bool headIndented = true,
   }) {
-    // Field reads inside a struct method become `o.field`.
+    // Field reads inside a struct method become `o.field`, unless a parameter
+    // of the same name shadows the field.
     if (!variable.isTypeIdentifier &&
-        _currentClassFields.contains(variable.name)) {
+        _currentClassFields.contains(variable.name) &&
+        !_currentMemberParameters.contains(variable.name)) {
       out ??= newOutput();
       if (headIndented) out.write(indent);
       out.write('$_receiver.');

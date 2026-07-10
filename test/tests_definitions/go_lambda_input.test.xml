@@ -28,6 +28,11 @@ package main
 type C struct {
 }
 
+func NewC() *C {
+  o := &C{}
+  return o
+}
+
 func (o *C) run(a int) int {
   triple := func(x int) int {
     return x * 3
