@@ -26,7 +26,8 @@ abstract class ApolloCodeGenerator
   @override
   StringBuffer newOutput() => StringBuffer();
 
-  @override
+  /// Emits any [ASTNode]. Declared here rather than on [ApolloGenerator]:
+  /// only a source-code generator can render an arbitrary node standalone.
   StringBuffer generateASTNode(
     ASTNode node, {
     StringBuffer? out,
@@ -367,7 +368,7 @@ abstract class ApolloCodeGenerator
     );
   }
 
-  @override
+  /// Emits a type, dispatching on its array rank.
   StringBuffer generateASTType(
     ASTType type, {
     StringBuffer? out,

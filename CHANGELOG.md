@@ -1,3 +1,37 @@
+## 1.9.1
+
+### Core-library and generator fixes found by a coverage pass
+
+Line coverage of `lib/` went from 83.4% to 84.6%. The tests written to get there
+surfaced three real defects:
+
+- **`String.length`, `String.isEmpty`, `String.isNotEmpty` and `int`/`double`
+  `sign` only worked when *called*** (`s.length()`), not when read as the
+  properties they are in Dart, Kotlin and C# (`s.length`). `List` and `Map`
+  already exposed theirs correctly. They are now getters as well as methods, so
+  Java-style `s.length()` keeps working.
+- **The Java 11 grammar crashed on the diamond form of a collection literal.**
+  `new HashMap<>(){{ put("a", 1); }}` — which the Java generator itself emits —
+  handed the `'>'` character to a cast expecting an `ASTType` and threw a raw
+  `TypeError`. A separate typo made the map literal's diamond alternative match
+  `<<` instead of `<>`. A Dart map literal now round-trips through Java.
+- **`ApolloGenerator` carried ~140 lines of dead dispatch** (`generateASTNode`,
+  `generateASTRoot`, `generateASTType`, `generateASTStatement`,
+  `generateASTBranch`, `generateASTExpression`, `generateASTValue`), shadowed by
+  every subclass and already drifting from them — the base `generateASTRoot`
+  never learned to emit extensions. The dispatchers are now abstract or removed.
+
+New tests: the core runtime library (`dart:math`, and every `String`, `int`,
+`double`, `List` and `Map` member), and a generator matrix asserting that a
+program exercising most AST node kinds generates in all nine languages and that
+the generated source parses back.
+
+Known gaps this pass documented but did not fix: several grammars parse only a
+subset of what their own generator emits (Lua has no `for`/`while` rule and
+emits `+` for string concatenation; Python cannot parse the lambda it generates;
+Go has no `&T{}` composite literal, so it cannot read back the constructor
+factory it emits). See `test/unit/apollovm_generator_matrix_test.dart`.
+
 ## 1.9.0
 
 ### Extensions — add methods and getters to an existing type

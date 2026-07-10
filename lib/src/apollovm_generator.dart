@@ -3,7 +3,6 @@
 // Please refer to the LICENSE and AUTHORS files for details.
 
 import 'apollovm_code_storage.dart';
-import 'ast/apollovm_ast_base.dart';
 import 'ast/apollovm_ast_expression.dart';
 import 'ast/apollovm_ast_statement.dart';
 import 'ast/apollovm_ast_toplevel.dart';
@@ -32,43 +31,7 @@ abstract class ApolloGenerator<
 
   O newOutput();
 
-  O generateASTNode(ASTNode node, {O? out}) {
-    if (node is ASTValue) {
-      return generateASTValue(node, out: out);
-    } else if (node is ASTExpression) {
-      return generateASTExpression(node, out: out);
-    } else if (node is ASTRoot) {
-      return generateASTRoot(node, out: out);
-    } else if (node is ASTStatementImport) {
-      return generateASTStatementImport(node, out: out);
-    } else if (node is ASTClassNormal) {
-      return generateASTClass(node, out: out);
-    } else if (node is ASTSingleLineStatementBlock) {
-      return generateASTSingleLineStatementBlock(node, out: out);
-    } else if (node is ASTBlock) {
-      return generateASTBlock(node, out: out);
-    } else if (node is ASTStatement) {
-      return generateASTStatement(node, out: out);
-    } else if (node is ASTClassFunctionDeclaration) {
-      return generateASTClassFunctionDeclaration(node, out: out);
-    } else if (node is ASTFunctionDeclaration) {
-      return generateASTFunctionDeclaration(node, out: out);
-    }
-
-    throw UnsupportedError("Can't handle ASTNode: $node");
-  }
-
-  O generateASTRoot(ASTRoot root, {O? out}) {
-    out ??= newOutput();
-
-    generateASTBlock(root, out: out);
-
-    for (var clazz in root.classes) {
-      generateASTClass(clazz, out: out);
-    }
-
-    return out;
-  }
+  O generateASTRoot(ASTRoot root, {O? out});
 
   O generateASTBlock(ASTBlock block, {O? out});
 
@@ -110,18 +73,6 @@ abstract class ApolloGenerator<
     O? out,
   });
 
-  O generateASTType(ASTType type, {O? out}) {
-    if (type is ASTTypeArray) {
-      return generateASTTypeArray(type, out: out);
-    } else if (type is ASTTypeArray2D) {
-      return generateASTTypeArray2D(type, out: out);
-    } else if (type is ASTTypeArray3D) {
-      return generateASTTypeArray3D(type, out: out);
-    }
-
-    return generateASTTypeDefault(type, out: out);
-  }
-
   O generateASTTypeArray(ASTTypeArray type, {O? out});
 
   O generateASTTypeArray2D(ASTTypeArray2D type, {O? out});
@@ -136,49 +87,9 @@ abstract class ApolloGenerator<
 
   O generateASTTypeDefault(ASTType type, {O? out});
 
-  O generateASTStatement(ASTStatement statement, {O? out}) {
-    if (statement is ASTStatementExpression) {
-      return generateASTStatementExpression(statement, out: out);
-    } else if (statement is ASTStatementVariableDeclaration) {
-      return generateASTStatementVariableDeclaration(statement, out: out);
-    } else if (statement is ASTBranch) {
-      return generateASTBranch(statement, out: out);
-    } else if (statement is ASTStatementForLoop) {
-      return generateASTStatementForLoop(statement, out: out);
-    } else if (statement is ASTStatementForEach) {
-      return generateASTStatementForEach(statement, out: out);
-    } else if (statement is ASTStatementWhileLoop) {
-      return generateASTStatementWhileLoop(statement, out: out);
-    } else if (statement is ASTStatementBlock) {
-      return generateASTStatementBlock(statement, out: out);
-    } else if (statement is ASTStatementFunctionDeclaration) {
-      return generateASTStatementFunctionDeclaration(statement, out: out);
-    } else if (statement is ASTStatementReturnNull) {
-      return generateASTStatementReturnNull(statement, out: out);
-    } else if (statement is ASTStatementReturnValue) {
-      return generateASTStatementReturnValue(statement, out: out);
-    } else if (statement is ASTStatementReturnVariable) {
-      return generateASTStatementReturnVariable(statement, out: out);
-    } else if (statement is ASTStatementReturnWithExpression) {
-      return generateASTStatementReturnWithExpression(statement, out: out);
-    } else if (statement is ASTStatementReturn) {
-      return generateASTStatementReturn(statement, out: out);
-    }
+  O generateASTStatement(ASTStatement statement, {O? out});
 
-    throw UnsupportedError("Can't handle statement: $statement");
-  }
-
-  O generateASTBranch(ASTBranch branch, {O? out}) {
-    if (branch is ASTBranchIfBlock) {
-      return generateASTBranchIfBlock(branch, out: out);
-    } else if (branch is ASTBranchIfElseBlock) {
-      return generateASTBranchIfElseBlock(branch, out: out);
-    } else if (branch is ASTBranchIfElseIfsElseBlock) {
-      return generateASTBranchIfElseIfsElseBlock(branch, out: out);
-    }
-
-    throw UnsupportedError("Can't handle branch: $branch");
-  }
+  O generateASTBranch(ASTBranch branch, {O? out});
 
   O generateASTStatementForLoop(ASTStatementForLoop forLoop, {O? out});
 
@@ -243,45 +154,7 @@ abstract class ApolloGenerator<
     O? out,
   });
 
-  O generateASTExpression(ASTExpression expression, {O? out}) {
-    if (expression is ASTExpressionNullValue) {
-      return generateASTExpressionNullValue(expression, out: out);
-    } else if (expression is ASTExpressionVariableAccess) {
-      return generateASTExpressionVariableAccess(expression, out: out);
-    } else if (expression is ASTExpressionVariableAssignment) {
-      return generateASTExpressionVariableAssignment(expression, out: out);
-    } else if (expression is ASTExpressionVariableEntryAssignment) {
-      return generateASTExpressionVariableEntryAssignment(expression, out: out);
-    } else if (expression is ASTExpressionVariableEntryAccess) {
-      return generateASTExpressionVariableEntryAccess(expression, out: out);
-    } else if (expression is ASTExpressionLiteral) {
-      return generateASTExpressionLiteral(expression, out: out);
-    } else if (expression is ASTExpressionListLiteral) {
-      return generateASTExpressionListLiteral(expression, out: out);
-    } else if (expression is ASTExpressionMapLiteral) {
-      return generateASTExpressionMapLiteral(expression, out: out);
-    } else if (expression is ASTExpressionNegation) {
-      return generateASTExpressionNegation(expression, out: out);
-    } else if (expression is ASTExpressionNegative) {
-      return generateASTExpressionNegative(expression, out: out);
-    } else if (expression is ASTExpressionAwait) {
-      return generateASTExpressionAwait(expression, out: out);
-    } else if (expression is ASTExpressionLocalFunctionInvocation) {
-      return generateASTExpressionLocalFunctionInvocation(expression, out: out);
-    } else if (expression is ASTExpressionObjectFunctionInvocation) {
-      return generateASTExpressionFunctionInvocation(expression, out: out);
-    } else if (expression is ASTExpressionGroupFunctionInvocation) {
-      return generateASTExpressionGroupFunctionInvocation(expression, out: out);
-    } else if (expression is ASTExpressionOperation) {
-      return generateASTExpressionOperation(expression, out: out);
-    } else if (expression is ASTExpressionConditional) {
-      return generateASTExpressionConditional(expression, out: out);
-    } else if (expression is ASTExpressionLiteralFunction) {
-      return generateASTExpressionLiteralFunction(expression, out: out);
-    }
-
-    throw UnsupportedError("Can't generate expression: $expression");
-  }
+  O generateASTExpression(ASTExpression expression, {O? out});
 
   O generateASTExpressionOperation(ASTExpressionOperation expression, {O? out});
 
@@ -383,37 +256,7 @@ abstract class ApolloGenerator<
     O? out,
   });
 
-  O generateASTValue(ASTValue value, {O? out}) {
-    if (value is ASTValueString) {
-      return generateASTValueString(value, out: out);
-    } else if (value is ASTValueInt) {
-      return generateASTValueInt(value, out: out);
-    } else if (value is ASTValueDouble) {
-      return generateASTValueDouble(value, out: out);
-    } else if (value is ASTValueNull) {
-      return generateASTValueNull(value, out: out);
-    } else if (value is ASTValueVar) {
-      return generateASTValueVar(value, out: out);
-    } else if (value is ASTValueObject) {
-      return generateASTValueObject(value, out: out);
-    } else if (value is ASTValueStatic) {
-      return generateASTValueStatic(value, out: out);
-    } else if (value is ASTValueStringVariable) {
-      return generateASTValueStringVariable(value, out: out);
-    } else if (value is ASTValueStringConcatenation) {
-      return generateASTValueStringConcatenation(value, out: out);
-    } else if (value is ASTValueStringExpression) {
-      return generateASTValueStringExpression(value, out: out);
-    } else if (value is ASTValueArray) {
-      return generateASTValueArray(value, out: out);
-    } else if (value is ASTValueArray2D) {
-      return generateASTValueArray2D(value, out: out);
-    } else if (value is ASTValueArray3D) {
-      return generateASTValueArray3D(value, out: out);
-    }
-
-    throw UnsupportedError("Can't generate value: $value");
-  }
+  O generateASTValue(ASTValue value, {O? out});
 
   O generateASTValueStringConcatenation(
     ASTValueStringConcatenation value, {

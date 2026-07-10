@@ -925,6 +925,17 @@ class Java11GrammarDefinition extends Java11GrammarLexer {
             );
           });
 
+  /// The [index]th declared type argument of a matched generic clause.
+  ///
+  /// The clause is either `<K, V>` (types present) or the diamond `<>` (only
+  /// the two angle-bracket characters), so the types are picked out by type
+  /// rather than by position.
+  static ASTType _genericTypeAt(Object? genericsMatch, int index) {
+    if (genericsMatch is! List) return ASTTypeDynamic.instance;
+    var types = genericsMatch.whereType<ASTType>().toList();
+    return index < types.length ? types[index] : ASTTypeDynamic.instance;
+  }
+
   Parser<ASTExpressionListLiteral> expressionListEmptyLiteral() =>
       (string('new').trimHidden() &
               string('ArrayList').trimHidden() &
@@ -935,7 +946,7 @@ class Java11GrammarDefinition extends Java11GrammarLexer {
               char('(').trimHidden() &
               char(')').trimHidden())
           .map((v) {
-            var type = (v[2]?[1] as ASTType?) ?? ASTTypeDynamic.instance;
+            var type = _genericTypeAt(v[2], 0);
             return ASTExpressionListLiteral(type, []);
           });
 
@@ -960,7 +971,7 @@ class Java11GrammarDefinition extends Java11GrammarLexer {
                   .star() &
               string('}}').trimHidden())
           .map((v) {
-            var type = (v[2]?[1] as ASTType?) ?? ASTTypeDynamic.instance;
+            var type = _genericTypeAt(v[2], 0);
             var v0 = (v[6] as List).whereType<ASTExpression>().first;
             var tail =
                 (v[7] as List?)
@@ -984,8 +995,8 @@ class Java11GrammarDefinition extends Java11GrammarLexer {
               char('(').trimHidden() &
               char(')').trimHidden())
           .map((v) {
-            var keyType = (v[2]?[1] as ASTType?) ?? ASTTypeDynamic.instance;
-            var valueType = (v[2]?[3] as ASTType?) ?? ASTTypeDynamic.instance;
+            var keyType = _genericTypeAt(v[2], 0);
+            var valueType = _genericTypeAt(v[2], 1);
             return ASTExpressionMapLiteral(keyType, valueType, []);
           });
 
@@ -997,7 +1008,7 @@ class Java11GrammarDefinition extends Java11GrammarLexer {
                       char(',').trimHidden() &
                       simpleType() &
                       char('>').trimHidden()) |
-                  (char('<').trimHidden() & char('<').trimHidden())) &
+                  (char('<').trimHidden() & char('>').trimHidden())) &
               char('(').trimHidden() &
               char(')').trimHidden() &
               string('{{').trimHidden() &
@@ -1016,8 +1027,8 @@ class Java11GrammarDefinition extends Java11GrammarLexer {
                   .star() &
               string('}}').trimHidden())
           .map((v) {
-            var keyType = (v[2]?[1] as ASTType?) ?? ASTTypeDynamic.instance;
-            var valueType = (v[2]?[3] as ASTType?) ?? ASTTypeDynamic.instance;
+            var keyType = _genericTypeAt(v[2], 0);
+            var valueType = _genericTypeAt(v[2], 1);
             var entry0 = (v[6] as List).whereType<ASTExpression>().toList();
             var entriesTail = (v[7] as List?)
                 ?.whereType<List>()
