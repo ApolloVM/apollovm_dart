@@ -136,5 +136,99 @@ void main() {
           );
       expect(result.getValueNoContext(), equals(42));
     });
+
+    test('a field-initializing parameter assigns its field', () async {
+      var vm = await _load(
+        'dart',
+        'class Point { int x; int y; Point(this.x, this.y);\n'
+            '  int sum() { return this.x + this.y; } }\n'
+            'class Foo { int test(int a) { var p = Point(a, 1); return p.sum(); } }',
+      );
+
+      var go = await _generateGo(vm);
+
+      expect(go, contains('o.x = x'));
+      expect(go, contains('o.y = y'));
+
+      var reloaded = await _load('go', go);
+      var result = await reloaded
+          .createRunner('go')!
+          .executeClassMethod(
+            '',
+            'Foo',
+            'test',
+            positionalParameters: [5],
+            classInstanceFields: const {},
+          );
+      expect(
+        result.getValueNoContext(),
+        equals(6),
+        reason: 'Dart `Point(this.x, this.y)` must not drop its arguments',
+      );
+    });
+
+    test('structs are emitted before the functions that call them', () async {
+      var vm = await _load(
+        'dart',
+        'class Point { int x; Point(this.x); }\n'
+            'int run(int a) { var p = Point(a); return p.x; }',
+      );
+
+      var go = await _generateGo(vm);
+
+      expect(
+        go.indexOf('type Point struct'),
+        lessThan(go.indexOf('func run(')),
+        reason:
+            'the Go parser resolves `NewPoint(...)` against what it has '
+            'already seen',
+      );
+
+      var reloaded = await _load('go', go);
+      var result = await reloaded
+          .createRunner('go')!
+          .executeFunction('', 'run', positionalParameters: [7]);
+      expect(result.getValueNoContext(), equals(7));
+    });
+  });
+
+  group('Go reserved words', () {
+    test('an identifier colliding with a Go keyword is escaped', () async {
+      var vm = await _load(
+        'dart',
+        'int run(int a) { var map = a + 1; var type = a + 2; return map + type; }',
+      );
+
+      var go = await _generateGo(vm);
+
+      expect(go, contains('map_ := a + 1'));
+      expect(go, contains('type_ := a + 2'));
+      expect(go, contains('return map_ + type_'));
+
+      var reloaded = await _load('go', go);
+      var result = await reloaded
+          .createRunner('go')!
+          .executeFunction('', 'run', positionalParameters: [5]);
+      expect(result.getValueNoContext(), equals(13));
+    });
+
+    test('a struct field named after a Go keyword is escaped', () async {
+      var vm = await _load(
+        'dart',
+        'class Box { int type; Box(this.type); int get2() { return this.type; } }\n'
+            'int run(int a) { var b = Box(a); return b.get2(); }',
+      );
+
+      var go = await _generateGo(vm);
+
+      expect(go, contains('type_ int'));
+      expect(go, contains('o.type_ = type_'));
+
+      var reloaded = await _load('go', go);
+      var result = await reloaded
+          .createRunner('go')!
+          .executeFunction('', 'run', positionalParameters: [9]);
+      expect(result.getValueNoContext(), equals(9));
+    });
   });
 }

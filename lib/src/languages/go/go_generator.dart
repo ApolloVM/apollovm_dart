@@ -25,6 +25,50 @@ class ApolloCodeGeneratorGo extends ApolloCodeGenerator {
   /// The fixed receiver name used for struct methods.
   static const String _receiver = 'o';
 
+  /// Go's 25 reserved words. None may be used as an identifier, so a name from
+  /// the source that collides with one (`map`, `type`, `range`, `func`, …) is
+  /// emitted with a trailing `_`.
+  static const Set<String> _goKeywords = {
+    'break',
+    'case',
+    'chan',
+    'const',
+    'continue',
+    'default',
+    'defer',
+    'else',
+    'fallthrough',
+    'for',
+    'func',
+    'go',
+    'goto',
+    'if',
+    'import',
+    'interface',
+    'map',
+    'package',
+    'range',
+    'return',
+    'select',
+    'struct',
+    'switch',
+    'type',
+    'var',
+  };
+
+  /// [name] as a Go identifier: a reserved word gets a trailing `_`.
+  ///
+  /// Applied at every site that writes a value identifier (variables,
+  /// parameters, struct fields, functions and methods), so a declaration and
+  /// its uses always agree.
+  static String _goIdent(String name) =>
+      _goKeywords.contains(name) ? '${name}_' : name;
+
+  /// Member names written after a `.` (`o.type_`, `p.sum()`) are escaped the
+  /// same way as the declarations they refer to.
+  @override
+  String normalizeIdentifier(String name) => _goIdent(name);
+
   /// Field names of the struct currently being generated (for `o.field`).
   Set<String> _currentClassFields = const {};
 
@@ -118,8 +162,10 @@ class ApolloCodeGeneratorGo extends ApolloCodeGenerator {
       out.write('\n');
     }
 
-    generateASTBlock(root, out: out, withBrackets: false);
-
+    // Structs (and their factories) are emitted before the top-level functions
+    // that call them. Go itself is order-independent, but ApolloVM's Go parser
+    // resolves a `NewPoint(...)` call against the declarations it has seen so
+    // far, so a caller emitted first could not resolve the struct.
     for (var clazz in root.classes) {
       generateASTClass(clazz, out: out);
     }
@@ -127,6 +173,8 @@ class ApolloCodeGeneratorGo extends ApolloCodeGenerator {
     for (var extension in root.extensions) {
       generateASTExtension(extension, out: out);
     }
+
+    generateASTBlock(root, out: out, withBrackets: false);
 
     return out;
   }
@@ -175,7 +223,7 @@ class ApolloCodeGeneratorGo extends ApolloCodeGenerator {
     out.write(' struct {\n');
     for (var field in fields) {
       out.write('  ');
-      out.write(field.name);
+      out.write(_goIdent(field.name));
       out.write(' ');
       generateASTType(field.type, out: out);
       out.write('\n');
@@ -234,7 +282,7 @@ class ApolloCodeGeneratorGo extends ApolloCodeGenerator {
     out.write(' *');
     out.write(className);
     out.write(') ');
-    out.write(f.name);
+    out.write(_goIdent(f.name));
     out.write('(');
     if (f.parametersSize > 0) {
       generateASTParametersDeclaration(f.parameters, out: out);
@@ -268,10 +316,29 @@ class ApolloCodeGeneratorGo extends ApolloCodeGenerator {
     out.write('$indent  ');
     out.write('$_receiver := &$className{}\n');
     _writeFieldInits(fieldInits, out, '$indent  ');
+    _writeThisParameterInits(ctor, out, '$indent  ');
     out.write(blockCode);
     out.write('$indent  return $_receiver\n');
     out.write(indent);
     out.write('}\n\n');
+  }
+
+  /// Assigns each field-initializing parameter (Dart's `Point(this.x)`) to its
+  /// field: `o.x = x`. Go has no such shorthand, and without this the factory
+  /// would ignore its arguments and leave the fields zero-valued.
+  ///
+  /// Written after [_writeFieldInits] so an explicit argument wins over the
+  /// field's declared initial value.
+  void _writeThisParameterInits(
+    ASTClassConstructorDeclaration ctor,
+    StringBuffer out,
+    String indent,
+  ) {
+    for (var p in ctor.parameters.allParameters) {
+      if (!p.thisParameter) continue;
+      var name = _goIdent(p.name);
+      out.write('$indent$_receiver.$name = $name\n');
+    }
   }
 
   void _generateDefaultConstructor(
@@ -301,7 +368,7 @@ class ApolloCodeGeneratorGo extends ApolloCodeGenerator {
     for (var field in fieldInits) {
       out.write(indent);
       out.write('$_receiver.');
-      out.write(field.name);
+      out.write(_goIdent(field.name));
       out.write(' = ');
       generateASTExpression(field.initialValue, out: out, headIndented: false);
       out.write('\n');
@@ -410,7 +477,7 @@ class ApolloCodeGeneratorGo extends ApolloCodeGenerator {
     out ??= newOutput();
 
     // Go declares the type *after* the name: `a int`.
-    out.write(parameter.name);
+    out.write(_goIdent(parameter.name));
     out.write(' ');
     generateASTType(parameter.type, out: out);
 
@@ -446,7 +513,7 @@ class ApolloCodeGeneratorGo extends ApolloCodeGenerator {
 
     if (value != null && type is ASTTypeVar) {
       // Inferred + value: `x := expr`.
-      out.write(statement.name);
+      out.write(_goIdent(statement.name));
       out.write(' := ');
       generateASTExpression(
         value,
@@ -457,7 +524,7 @@ class ApolloCodeGeneratorGo extends ApolloCodeGenerator {
     } else {
       // `var x Type = expr`, `var x Type`, or `var x = expr`.
       out.write('var ');
-      out.write(statement.name);
+      out.write(_goIdent(statement.name));
       if (type is! ASTTypeVar) {
         out.write(' ');
         generateASTType(type, out: out);
@@ -1052,7 +1119,7 @@ class ApolloCodeGeneratorGo extends ApolloCodeGenerator {
       out ??= newOutput();
       if (headIndented) out.write(indent);
       out.write('$_receiver.');
-      out.write(expression.name);
+      out.write(_goIdent(expression.name));
       out.write('(');
       var arguments = expression.arguments;
       for (var i = 0; i < arguments.length; ++i) {
@@ -1092,7 +1159,16 @@ class ApolloCodeGeneratorGo extends ApolloCodeGenerator {
       out ??= newOutput();
       if (headIndented) out.write(indent);
       out.write('$_receiver.');
-      out.write(variable.name);
+      out.write(_goIdent(variable.name));
+      return out;
+    }
+
+    // A plain variable read: the base writes the raw name, which would not
+    // agree with the mangled name its declaration emitted.
+    if (!variable.isTypeIdentifier) {
+      out ??= newOutput();
+      if (headIndented) out.write(indent);
+      out.write(_goIdent(variable.name));
       return out;
     }
 
@@ -1119,7 +1195,7 @@ class ApolloCodeGeneratorGo extends ApolloCodeGenerator {
     if (variable is ASTThisVariable) {
       out.write(_receiver);
     } else {
-      out.write(variable.name);
+      out.write(_goIdent(variable.name));
     }
     return out;
   }
