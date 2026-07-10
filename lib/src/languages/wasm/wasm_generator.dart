@@ -13,6 +13,7 @@ import '../../apollovm_base.dart';
 import '../../apollovm_code_storage.dart';
 import '../../apollovm_generated_output.dart';
 import '../../apollovm_generator.dart';
+import '../../apollovm_parser.dart';
 import '../../ast/apollovm_ast_base.dart';
 import '../../ast/apollovm_ast_expression.dart';
 import '../../ast/apollovm_ast_statement.dart';
@@ -61,6 +62,13 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
   @override
   BytesOutput generateASTRoot(ASTRoot root, {BytesOutput? out}) {
     out ??= newOutput();
+
+    if (root.extensions.isNotEmpty) {
+      throw UnsupportedSyntaxError(
+        'Wasm compilation of extensions is not implemented: '
+        '${root.extensions.join(', ')}',
+      );
+    }
 
     out.write(Wasm.magicModuleHeader, description: "Wasm Magic");
     out.write(Wasm.moduleVersion, description: "Version 1");

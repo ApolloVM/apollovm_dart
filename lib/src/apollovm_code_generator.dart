@@ -4,6 +4,7 @@
 
 import 'apollovm_code_storage.dart';
 import 'apollovm_generator.dart';
+import 'apollovm_parser.dart';
 import 'ast/apollovm_ast_base.dart';
 import 'ast/apollovm_ast_expression.dart';
 import 'ast/apollovm_ast_statement.dart';
@@ -50,6 +51,8 @@ abstract class ApolloCodeGenerator
       return generateASTRoot(node, out: out, indent: indent);
     } else if (node is ASTClassNormal) {
       return generateASTClass(node, out: out, indent: indent);
+    } else if (node is ASTExtension) {
+      return generateASTExtension(node, out: out, indent: indent);
     } else if (node is ASTSingleLineStatementBlock) {
       return generateASTSingleLineStatementBlock(
         node,
@@ -117,7 +120,43 @@ abstract class ApolloCodeGenerator
       generateASTClass(clazz, out: out);
     }
 
+    for (var extension in root.extensions) {
+      generateASTExtension(extension, out: out);
+    }
+
     return out;
+  }
+
+  /// Emits an extension declaration.
+  ///
+  /// Only Dart, Kotlin and C# have a native extension construct; every other
+  /// language rejects it rather than emit something that does not mean the same
+  /// thing (a monkey-patched prototype or a free-standing static helper would
+  /// silently change the program's semantics at the call sites).
+  StringBuffer generateASTExtension(
+    ASTExtension extension, {
+    StringBuffer? out,
+    String indent = '',
+  }) {
+    throw UnsupportedSyntaxError(
+      "Language '$language' has no extension declaration: $extension",
+    );
+  }
+
+  /// Emits an instance getter (`int get twice => …`). Default: unsupported.
+  ///
+  /// [receiver] is set only when the getter belongs to an extension *and* the
+  /// target language qualifies the declaration by the extended type (Kotlin:
+  /// `val Int.twice: Int get()`).
+  StringBuffer generateASTClassGetterDeclaration(
+    ASTClassGetterDeclaration getter, {
+    StringBuffer? out,
+    String indent = '',
+    String? receiver,
+  }) {
+    throw UnsupportedSyntaxError(
+      "Language '$language' has no getter declaration: ${getter.name}",
+    );
   }
 
   @override
@@ -177,6 +216,12 @@ abstract class ApolloCodeGenerator
         } else {
           generateASTFunctionDeclaration(f, out: out, indent: indent2);
         }
+      }
+    }
+
+    for (var g in block.getter) {
+      if (g is ASTClassGetterDeclaration) {
+        generateASTClassGetterDeclaration(g, out: out, indent: indent2);
       }
     }
 

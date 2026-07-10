@@ -1064,6 +1064,12 @@ class ASTValueAsString<T> extends ASTValue<String> {
   Iterable<ASTNode> get children => [value];
 
   @override
+  void resolveNode(ASTNode? parentNode) {
+    super.resolveNode(parentNode);
+    value.resolveNode(this);
+  }
+
+  @override
   FutureOr<String> getValue(VMContext context) {
     return value
         .getValue(context)
@@ -1098,6 +1104,14 @@ class ASTValuesListAsString extends ASTValue<String> {
 
   @override
   Iterable<ASTNode> get children => [...values];
+
+  @override
+  void resolveNode(ASTNode? parentNode) {
+    super.resolveNode(parentNode);
+    for (var v in values) {
+      v.resolveNode(this);
+    }
+  }
 
   @override
   FutureOr<String> getValue(VMContext context) {
@@ -1140,6 +1154,15 @@ class ASTValueStringExpression<T> extends ASTValue<String> {
 
   @override
   Iterable<ASTNode> get children => [expression];
+
+  /// Resolves the interpolated expression against this node, so that it reaches
+  /// the enclosing [ASTRoot] (and its extensions) through the `parentNode`
+  /// chain, exactly as an expression in statement position does.
+  @override
+  void resolveNode(ASTNode? parentNode) {
+    super.resolveNode(parentNode);
+    expression.resolveNode(this);
+  }
 
   @override
   FutureOr<String> getValue(VMContext context) {
@@ -1226,6 +1249,14 @@ class ASTValueStringConcatenation extends ASTValue<String> {
 
   @override
   Iterable<ASTNode> get children => [...values];
+
+  @override
+  void resolveNode(ASTNode? parentNode) {
+    super.resolveNode(parentNode);
+    for (var v in values) {
+      v.resolveNode(this);
+    }
+  }
 
   @override
   FutureOr<String> getValue(VMContext context) {

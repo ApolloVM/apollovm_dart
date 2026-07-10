@@ -1,0 +1,130 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="Extension on a user class">
+    <source language="dart">
+        <![CDATA[
+
+            class Point {
+
+              int x;
+              int y;
+
+              Point(int x, int y) {
+                this.x = x;
+                this.y = y;
+              }
+
+              int sum() {
+                return this.x + this.y;
+              }
+            }
+
+            extension PointExt on Point {
+
+              int scaled(int by) {
+                return this.sum() * by;
+              }
+
+              int get doubledSum {
+                return this.scaled(2);
+              }
+
+            }
+
+            class Foo {
+
+              void test(int a) {
+                var p = Point(a, 1);
+                print('scaled: ${p.scaled(3)}');
+                print('doubledSum: ${p.doubledSum}');
+              }
+            }
+
+        ]]>
+    </source>
+    <call class="Foo" function="test">
+        [ 10 ]
+    </call>
+    <output>
+        ["scaled: 33", "doubledSum: 22"]
+    </output>
+    <source-generated language="dart"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+class Point {
+
+  int x;
+  int y;
+
+  Point(int x, int y) {
+    this.x = x;
+    this.y = y;
+  }
+
+  int sum() {
+    return this.x + this.y;
+  }
+
+}
+class Foo {
+
+  void test(int a) {
+    var p = Point(a, 1);
+    print('scaled: ${p.scaled(3)}');
+    print('doubledSum: ${p.doubledSum}');
+  }
+
+}
+extension PointExt on Point {
+
+  int scaled(int by) {
+    return sum() * by;
+  }
+
+  int get doubledSum {
+    return scaled(2);
+  }
+
+}
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+
+    <source-generated language="kotlin"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+class Point {
+
+  var x: Int
+  var y: Int
+
+  constructor(x: Int, y: Int) {
+    this.x = x
+    this.y = y
+  }
+
+  fun sum(): Int {
+    return this.x + this.y
+  }
+
+}
+class Foo {
+
+  fun test(a: Int) {
+    var p = Point(a, 1)
+    print("scaled: ${p.scaled(3)}")
+    print("doubledSum: ${p.doubledSum}")
+  }
+
+}
+fun Point.scaled(by: Int): Int {
+  return sum() * by
+}
+
+val Point.doubledSum: Int get() {
+  return scaled(2)
+}
+
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+</test>

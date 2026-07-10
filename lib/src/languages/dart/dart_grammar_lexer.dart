@@ -87,7 +87,9 @@ abstract class DartGrammarLexer extends BaseGrammarLexer {
 
   Parser factoryToken() => ref1(token, 'factory');
 
-  Parser getToken() => ref1(token, 'get');
+  Parser extensionToken() => _keywordToken('extension');
+
+  Parser getToken() => _keywordToken('get');
 
   Parser hideToken() => ref1(token, 'hide');
 
@@ -104,6 +106,8 @@ abstract class DartGrammarLexer extends BaseGrammarLexer {
   Parser negateToken() => ref1(token, 'negate');
 
   Parser ofToken() => ref1(token, 'of');
+
+  Parser onToken() => _keywordToken('on');
 
   Parser operatorToken() => ref1(token, 'operator');
 

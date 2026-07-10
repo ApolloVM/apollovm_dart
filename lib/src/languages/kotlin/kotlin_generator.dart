@@ -152,6 +152,71 @@ class ApolloCodeGeneratorKotlin extends ApolloCodeGenerator {
     return out;
   }
 
+  /// Kotlin has no extension *block*: each member is emitted as a top-level
+  /// declaration qualified by the receiver type — `fun Int.doubled(): Int` and
+  /// `val Int.twice: Int get()`. The extension's name is therefore dropped.
+  @override
+  StringBuffer generateASTExtension(
+    ASTExtension extension, {
+    StringBuffer? out,
+    String indent = '',
+  }) {
+    out ??= newOutput();
+
+    var receiver = generateASTType(extension.targetType).toString();
+
+    for (var set in extension.functions) {
+      for (var f in set.functions) {
+        _generateASTFunctionDeclarationImpl(f, out, indent, receiver);
+      }
+    }
+
+    for (var g in extension.getter) {
+      if (g is ASTClassGetterDeclaration) {
+        generateASTClassGetterDeclaration(
+          g,
+          out: out,
+          indent: indent,
+          receiver: receiver,
+        );
+      }
+    }
+
+    return out;
+  }
+
+  @override
+  StringBuffer generateASTClassGetterDeclaration(
+    ASTClassGetterDeclaration getter, {
+    StringBuffer? out,
+    String indent = '',
+    String? receiver,
+  }) {
+    out ??= newOutput();
+
+    var blockCode = generateASTBlock(
+      getter,
+      indent: indent,
+      withBrackets: false,
+    );
+
+    out.write(indent);
+    out.write('val ');
+    if (receiver != null) {
+      out.write(receiver);
+      out.write('.');
+    }
+    out.write(getter.name);
+    out.write(': ');
+    generateASTType(getter.returnType, out: out);
+    out.write(' get() {\n');
+    out.write(blockCode);
+    out.write(indent);
+    out.write('}\n\n');
+
+    return out;
+  }
+
   @override
   StringBuffer generateASTClass(
     ASTClassNormal clazz, {
@@ -345,11 +410,14 @@ class ApolloCodeGeneratorKotlin extends ApolloCodeGenerator {
     return _generateASTFunctionDeclarationImpl(f, out, indent);
   }
 
+  /// [receiver] is set only for extension functions, where the name is
+  /// qualified by the extended type: `fun Int.doubled()`.
   StringBuffer _generateASTFunctionDeclarationImpl(
     ASTFunctionDeclaration f,
     StringBuffer? out,
-    String indent,
-  ) {
+    String indent, [
+    String? receiver,
+  ]) {
     out ??= newOutput();
 
     var blockCode = generateASTBlock(f, indent: indent, withBrackets: false);
@@ -374,6 +442,10 @@ class ApolloCodeGeneratorKotlin extends ApolloCodeGenerator {
     }
 
     out.write('fun ');
+    if (receiver != null) {
+      out.write(receiver);
+      out.write('.');
+    }
     out.write(f.name);
     _generateFunctionParamsAndBlock(f, blockCode, out, indent, returnType);
 

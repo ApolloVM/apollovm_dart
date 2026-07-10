@@ -165,6 +165,64 @@ class ApolloCodeGeneratorDart extends ApolloCodeGenerator {
     return out;
   }
 
+  @override
+  StringBuffer generateASTExtension(
+    ASTExtension extension, {
+    StringBuffer? out,
+    String indent = '',
+  }) {
+    out ??= newOutput();
+
+    var code = generateASTBlock(
+      extension,
+      withBrackets: true,
+      withBlankHeadLine: true,
+    );
+
+    out.write(indent);
+    out.write('extension ');
+
+    var name = extension.name;
+    if (name != null) {
+      out.write(name);
+      out.write(' ');
+    }
+
+    out.write('on ');
+    out.write(generateASTType(extension.targetType));
+    out.write(' ');
+    out.write(code);
+
+    return out;
+  }
+
+  @override
+  StringBuffer generateASTClassGetterDeclaration(
+    ASTClassGetterDeclaration getter, {
+    StringBuffer? out,
+    String indent = '',
+    String? receiver,
+  }) {
+    out ??= newOutput();
+
+    var blockCode = generateASTBlock(
+      getter,
+      indent: indent,
+      withBrackets: false,
+    );
+
+    out.write(indent);
+    out.write(generateASTType(getter.returnType));
+    out.write(' get ');
+    out.write(getter.name);
+    out.write(' {\n');
+    out.write(blockCode);
+    out.write(indent);
+    out.write('}\n\n');
+
+    return out;
+  }
+
   /// Generates a Dart `enum` declaration (simple or enhanced/rich).
   StringBuffer generateASTClassEnum(
     ASTClassEnum clazz, {

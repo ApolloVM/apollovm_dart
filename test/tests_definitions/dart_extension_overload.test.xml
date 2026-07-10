@@ -1,0 +1,112 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="Overloaded extension methods">
+    <source language="dart">
+        <![CDATA[
+
+            extension NumExt on int {
+
+              int plus(int a) {
+                return this + a;
+              }
+
+              int plus(int a, int b) {
+                return this + a + b;
+              }
+
+            }
+
+            class Foo {
+
+              void test(int a) {
+                var b = a.plus(1);
+                var c = a.plus(1, 2);
+                print('b: $b ; c: $c');
+              }
+            }
+
+        ]]>
+    </source>
+    <call class="Foo" function="test">
+        [ 10 ]
+    </call>
+    <output>
+        ["b: 11 ; c: 13"]
+    </output>
+    <source-generated language="dart"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+class Foo {
+
+  void test(int a) {
+    var b = a.plus(1);
+    var c = a.plus(1, 2);
+    print('b: $b ; c: $c');
+  }
+
+}
+extension NumExt on int {
+
+  int plus(int a) {
+    return this + a;
+  }
+
+  int plus(int a, int b) {
+    return (this + a) + b;
+  }
+
+}
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+
+    <source-generated language="kotlin"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+class Foo {
+
+  fun test(a: Int) {
+    var b = a.plus(1)
+    var c = a.plus(1, 2)
+    print("b: $b ; c: $c")
+  }
+
+}
+fun Int.plus(a: Int): Int {
+  return this + a
+}
+
+fun Int.plus(a: Int, b: Int): Int {
+  return (this + a) + b
+}
+
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+
+    <source-generated language="csharp"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+class Foo {
+
+  void test(int a) {
+    var b = a.plus(1);
+    var c = a.plus(1, 2);
+    print("b: " + b + " ; c: " + c);
+  }
+
+}
+static class NumExt {
+
+  public static int plus(this int self, int a) {
+    return self + a;
+  }
+
+  public static int plus(this int self, int a, int b) {
+    return (self + a) + b;
+  }
+
+}
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+</test>

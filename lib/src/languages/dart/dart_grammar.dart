@@ -76,6 +76,8 @@ class DartGrammarDefinition extends DartGrammarLexer {
                   root.addFunction(def);
                 } else if (def is ASTClassNormal) {
                   root.addClass(def);
+                } else if (def is ASTExtension) {
+                  root.addExtension(def);
                 } else if (def is ASTTypeAlias) {
                   root.addTypeAlias(def);
                 } else if (def is ASTStatementVariableDeclaration) {
@@ -96,6 +98,7 @@ class DartGrammarDefinition extends DartGrammarLexer {
   Parser topLevelDefinition() =>
       (typeAliasDeclaration() |
               enumDeclaration() |
+              extensionDeclaration() |
               classDeclaration() |
               functionDeclaration() |
               statementVariableDeclaration())
@@ -198,6 +201,64 @@ class DartGrammarDefinition extends DartGrammarLexer {
               type() &
               char(';').trimHidden())
           .map((v) => ASTTypeAlias(v[1] as String, v[3] as ASTType));
+
+  /// `extension [Name] on Type { <methods and getters> }`.
+  ///
+  /// The name is optional (Dart allows unnamed extensions). Members reuse the
+  /// class-member parsers, so an extension method is an ordinary
+  /// [ASTClassFunctionDeclaration] whose `clazz` is bound to the extended class
+  /// by [ASTExtension.resolveNode].
+  Parser<ASTExtension> extensionDeclaration() =>
+      (extensionToken().trimHidden() &
+              extensionName() &
+              onToken().trimHidden() &
+              type() &
+              char('{').trimHidden() &
+              (ref0(classFunctionDeclaration) | ref0(getterDeclaration))
+                  .star() &
+              char('}').trimHidden())
+          .map((v) {
+            var name = v[1] as String?;
+            var targetType = v[3] as ASTType;
+
+            var extension = ASTExtension(name, targetType);
+
+            for (var member in (v[5] as List)) {
+              if (member is ASTClassGetterDeclaration) {
+                extension.addGetter(member);
+              } else if (member is ASTFunctionDeclaration) {
+                extension.addFunction(member);
+              }
+            }
+
+            return extension;
+          });
+
+  /// The optional name of an extension. Only consumed when followed by `on`,
+  /// otherwise `extension on int {}` would read `on` as the name.
+  Parser<String?> extensionName() =>
+      (identifier().trimHidden() & onToken().and())
+          .map((v) => v[0] as String)
+          .optional();
+
+  /// An instance getter: `int get twice => this * 2;` or `int get twice { … }`.
+  /// Valid in a class body and in an extension body. Setters are not supported.
+  Parser<ASTClassGetterDeclaration> getterDeclaration() =>
+      (type().optional() &
+              getToken().trimHidden() &
+              identifier() &
+              (arrowBody() | codeBlock()))
+          .map((v) {
+            var returnType = v[0] as ASTType? ?? ASTTypeDynamic.instance;
+            var name = v[2] as String;
+            var block = v[3] as ASTBlock;
+            return ASTClassGetterDeclaration(
+              null,
+              name,
+              returnType,
+              block: block,
+            );
+          });
 
   /// Type-parameter names of the class currently being parsed (e.g. `T` in
   /// `class Wrapper<T>`). Used by [simpleType] to erase them to `dynamic`.
@@ -362,6 +423,7 @@ class DartGrammarDefinition extends DartGrammarLexer {
       (char('{').trimHidden() &
               (ref0(classConstructorDefaultDeclaration) |
                       ref0(classFunctionDeclaration) |
+                      ref0(getterDeclaration) |
                       ref0(classFieldDeclaration) |
                       ref0(classFieldDeclarationWithValue))
                   .star() &
@@ -372,6 +434,7 @@ class DartGrammarDefinition extends DartGrammarLexer {
             var constructors = list
                 .whereType<ASTClassConstructorDeclaration>()
                 .toList();
+            var getters = list.whereType<ASTClassGetterDeclaration>().toList();
             var functions = list.whereType<ASTFunctionDeclaration>().toList();
 
             var block = ASTClassNormal('?', ASTType<VMObject>('?'), null);
@@ -379,6 +442,7 @@ class DartGrammarDefinition extends DartGrammarLexer {
             block.addAllFields(fields);
             block.addAllConstructors(constructors);
             block.addAllFunctions(functions);
+            block.addAllGetters(getters);
 
             return block;
           });

@@ -1,3 +1,35 @@
+## 1.9.0
+
+### Extensions — add methods and getters to an existing type
+
+Three of the supported languages have a native extension construct, and they now
+share one: parse in any of them, run, and translate to the others.
+
+- **Dart**: `extension NumExt on int { int doubled() { return this * 2; } int get twice { … } }`
+  (the name is optional).
+- **Kotlin**: top-level `fun Int.doubled(): Int { … }` and `val Int.twice: Int get() = …`;
+  members are grouped by receiver into one extension.
+- **C#**: `static class NumExt { public static int Doubled(this int self) { … } }`; the
+  self-parameter and `this` are translated in both directions. C# has no extension property,
+  so an extension with a getter cannot be emitted as C#.
+
+Extensions apply to core types (`int`, `String`, …) as well as user classes, support
+overloads, and may call one another (`this.doubled()` or plain `doubled()`). A class member
+always wins over an extension member. Extensions are module-local: they are not carried across
+`import`. Java, JavaScript, TypeScript, Python, Go and Lua have no equivalent construct, so
+asking for one throws `UnsupportedSyntaxError` instead of emitting a shim that would mean
+something else.
+
+Supporting changes:
+
+- Dart now parses **instance getters** (`int get x { … }` / `=> …`) in class bodies too; the
+  `ASTClassGetterDeclaration` node existed but no grammar reached it.
+- New `ASTExtension` node and `ASTRoot.extensions` registry, consulted as a fallback when a
+  receiver's own class lookup misses.
+- Fixed: expressions interpolated into a string (`'${a.doubled()}'`) were never linked into the
+  AST `parentNode` chain, so they could not resolve anything reached through it.
+- Extensions appear in LSP document symbols and in the MCP AST serialization.
+
 ## 1.8.0
 
 ### Remote repository backend — edit and version-control a project from the browser

@@ -63,13 +63,17 @@ class CSharpGrammarDefinition extends CSharpGrammarLexer {
 
   Parser<ASTRoot> compilationUnit() =>
       (ref0(usingDirective).star() & ref0(topLevelDefinition).star()).map((v) {
-        var topDef = v[1];
-
-        var classes = topDef as List;
+        var topDef = v[1] as List;
 
         var root = ASTRoot();
 
-        root.addAllClasses(classes.cast());
+        for (var def in topDef) {
+          if (def is ASTExtension) {
+            root.addExtension(def);
+          } else if (def is ASTClassNormal) {
+            root.addClass(def);
+          }
+        }
 
         root.resolveNode(null);
 
@@ -83,7 +87,115 @@ class CSharpGrammarDefinition extends CSharpGrammarLexer {
       (char('.').trimHidden() & identifier()).star() &
       char(';').trimHidden());
 
-  Parser topLevelDefinition() => (enumDeclaration() | classDeclaration());
+  Parser topLevelDefinition() =>
+      (enumDeclaration() | extensionClassDeclaration() | classDeclaration());
+
+  /// The name of the `this`-parameter of the extension method being parsed.
+  /// Inside the body that identifier denotes the receiver, so it is parsed as
+  /// [ASTThisVariable] — the shared AST has no notion of a self-parameter.
+  String? _extensionSelfName;
+
+  /// `this` (any language) or the current extension method's self-parameter.
+  ASTVariable _variableForName(String name) =>
+      name == 'this' || name == _extensionSelfName
+      ? ASTThisVariable()
+      : ASTScopeVariable(name);
+
+  /// A C# extension class: a `static class` whose methods all take a
+  /// `this`-qualified first parameter, e.g.
+  /// `static class NumExt { public static int Doubled(this int self) { … } }`.
+  ///
+  /// Tried before [classDeclaration], which rejects the `this` parameter.
+  Parser<ASTExtension> extensionClassDeclaration() =>
+      (classVisibilityModifier().star() &
+              string('class').trimHidden() &
+              identifier() &
+              char('{').trimHidden() &
+              ref0(extensionMethodDeclaration).plus() &
+              char('}').trimHidden())
+          .map((v) {
+            // `classVisibilityModifier` flattens the trimmed range, so each
+            // matched keyword carries the surrounding whitespace.
+            var classModifiers = (v[0] as List)
+                .map((e) => (e as String).trim())
+                .toList();
+            var name = v[2] as String;
+            var methods = (v[4] as List).cast<_ExtensionMethod>();
+
+            if (!classModifiers.contains('static')) {
+              throw SyntaxError(
+                'An extension class must be `static`: class $name',
+              );
+            }
+
+            // The shared AST models one extension per extended type, while C#
+            // lets a single static class extend several types.
+            var receiverType = methods.first.receiverType;
+            for (var m in methods) {
+              if (m.receiverType.name != receiverType.name) {
+                throw SyntaxError(
+                  'Extension class `$name` extends multiple types '
+                  '(${receiverType.name}, ${m.receiverType.name}): not supported.',
+                );
+              }
+            }
+
+            var extension = ASTExtension(name, receiverType);
+            for (var m in methods) {
+              extension.addFunction(m.function);
+            }
+            return extension;
+          });
+
+  /// `public static int Doubled(this int self, int by) { … }`.
+  Parser extensionMethodDeclaration() =>
+      (modifiers().optional() &
+              type() &
+              identifier() &
+              char('(').trimHidden() &
+              ref0(extensionSelfParameter) &
+              (char(',').trimHidden() & parameterDeclaration()).star() &
+              char(')').trimHidden() &
+              codeBlock())
+          .map((v) {
+            var modifiers =
+                (v[0] as ASTModifiers?) ?? ASTModifiers.modifiersNone;
+            var returnType = v[1] as ASTType;
+            var name = v[2] as String;
+            var self = v[4] as _ExtensionSelf;
+            var block = v[7] as ASTBlock;
+
+            var parameters = (v[5] as List)
+                .map((e) => (e as List)[1] as ASTFunctionParameterDeclaration)
+                .toList();
+
+            _extensionSelfName = null;
+
+            // `static` is C#'s carrier syntax for the receiver; the AST models
+            // an extension method as an instance method bound to the receiver.
+            return _ExtensionMethod(
+              self.receiverType,
+              ASTClassFunctionDeclaration(
+                null,
+                name,
+                ASTFunctionParametersDeclaration(parameters, null, null),
+                returnType,
+                block: block,
+                modifiers: modifiers.copyWith(isStatic: false),
+              ),
+            );
+          });
+
+  /// The receiver parameter of an extension method: `this int self`. Registers
+  /// [_extensionSelfName] so the body's `self` parses as `this`; the sequence
+  /// is parsed left-to-right, so this runs before the method body.
+  Parser extensionSelfParameter() =>
+      (token('this') & type() & identifier()).map((v) {
+        var receiverType = v[1] as ASTType;
+        var selfName = v[2] as String;
+        _extensionSelfName = selfName;
+        return _ExtensionSelf(receiverType, selfName);
+      });
 
   Parser<ASTClassEnum> enumDeclaration() =>
       (classVisibilityModifier().star() &
@@ -127,6 +239,9 @@ class CSharpGrammarDefinition extends CSharpGrammarLexer {
       (classVisibilityModifier().star() &
               string('class').trimHidden().map((v) {
                 _classTypeParameters.clear();
+                // A failed `extensionClassDeclaration` attempt (tried first)
+                // may have left a self-name behind; a plain class has none.
+                _extensionSelfName = null;
                 return v;
               }) &
               identifier() &
@@ -831,7 +946,7 @@ class CSharpGrammarDefinition extends CSharpGrammarLexer {
                 .toList();
 
             if (obj != null && obj != 'this') {
-              var variable = ASTScopeVariable(obj);
+              var variable = _variableForName(obj);
               return ASTExpressionObjectFunctionInvocation(
                 variable,
                 name,
@@ -859,9 +974,7 @@ class CSharpGrammarDefinition extends CSharpGrammarLexer {
                 .whereType<ASTExpressionChainFunctionInvocation>()
                 .toList();
 
-            ASTVariable variable = obj == 'this'
-                ? ASTThisVariable()
-                : ASTScopeVariable(obj!);
+            var variable = _variableForName(obj!);
             return ASTExpressionObjectGetterAccess(
               variable,
               name,
@@ -1113,9 +1226,7 @@ class CSharpGrammarDefinition extends CSharpGrammarLexer {
             var name = v[2] as String;
             var op = v[3] as ASTAssignmentOperator;
             var valueExpr = v[4] as ASTExpression;
-            ASTVariable variable = obj == 'this'
-                ? ASTThisVariable()
-                : ASTScopeVariable(obj);
+            var variable = _variableForName(obj);
             return ASTExpressionObjectSetterAssignment(
               variable,
               name,
@@ -1138,9 +1249,10 @@ class CSharpGrammarDefinition extends CSharpGrammarLexer {
     return ASTThisVariable();
   });
 
-  Parser<ASTScopeVariable> scopeVariable() => (identifier()).map((v) {
-    return ASTScopeVariable(v);
-  });
+  /// A bare identifier. Inside an extension method the self-parameter denotes
+  /// the receiver, so it yields [ASTThisVariable] instead.
+  Parser<ASTVariable> scopeVariable() =>
+      (identifier()).map((v) => _variableForName(v));
 
   /// C# lambda used as an expression (a closure): `(a, b) => expr`,
   /// `(int a) => { ... }`, `x => x * 2`, `() => 0`. Captures the enclosing scope.
@@ -1353,4 +1465,20 @@ class CSharpGrammarDefinition extends CSharpGrammarLexer {
 
     return l.expand((e) => e is List ? _expandListDeeply(e) : [e]).toList();
   }
+}
+
+/// The `this int self` receiver parameter of a C# extension method.
+class _ExtensionSelf {
+  final ASTType receiverType;
+  final String name;
+
+  _ExtensionSelf(this.receiverType, this.name);
+}
+
+/// A parsed C# extension method tagged with the type it extends.
+class _ExtensionMethod {
+  final ASTType receiverType;
+  final ASTClassFunctionDeclaration function;
+
+  _ExtensionMethod(this.receiverType, this.function);
 }

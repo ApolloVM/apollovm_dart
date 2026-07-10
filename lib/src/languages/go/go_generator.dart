@@ -99,6 +99,10 @@ class ApolloCodeGeneratorGo extends ApolloCodeGenerator {
       generateASTClass(clazz, out: out);
     }
 
+    for (var extension in root.extensions) {
+      generateASTExtension(extension, out: out);
+    }
+
     return out;
   }
 
