@@ -14,6 +14,11 @@ class ApolloParserJava11 extends ApolloSourceCodeParser {
   @override
   String get language => 'java11';
 
+  /// Report parse errors at the farthest point the grammar reached, close to
+  /// the real syntax error, instead of a generic top-level failure at offset 0.
+  @override
+  bool get trackFarthestFailure => true;
+
   @override
   bool acceptsLanguage(String language) {
     language = language.toLowerCase().trim();

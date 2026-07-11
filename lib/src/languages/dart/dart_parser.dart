@@ -13,4 +13,9 @@ class ApolloParserDart extends ApolloSourceCodeParser {
 
   @override
   String get language => 'dart';
+
+  /// Report parse errors at the farthest point the grammar reached, close to
+  /// the real syntax error, instead of a generic top-level failure at offset 0.
+  @override
+  bool get trackFarthestFailure => true;
 }

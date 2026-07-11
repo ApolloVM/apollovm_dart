@@ -50,21 +50,25 @@ ParseErrorLocation locateParseError(
 
   int offset;
   String? hint;
-  if (parserConcrete) {
-    offset = parserPosition;
-  } else if (structural != null) {
-    // A bracket imbalance is the most fundamental structural fault — trust it.
+  if (structural != null) {
+    // A bracket imbalance is the most fundamental structural fault — trust it
+    // over any parser position, and describe it (e.g. "'(' is never closed").
     offset = structural.offset;
     hint = structural.hint;
   } else {
-    // Brackets balance but the parse still failed. Try to pin a missing
-    // statement terminator before giving up on a precise location.
+    // Brackets balance. Prefer a confidently-located missing statement
+    // terminator (reported at the end of the offending value — the editor
+    // convention) before trusting the parser's own position.
     final missing = (language != null && _semicolonLanguages.contains(language))
         ? _missingTerminator(text)
         : null;
     if (missing != null) {
       offset = missing.offset;
       hint = missing.hint;
+    } else if (parserConcrete) {
+      // A concrete parser position; with farthest-failure tracking (Dart) this
+      // now lands on or next to the real error (e.g. a bad token mid-line).
+      offset = parserPosition;
     } else if (parserPosition != null &&
         parserPosition > 0 &&
         parserPosition <= text.length) {
