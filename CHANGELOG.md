@@ -1,3 +1,41 @@
+## 1.10.0
+
+### Parse errors now point at the real mistake, not the top of the file
+
+Every ApolloVM grammar's top rule is `compilationUnit().star().trim().end()`.
+When a syntax error appeared deep in a file, the last top-level definition failed
+*deep* in the input, but `star()` treated that as "stop, success" and discarded
+the failure, so `end()` reported a generic **`end of input expected` at offset 0
+(line 1)** — technically correct, useless in an editor. petitparser's plain
+`parse()` does not track the farthest failure, so the deep position was lost.
+
+Parsers now record the **farthest point the grammar actually reached** and report
+the error there, at or immediately adjacent to the real mistake:
+
+- New opt-in `ApolloSourceCodeParser.trackFarthestFailure`. When a parse fails,
+  the source is re-parsed with a copy of the grammar (built via petitparser's
+  `transformParser` + `callCC`) in which every parser records each `Failure` it
+  produces if it is the deepest seen. This captures failures that `star()` /
+  `optional()` would otherwise swallow. The deeper of the two positions is used,
+  so the reported position never gets *worse*. The happy path is untouched — the
+  fast plain parser still runs first; the tracking re-parse only runs on failure.
+- Enabled for **Dart, Java 11, Kotlin, Go, C#, JavaScript, TypeScript and Lua**.
+  For an invalid token mid-expression on line N, all eight now report the error
+  exactly at that token on line N instead of at line 1.
+- **Python is intentionally excluded.** Its source is rewritten by the
+  indentation preprocessor before the grammar sees it, so grammar offsets are in
+  *preprocessed* coordinates — dropped blank/comment lines shift the reported
+  line and INDENT/DEDENT markers would leak into messages. Enabling it needs a
+  source map from preprocessed offsets back to the original (future work).
+
+### LSP
+
+- `locateParseError` now runs its structural heuristics (bracket-imbalance,
+  missing `;`) *before* trusting the raw parser position, then falls back to the
+  now-precise parser position. Editor-friendly locations (a missing `;` reported
+  at the end of the offending value; `'(' is never closed`) are preserved, while
+  the fallback for every other failure is far better than the old offset 0.
+
 ## 1.9.2
 
 ### Go — a class with a field-initializing constructor now survives Dart -> Go

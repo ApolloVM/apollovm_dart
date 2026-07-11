@@ -21,6 +21,14 @@ class ApolloParserPython extends ApolloSourceCodeParser {
   @override
   String get language => 'python';
 
+  // NOTE: [trackFarthestFailure] is intentionally left `false` (the default).
+  // Python source is rewritten by [PythonIndentationPreprocessor] before it
+  // reaches the grammar, so grammar offsets are in *preprocessed* coordinates:
+  // dropped blank/comment lines and joined continuations make the reported
+  // line/column diverge from the original source, and INDENT/DEDENT/NEWLINE
+  // marker chars would leak into the error message. Enabling it needs a source
+  // map from preprocessed offsets back to the original — future work.
+
   @override
   bool acceptsLanguage(String language) {
     language = language.toLowerCase().trim();

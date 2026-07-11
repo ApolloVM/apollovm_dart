@@ -3,6 +3,7 @@
 // Please refer to the LICENSE and AUTHORS files for details.
 
 import 'package:petitparser/petitparser.dart';
+import 'package:petitparser/reflection.dart';
 import 'package:swiss_knife/swiss_knife.dart';
 
 import 'apollovm_base.dart';
@@ -45,6 +46,41 @@ abstract class ApolloSourceCodeParser extends ApolloCodeParser<String> {
     return _grammarParserInstance!;
   }
 
+  /// Whether this parser, upon a parse failure, should re-parse with a
+  /// farthest-failure tracker to report the error at the deepest point the
+  /// grammar actually reached (instead of petitparser's top-level
+  /// `end()`-at-offset-0 failure). Opt-in per language; defaults to `false`.
+  bool get trackFarthestFailure => false;
+
+  /// The farthest [Failure] observed during the last diagnostic re-parse.
+  /// Only used when [trackFarthestFailure] is `true`. Parsing is synchronous,
+  /// so this single mutable field is safe to reset per [parse] call.
+  Failure? _farthestFailure;
+
+  Parser<dynamic>? _diagParserInstance;
+
+  /// A copy of the grammar where every parser is wrapped so that each [Failure]
+  /// it produces updates [_farthestFailure] if it is the farthest seen. This
+  /// captures failures that a surrounding `star()`/`optional()` would otherwise
+  /// discard — exactly what plain `parse()` loses.
+  Parser<dynamic> get _diagParser {
+    _diagParserInstance ??= transformParser(_grammar.build(), <R>(
+      Parser<R> parser,
+    ) {
+      return parser.callCC<R>((continuation, context) {
+        final result = continuation(context);
+        if (result is Failure) {
+          final best = _farthestFailure;
+          if (best == null || result.position >= best.position) {
+            _farthestFailure = result;
+          }
+        }
+        return result;
+      });
+    });
+    return _diagParserInstance!;
+  }
+
   /// Parses a [codeUnit] to an [ASTRoot] and returns a [ParseResult].
   ///
   /// If some error occurs, returns a [ParseResult] with an error message.
@@ -55,7 +91,21 @@ abstract class ApolloSourceCodeParser extends ApolloCodeParser<String> {
     var result = _grammarParser.parse(codeUnit.code);
 
     if (result is! Success) {
-      var lineAndColumn = result
+      Result<dynamic> errorResult = result;
+
+      // Re-parse to locate the farthest point the grammar reached, which is at
+      // or immediately adjacent to the real syntax error. Only the deeper of
+      // the two is used, so this never worsens the reported position.
+      if (trackFarthestFailure) {
+        _farthestFailure = null;
+        _diagParser.parse(codeUnit.code);
+        final farthest = _farthestFailure;
+        if (farthest != null && farthest.position >= result.position) {
+          errorResult = farthest;
+        }
+      }
+
+      var lineAndColumn = errorResult
           .toPositionString()
           .split(':')
           .map((e) => parseInt(e)!)
@@ -63,8 +113,8 @@ abstract class ApolloSourceCodeParser extends ApolloCodeParser<String> {
 
       return ParseResult(
         codeUnit,
-        errorMessage: result.message,
-        errorPosition: result.position,
+        errorMessage: errorResult.message,
+        errorPosition: errorResult.position,
         errorLineAndColumn: lineAndColumn,
       );
     }
