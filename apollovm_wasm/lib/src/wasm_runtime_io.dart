@@ -212,7 +212,6 @@ class WasmModuleIO extends WasmModule {
   }
 }
 
-
 String? _wasmRunLibraryFileName() {
   if (Platform.isMacOS) {
     return 'libwasm_run_dart.dylib';

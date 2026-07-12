@@ -2,5 +2,10 @@
 # example-workspace fixtures written in ApolloVM's language subset — one
 # intentionally malformed) are not part of the published package and must not be
 # scanned for dependency usage.
+#
+# `apollovm_wasm/` is a package of its own (the native Wasm runtime, published
+# separately) with its own dependencies — notably `wasm_run`, which core
+# deliberately does not declare. It is validated by its own CI job.
 exclude:
   - 'lsp/**'
+  - 'apollovm_wasm/**'

@@ -108,3 +108,40 @@ jobs:
         # runs ALL tests, including `wasm-gc` ones (unlike the wasm_run-based
         # VM/exe jobs, which exclude that tag).
         run: dart test --platform chrome
+
+
+  # The `apollovm_wasm/` sub-package: the native (VM) Wasm runtime, published
+  # separately so that core `apollovm` stays free of an FFI/Rust toolchain.
+  # `pubspec_overrides.yaml` resolves `apollovm` from this checkout, so this job
+  # validates the sub-package against the core commit it ships with — not
+  # against whatever is on pub.dev.
+  apollovm_wasm:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apollovm_wasm
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dart-lang/setup-dart@v1
+      - name: Dart version
+        run: |
+          dart --version
+          uname -a
+      - name: Install dependencies
+        run: dart pub get
+      - name: dart format
+        run: dart format -o none --set-exit-if-changed lib test
+      - name: dart analyze
+        run: dart analyze --fatal-infos --fatal-warnings .
+      - name: dart doc
+        run: dart doc --dry-run
+      - name: wasm_run:setup (install dynamic library)
+        run: dart run wasm_run:setup
+      - name: Run tests (VM)
+        # `wasm_run` (wasmtime 14 / wasmi 0.31) has no WebAssembly GC support.
+        run: dart test --platform vm --exclude-tags wasm-gc
+      - name: dart pub publish --dry-run
+        # Skipped until `apollovm` 2.0.0 is on pub.dev: the dry-run resolves the
+        # published `apollovm: ^2.0.0` constraint, ignoring pubspec_overrides.
+        continue-on-error: true
+        run: dart pub publish --dry-run

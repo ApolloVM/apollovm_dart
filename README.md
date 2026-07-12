@@ -640,6 +640,23 @@ cross-translatable with Dart, Java, Kotlin, JavaScript, TypeScript and Lua.
 ApolloVM can compile its AST tree to WebAssembly (Wasm). This means that parsed code loaded into the VM can be compiled
 on the fly, without the need for any third-party tools.
 
+- **Compiling** Wasm works everywhere, out of the box, with this package alone.
+- **Executing** a compiled module needs a Wasm engine. Browsers have one built in. The Dart VM does not,
+  so it needs [`apollovm_wasm`][apollovm_wasm_pub] — a separate package, so that the native/FFI toolchain
+  it depends on is paid for only by those who actually run Wasm on the VM:
+
+  ```dart
+  import 'package:apollovm_wasm/apollovm_wasm.dart';
+
+  void main() {
+    registerApolloVMWasmRuntime(); // now `WasmRuntime()` executes on the VM
+  }
+  ```
+
+  Without it, `WasmRuntime().isSupported` is `false` on the VM.
+
+[apollovm_wasm_pub]: https://pub.dev/packages/apollovm_wasm
+
 - **Status:** *Wasm support is under active development. It already compiles a broad subset of
 the AST — functions, full control flow (`if`/`for`/`for-each`/`while`/`do-while`/`switch`/
 `break`/`continue`/ternary), arithmetic/comparison/logical/bitwise operators, `try`/`catch`/`throw`,
