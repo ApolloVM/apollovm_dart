@@ -7,7 +7,11 @@ import 'package:apollovm/apollovm.dart';
 import 'package:data_serializer/data_serializer.dart';
 import 'package:test/test.dart';
 
+import 'wasm_runtime_setup.dart';
+
 void main() async {
+  setUpWasmRuntime();
+
   group('ApolloVM - Wasm Generator (named arguments)', () {
     test(
       'named args in reverse order',

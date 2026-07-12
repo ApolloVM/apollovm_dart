@@ -10,6 +10,8 @@ import 'package:apollovm/apollovm.dart';
 import 'package:apollovm/src/languages/wasm/wasm.dart';
 import 'package:test/test.dart';
 
+import 'wasm_runtime_setup.dart';
+
 /// Asyncify real-suspension PROTOTYPE for the ApolloVM Wasm backend.
 ///
 /// WebAssembly has no native async/await, and ApolloVM's Wasm runtime is
@@ -276,6 +278,8 @@ int _counterOf(WasmModule m) {
 }
 
 void main() {
+  setUpWasmRuntime();
+
   late WasmRuntime rt;
 
   setUpAll(() {

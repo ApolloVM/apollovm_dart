@@ -6,9 +6,7 @@ import 'package:crypto/crypto.dart';
 import 'package:path/path.dart' as pack_path;
 import 'package:wasm_run/wasm_run.dart' as wasm_run;
 
-import '../../ast/apollovm_ast_toplevel.dart';
-import '../../ast/apollovm_ast_type.dart';
-import 'wasm_runtime.dart';
+import 'package:apollovm/apollovm.dart';
 
 /// [WasmRuntime] implementation for Dart VM.
 class WasmRuntimeIO extends WasmRuntime {
@@ -214,9 +212,6 @@ class WasmModuleIO extends WasmModule {
   }
 }
 
-WasmRuntime createWasmRuntime() {
-  return WasmRuntimeIO();
-}
 
 String? _wasmRunLibraryFileName() {
   if (Platform.isMacOS) {

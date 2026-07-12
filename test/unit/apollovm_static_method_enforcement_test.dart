@@ -4,6 +4,8 @@ library;
 import 'package:apollovm/apollovm.dart';
 import 'package:test/test.dart';
 
+import '../wasm/wasm_runtime_setup.dart';
+
 /// Compiles the loaded code in [vm] to a single Wasm module.
 Future<BytesOutput> _compileWasm(ApolloVM vm) async {
   var storage = vm.generateAllIn<BytesOutput>('wasm');
@@ -25,6 +27,8 @@ Future<ApolloRunner> _dartRunner(String src) async {
 }
 
 void main() {
+  setUpWasmRuntime();
+
   group('Interpreter: only static methods run without an instance', () {
     const src = r'''
       class Foo {

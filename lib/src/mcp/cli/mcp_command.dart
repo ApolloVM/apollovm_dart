@@ -617,21 +617,26 @@ Examples:
     }, limits);
     report(wasm['isError'] != true, 'apollovm.wasm (compile)');
 
-    // Optional: the native runtime needed to *run* compiled Wasm.
+    // Optional: the native runtime needed to *run* compiled Wasm. It ships
+    // separately (`package:apollovm_wasm`) so that `package:apollovm` stays
+    // free of a native/FFI toolchain; without it Wasm still compiles.
     try {
       final runtime = _wasmRuntimeSupported();
       report(
         runtime,
         runtime
-            ? 'wasm_run native runtime available (apollovm.wasm modules are runnable)'
-            : 'wasm_run native runtime missing — apollovm.wasm still COMPILES; '
-                  'running compiled modules needs `dart run wasm_run:setup`',
+            ? 'native Wasm runtime available (apollovm.wasm modules are runnable)'
+            : 'native Wasm runtime missing — apollovm.wasm still COMPILES; '
+                  'running compiled modules needs `package:apollovm_wasm` '
+                  '(call `registerApolloVMWasmRuntime()`) and '
+                  '`dart run wasm_run:setup`',
         warnOnly: !runtime,
       );
     } catch (_) {
       report(
         false,
-        'wasm_run native runtime missing — run `dart run wasm_run:setup` to run modules',
+        'native Wasm runtime missing — add `package:apollovm_wasm` and call '
+        '`registerApolloVMWasmRuntime()` to run compiled modules',
         warnOnly: true,
       );
     }

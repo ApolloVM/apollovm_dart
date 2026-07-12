@@ -5,6 +5,8 @@ library;
 import 'package:apollovm/apollovm.dart';
 import 'package:test/test.dart';
 
+import 'wasm_runtime_setup.dart';
+
 /// Compiles [code] to Wasm and runs top-level [fn] on BOTH the AST interpreter
 /// and the compiled+executed Wasm module, asserting every `args -> expected`
 /// pair in [executions] matches on both backends.
@@ -70,6 +72,8 @@ Future<void> _testWasm(
 }
 
 void main() {
+  setUpWasmRuntime();
+
   group('Wasm: control flow as the terminating statement', () {
     test('switch as last statement (scrutinee is the parameter)', () {
       return _testWasm(

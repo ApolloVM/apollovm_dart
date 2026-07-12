@@ -6,6 +6,8 @@ import 'dart:typed_data';
 import 'package:apollovm/apollovm.dart';
 import 'package:test/test.dart';
 
+import 'wasm_runtime_setup.dart';
+
 /// Compiles [code] to Wasm, runs the exported [functionName] on the native
 /// `wasm_run` runtime for each `args -> expected` entry in [executions], and
 /// asserts the returned value. Also runs the AST interpreter as a reference.
@@ -75,6 +77,8 @@ Future<void> _testWasm({
 }
 
 void main() {
+  setUpWasmRuntime();
+
   group('Wasm: String + <number> concatenation', () {
     // GAP 2: `String + int`. Dart forbids this syntactically, so it arrives
     // from Kotlin/Java/C#/JS/TS sources.

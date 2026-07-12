@@ -4,6 +4,8 @@ library;
 import 'package:apollovm/apollovm.dart';
 import 'package:test/test.dart';
 
+import 'wasm_runtime_setup.dart';
+
 /// Compiles [code] to Wasm and runs the `static` method [className].[methodName]
 /// (with [args]) on BOTH the AST interpreter and the compiled Wasm module,
 /// asserting both produce [expectedPrints]. Exercises static-method compilation
@@ -84,6 +86,8 @@ Future<void> _runWasmAndExpect(
 }
 
 void main() {
+  setUpWasmRuntime();
+
   group('Wasm: static methods + List<Object> args', () {
     // The motivating program: a `static main(List<Object> args)` that builds an
     // instance and calls an instance method which interpolates `args[0]`.

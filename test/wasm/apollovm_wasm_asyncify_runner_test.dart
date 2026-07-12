@@ -5,6 +5,8 @@ library;
 import 'package:apollovm/apollovm.dart';
 import 'package:test/test.dart';
 
+import 'wasm_runtime_setup.dart';
+
 /// End-to-end real-suspension `async`/`await` in Wasm THROUGH the normal VM
 /// runner: `ApolloRunnerWasm.executeFunction` compiles the async function with
 /// the Asyncify transform, then drives its unwind/rewind loop — awaiting a real
@@ -42,6 +44,8 @@ Future<ApolloRunnerWasm?> _wasmRunner(String dartSource) async {
 }
 
 void main() {
+  setUpWasmRuntime();
+
   group('Wasm Asyncify via ApolloRunnerWasm (real suspension)', () {
     test(
       'executeFunction drives an async fn that awaits a host Future',

@@ -6,6 +6,8 @@ import 'dart:typed_data';
 import 'package:apollovm/apollovm.dart';
 import 'package:test/test.dart';
 
+import 'wasm_runtime_setup.dart';
+
 /// Runs [code] in [language] via the AST interpreter AND the compiled Wasm
 /// module, capturing `print` output, and asserts both equal [expected].
 Future<void> _testPrints({
@@ -73,6 +75,8 @@ Future<void> _testPrints({
 }
 
 void main() {
+  setUpWasmRuntime();
+
   // `/` on integer operands is integer (truncating) division in Java/Kotlin/C#
   // — the expression resolves to `int`. Dart keeps `/` as a double quotient and
   // uses `~/` for integer division.

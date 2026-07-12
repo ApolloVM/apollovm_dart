@@ -6,6 +6,8 @@ import 'dart:typed_data';
 import 'package:apollovm/apollovm.dart';
 import 'package:test/test.dart';
 
+import 'wasm_runtime_setup.dart';
+
 /// Runs [code] in [language] via the AST interpreter AND the compiled Wasm
 /// module, capturing `print` output, and asserts both equal [expected].
 ///
@@ -77,6 +79,8 @@ Future<void> _testPrints({
 }
 
 void main() {
+  setUpWasmRuntime();
+
   // An untyped anonymous-function parameter (`n => n * 2`) is inferred from its
   // body. Lua/Python additionally exercise the "a nested closure's `return`
   // does not make the enclosing void function non-void" fix.

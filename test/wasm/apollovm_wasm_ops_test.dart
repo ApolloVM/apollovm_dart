@@ -5,6 +5,8 @@ library;
 import 'package:apollovm/apollovm.dart';
 import 'package:test/test.dart';
 
+import 'wasm_runtime_setup.dart';
+
 /// Compiles [code] to Wasm, executes [functionName] both via the AST
 /// interpreter and the compiled+executed Wasm module, and asserts every
 /// execution matches the expected result in [executions].
@@ -75,6 +77,8 @@ Future<void> _testWasm(
 }
 
 void main() {
+  setUpWasmRuntime();
+
   group('Wasm OPS: modulo', () {
     test('integer remainder (non-negative)', () async {
       await _testWasm(

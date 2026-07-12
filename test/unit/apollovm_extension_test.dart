@@ -5,6 +5,8 @@ import 'package:apollovm/apollovm.dart';
 import 'package:apollovm/src/apollovm_code_storage.dart';
 import 'package:test/test.dart';
 
+import '../wasm/wasm_runtime_setup.dart';
+
 Future<ApolloVM> _load(String src, {String language = 'dart'}) async {
   var vm = ApolloVM();
   var ok = await vm.loadCodeUnit(SourceCodeUnit(language, src, id: 'test'));
@@ -30,6 +32,8 @@ Future<ASTRoot> _parseRoot(String src, {String language = 'dart'}) async {
 }
 
 void main() {
+  setUpWasmRuntime();
+
   group('ASTExtension resolution', () {
     test('binds members to the extended core class', () async {
       var root = await _parseRoot(

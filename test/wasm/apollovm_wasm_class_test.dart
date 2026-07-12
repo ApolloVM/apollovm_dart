@@ -4,6 +4,8 @@ library;
 import 'package:apollovm/apollovm.dart';
 import 'package:test/test.dart';
 
+import 'wasm_runtime_setup.dart';
+
 /// Runs [functionName] via the AST interpreter AND the compiled+executed Wasm
 /// module and asserts both return [expectedReturn]. Exercises in-code class
 /// instantiation, field access and instance methods on both paths.
@@ -110,6 +112,8 @@ Future<void> _testClassPrint(
 }
 
 void main() {
+  setUpWasmRuntime();
+
   group('Wasm classes: instantiation + methods', () {
     test('constructor + instance method', () async {
       await _testClassReturn(

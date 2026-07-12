@@ -7,6 +7,8 @@ import 'dart:typed_data';
 import 'package:apollovm/apollovm.dart';
 import 'package:test/test.dart';
 
+import 'wasm_runtime_setup.dart';
+
 /// Compiles [code] (Dart) to Wasm, runs [fn] on the real Wasm runtime, and also
 /// runs it through the AST interpreter; asserts both agree and match
 /// [expected].
@@ -67,6 +69,8 @@ Future<void> _check(
 }
 
 void main() {
+  setUpWasmRuntime();
+
   group('Wasm throw + catch', () {
     test('typed catch returns thrown int', () async {
       await _check(

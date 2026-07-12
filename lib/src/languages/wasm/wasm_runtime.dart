@@ -5,8 +5,10 @@ import 'package:async_extension/async_extension.dart';
 
 import 'wasm_runtime_generic.dart'
     if (dart.library.js_interop) 'wasm_runtime_web.dart'
-    if (dart.library.html) 'wasm_runtime_dart_html.dart'
-    if (dart.library.io) 'wasm_runtime_io.dart';
+    if (dart.library.html) 'wasm_runtime_dart_html.dart';
+
+/// Builds a [WasmRuntime]. See [WasmRuntime.registerProvider].
+typedef WasmRuntimeProvider = WasmRuntime Function();
 
 /// A Wasm value type, for host import signatures.
 enum WasmValueType { i32, i64, f32, f64 }
@@ -33,12 +35,37 @@ typedef WasmHostImports = Map<String, Map<String, WasmHostFunction>>;
 
 /// A WebAssembly (Wasm) Runtime.
 abstract class WasmRuntime {
+  static WasmRuntimeProvider? _provider;
+
+  /// Registers the implementation that [WasmRuntime.new] instantiates,
+  /// overriding the platform default.
+  ///
+  /// Browsers have a Wasm engine built in, so the default runtime there is a
+  /// working one. The Dart VM does not: it needs a native engine, which lives
+  /// in `package:apollovm_wasm` (kept out of this package so that importing
+  /// `apollovm.dart` does not drag a native/FFI toolchain into every
+  /// consumer). Without it, [WasmRuntime] on the VM is
+  /// [WasmRuntime.isSupported] `false` — Wasm still *compiles*, it just cannot
+  /// be *executed*.
+  ///
+  /// ```dart
+  /// import 'package:apollovm_wasm/apollovm_wasm.dart';
+  ///
+  /// void main() {
+  ///   registerApolloVMWasmRuntime(); // now WasmRuntime() executes on the VM
+  /// }
+  /// ```
+  static void registerProvider(WasmRuntimeProvider provider) {
+    _provider = provider;
+  }
+
   final Map<String, WasmModule> _loadedModules = {};
 
   WasmRuntime.base();
 
   factory WasmRuntime() {
-    return createWasmRuntime();
+    final provider = _provider;
+    return provider != null ? provider() : createWasmRuntime();
   }
 
   /// Returns the platform version of the Wasm runtime.
