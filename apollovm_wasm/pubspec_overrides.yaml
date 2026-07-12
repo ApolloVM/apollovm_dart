@@ -1,4 +1,0 @@
-# Local development: resolve `apollovm` from this repo rather than pub.dev.
-dependency_overrides:
-  apollovm:
-    path: ../

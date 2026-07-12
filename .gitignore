@@ -16,3 +16,6 @@ doc/api/
 *.exe
 
 articles/
+
+# Local dependency overrides (developer-specific, never published).
+pubspec_overrides.yaml
