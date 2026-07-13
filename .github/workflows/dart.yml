@@ -112,9 +112,8 @@ jobs:
 
   # The `apollovm_wasm/` sub-package: the native (VM) Wasm runtime, published
   # separately so that core `apollovm` stays free of an FFI/Rust toolchain.
-  # `pubspec_overrides.yaml` resolves `apollovm` from this checkout, so this job
-  # validates the sub-package against the core commit it ships with — not
-  # against whatever is on pub.dev.
+  # It resolves `apollovm` from pub.dev, so this job validates it exactly as a
+  # consumer would get it.
   apollovm_wasm:
     runs-on: ubuntu-latest
     defaults:
@@ -141,7 +140,12 @@ jobs:
         # `wasm_run` (wasmtime 14 / wasmi 0.31) has no WebAssembly GC support.
         run: dart test --platform vm --exclude-tags wasm-gc
       - name: dart pub publish --dry-run
-        # Skipped until `apollovm` 2.0.0 is on pub.dev: the dry-run resolves the
-        # published `apollovm: ^2.0.0` constraint, ignoring pubspec_overrides.
-        continue-on-error: true
-        run: dart pub publish --dry-run
+        # Via the release script, which temporarily drops the `/apollovm_wasm/`
+        # rule from the root `.pubignore` (it keeps the sub-package out of the
+        # `apollovm` archive, but pub reads ignore rules from the repo root, so
+        # it would otherwise hide this package from its own publish). Running
+        # `dart pub publish --dry-run` directly here fails with "the pubspec is
+        # hidden" — so this must NOT be `continue-on-error`, or that failure is
+        # exactly what gets swallowed.
+        working-directory: .
+        run: tool/publish_apollovm_wasm.sh --dry-run
