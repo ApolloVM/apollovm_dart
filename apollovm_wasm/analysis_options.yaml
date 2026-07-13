@@ -1,0 +1,15 @@
+
+include: package:lints/recommended.yaml
+
+# For lint rules and documentation, see http://dart-lang.github.io/linter/lints.
+# Uncomment to specify additional rules.
+# linter:
+#   rules:
+#     - camel_case_types
+
+analyzer:
+  exclude:
+    # Companion LSP assets (VS Code client, benchmark, and example workspace
+    # fixtures written in ApolloVM's language subset — one intentionally broken).
+    # The language server itself lives in lib/src/lsp and is analyzed normally.
+    - lsp/**

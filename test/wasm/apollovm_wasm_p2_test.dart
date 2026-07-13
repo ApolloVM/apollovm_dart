@@ -4,6 +4,8 @@ library;
 import 'package:apollovm/apollovm.dart';
 import 'package:test/test.dart';
 
+import 'wasm_runtime_setup.dart';
+
 /// Runs [functionName] via the AST interpreter AND via the compiled+executed
 /// Wasm module, capturing `print` output from both and asserting they match
 /// [expectedOutput].
@@ -166,6 +168,8 @@ Future<void> _testWasmReturn(
 }
 
 void main() {
+  setUpWasmRuntime();
+
   group('Wasm P2: print(string literal)', () {
     test('single print', () async {
       await _testWasmPrint(

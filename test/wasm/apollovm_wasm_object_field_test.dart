@@ -4,6 +4,8 @@ library;
 import 'package:apollovm/apollovm.dart';
 import 'package:test/test.dart';
 
+import 'wasm_runtime_setup.dart';
+
 /// Compiles [code] to Wasm, runs top-level [functionName] on BOTH the AST
 /// interpreter and the compiled Wasm module, and asserts both produce
 /// [expectedPrints] (compared as text).
@@ -52,6 +54,8 @@ Future<void> _testWasmPrints(
 }
 
 void main() {
+  setUpWasmRuntime();
+
   group('Wasm: object fields + default constructor + toString', () {
     test('the motivating program', () async {
       await _testWasmPrints(

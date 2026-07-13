@@ -4,6 +4,8 @@ library;
 import 'package:apollovm/apollovm.dart';
 import 'package:test/test.dart';
 
+import 'wasm_runtime_setup.dart';
+
 /// Runs [functionName] via the AST interpreter AND the compiled+executed Wasm
 /// module and asserts both return [expectedReturn].
 Future<void> _testWasmReturn(
@@ -53,6 +55,8 @@ Future<void> _testWasmReturn(
 }
 
 void main() {
+  setUpWasmRuntime();
+
   group('Wasm P3: list indexing + length', () {
     test('index with constant', () async {
       await _testWasmReturn(

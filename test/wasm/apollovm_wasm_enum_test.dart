@@ -4,6 +4,8 @@ library;
 import 'package:apollovm/apollovm.dart';
 import 'package:test/test.dart';
 
+import 'wasm_runtime_setup.dart';
+
 /// Compiles [src] in [language] to Wasm and runs the static [entry] (e.g.
 /// `Foo.run`) on BOTH the AST interpreter and the compiled Wasm module,
 /// asserting both produce [expected].
@@ -121,6 +123,8 @@ Future<void> _bothPrints(String src, List<String> expectedPrints) async {
 }
 
 void main() {
+  setUpWasmRuntime();
+
   group('Wasm: enum entries as const instances', () {
     const color = 'enum Color { red, green, blue }\n';
 

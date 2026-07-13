@@ -6,6 +6,8 @@ import 'dart:typed_data';
 import 'package:apollovm/apollovm.dart';
 import 'package:test/test.dart';
 
+import 'wasm_runtime_setup.dart';
+
 /// Compiles [code] in [language] to Wasm, runs the exported [functionName] both
 /// via the AST interpreter and the compiled Wasm module for each
 /// `args -> expected` entry, and asserts both return the expected value.
@@ -122,6 +124,8 @@ Future<void> _testWasmPrints({
 }
 
 void main() {
+  setUpWasmRuntime();
+
   // A plain `num` (TypeScript / JavaScript `number`) has no fixed width; the VM
   // treats integer-valued numbers as `int`, so the Wasm backend represents
   // `num` as i64. These exercise the paths that previously rejected `num`.

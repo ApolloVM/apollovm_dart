@@ -1,3 +1,53 @@
+## 2.0.0
+
+### `apollovm` no longer drags a native/FFI toolchain into every consumer
+
+Executing a compiled Wasm module on the Dart VM needs a native engine
+(`package:wasm_run`), which brings an FFI/Rust toolchain and a long-abandoned
+`flutter_rust_bridge` 1.x with it. That dependency was paid by *every* consumer
+of `apollovm` — including the many that only parse, translate or generate code
+and never execute Wasm at all. Worse, `flutter_rust_bridge` 1.x pins
+`shelf_web_socket ^1.0.2` and `web_socket_channel ^2.2.0`, so anything depending
+on `apollovm` (however indirectly) could not also use a modern shelf/WebSocket
+stack.
+
+The native runtime now lives in its own package, **`apollovm_wasm`**. Nothing
+else moved: Wasm **compilation is unchanged and still in core**.
+
+### Breaking
+
+- **`package:wasm_run` is no longer a dependency.** On the Dart VM,
+  `WasmRuntime()` now returns an unsupported runtime
+  (`isSupported == false`) unless the native engine is registered. Wasm still
+  compiles; it just cannot be *executed* out of the box.
+
+  To execute Wasm on the VM, add `apollovm_wasm` and register it once:
+
+  ```dart
+  import 'package:apollovm/apollovm.dart';
+  import 'package:apollovm_wasm/apollovm_wasm.dart';
+
+  void main() {
+    registerApolloVMWasmRuntime();
+
+    final runtime = WasmRuntime()..ensureBooted();
+    print(runtime.isSupported); // true
+  }
+  ```
+
+  Browsers are unaffected — they have a Wasm engine built in, and the browser
+  runtime remains in core.
+
+- **`createWasmRuntime()` is no longer part of the VM conditional-import
+  chain.** The platform default is now resolved through
+  `WasmRuntime.registerProvider()`, which `apollovm_wasm` calls.
+
+### Added
+
+- `WasmRuntime.registerProvider()` — installs the implementation that
+  `WasmRuntime()` instantiates, so an engine can be supplied from outside the
+  package.
+
 ## 1.10.0
 
 ### Parse errors now point at the real mistake, not the top of the file

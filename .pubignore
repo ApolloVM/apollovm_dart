@@ -12,3 +12,9 @@
 build/
 doc/api/
 articles/
+
+# The native Wasm engine is published as its own package: apollovm_wasm.
+/apollovm_wasm/
+
+# Local dependency overrides (developer-specific).
+pubspec_overrides.yaml

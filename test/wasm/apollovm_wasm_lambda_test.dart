@@ -4,6 +4,8 @@ library;
 import 'package:apollovm/apollovm.dart';
 import 'package:test/test.dart';
 
+import 'wasm_runtime_setup.dart';
+
 /// Compiles [code], runs top-level [functionName] via the AST interpreter AND
 /// the compiled Wasm module, and asserts both return [expectedReturn].
 Future<void> _testWasmReturn(
@@ -92,6 +94,8 @@ Future<BytesOutput> _compile(ApolloVM vm) async {
 }
 
 void main() {
+  setUpWasmRuntime();
+
   group('Wasm: lambda assigned to a var, called directly', () {
     test('the motivating program', () async {
       await _testWasmClassPrints(

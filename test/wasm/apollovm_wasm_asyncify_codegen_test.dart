@@ -7,6 +7,8 @@ import 'dart:typed_data';
 import 'package:apollovm/apollovm.dart';
 import 'package:test/test.dart';
 
+import 'wasm_runtime_setup.dart';
+
 /// Validates the **generator-emitted** Asyncify transform (real suspension):
 /// the Wasm generator compiles an `async` function with a single statement-level
 /// `await` of an external host call into an unwind/rewind state machine. Here a
@@ -96,6 +98,8 @@ Future<int> _drive(
 }
 
 void main() {
+  setUpWasmRuntime();
+
   late WasmRuntime rt;
   setUpAll(() => rt = WasmRuntime()..ensureBooted());
 
