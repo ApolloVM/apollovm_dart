@@ -7791,7 +7791,25 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     out ??= newOutput();
     context ??= WasmContext();
 
-    generateASTExpression(statement.expression, out: out, context: context);
+    final expression = statement.expression;
+    generateASTExpression(expression, out: out, context: context);
+
+    // A pre/post increment or decrement (`i++`, `++i`, `i--`, `--i`) is an
+    // *expression*: its codegen leaves the operation's value on the real Wasm
+    // stack (unlike a plain assignment, which leaves only a phantom
+    // virtual-stack entry with the real stack balanced). In statement position
+    // that value is discarded, so it must be dropped — otherwise it lingers to
+    // the end of the enclosing (void) block and fails Wasm validation with
+    // "values remaining on stack at end of block", e.g. `i++;` in a `while`
+    // body. In a `for` header the update expression is instead unwound by the
+    // loop's back-edge branch, so this only matters for statement position.
+    if (expression is ASTExpressionVariableDirectOperation) {
+      out.writeByte(
+        Wasm.drop,
+        description: "[OP] drop unused ${expression.operator} result",
+      );
+      context.stackDrop();
+    }
 
     return out;
   }

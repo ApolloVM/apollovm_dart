@@ -1,9 +1,16 @@
 # Plan: extend the ApolloVM Wasm backend (Dart → WebAssembly)
 
-> For another Claude. This is a work plan to close concrete gaps in the
-> on-the-fly Wasm compiler. Every gap below was reproduced against **0.1.42**
-> with the native `wasm_run` runtime and includes a **ready-to-paste test** in
-> the repo's existing harness style. Fix one gap, make its test green, repeat.
+> A work plan to close concrete gaps in the on-the-fly Wasm compiler. Every gap
+> below was **re-verified end-to-end** (compile → load → execute on the native
+> `wasm_run` runtime) against the current tree. Fix one gap, make its test
+> green, repeat.
+>
+> **Status note (re-verified):** the original 9-gap list this file shipped with
+> was written against an older build. On re-check, **8 of those 9 now compile
+> and execute correctly** (sibling class-method calls, `String + number`,
+> `Map → String`, `switch` on `num`/`dynamic`, lambdas, rich-enum methods,
+> typed `catch`, C# enum `.value`). Only the **generic type-parameter field**
+> gap survives (now GAP A). The gaps below are the ones that reproduce today.
 
 The Wasm backend lives almost entirely in:
 - `lib/src/languages/wasm/wasm_generator.dart` — AST → Wasm codegen (most gaps).
@@ -15,429 +22,181 @@ The Wasm backend lives almost entirely in:
 ```bash
 dart run wasm_run:setup            # one-time: install the native wasm_run lib
 dart test -t wasm -x wasm-gc -x wasm-chrome    # all Wasm backend tests, native runtime
-dart test test/wasm/apollovm_wasm_named_parameters_test.dart -x wasm-gc   # one file
+dart test test/wasm/apollovm_wasm_maps_test.dart -x wasm-gc   # one file
 ```
 
 - `wasm-gc` / `wasm-chrome` tags need a browser (WasmGC engine); the native
   `wasm_run` runtime (wasmtime/wasmi) has **no GC**, so exclude those tags when
-  iterating locally. None of the gaps below need GC — they reproduce on the
-  native runtime.
-- All **59** existing Wasm tests pass today; don't regress them.
+  iterating locally. None of the gaps below need GC.
 
 ## The test harness (`_testWasm`)
 
-Each `test/wasm/apollovm_wasm_*_test.dart` defines a local helper:
-
-```dart
-Future<void> _testWasm({
-  required String language,            // 'dart' | 'kotlin' | 'java11' | ...
-  required String code,
-  required String functionName,        // export to call: 'run' or 'Foo.run'
-  required Map<List, Object?> executions,   // { argsList : expectedReturn }
-  Map<String, dynamic>? expecteWasm,
-}) async { ... }
-```
-
-It compiles `code` to Wasm, loads it, calls `functionName`, and asserts the
-return value equals the expected one (works for `int`, `double`, `String`,
-`bool`). Design each new test to **return** the value to assert (not `print`).
+Each `test/wasm/apollovm_wasm_*_test.dart` defines a local helper that compiles
+`code` to Wasm, loads it, calls `functionName`, and asserts the return value
+equals the expected one (works for `int`, `double`, `String`, `bool`). Design
+each new test to **return** the value to assert (not `print`). The positional
+form in `apollovm_wasm_ops_test.dart` / `apollovm_wasm_loop_increment_test.dart`
+is the simplest to copy.
 
 ---
 
 ## What already works (do NOT "fix" these — keep them green)
 
 - Top-level `int`/`double`/`String`/`bool` functions: arithmetic, `while`/`for`,
-  `if`/`else`, ternary, `switch` on **`int`**, `do`/`while`, bitwise, `int`
-  string-interpolation (`'$n'`), `String + String`.
-- **Top-level** function-to-function calls, including **named arguments** and
-  **default parameter values** (see `apollovm_wasm_named_parameters_test.dart`,
-  `apollovm_wasm_default_parameters_test.dart`).
-- Classes driven from a top-level entry: constructors, `this.` params, field
-  initializers, **external field read/write**, **`double` fields**, instance
-  methods called **via a receiver** (`p.sum()`), `toString()`.
-- Static method as the **entry point**; `static main(List<Object> args)`.
-- Simple `enum`: entry `.index` / `.name`.
-- Dart untyped `try`/`catch`/`finally` + `throw`.
+  `if`/`else`, ternary, `switch` (on `int`, `num`, `dynamic`, `String`, `enum`),
+  `do`/`while`, bitwise, `int` string-interpolation, `String + String`,
+  `String + <number>`.
+- **`i++`/`++i`/`i--`/`--i` as a statement** inside any loop body — fixed;
+  see `apollovm_wasm_loop_increment_test.dart`. (Previously a bare increment
+  statement in a `while`/`do-while` body left its value on the operand stack and
+  the module failed validation. `for`-header updates were never affected.)
+- Function-to-function calls, **including class methods** by bare (unqualified)
+  name, named arguments, and default parameter values.
+- Classes: constructors, `this.` params, field initializers, external field
+  read/write, `double` fields, instance methods via a receiver, `toString()`.
+- Static method as the entry point; `static main(List<Object> args)`.
+- `enum`: `.index` / `.name`, **methods that read entry fields**, enum-typed
+  parameters, C# explicit-value `.value`. `switch` on an enum entry.
+- `Map` / `List` construction, index read/write, and `Map → String` coercion.
+- `try`/`catch`/`finally` + `throw`, including a **typed** `catch (Exception e)`.
+- Local lambdas assigned to a variable and invoked.
 
 The gaps below are the cases *outside* that envelope.
 
 ---
 
-## GAP 1 — unqualified calls to sibling class methods (HIGHEST IMPACT)
+## GAP A — generic class with a type-parameter field (`Box<T>`)
 
-**This single gap also causes named-args and default-params to fail when the
-callee is a class method** (they already work at top level). Fixing it unblocks
-three playground examples at once.
-
-- **Error** (`wasm_generator.dart:2123`):
-  `Bad state: Can't resolve local function \`dbl\` with 1 argument(s) in the Wasm function index table.`
-- **Trigger**: a method calls a *sibling* method of the same class by bare name
-  (no receiver): `dbl(x)` instead of `this.dbl(x)` / `Foo.dbl(x)`. Top-level
-  function-to-function calls resolve fine; the function index table just doesn't
-  register/resolve class methods for unqualified call sites.
-- **Root cause to investigate**: how the function index table is populated
-  around `wasm_generator.dart:2123`. Top-level functions are registered by name;
-  class methods (static and instance) need to be resolvable for an unqualified
-  sibling call, with the named/default-argument normalization applied the same
-  way it already is for top-level calls.
-
-**Test — add to `test/wasm/apollovm_wasm_static_method_test.dart`:**
-
-```dart
-test('unqualified sibling static call resolves', () => _testWasm(
-  language: 'dart',
-  code: r'''
-    class Foo {
-      static int dbl(int n) { return n * 2; }
-      static int run(int x) { return dbl(x); }   // bare-name sibling call
-    }
-  ''',
-  functionName: 'Foo.run',
-  executions: {[5]: 10},
-));
-```
-
-**Test — add to `test/wasm/apollovm_wasm_named_parameters_test.dart`** (named
-args on a class method):
-
-```dart
-test('named args on a static class method', () => _testWasm(
-  language: 'dart',
-  code: r'''
-    class Foo {
-      static int area(int w, int h) { return w * h; }
-      static int run() { return area(h: 3, w: 4); }
-    }
-  ''',
-  functionName: 'Foo.run',
-  executions: {[]: 12},
-));
-```
-
-**Test — add to `test/wasm/apollovm_wasm_default_parameters_test.dart`**
-(omitted default on a class method):
-
-```dart
-test('default param omitted on a class method', () => _testWasm(
-  language: 'dart',
-  code: r'''
-    class Foo {
-      static int area(int w, [int h = 3]) { return w * h; }
-      static int run() { return area(5); }   // h defaults to 3
-    }
-  ''',
-  functionName: 'Foo.run',
-  executions: {[]: 15},
-));
-```
-
----
-
-## GAP 2 — `String + <number>` concatenation (number → string)
-
-- **Error** (`wasm_generator.dart:3097`):
-  `UnimplementedError: Wasm string \`+\` with a non-String operand (number-to-string) is not supported yet (String + int).`
-  (also `String + double`, `String + num`, `String + dynamic`, `String + int(64)`)
-- **Trigger**: the `+` operator with a `String` LHS and a numeric RHS. Dart
-  forbids this syntactically, so it arrives from **Java/Kotlin/C#/JS/TS** sources
-  (e.g. `"n = " + n`). Note `int` interpolation (`'$n'`) and `String + String`
-  already work — the missing piece is an `int`/`double` → `String` conversion in
-  the `+` codegen path.
-- **Fix direction**: reuse whatever number→string conversion the interpolation
-  path already uses, in the binary-`+` string branch at `wasm_generator.dart:3097`.
-
-**Test — new file `test/wasm/apollovm_wasm_string_concat_test.dart`** (mirror the
-`_testWasm` helper from a sibling file):
-
-```dart
-test('String + int (Kotlin)', () => _testWasm(
-  language: 'kotlin',
-  code: r'''
-    fun run(n: Int): String {
-      return "n=" + n
-    }
-  ''',
-  functionName: 'run',
-  executions: {[5]: 'n=5'},
-));
-
-test('String + double (Kotlin)', () => _testWasm(
-  language: 'kotlin',
-  code: r'''
-    fun run(): String {
-      return "g=" + 9.8
-    }
-  ''',
-  functionName: 'run',
-  executions: {[]: 'g=9.8'},
-));
-```
-
----
-
-## GAP 3 — `Map` (collection) → String coercion
-
-- **Error** (`wasm_generator.dart:8517`):
-  `UnimplementedError: Wasm string coercion of type Map<String,int> is not supported yet.`
-- **Trigger**: interpolating/coercing a whole `Map` (or `List`) to a `String`.
-- **Fix direction**: implement a runtime string-coercion for collection values
-  at `wasm_generator.dart:8517` (emit `{k: v, ...}` like Dart's `Map.toString`).
-
-**Test — add to `test/wasm/apollovm_wasm_maps_test.dart`:**
-
-```dart
-test('Map interpolated into a String', () => _testWasm(
-  language: 'dart',
-  code: r'''
-    String run() {
-      var m = <String, int>{'a': 1, 'b': 2};
-      return 'Map: $m';
-    }
-  ''',
-  functionName: 'run',
-  executions: {[]: 'Map: {a: 1, b: 2}'},
-));
-```
-
----
-
-## GAP 4 — generic class `Box<T>` produces invalid Wasm
-
-- **Error** (at execution, after compile): the module fails validation —
-  `FrbAnyhowException(WebAssembly translation error … type mismatch: expected i64, found i32)`.
-- **Trigger**: a generic class with a type-parameter field, e.g. `Box<T>{ T value; }`,
-  instantiated as `Box<int>` and read back. Non-generic classes with the same
-  shape already work (`apollovm_wasm_object_field_test.dart`), so this is specific
-  to type-parameter fields: the field's storage/width is emitted as `i32` where
-  the `int` value needs `i64` (an int-width mismatch in object-field codegen).
-- **Fix direction**: when a type parameter resolves to `int`, the field
-  load/store must use the i64 representation. Look at object-field codegen and
-  generic type resolution in `wasm_generator.dart`.
-
-**Test — add to `test/wasm/apollovm_wasm_object_field_test.dart`:**
+- **Error** (compile): `Bad state: Can't unbox an Object without a module.`
+- **Trigger**: a generic class with a type-parameter field, e.g.
+  `class Box<T> { T value; Box(this.value); }`, instantiated as `Box<int>` and
+  read back. Non-generic classes with the same shape already work.
+- **Fix direction**: when a type parameter resolves to a concrete primitive
+  (`int` → i64), the field load/store must use that representation instead of
+  the boxed-Object path. Look at object-field codegen and generic type
+  resolution in `wasm_generator.dart`.
 
 ```dart
 test('generic Box<int> field round-trips', () => _testWasm(
-  language: 'dart',
-  code: r'''
-    class Box<T> {
-      T value;
-      Box(this.value);
-    }
-    int run(int x) {
-      var b = Box<int>(x);
-      return b.value;
-    }
-  ''',
-  functionName: 'run',
-  executions: {[7]: 7},
-));
+  'class Box<T> { T value; Box(this.value); }'
+  ' int run(int x) { var b = Box<int>(x); return b.value; }',
+  'run', {[7]: 7}));
 ```
 
 ---
 
-## GAP 5 — `switch` on a non-`int` scrutinee
+## GAP B — String methods & getters (HIGHEST IMPACT)
 
-- **Error** (`wasm_generator.dart:7424`):
-  `UnimplementedError: Wasm switch on dynamic is not supported (int only).`
-  (also `Wasm switch on num is not supported (int only)`)
-- **Trigger**: `switch` where the scrutinee is `dynamic` (untyped JS/Python) or
-  `num` (TS). `switch` on a statically-`int` value works.
-- **Fix direction**: coerce/narrow the scrutinee to `int` (or `i64`) before the
-  branch table at `wasm_generator.dart:7424`, or support a fallback compare chain.
-
-**Test — add to `test/wasm/apollovm_wasm_ops_test.dart`:**
+- **Error** (compile): `UnimplementedError: Wasm getter/method .X on String is
+  not supported yet.` for `.length`, `.toUpperCase`, `.toLowerCase`,
+  `.substring`, `.contains`, `.indexOf`, `.trim`, `.split`, `.replaceAll`
+  (and siblings).
+- **Trigger**: any String manipulation beyond concatenation/interpolation. This
+  is the broadest gap — most real string code is currently uncompilable.
+- **Fix direction**: implement runtime helpers over the String memory layout the
+  backend already uses for `__streq`/concatenation. `.length` (read the header
+  length) and case conversion are the cheapest starting points; `.substring`,
+  `.indexOf`, `.contains`, `.split`, `.replaceAll` build on the same buffer ops.
 
 ```dart
-test('switch on a num scrutinee (TypeScript)', () => _testWasm(
-  language: 'typescript',
-  code: r'''
-    function run(n: number): number {
-      switch (n) {
-        case 1: return 10;
-        case 2: return 20;
-        default: return 99;
-      }
-    }
-  ''',
-  functionName: 'run',
-  executions: {[1]: 10, [2]: 20, [5]: 99},
-));
+test('String.length', () => _testWasm(
+  "int run() { var s = 'hello'; return s.length; }", 'run', {[]: 5}));
+test('String.toUpperCase', () => _testWasm(
+  "String run() { var s = 'hi'; return s.toUpperCase(); }", 'run', {[]: 'HI'}));
 ```
 
 ---
 
-## GAP 6 — anonymous functions / lambdas
+## GAP C — custom instance getters
 
-- **Error** (`wasm_generator.dart:841`):
-  `Unsupported operation: Wasm: can't infer the return type of an anonymous function …`
-  and, for JS/TS, `UnimplementedError: generateASTStatementFunctionDeclaration`.
-- **Trigger**: assigning a lambda to a local and invoking it.
-- **Fix direction**: infer the closure's return type from its body / the
-  expected type at the use site; implement nested function-declaration codegen
-  for JS/TS.
-
-**Test — new file `test/wasm/apollovm_wasm_lambda_test.dart`:**
+- **Error** (compile): `UnimplementedError: Wasm getter .x on C is not
+  supported yet.`
+- **Trigger**: a user-declared getter, `int get x { return _x; }`, read as
+  `c.x`. (External/plain field reads already work; this is the *getter method*
+  form.)
+- **Fix direction**: lower a getter access to a zero-argument method call on the
+  receiver, reusing the instance-method-call path.
 
 ```dart
-test('local lambda invoked', () => _testWasm(
-  language: 'dart',
-  code: r'''
-    int run(int x) {
-      var twice = (int n) => n * 2;
-      return twice(x);
-    }
-  ''',
-  functionName: 'run',
-  executions: {[5]: 10},
-));
+test('instance getter', () => _testWasm(
+  'class C { int _x = 5; int get x { return _x; } }'
+  ' int run() { var c = C(); return c.x; }', 'run', {[]: 5}));
 ```
 
 ---
 
-## GAP 7 — rich-enum methods & enum-typed parameters
+## GAP D — reading a `static` field
 
-Simple enums (`.index`/`.name`) already compile and run. The gaps appear with
-**enhanced enums that declare methods** and with **enum-typed parameters**.
-
-- **Error**: `Bad state: Can't handle type: Planet` (`wasm_parser.dart:176` /
-  `wasm_generator.dart:10081`) when an enum type is used as a parameter type;
-  enum entries with method bodies also need codegen.
-- **Trigger** (the playground's `Dart — Rich enum (fields & methods)`):
-
-```dart
-enum Planet {
-  earth(9.8),
-  mars(3.7);
-
-  final double gravity;
-
-  const Planet(this.gravity);
-
-  double mult(double m) => gravity * m;
-
-  double ratio(Planet p) => gravity / p.gravity;   // enum-typed param `p`
-}
-```
-
-**Test — add to `test/wasm/apollovm_wasm_enum_test.dart`:**
+- **Error** (compile): `Bad state: Can't find local variable \`count\` in
+  context.`
+- **Trigger**: reading a `static` field from a static method (`return count;` or
+  `C.count`). Static *methods* work; static *fields* don't resolve.
+- **Fix direction**: give static fields module-level storage (a global or a
+  fixed memory slot) and resolve a bare/`Class.`-qualified static-field name to
+  a load from it.
 
 ```dart
-test('enum method using a field', () => _testWasm(
-  language: 'dart',
-  code: r'''
-    enum Planet {
-      earth(9.8), mars(3.7);
-      final double gravity;
-      const Planet(this.gravity);
-      double mult(double m) { return gravity * m; }
-    }
-    double run() {
-      var e = Planet.earth;
-      return e.mult(2.0);   // expect 19.6
-    }
-  ''',
-  functionName: 'run',
-  executions: {[]: 19.6},
-));
-
-test('enum method taking an enum-typed parameter', () => _testWasm(
-  language: 'dart',
-  code: r'''
-    enum Planet {
-      earth(9.8), mars(3.7);
-      final double gravity;
-      const Planet(this.gravity);
-      double ratio(Planet p) { return gravity / p.gravity; }
-    }
-    double run() {
-      var e = Planet.earth;
-      var m = Planet.mars;
-      return e.ratio(m);    // 9.8 / 3.7
-    }
-  ''',
-  functionName: 'run',
-  executions: {[]: 9.8 / 3.7},
-));
+test('static field read', () => _testWasm(
+  'class C { static int count = 7; static int run() { return count; } }',
+  'C.run', {[]: 7}));
 ```
 
 ---
 
-## GAP 8 — typed exception catch (`catch (Exception e)`)
+## GAP E — inherited / `super` method calls
 
-- **Error**: `Bad state: Can't handle type: Exception`.
-- **Trigger**: a `catch` clause with a declared exception **type** (Java/Kotlin/C#).
-  Dart's untyped `catch (e)` + `try`/`finally` already work
-  (`apollovm_wasm_exception_test.dart`).
-- **Fix direction**: treat a typed catch like the untyped one (the Wasm model
-  has a single thrown value); ignore/normalize the declared type.
-
-**Test — add to `test/wasm/apollovm_wasm_exception_test.dart`:**
+- **Error** (compile): `Unsupported operation: Can't call non-static method
+  'A.base' without an instance.`
+- **Trigger**: a subclass calling a concrete method it inherits from its
+  superclass (`class B extends A { int run() { return base() + 2; } }`), and
+  `super.method()` / `super(...)`. A class calling *its own* methods works.
+- **Fix direction**: walk the superclass chain when resolving an unqualified
+  method call and when laying out the vtable / function index table, so an
+  inherited method is callable on a subclass instance.
 
 ```dart
-test('typed catch (Java)', () => _testWasm(
-  language: 'java11',
-  code: r'''
-    class Foo {
-      static int run(int b) {
-        try {
-          if (b == 0) { throw "zero"; }
-          return b;
-        } catch (Exception e) {
-          return -1;
-        }
-      }
-    }
-  ''',
-  functionName: 'Foo.run',
-  executions: {[0]: -1, [5]: 5},
-));
+test('inherited superclass method', () => _testWasm(
+  'class A { int base() { return 1; } }'
+  ' class B extends A { int run() { return base() + 2; } }'
+  ' int run() { var b = B(); return b.run(); }', 'run', {[]: 3}));
 ```
 
 ---
 
-## GAP 9 — C# enum `.value` getter
+## GAP F — returning a `List`/`Map` across the module boundary
 
-- **Error** (`wasm_generator.dart:4449`):
-  `UnimplementedError: Wasm getter \`.value\` on Level is not supported yet.`
-- **Trigger**: reading an explicit-value (C#) enum entry's `.value`.
-
-**Test — add to `test/wasm/apollovm_wasm_enum_test.dart`:**
+- **Error** (execute): `Bad state: Unsupported Wasm Object box tag: 0.`
+- **Trigger**: a function whose return type is a collection, `List run() =>
+  [1, 2, 3];`. Building and using collections *inside* a function works; handing
+  one back across the call boundary does not.
+- **Fix direction**: box the collection handle with a tag the host unwrapper
+  understands (mirror how scalar returns are boxed), so `executeFunction` can
+  read a `List`/`Map` result back.
 
 ```dart
-test('C# enum .value', () => _testWasm(
-  language: 'csharp',
-  code: r'''
-    enum Level { Low = 1, Medium = 5, High = 10 }
-    class Foo {
-      public static int run() {
-        var m = Level.Medium;
-        return m.value;
-      }
-    }
-  ''',
-  functionName: 'Foo.run',
-  executions: {[]: 5},
-));
+test('return a List', () => _testWasm(
+  'List run() { return [1, 2, 3]; }', 'run', {[]: [1, 2, 3]}));
 ```
 
 ---
 
 ## Suggested order
 
-1. **GAP 1** (class-method call resolution) — one subsystem, unblocks named
-   args + defaults + sibling/async calls on class methods.
-2. **GAP 2** (`String + number`) — unblocks most non-Dart examples broadly.
-3. **GAP 4** (generic field i64/i32) — object-field codegen correctness.
-4. **GAP 3** (Map coercion), **GAP 5** (non-int switch), **GAP 6** (lambdas),
-   **GAP 7** (rich-enum methods / enum params), **GAP 8** (typed catch),
-   **GAP 9** (C# `.value`) — independent, feature-by-feature.
+1. **GAP B** (String methods) — by far the widest impact on real code.
+2. **GAP D** (static field reads) and **GAP C** (getters) — small, common,
+   independent.
+3. **GAP E** (inheritance/`super`) — one subsystem (method resolution + vtable).
+4. **GAP A** (generic field i64/boxing) and **GAP F** (aggregate returns) —
+   value-representation work; related boxing concerns.
 
 After each fix: `dart test -t wasm -x wasm-gc -x wasm-chrome` must stay green
-(all existing tests + the new one for that gap).
+(all existing tests + the new one for that gap). Note that some Wasm tests
+assert **exact** emitted bytecode via `expecteWasm`; a codegen change that alters
+the bytes for those cases requires updating their expected hex (the executions
+must still pass).
 
 ### Source of these findings
 
-Reproduced by compiling the ApolloVM web playground examples
-(`apollovm_web_example`) through the full Wasm pipeline; the playground itself is
-a good end-to-end smoke test once these land.
+Re-verified by compiling representative snippets per gap through the full Wasm
+pipeline (`generateAllIn<BytesOutput>('wasm')` → `BinaryCodeUnit` → execute) on
+the native `wasm_run` runtime.
