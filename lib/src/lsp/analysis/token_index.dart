@@ -502,6 +502,7 @@ class TokenIndex {
 
       // Enum constants: identifiers in the enum's constant list (before `;`).
       if (inEnumConstantList() && t.isIdent && atBoundary) {
+        final declIndex = decls.length;
         decls.add(
           DeclSite(
             name: t.value,
@@ -513,13 +514,29 @@ class TokenIndex {
             container: enclosingName(),
           ),
         );
-        // Skip to the next comma/brace.
+        // A constant is a constructor invocation, so consume the rest of the
+        // entry — a `.named` constructor, `<T>` type arguments, the balanced
+        // argument list, or an `= value` — extending `fullEnd` across it. This
+        // mirrors a class member, whose range covers its parameters and body
+        // rather than stopping at the name.
+        //
+        // Only a `,`/`;`/`}` at depth 0 ends the entry: those nested inside an
+        // argument list (`earth(mass: 5.97, radius: 6371)`, a collection
+        // literal) belong to the entry. Consuming them here also keeps their
+        // identifiers from being read as further constants.
         i++;
-        while (i < tokens.length &&
-            !tokens[i].sym(',') &&
-            !tokens[i].sym('}') &&
-            !tokens[i].sym('{') &&
-            !tokens[i].sym(';')) {
+        var depth = 0;
+        while (i < tokens.length) {
+          final u = tokens[i];
+          if (depth == 0 && (u.sym(',') || u.sym(';') || u.sym('}'))) break;
+          if (u.sym('(') || u.sym('[') || u.sym('{')) {
+            depth++;
+          } else if (u.sym(')') || u.sym(']') || u.sym('}')) {
+            // Guarded so an unbalanced closer in malformed source cannot drive
+            // `depth` negative and swallow the rest of the enum body.
+            if (depth > 0) depth--;
+          }
+          decls[declIndex].fullEnd = u.end;
           i++;
         }
         atBoundary = false;

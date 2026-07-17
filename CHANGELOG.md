@@ -1,3 +1,29 @@
+## 2.0.1
+
+### LSP — an enum constant now selects its whole entry, not just its name
+
+A Dart enum constant is a constructor invocation, but the language server's
+declaration scanner recorded its range as the name alone: `earth(5.97, 6371)`
+selected only `earth`, dropping the arguments. Every other declaration kind has
+its range extended past the name — a class member's covers its parameters and
+body — so enum constants were the one exception, and folding, hover and the
+document outline all saw a truncated span.
+
+- **An enum constant's range now covers the whole entry**: a `.named`
+  constructor, `<T>` type arguments, the argument list, or an `= value`
+  (`Red = 1`). Its *name* span is unchanged, so go-to-definition and rename
+  still target the name alone.
+- **Named arguments are no longer reported as extra constants.** The scan that
+  skipped past a constant stopped at the first `,` even when nested inside the
+  argument list, so scanning resumed mid-arguments and read the argument label
+  as another constant: `earth(mass: 5.97, radius: 6371)` emitted a phantom
+  `radius` enum member into the outline. Entry consumption is now depth-aware —
+  only a `,`/`;`/`}` outside brackets ends an entry — which fixes both the
+  truncated range and the phantom symbols.
+
+Constructors *declared* in an enum body (`const Planet(this.mass);`) were
+already correct and are unchanged.
+
 ## 2.0.0
 
 ### `apollovm` no longer drags a native/FFI toolchain into every consumer
