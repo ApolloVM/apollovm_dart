@@ -88,23 +88,28 @@ test('generic Box<int> field round-trips', () => _testWasm(
 ## GAP B — String methods & getters (HIGHEST IMPACT, partially done)
 
 - **Done**: `.length`, `.isEmpty`, `.isNotEmpty` (read the `[len:i32][utf8]`
-  header) — see `apollovm_wasm_string_length_test.dart`.
+  header) — see `apollovm_wasm_string_length_test.dart`; `.toUpperCase`,
+  `.toLowerCase` (ASCII, fresh buffer + case-bit shift) — see
+  `apollovm_wasm_string_case_test.dart`.
 - **Still open** (compile error `UnimplementedError: Wasm getter/method .X on
-  String is not supported yet.`): `.toUpperCase`, `.toLowerCase`, `.substring`,
-  `.contains`, `.indexOf`, `.trim`, `.split`, `.replaceAll` (and siblings).
+  String is not supported yet.`): `.substring`, `.contains`, `.indexOf`,
+  `.trim`, `.split`, `.replaceAll` (and siblings). Also: chaining a getter/method
+  onto a method *result* (`s.toUpperCase().length`) — the receiver must be a
+  named local today.
 - **Trigger**: any String manipulation beyond concatenation/interpolation and
   the length/emptiness getters above. Still the broadest gap.
 - **Fix direction**: implement runtime helpers over the String memory layout the
-  backend already uses for `__streq`/concatenation. Case conversion is the
-  cheapest next step (allocate a same-length buffer, map each ASCII byte);
-  `.substring`, `.indexOf`, `.contains`, `.split`, `.replaceAll` build on the
-  same buffer ops. Note the stored length is UTF-8 bytes, so any method whose
-  Dart semantics are in UTF-16 code units is only correct for ASCII until the
-  layout carries a code-unit count.
+  backend already uses for `__streq`/concatenation (see `_emitStringConcat2` and
+  `_generateStringCaseConvert` for the allocate-buffer + byte-loop pattern).
+  `.substring` (copy a slice), `.indexOf`/`.contains` (byte scan), `.split`,
+  `.replaceAll` build on the same buffer ops. Note the stored length is UTF-8
+  bytes, so any method whose Dart semantics are in UTF-16 code units is only
+  correct for ASCII until the layout carries a code-unit count.
 
 ```dart
-test('String.toUpperCase', () => _testWasm(
-  "String run() { var s = 'hi'; return s.toUpperCase(); }", 'run', {[]: 'HI'}));
+test('String.substring', () => _testWasm(
+  "String run() { var s = 'hello'; return s.substring(1, 3); }",
+  'run', {[]: 'el'}));
 ```
 
 ---

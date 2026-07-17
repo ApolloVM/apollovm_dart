@@ -1643,6 +1643,20 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       );
     }
 
+    // String.toUpperCase() / toLowerCase() (ASCII).
+    if (localVar.type is ASTTypeString &&
+        expression.arguments.isEmpty &&
+        (expression.name == 'toUpperCase' ||
+            expression.name == 'toLowerCase')) {
+      return _generateStringCaseConvert(
+        localVar,
+        varName,
+        upper: expression.name == 'toUpperCase',
+        out: out,
+        context: context,
+      );
+    }
+
     // Instance method call on a class: `recv.method(args)`.
     if (context.module?.layoutForType(localVar.type) != null) {
       return _generateMethodInvocation(
@@ -9860,6 +9874,125 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     context.stackDrop();
     context.stackDrop();
     context.stackPush(_astTypeString, "string concat");
+  }
+
+  /// Lowers `s.toUpperCase()` / `s.toLowerCase()` for ASCII text. Allocates a
+  /// fresh `[len:i32][utf8]` buffer the same size as the receiver, then copies
+  /// each byte shifting ASCII letters by `0x20` (case bit). Non-letter bytes and
+  /// non-ASCII bytes are copied unchanged, so this matches Dart semantics for
+  /// ASCII input (the same restriction as the byte-length `.length`).
+  BytesOutput _generateStringCaseConvert(
+    ({ASTType type, int index}) localVar,
+    String varName, {
+    required bool upper,
+    required BytesOutput out,
+    required WasmContext context,
+  }) {
+    var module = context.module;
+    if (module == null) {
+      throw StateError("Can't transform a String without a module.");
+    }
+    module.requiresMemory = true;
+    module.requiresHeapGlobal = true;
+
+    final s0 = context.stackLength;
+
+    // i32 scratch locals (distinct slots from concat/for-each to avoid clashes).
+    var src = context.scratchLocal(_astTypeString, 20);
+    var dest = context.scratchLocal(_astTypeString, 21);
+    var len = context.scratchLocal(_astTypeString, 22);
+    var i = context.scratchLocal(_astTypeString, 23);
+    var ch = context.scratchLocal(_astTypeString, 24);
+
+    // src = receiver ; len = load(src, 0)
+    _localVariableGet(out, context, localVar.index, varName);
+    out.write(Wasm.localSet(src));
+    out.write(Wasm.localGet(src));
+    out.write(Wasm32.i32Load());
+    out.write(Wasm.localSet(len));
+
+    // dest = alloc(len + 4) ; store len at dest[0]
+    out.write(Wasm.localGet(len));
+    out.write(Wasm32.i32Const(4));
+    out.writeByte(Wasm32.i32Add);
+    _emitInlineAlloc(out, context);
+    out.write(Wasm.localSet(dest));
+    out.write(Wasm.localGet(dest));
+    out.write(Wasm.localGet(len));
+    out.write(Wasm32.i32Store());
+
+    // i = 0
+    out.write(Wasm32.i32Const(0));
+    out.write(Wasm.localSet(i));
+
+    // block(break) { loop(repeat) { if (i>=len) break; <copy+shift>; i++; repeat } }
+    out.write(Wasm.block(WasmType.voidType), description: "[OP] block (case)");
+    context.controlDepth++;
+    final breakLevel = context.controlDepth;
+    out.write(Wasm.loop(WasmType.voidType), description: "[OP] loop (case)");
+    context.controlDepth++;
+    final repeatLevel = context.controlDepth;
+
+    out.write(Wasm.localGet(i));
+    out.write(Wasm.localGet(len));
+    out.writeByte(Wasm32.i32GreaterThanOrEqualsUnsigned);
+    out.write(Wasm.brIf(context.controlDepth - breakLevel));
+
+    // ch = load8_u(src + 4 + i)
+    out.write(Wasm.localGet(src));
+    out.write(Wasm32.i32Const(4));
+    out.writeByte(Wasm32.i32Add);
+    out.write(Wasm.localGet(i));
+    out.writeByte(Wasm32.i32Add);
+    out.write(Wasm32.i32Load8U());
+    out.write(Wasm.localSet(ch));
+
+    // if (ch in [lo..hi]) ch += /-= 0x20
+    final lo = upper ? 0x61 : 0x41; // 'a' / 'A'
+    final hi = upper ? 0x7A : 0x5A; // 'z' / 'Z'
+    out.write(Wasm.localGet(ch));
+    out.write(Wasm32.i32Const(lo));
+    out.writeByte(Wasm32.i32GreaterThanOrEqualsUnsigned);
+    out.write(Wasm.localGet(ch));
+    out.write(Wasm32.i32Const(hi));
+    out.writeByte(Wasm32.i32LessThanOrEqualsUnsigned);
+    out.writeByte(Wasm32.i32BitwiseAnd);
+    out.write(Wasm.ifInstruction(WasmType.voidType));
+    out.write(Wasm.localGet(ch));
+    out.write(Wasm32.i32Const(0x20));
+    out.writeByte(upper ? Wasm32.i32Subtract : Wasm32.i32Add);
+    out.write(Wasm.localSet(ch));
+    out.writeByte(Wasm.end);
+
+    // store8(dest + 4 + i, ch)
+    out.write(Wasm.localGet(dest));
+    out.write(Wasm32.i32Const(4));
+    out.writeByte(Wasm32.i32Add);
+    out.write(Wasm.localGet(i));
+    out.writeByte(Wasm32.i32Add);
+    out.write(Wasm.localGet(ch));
+    out.write(Wasm32.i32Store8());
+
+    // i++ ; repeat
+    out.write(Wasm.localGet(i));
+    out.write(Wasm32.i32Const(1));
+    out.writeByte(Wasm32.i32Add);
+    out.write(Wasm.localSet(i));
+    out.write(Wasm.br(context.controlDepth - repeatLevel));
+
+    out.writeByte(Wasm.end); // loop
+    context.controlDepth--;
+    out.writeByte(Wasm.end); // block
+    context.controlDepth--;
+
+    // Result pointer.
+    out.write(Wasm.localGet(dest));
+    context.stackPush(
+      _astTypeString,
+      "$varName.${upper ? 'toUpperCase' : 'toLowerCase'}",
+    );
+    context.assertStackLength(s0 + 1, "After String case convert");
+    return out;
   }
 
   /// Grow-aware bump allocation, emitted inline: consumes `[size]` on the stack
