@@ -1,3 +1,33 @@
+## 2.1.0
+
+### Wasm backend — loop increment fix and initial String methods
+
+- **Fixed: a `++`/`--` statement inside a `while`/`do-while` body produced an
+  invalid module.** A bare increment/decrement (`i++`, `++i`, `i--`, `--i`) used
+  as a statement left the operator's value on the operand stack; inside a loop's
+  void block that value reached the block end and the compiled module failed
+  WebAssembly validation ("values remaining on stack at end of block"). Only
+  explicitly `int`-typed counters written as `i = i + 1` happened to avoid it.
+  The discarded value is now dropped in statement position; the expression form
+  (`x = i++`) still yields its value, and `for`-header updates are unchanged.
+- **New: `String.length`, `.isEmpty`, `.isNotEmpty` compile to Wasm.** They read
+  the string's `[len:i32][utf8]` header length word.
+- **New: `String.toUpperCase()` / `.toLowerCase()` compile to Wasm** for ASCII
+  text — a fresh buffer is allocated and each ASCII letter is shifted by the
+  case bit; other bytes are copied unchanged.
+
+The stored String length is the UTF-8 byte count, so these match Dart semantics
+for ASCII input. See `WASM_BACKEND_PLAN.md` for the re-verified backend status
+(8 of the 9 previously documented gaps already work) and the remaining gaps.
+
+### Tests
+
+- Substantially expanded coverage: AST values/types/variables/annotations, the
+  core library, external-function/getter mapping, runner `tryExecute*`
+  fallbacks, in-memory code storages, cross-language translation and generator
+  emit paths, native parse+execute across every non-Dart language, and a
+  transpile-then-execute integration matrix (Dart → Java/JS/TS/C#).
+
 ## 2.0.1
 
 ### LSP — an enum constant now selects its whole entry, not just its name
