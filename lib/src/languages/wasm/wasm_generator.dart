@@ -4890,6 +4890,37 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       }
     }
 
+    // A String is stored as `[len:i32][utf8]`, so `.length`/`.isEmpty`/
+    // `.isNotEmpty` read the same header[0] length word as a list/map. The
+    // stored length is the UTF-8 byte count, which equals the Dart code-unit
+    // count for ASCII text.
+    if (listType is ASTTypeString) {
+      final s0 = context.stackLength;
+
+      if (name == 'length') {
+        _localVariableGet(out, context, localVar.index, varName);
+        out.write(Wasm32.i32Load(2, 0)); // length (i32)
+        out.writeByte(Wasm32.i32ExtendToI64Signed); // -> i64 (int)
+        context.stackPush(_astTypeInt64, "$varName.length");
+        context.assertStackLength(s0 + 1, "After String .length");
+        return out;
+      }
+
+      if (name == 'isEmpty' || name == 'isNotEmpty') {
+        _localVariableGet(out, context, localVar.index, varName);
+        out.write(Wasm32.i32Load(2, 0)); // length (i32)
+        if (name == 'isEmpty') {
+          out.writeByte(Wasm32.i32EqualsToZero); // length == 0
+        } else {
+          out.write(Wasm32.i32Const(0));
+          out.writeByte(Wasm32.i32NotEquals); // length != 0 (normalized 0/1)
+        }
+        context.stackPush(_astTypeInt32, "$varName.$name"); // bool as i32
+        context.assertStackLength(s0 + 1, "After String .$name");
+        return out;
+      }
+    }
+
     // `m.keys` / `m.values`: materialize a fresh list (the map's key/value
     // buffer already has the list element layout), enabling `for (var k in
     // m.keys)` via the regular list for-each.

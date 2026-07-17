@@ -85,22 +85,24 @@ test('generic Box<int> field round-trips', () => _testWasm(
 
 ---
 
-## GAP B — String methods & getters (HIGHEST IMPACT)
+## GAP B — String methods & getters (HIGHEST IMPACT, partially done)
 
-- **Error** (compile): `UnimplementedError: Wasm getter/method .X on String is
-  not supported yet.` for `.length`, `.toUpperCase`, `.toLowerCase`,
-  `.substring`, `.contains`, `.indexOf`, `.trim`, `.split`, `.replaceAll`
-  (and siblings).
-- **Trigger**: any String manipulation beyond concatenation/interpolation. This
-  is the broadest gap — most real string code is currently uncompilable.
+- **Done**: `.length`, `.isEmpty`, `.isNotEmpty` (read the `[len:i32][utf8]`
+  header) — see `apollovm_wasm_string_length_test.dart`.
+- **Still open** (compile error `UnimplementedError: Wasm getter/method .X on
+  String is not supported yet.`): `.toUpperCase`, `.toLowerCase`, `.substring`,
+  `.contains`, `.indexOf`, `.trim`, `.split`, `.replaceAll` (and siblings).
+- **Trigger**: any String manipulation beyond concatenation/interpolation and
+  the length/emptiness getters above. Still the broadest gap.
 - **Fix direction**: implement runtime helpers over the String memory layout the
-  backend already uses for `__streq`/concatenation. `.length` (read the header
-  length) and case conversion are the cheapest starting points; `.substring`,
-  `.indexOf`, `.contains`, `.split`, `.replaceAll` build on the same buffer ops.
+  backend already uses for `__streq`/concatenation. Case conversion is the
+  cheapest next step (allocate a same-length buffer, map each ASCII byte);
+  `.substring`, `.indexOf`, `.contains`, `.split`, `.replaceAll` build on the
+  same buffer ops. Note the stored length is UTF-8 bytes, so any method whose
+  Dart semantics are in UTF-16 code units is only correct for ASCII until the
+  layout carries a code-unit count.
 
 ```dart
-test('String.length', () => _testWasm(
-  "int run() { var s = 'hello'; return s.length; }", 'run', {[]: 5}));
 test('String.toUpperCase', () => _testWasm(
   "String run() { var s = 'hi'; return s.toUpperCase(); }", 'run', {[]: 'HI'}));
 ```
@@ -182,7 +184,8 @@ test('return a List', () => _testWasm(
 
 ## Suggested order
 
-1. **GAP B** (String methods) — by far the widest impact on real code.
+1. **GAP B** (remaining String methods) — by far the widest impact on real code
+   (`.length`/`.isEmpty`/`.isNotEmpty` already done).
 2. **GAP D** (static field reads) and **GAP C** (getters) — small, common,
    independent.
 3. **GAP E** (inheritance/`super`) — one subsystem (method resolution + vtable).
