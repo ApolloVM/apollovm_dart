@@ -1,3 +1,19 @@
+## 2.7.0
+
+### Wasm: String slice & search methods
+
+The on-the-fly WebAssembly compiler now supports the common String slice/search
+methods over its `[len][utf8]` layout: `substring(start, [end])` (a fresh-buffer
+`memory.copy` slice), `codeUnitAt(i)`, `startsWith` / `endsWith`, `indexOf`, and
+`contains` (byte scans, guarded against out-of-bounds reads). These join the
+already-supported `length` / `isEmpty` / `isNotEmpty` getters and
+`toUpperCase` / `toLowerCase`. Methods are byte-indexed, so results are exact for
+ASCII text.
+
+Still to come: `trim`, `split`, `replaceAll` / `replaceFirst`, `padLeft` /
+`padRight`, `compareTo`, and index `[]`; chaining a method onto a method result
+(the receiver must be a named local).
+
 ## 2.6.0
 
 ### Wasm: nested collections & chained indexing (`m[0][1]`)

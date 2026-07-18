@@ -1823,6 +1823,19 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       );
     }
 
+    // Other String methods (ASCII/UTF-8 byte ops over the `[len][utf8]` layout):
+    // substring, codeUnitAt, startsWith, endsWith, indexOf, contains.
+    if (localVar.type is ASTTypeString) {
+      var handled = _tryGenerateStringMethod(
+        expression,
+        localVar,
+        varName,
+        out: out,
+        context: context,
+      );
+      if (handled != null) return handled;
+    }
+
     // Instance method call on a class: `recv.method(args)`.
     if (context.module?.layoutForType(localVar.type) != null) {
       return _generateMethodInvocation(
@@ -10322,6 +10335,435 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
   /// each byte shifting ASCII letters by `0x20` (case bit). Non-letter bytes and
   /// non-ASCII bytes are copied unchanged, so this matches Dart semantics for
   /// ASCII input (the same restriction as the byte-length `.length`).
+  /// Dispatches a supported String method (over the `[len:i32][utf8]` layout) to
+  /// its byte-level codegen, or returns `null` if [expression.name] isn't one of
+  /// them (the caller then errors). Byte-indexed, so exact for ASCII text (a
+  /// multi-byte UTF-8 code point counts as its byte length).
+  BytesOutput? _tryGenerateStringMethod(
+    ASTExpressionObjectFunctionInvocation expression,
+    ({ASTType type, int index}) recv,
+    String varName, {
+    required BytesOutput out,
+    required WasmContext context,
+  }) {
+    var name = expression.name;
+    var args = expression.arguments;
+    if (name == 'codeUnitAt' && args.length == 1) {
+      return _generateStringCodeUnitAt(
+        recv,
+        varName,
+        args[0],
+        out: out,
+        context: context,
+      );
+    }
+    if (name == 'substring' && (args.length == 1 || args.length == 2)) {
+      return _generateStringSubstring(
+        recv,
+        varName,
+        args,
+        out: out,
+        context: context,
+      );
+    }
+    if (name == 'startsWith' && args.length == 1) {
+      return _generateStringStartsEndsWith(
+        recv,
+        varName,
+        args[0],
+        ends: false,
+        out: out,
+        context: context,
+      );
+    }
+    if (name == 'endsWith' && args.length == 1) {
+      return _generateStringStartsEndsWith(
+        recv,
+        varName,
+        args[0],
+        ends: true,
+        out: out,
+        context: context,
+      );
+    }
+    if (name == 'indexOf' && args.length == 1) {
+      return _generateStringIndexOf(
+        recv,
+        varName,
+        args[0],
+        asContains: false,
+        out: out,
+        context: context,
+      );
+    }
+    if (name == 'contains' && args.length == 1) {
+      return _generateStringIndexOf(
+        recv,
+        varName,
+        args[0],
+        asContains: true,
+        out: out,
+        context: context,
+      );
+    }
+    return null;
+  }
+
+  /// `s.codeUnitAt(i)` -> the (unsigned) byte at `s + 4 + i` as an `int` (i64).
+  BytesOutput _generateStringCodeUnitAt(
+    ({ASTType type, int index}) recv,
+    String varName,
+    ASTExpression indexExpr, {
+    required BytesOutput out,
+    required WasmContext context,
+  }) {
+    context.module!.requiresMemory = true;
+    final s0 = context.stackLength;
+    _localVariableGet(out, context, recv.index, varName); // src ptr
+    out.write(Wasm32.i32Const(4));
+    out.writeByte(Wasm32.i32Add);
+    generateASTExpression(indexExpr, out: out, context: context); // index (i64)
+    context.stackDrop();
+    out.writeByte(Wasm64.i64WrapToi32);
+    out.writeByte(Wasm32.i32Add); // src + 4 + index
+    out.write(Wasm32.i32Load8U());
+    out.writeByte(Wasm32.i32ExtendToI64Unsigned);
+    context.stackPush(_astTypeInt64, "$varName.codeUnitAt");
+    context.assertStackLength(s0 + 1, "After String.codeUnitAt");
+    return out;
+  }
+
+  /// `s.substring(start, [end])` -> a fresh String holding the byte slice
+  /// `[start, end)` (end defaults to the length).
+  BytesOutput _generateStringSubstring(
+    ({ASTType type, int index}) recv,
+    String varName,
+    List<ASTExpression> args, {
+    required BytesOutput out,
+    required WasmContext context,
+  }) {
+    var module = context.module!;
+    module.requiresMemory = true;
+    module.requiresHeapGlobal = true;
+    final s0 = context.stackLength;
+
+    var src = context.scratchLocal(_astTypeString, 30);
+    var srcLen = context.scratchLocal(_astTypeString, 31);
+    var startL = context.scratchLocal(_astTypeString, 32);
+    var endL = context.scratchLocal(_astTypeString, 33);
+    var dest = context.scratchLocal(_astTypeString, 34);
+    var newLen = context.scratchLocal(_astTypeString, 35);
+
+    // src = recv ; srcLen = load(src, 0)
+    _localVariableGet(out, context, recv.index, varName);
+    out.write(Wasm.localSet(src));
+    out.write(Wasm.localGet(src));
+    out.write(Wasm32.i32Load());
+    out.write(Wasm.localSet(srcLen));
+
+    // start = arg0 (i64 -> i32)
+    generateASTExpression(args[0], out: out, context: context);
+    context.stackDrop();
+    out.writeByte(Wasm64.i64WrapToi32);
+    out.write(Wasm.localSet(startL));
+
+    // end = arg1 if present, else srcLen
+    if (args.length >= 2) {
+      generateASTExpression(args[1], out: out, context: context);
+      context.stackDrop();
+      out.writeByte(Wasm64.i64WrapToi32);
+      out.write(Wasm.localSet(endL));
+    } else {
+      out.write(Wasm.localGet(srcLen));
+      out.write(Wasm.localSet(endL));
+    }
+
+    // newLen = end - start
+    out.write(Wasm.localGet(endL));
+    out.write(Wasm.localGet(startL));
+    out.writeByte(Wasm32.i32Subtract);
+    out.write(Wasm.localSet(newLen));
+
+    // dest = alloc(newLen + 4) ; store newLen at dest[0]
+    out.write(Wasm.localGet(newLen));
+    out.write(Wasm32.i32Const(4));
+    out.writeByte(Wasm32.i32Add);
+    _emitInlineAlloc(out, context);
+    out.write(Wasm.localSet(dest));
+    out.write(Wasm.localGet(dest));
+    out.write(Wasm.localGet(newLen));
+    out.write(Wasm32.i32Store());
+
+    // memory.copy(dest + 4, src + 4 + start, newLen)
+    out.write(Wasm.localGet(dest));
+    out.write(Wasm32.i32Const(4));
+    out.writeByte(Wasm32.i32Add);
+    out.write(Wasm.localGet(src));
+    out.write(Wasm32.i32Const(4));
+    out.writeByte(Wasm32.i32Add);
+    out.write(Wasm.localGet(startL));
+    out.writeByte(Wasm32.i32Add);
+    out.write(Wasm.localGet(newLen));
+    out.write(Wasm.memoryCopy);
+
+    out.write(Wasm.localGet(dest));
+    context.stackPush(_astTypeString, "$varName.substring");
+    context.assertStackLength(s0 + 1, "After String.substring");
+    return out;
+  }
+
+  /// `s.startsWith(p)` / `s.endsWith(p)` -> a `bool` (i32): whether the pattern's
+  /// bytes match at the start (or end) of the receiver.
+  BytesOutput _generateStringStartsEndsWith(
+    ({ASTType type, int index}) recv,
+    String varName,
+    ASTExpression argExpr, {
+    required bool ends,
+    required BytesOutput out,
+    required WasmContext context,
+  }) {
+    context.module!.requiresMemory = true;
+    final s0 = context.stackLength;
+
+    var src = context.scratchLocal(_astTypeString, 36);
+    var srcLen = context.scratchLocal(_astTypeString, 37);
+    var sub = context.scratchLocal(_astTypeString, 38);
+    var subLen = context.scratchLocal(_astTypeString, 39);
+    var aAddr = context.scratchLocal(_astTypeString, 40);
+    var bAddr = context.scratchLocal(_astTypeString, 41);
+    var res = context.scratchLocal(_astTypeString, 42);
+    var j = context.scratchLocal(_astTypeString, 43);
+
+    // sub = eval(arg) ; src = recv
+    generateASTExpression(argExpr, out: out, context: context);
+    context.stackDrop();
+    out.write(Wasm.localSet(sub));
+    _localVariableGet(out, context, recv.index, varName);
+    out.write(Wasm.localSet(src));
+    out.write(Wasm.localGet(src));
+    out.write(Wasm32.i32Load());
+    out.write(Wasm.localSet(srcLen));
+    out.write(Wasm.localGet(sub));
+    out.write(Wasm32.i32Load());
+    out.write(Wasm.localSet(subLen));
+
+    // bAddr = sub + 4
+    out.write(Wasm.localGet(sub));
+    out.write(Wasm32.i32Const(4));
+    out.writeByte(Wasm32.i32Add);
+    out.write(Wasm.localSet(bAddr));
+    // aAddr = src + 4 (+ srcLen - subLen for endsWith)
+    out.write(Wasm.localGet(src));
+    out.write(Wasm32.i32Const(4));
+    out.writeByte(Wasm32.i32Add);
+    if (ends) {
+      out.write(Wasm.localGet(srcLen));
+      out.write(Wasm.localGet(subLen));
+      out.writeByte(Wasm32.i32Subtract);
+      out.writeByte(Wasm32.i32Add);
+    }
+    out.write(Wasm.localSet(aAddr));
+
+    // res = 0 ; only compare when the pattern fits (guards an OOB read).
+    out.write(Wasm32.i32Const(0));
+    out.write(Wasm.localSet(res));
+    out.write(Wasm.localGet(subLen));
+    out.write(Wasm.localGet(srcLen));
+    out.writeByte(Wasm32.i32LessThanOrEqualsUnsigned);
+    out.write(Wasm.ifInstruction(WasmType.voidType));
+    _emitBytesEqualNoBreak(
+      out,
+      context,
+      aLoc: aAddr,
+      bLoc: bAddr,
+      lenLoc: subLen,
+      jLoc: j,
+      outLoc: res,
+    );
+    out.writeByte(Wasm.end); // if
+
+    out.write(Wasm.localGet(res));
+    context.stackPush(
+      _astTypeInt32,
+      "$varName.${ends ? 'endsWith' : 'startsWith'}",
+    );
+    context.assertStackLength(s0 + 1, "After String.startsWith/endsWith");
+    return out;
+  }
+
+  /// `s.indexOf(p)` -> the first byte offset where `p` occurs (or `-1`), as an
+  /// `int` (i64); or, when [asContains], `s.contains(p)` as a `bool` (i32).
+  BytesOutput _generateStringIndexOf(
+    ({ASTType type, int index}) recv,
+    String varName,
+    ASTExpression argExpr, {
+    required bool asContains,
+    required BytesOutput out,
+    required WasmContext context,
+  }) {
+    context.module!.requiresMemory = true;
+    final s0 = context.stackLength;
+
+    var src = context.scratchLocal(_astTypeString, 44);
+    var srcLen = context.scratchLocal(_astTypeString, 45);
+    var sub = context.scratchLocal(_astTypeString, 46);
+    var subLen = context.scratchLocal(_astTypeString, 47);
+    var iL = context.scratchLocal(_astTypeString, 48);
+    var match = context.scratchLocal(_astTypeString, 49);
+    var j = context.scratchLocal(_astTypeString, 50);
+    var result = context.scratchLocal(_astTypeString, 51);
+    var aAddr = context.scratchLocal(_astTypeString, 52);
+    var bAddr = context.scratchLocal(_astTypeString, 53);
+
+    // sub = eval(arg) ; src = recv
+    generateASTExpression(argExpr, out: out, context: context);
+    context.stackDrop();
+    out.write(Wasm.localSet(sub));
+    _localVariableGet(out, context, recv.index, varName);
+    out.write(Wasm.localSet(src));
+    out.write(Wasm.localGet(src));
+    out.write(Wasm32.i32Load());
+    out.write(Wasm.localSet(srcLen));
+    out.write(Wasm.localGet(sub));
+    out.write(Wasm32.i32Load());
+    out.write(Wasm.localSet(subLen));
+
+    // bAddr = sub + 4 ; result = -1 ; i = 0
+    out.write(Wasm.localGet(sub));
+    out.write(Wasm32.i32Const(4));
+    out.writeByte(Wasm32.i32Add);
+    out.write(Wasm.localSet(bAddr));
+    out.write(Wasm32.i32Const(-1));
+    out.write(Wasm.localSet(result));
+    out.write(Wasm32.i32Const(0));
+    out.write(Wasm.localSet(iL));
+
+    // block { loop { ... } } scanning positions i = 0..srcLen-subLen.
+    out.write(Wasm.block(WasmType.voidType));
+    context.controlDepth++;
+    final breakLevel = context.controlDepth;
+    out.write(Wasm.loop(WasmType.voidType));
+    context.controlDepth++;
+    final repeatLevel = context.controlDepth;
+
+    // if (i + subLen > srcLen) break — no room for a match.
+    out.write(Wasm.localGet(iL));
+    out.write(Wasm.localGet(subLen));
+    out.writeByte(Wasm32.i32Add);
+    out.write(Wasm.localGet(srcLen));
+    out.writeByte(Wasm32.i32GreaterThanUnsigned);
+    out.write(Wasm.brIf(context.controlDepth - breakLevel));
+
+    // aAddr = src + 4 + i ; match = (subLen bytes at aAddr == bAddr)
+    out.write(Wasm.localGet(src));
+    out.write(Wasm32.i32Const(4));
+    out.writeByte(Wasm32.i32Add);
+    out.write(Wasm.localGet(iL));
+    out.writeByte(Wasm32.i32Add);
+    out.write(Wasm.localSet(aAddr));
+    _emitBytesEqualNoBreak(
+      out,
+      context,
+      aLoc: aAddr,
+      bLoc: bAddr,
+      lenLoc: subLen,
+      jLoc: j,
+      outLoc: match,
+    );
+
+    // result = match ? i : result ; break when matched.
+    out.write(Wasm.localGet(iL));
+    out.write(Wasm.localGet(result));
+    out.write(Wasm.localGet(match));
+    out.writeByte(Wasm.select);
+    out.write(Wasm.localSet(result));
+    out.write(Wasm.localGet(match));
+    out.write(Wasm.brIf(context.controlDepth - breakLevel));
+
+    // i++ ; repeat
+    out.write(Wasm.localGet(iL));
+    out.write(Wasm32.i32Const(1));
+    out.writeByte(Wasm32.i32Add);
+    out.write(Wasm.localSet(iL));
+    out.write(Wasm.br(context.controlDepth - repeatLevel));
+
+    out.writeByte(Wasm.end); // loop
+    context.controlDepth--;
+    out.writeByte(Wasm.end); // block
+    context.controlDepth--;
+
+    if (asContains) {
+      out.write(Wasm.localGet(result));
+      out.write(Wasm32.i32Const(-1));
+      out.writeByte(Wasm32.i32NotEquals);
+      context.stackPush(_astTypeInt32, "$varName.contains");
+    } else {
+      out.write(Wasm.localGet(result));
+      out.writeByte(Wasm32.i32ExtendToI64Signed); // -1 stays -1
+      context.stackPush(_astTypeInt64, "$varName.indexOf");
+    }
+    context.assertStackLength(s0 + 1, "After String.indexOf/contains");
+    return out;
+  }
+
+  /// Emits a byte-compare loop: sets [outLoc] to 1 if the [lenLoc] bytes at
+  /// address [aLoc] equal those at [bLoc], else 0 (AND-accumulated, no early
+  /// exit, so it never branches out of an enclosing `if`). [jLoc] is a scratch
+  /// counter. The caller must guarantee both ranges are in-bounds.
+  void _emitBytesEqualNoBreak(
+    BytesOutput out,
+    WasmContext context, {
+    required int aLoc,
+    required int bLoc,
+    required int lenLoc,
+    required int jLoc,
+    required int outLoc,
+  }) {
+    out.write(Wasm32.i32Const(1));
+    out.write(Wasm.localSet(outLoc));
+    out.write(Wasm32.i32Const(0));
+    out.write(Wasm.localSet(jLoc));
+
+    out.write(Wasm.block(WasmType.voidType));
+    context.controlDepth++;
+    final breakLevel = context.controlDepth;
+    out.write(Wasm.loop(WasmType.voidType));
+    context.controlDepth++;
+    final repeatLevel = context.controlDepth;
+
+    // if (j >= len) break
+    out.write(Wasm.localGet(jLoc));
+    out.write(Wasm.localGet(lenLoc));
+    out.writeByte(Wasm32.i32GreaterThanOrEqualsUnsigned);
+    out.write(Wasm.brIf(context.controlDepth - breakLevel));
+
+    // out = out & (load8(a + j) == load8(b + j))
+    out.write(Wasm.localGet(outLoc));
+    out.write(Wasm.localGet(aLoc));
+    out.write(Wasm.localGet(jLoc));
+    out.writeByte(Wasm32.i32Add);
+    out.write(Wasm32.i32Load8U());
+    out.write(Wasm.localGet(bLoc));
+    out.write(Wasm.localGet(jLoc));
+    out.writeByte(Wasm32.i32Add);
+    out.write(Wasm32.i32Load8U());
+    out.writeByte(Wasm32.i32Equals);
+    out.writeByte(Wasm32.i32BitwiseAnd);
+    out.write(Wasm.localSet(outLoc));
+
+    // j++ ; repeat
+    out.write(Wasm.localGet(jLoc));
+    out.write(Wasm32.i32Const(1));
+    out.writeByte(Wasm32.i32Add);
+    out.write(Wasm.localSet(jLoc));
+    out.write(Wasm.br(context.controlDepth - repeatLevel));
+
+    out.writeByte(Wasm.end); // loop
+    context.controlDepth--;
+    out.writeByte(Wasm.end); // block
+    context.controlDepth--;
+  }
+
   BytesOutput _generateStringCaseConvert(
     ({ASTType type, int index}) localVar,
     String varName, {
