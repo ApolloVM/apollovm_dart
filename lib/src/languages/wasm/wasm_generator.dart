@@ -95,7 +95,11 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     var anonClosures = anon.closures;
 
     var functions = [...baseFunctions, ...anonClosures.map((c) => c.function)];
-    var module = WasmModuleContext(functions, classLayouts: classLayouts);
+    var module = WasmModuleContext(
+      functions,
+      classLayouts: classLayouts,
+      classDeclarations: {for (var c in root.classes) c.name: c},
+    );
 
     // Register a module global for each `static` field, up front (before any
     // enum-entry global) so global indices are stable. Only literal `int`/
@@ -186,12 +190,17 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
 
   /// Computes the heap layout of a class instance: instance fields in
   /// declaration order, each at a byte offset (int/double 8B, else 4B i32).
+  /// Inherited fields come first (superclass-first, see [_allInstanceFields]),
+  /// so an inherited field sits at the same offset on a subclass instance as on
+  /// the superclass — a superclass method compiled against the superclass layout
+  /// reads/writes the correct slot when invoked on a subclass instance.
   WasmClassLayout _buildClassLayout(ASTClassNormal clazz) {
     var offsets = <String, int>{};
     var types = <String, ASTType>{};
     var offset = 0;
-    for (var field in clazz.fields) {
-      if (field.modifiers.isStatic) continue; // statics aren't instance fields
+    for (var field in _allInstanceFields(clazz)) {
+      // On a name collision keep the first (inherited) declaration's offset.
+      if (offsets.containsKey(field.name)) continue;
       offsets[field.name] = offset;
       types[field.name] = field.type;
       offset += _elemSize(field.type);
@@ -223,6 +232,27 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     return WasmClassLayout(clazz.name, offsets, types, offset);
   }
 
+  /// All non-static instance fields visible on [clazz], **superclass-first**: a
+  /// field declared on the top of the `extends` chain appears before a subclass's
+  /// own fields. Duplicates (a subclass field named like an inherited one) keep
+  /// the superclass declaration's position; the caller de-dupes by name. Enums
+  /// have no superclass, so this returns their declared fields unchanged.
+  List<ASTClassField> _allInstanceFields(ASTClassNormal clazz) {
+    var chain = <ASTClassNormal>[];
+    for (ASTClass? c = clazz; c is ASTClassNormal; c = c.superClass) {
+      chain.add(c);
+    }
+    var result = <ASTClassField>[];
+    for (var k = chain.length - 1; k >= 0; k--) {
+      for (var field in chain[k].fields) {
+        // Statics aren't instance fields.
+        if (field.modifiers.isStatic) continue;
+        result.add(field);
+      }
+    }
+    return result;
+  }
+
   /// The seed value for a `static` field global: the field's literal `int` /
   /// `double` / `bool` initializer (bool as `0`/`1`), or `0` when there is no
   /// initializer or it is not a compile-time literal.
@@ -244,6 +274,8 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
 
   /// The `"Class.field"` key of a bare `static` field [name] of the current
   /// class (via `context.classLayout`), or `null` if it isn't a static field.
+  /// Static members are not inherited in Dart, so this does not walk the
+  /// `extends` chain (unlike instance-member resolution).
   String? _staticFieldKey(WasmContext context, String name) {
     var module = context.module;
     var className = context.classLayout?.className;
@@ -1697,6 +1729,29 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     context ??= WasmContext();
 
     var varName = expression.variable.name;
+
+    // `super.method(args)`: the receiver is the current instance (`this`), but
+    // method dispatch starts at the enclosing class's superclass (so an override
+    // in the current class is skipped — `super` reaches the inherited one).
+    if (varName == 'super') {
+      var thisVar = context.getLocalVariable('this');
+      var superName = context.module?.superClassNameOf(
+        context.classLayout?.className,
+      );
+      if (thisVar != null && superName != null) {
+        return _emitClassMethodCall(
+          recv: thisVar,
+          receiverDesc: 'super',
+          methodName: expression.name,
+          arguments: expression.arguments,
+          namedArguments: expression.namedArguments,
+          resolveClassName: superName,
+          out: out,
+          context: context,
+        );
+      }
+    }
+
     var localVar = _getLocalVariable(context, varName);
 
     // List.add(x)
@@ -1781,11 +1836,14 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     required String methodName,
     required List<ASTExpression> arguments,
     Map<String, ASTExpression>? namedArguments,
+    String? resolveClassName,
     required BytesOutput out,
     required WasmContext context,
   }) {
     var module = context.module!;
-    var className = recv.type.name;
+    // For `super.m()` the receiver stays the current instance but dispatch
+    // starts at the enclosing class's superclass ([resolveClassName]).
+    var className = resolveClassName ?? recv.type.name;
     // Supplied arity = positional + named. A call may omit trailing parameters
     // that have default values, so this can be less than the method's declared
     // arity; resolve at the declared arity (Wasm methods are fixed-arity).
@@ -5653,9 +5711,12 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
         .toSet();
 
     // Field initializers (e.g. `int y = 5`) for fields not set by a `this.`
-    // parameter.
-    for (var field in clazz.fields) {
+    // parameter — including inherited fields (superclass-first, so a superclass
+    // initializer runs before the subclass's own; the seen-set keeps the first).
+    var initializedFields = <String>{};
+    for (var field in _allInstanceFields(clazz)) {
       if (field.modifiers.isStatic) continue;
+      if (!initializedFields.add(field.name)) continue;
       if (thisParamNames.contains(field.name)) continue;
       if (field is! ASTClassFieldWithInitialValue) continue;
 
@@ -10406,10 +10467,25 @@ class WasmModuleContext {
   /// Field memory layout for each class, keyed by class name.
   final Map<String, WasmClassLayout> classLayouts;
 
-  WasmModuleContext(this.functions, {this.classLayouts = const {}});
+  /// The class declarations, keyed by name — used to walk the `extends` chain
+  /// when resolving inherited members and `super` dispatch.
+  final Map<String, ASTClassNormal> classDeclarations;
+
+  WasmModuleContext(
+    this.functions, {
+    this.classLayouts = const {},
+    this.classDeclarations = const {},
+  });
 
   /// The field layout of the class whose instances have type [t], or `null`.
   WasmClassLayout? layoutForType(ASTType t) => classLayouts[t.name];
+
+  /// The name of the direct superclass of [className] (its `extends` target),
+  /// or `null` if the class is unknown or has no superclass.
+  String? superClassNameOf(String? className) {
+    if (className == null) return null;
+    return classDeclarations[className]?.superClass?.name;
+  }
 
   // --- Function table (for closures / function values via `call_indirect`) ---
 
@@ -10534,15 +10610,19 @@ class WasmModuleContext {
   }
 
   /// Resolves the Wasm function index of class [className]'s method
-  /// [methodName] taking [arity] declared arguments (excluding `this`).
+  /// [methodName] taking [arity] declared arguments (excluding `this`). Walks the
+  /// `extends` chain, so an inherited (non-overridden) method resolves to the
+  /// superclass function that defines it.
   int? methodIndex(String className, String methodName, int arity) {
-    for (var i = 0; i < functions.length; ++i) {
-      var f = functions[i];
-      if (f is _WasmMethodFunction &&
-          f.clazz.name == className &&
-          f.method.name == methodName &&
-          f.method.parameters.size == arity) {
-        return importCount + i;
+    for (String? cn = className; cn != null; cn = superClassNameOf(cn)) {
+      for (var i = 0; i < functions.length; ++i) {
+        var f = functions[i];
+        if (f is _WasmMethodFunction &&
+            f.clazz.name == cn &&
+            f.method.name == methodName &&
+            f.method.parameters.size == arity) {
+          return importCount + i;
+        }
       }
     }
     return null;
@@ -10558,23 +10638,28 @@ class WasmModuleContext {
     String methodName,
     int suppliedCount,
   ) {
-    int? bestIndex;
-    int? bestSize;
-    for (var i = 0; i < functions.length; ++i) {
-      var f = functions[i];
-      if (f is! _WasmMethodFunction ||
-          f.clazz.name != className ||
-          f.method.name != methodName) {
-        continue;
+    // Walk the `extends` chain: the most-derived class that declares the method
+    // wins (an override), falling back to an inherited superclass method.
+    for (String? cn = className; cn != null; cn = superClassNameOf(cn)) {
+      int? bestIndex;
+      int? bestSize;
+      for (var i = 0; i < functions.length; ++i) {
+        var f = functions[i];
+        if (f is! _WasmMethodFunction ||
+            f.clazz.name != cn ||
+            f.method.name != methodName) {
+          continue;
+        }
+        var size = f.method.parameters.size;
+        if (size < suppliedCount) continue;
+        if (bestSize == null || size < bestSize) {
+          bestSize = size;
+          bestIndex = importCount + i;
+        }
       }
-      var size = f.method.parameters.size;
-      if (size < suppliedCount) continue;
-      if (bestSize == null || size < bestSize) {
-        bestSize = size;
-        bestIndex = importCount + i;
-      }
+      if (bestIndex != null) return bestIndex;
     }
-    return bestIndex;
+    return null;
   }
 
   /// Like [methodIndexForCall] but for **static** methods (no receiver):

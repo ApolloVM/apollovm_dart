@@ -1,3 +1,24 @@
+## 2.4.0
+
+### Wasm: class inheritance (`extends` / `super`)
+
+The on-the-fly WebAssembly compiler now supports single inheritance, matching the
+interpreter. A subclass instance carries its superclass's fields **first** in its
+heap layout, so an inherited field sits at the same offset as on the superclass —
+a superclass method, compiled once, reads/writes the correct slot when invoked on
+a subclass instance. Method resolution walks the `extends` chain (an override on
+the subclass wins, otherwise the inherited superclass method), the subclass
+constructor runs inherited field initializers, and `super.method(args)` keeps the
+current instance as the receiver while dispatching to the superclass (skipping the
+override). Covers inherited method calls (bare and via a receiver, with
+arguments), inherited field read/write (including `double`), own+inherited fields
+at distinct offsets, override-wins, `super.method()`/`super.method(args)`, and
+multi-level `extends` chains.
+
+Dispatch is static (by the receiver's declared type); virtual dispatch through an
+upcast receiver, `super.field`/`super.getter`, and inherited user-getters remain
+follow-ups. Static members are intentionally not inherited (matching Dart).
+
 ## 2.3.0
 
 ### Wasm: `static` class fields
