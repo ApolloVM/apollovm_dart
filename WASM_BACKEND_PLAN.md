@@ -121,10 +121,14 @@ test('generic Box<int> field round-trips', () => _testWasm(
 - **Done (index)**: `s[i]` -> a length-1 String (the byte at `s + 4 + i`). Also
   added `String[]` (`readIndex`) to the interpreter, which lacked it —
   `apollovm_wasm_string_index_test`.
+- **Done (equality)**: `String == String` / `String != String` now compile to
+  content equality via the `__streq` synth helper (not pointer identity),
+  yielding a `bool` that can be returned, used as an `if`/`&&` condition, etc.
+  Covers literal/variable operands and the empty string —
+  `apollovm_wasm_string_equality_test`.
 - **Still open**: chaining a getter/method onto a method/index *result*
   (`s.toUpperCase().length`, `s.split(',')[0].length`, `s.substring(0,2) == 'x'`)
-  — the receiver must be a named local; a bare `String == String` returning a
-  `bool` is a separate pre-existing limitation.
+  — the receiver must be a named local.
 - **Fix direction**: same allocate-buffer + byte-loop pattern
   (`_generateStringCaseConvert`, `_emitBytesEqualNoBreak`). `.split`/`.replaceAll`
   build a fresh buffer/`List` from scan results. Stored length is UTF-8 bytes, so
@@ -271,9 +275,9 @@ All lettered gaps are now **DONE**: **B** (String methods), **C** (getters),
 
 Remaining known limitations (not full gaps): chaining a getter/method onto a
 non-local *result* (`s.toUpperCase().length`, `s.split(',')[0].length`); virtual
-dispatch through an upcast receiver; `super.field`/`super.getter`; the
-`: super(...)` constructor-initializer **parser** gap; and a bare
-`String == String` returning a `bool`.
+dispatch through an upcast receiver; `super.field`/`super.getter`; and the
+`: super(...)` constructor-initializer **parser** gap. (`String == String`
+returning a `bool` is now supported via the `__streq` helper.)
 
 After each fix: `dart test -t wasm -x wasm-gc -x wasm-chrome` must stay green
 (all existing tests + the new one for that gap). Note that some Wasm tests

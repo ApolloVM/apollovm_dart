@@ -1,3 +1,17 @@
+## 2.14.0
+
+### Wasm: `String ==` / `String !=` content equality
+
+The on-the-fly WebAssembly compiler now compiles `String == String` and
+`String != String` to content equality via the `__streq` synth helper (the same
+byte-comparison already used for `switch` cases and `Map<String, …>` key
+lookups), instead of leaving the two String handles to flow into a numeric
+comparison — which tested pointer identity and, when the handles reached an
+`i64.eq`, produced invalid Wasm. The result is a proper `bool`, so it can be
+returned directly, used as an `if`/`&&`/`||` condition, or otherwise combined
+logically. `!=` inverts the helper's result with `i32.eqz`. Covers
+literal/variable operands and the empty string.
+
 ## 2.13.0
 
 ### Wasm: generic-class fields (`Box<T>`) + aggregate-return coverage
