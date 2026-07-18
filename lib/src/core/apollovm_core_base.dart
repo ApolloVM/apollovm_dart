@@ -436,6 +436,8 @@ class CoreClassString extends CoreClassPrimitive<String> {
 
   late final ASTExternalClassFunction _functionCodeUnitAt;
 
+  late final ASTExternalClassFunction _functionCompareTo;
+
   late final ASTExternalFunction _functionValueOf;
 
   CoreClassString._() : super(ASTTypeString.instance, 'String') {
@@ -647,6 +649,18 @@ class CoreClassString extends CoreClassPrimitive<String> {
       (String o, int index) => o.codeUnitAt(index),
     );
 
+    _functionCompareTo = _externalClassFunctionArgs1(
+      'compareTo',
+      ASTTypeInt.instance,
+      ASTFunctionParameterDeclaration(
+        ASTTypeString.instance,
+        'other',
+        0,
+        false,
+      ),
+      (String o, String other) => o.compareTo(other),
+    );
+
     _functionValueOf = _externalStaticFunctionArgs1(
       'valueOf',
       ASTTypeString.instance,
@@ -747,6 +761,9 @@ class CoreClassString extends CoreClassPrimitive<String> {
 
       case 'codeUnitAt':
         return _functionCodeUnitAt;
+
+      case 'compareTo':
+        return _functionCompareTo;
 
       case 'valueOf':
         return _functionValueOf;
