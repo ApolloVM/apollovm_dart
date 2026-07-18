@@ -105,10 +105,16 @@ test('generic Box<int> field round-trips', () => _testWasm(
 - **Done (compareTo)**: `.compareTo(other)` — lexicographic byte compare
   returning `-1`/`0`/`1`. Also added `String.compareTo` to the interpreter core
   (`apollovm_core_base.dart`), which lacked it — `apollovm_wasm_string_compareto_test`.
-- **Still open**: `.split` (returns a `List`) and index `[]`. Also: chaining a
-  getter/method onto a method *result* (`s.toUpperCase().length`,
-  `s.substring(0,2) == 'x'`) — the receiver must be a named local, and a bare
-  `String == String` returning a `bool` is a separate pre-existing limitation.
+- **Done (split)**: `.split(sep)` -> `List<String>` — two passes (count
+  separators to size the list, then allocate each piece as a fresh String);
+  handles multi-char separators and leading/trailing empty pieces. An empty `sep`
+  yields a single whole-string piece (Dart's char-split for `''` is a follow-up)
+  — `apollovm_wasm_string_split_test`.
+- **Still open**: chaining a getter/method onto a method/index *result*
+  (`s.toUpperCase().length`, `s.split(',')[0].length`, `s.substring(0,2) == 'x'`)
+  — the receiver must be a named local; a bare `String == String` returning a
+  `bool` is a separate pre-existing limitation. (Note: Dart `String` has no
+  `operator []`, so `s[i]` is not a real gap.)
 - **Fix direction**: same allocate-buffer + byte-loop pattern
   (`_generateStringCaseConvert`, `_emitBytesEqualNoBreak`). `.split`/`.replaceAll`
   build a fresh buffer/`List` from scan results. Stored length is UTF-8 bytes, so
@@ -250,14 +256,13 @@ test('return a List', () => _testWasm(
 
 ## Suggested order
 
-GAPs **C** (getters), **D** (static fields), **E** (inheritance/`super`) and **G**
-(nested collections / `m[0][1]`) are **DONE**; **GAP B** (String methods) is mostly
-done (slice/search/case complete). Remaining:
+GAPs **C** (getters), **D** (static fields), **E** (inheritance/`super`), **G**
+(nested collections / `m[0][1]`) and **B** (String methods) are **DONE**.
+Remaining:
 
-1. **GAP B tail** — `.split` (returns a `List`) and index `[]`. (`.trim`/`.pad`/
-   `.replaceAll`/`.replaceFirst`/`.compareTo` done.)
-2. **GAP A** (generic field i64/boxing) and **GAP F** (aggregate returns) —
-   value-representation work; related boxing concerns.
+1. **GAP A** (generic field i64/boxing) and **GAP F** (aggregate returns) —
+   value-representation work; related boxing concerns. (These, plus chaining a
+   method onto a non-local result, are the main remaining backend gaps.)
 
 After each fix: `dart test -t wasm -x wasm-gc -x wasm-chrome` must stay green
 (all existing tests + the new one for that gap). Note that some Wasm tests

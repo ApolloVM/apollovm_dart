@@ -1,3 +1,19 @@
+## 2.11.0
+
+### Wasm: String `split`
+
+The on-the-fly WebAssembly compiler now supports `String.split(sep)`, returning a
+`List<String>`. It is compiled as two passes over the `[len][utf8]` layout: the
+first counts the separators to size the list (`pieces = count + 1`), the second
+allocates each piece as a fresh String and stores its pointer in the list buffer.
+Handles multi-char separators and leading/trailing empty pieces; an empty `sep`
+yields a single whole-string piece (Dart's char-split for `''` is a follow-up).
+
+With this, the String method surface in Wasm is broadly complete (case, length,
+slice/search, trim/pad, replace, compareTo, split). The main remaining Wasm
+backend gaps are value-representation ones: generic-typed fields and returning a
+`List`/`Map` across the module boundary.
+
 ## 2.10.0
 
 ### String `compareTo` (interpreter + Wasm)

@@ -10447,7 +10447,281 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
         context: context,
       );
     }
+    if (name == 'split' && args.length == 1) {
+      return _generateStringSplit(
+        recv,
+        varName,
+        args[0],
+        out: out,
+        context: context,
+      );
+    }
     return null;
+  }
+
+  /// `s.split(sep)` -> a `List<String>` of the pieces between (non-overlapping)
+  /// occurrences of `sep`. Two passes over the byte layout: pass 1 counts the
+  /// separators to size the list (`pieces = count + 1`), pass 2 allocates each
+  /// piece as a fresh String and stores its pointer in the list buffer. An empty
+  /// `sep` yields a single piece (the whole string) — Dart's char-split for `''`
+  /// is a follow-up.
+  BytesOutput _generateStringSplit(
+    ({ASTType type, int index}) recv,
+    String varName,
+    ASTExpression sepExpr, {
+    required BytesOutput out,
+    required WasmContext context,
+  }) {
+    var module = context.module!;
+    module.requiresMemory = true;
+    module.requiresHeapGlobal = true;
+    final s0 = context.stackLength;
+
+    var src = context.scratchLocal(_astTypeString, 60);
+    var srcLen = context.scratchLocal(_astTypeString, 61);
+    var sep = context.scratchLocal(_astTypeString, 62);
+    var sepLen = context.scratchLocal(_astTypeString, 63);
+    var sepData = context.scratchLocal(_astTypeString, 64);
+    var count = context.scratchLocal(_astTypeString, 65);
+    var i = context.scratchLocal(_astTypeString, 66);
+    var listHdr = context.scratchLocal(_astTypeString, 67);
+    var dataBuf = context.scratchLocal(_astTypeString, 68);
+    var pieceIdx = context.scratchLocal(_astTypeString, 69);
+    var ps = context.scratchLocal(_astTypeString, 70);
+    var isMatch = context.scratchLocal(_astTypeString, 71);
+    var j = context.scratchLocal(_astTypeString, 72);
+    var aAddr = context.scratchLocal(_astTypeString, 73);
+    var pieceLen = context.scratchLocal(_astTypeString, 74);
+    var strPtr = context.scratchLocal(_astTypeString, 75);
+    var isEnd = context.scratchLocal(_astTypeString, 76);
+    var doEmit = context.scratchLocal(_astTypeString, 77);
+
+    // sep = eval(arg) ; src = recv ; lengths ; sepData = sep + 4
+    generateASTExpression(sepExpr, out: out, context: context);
+    context.stackDrop();
+    out.write(Wasm.localSet(sep));
+    _localVariableGet(out, context, recv.index, varName);
+    out.write(Wasm.localSet(src));
+    out.write(Wasm.localGet(src));
+    out.write(Wasm32.i32Load());
+    out.write(Wasm.localSet(srcLen));
+    out.write(Wasm.localGet(sep));
+    out.write(Wasm32.i32Load());
+    out.write(Wasm.localSet(sepLen));
+    out.write(Wasm.localGet(sep));
+    out.write(Wasm32.i32Const(4));
+    out.writeByte(Wasm32.i32Add);
+    out.write(Wasm.localSet(sepData));
+
+    // --- Pass 1: count non-overlapping separators ---
+    out.write(Wasm32.i32Const(0));
+    out.write(Wasm.localSet(count));
+    out.write(Wasm32.i32Const(0));
+    out.write(Wasm.localSet(i));
+    out.write(Wasm.block(WasmType.voidType));
+    context.controlDepth++;
+    var brk1 = context.controlDepth;
+    out.write(Wasm.loop(WasmType.voidType));
+    context.controlDepth++;
+    var rpt1 = context.controlDepth;
+    // if (i + sepLen > srcLen) break
+    out.write(Wasm.localGet(i));
+    out.write(Wasm.localGet(sepLen));
+    out.writeByte(Wasm32.i32Add);
+    out.write(Wasm.localGet(srcLen));
+    out.writeByte(Wasm32.i32GreaterThanUnsigned);
+    out.write(Wasm.brIf(context.controlDepth - brk1));
+    // aAddr = src + 4 + i ; isMatch = bytesEqual(aAddr, sepData, sepLen) & sepLen!=0
+    out.write(Wasm.localGet(src));
+    out.write(Wasm32.i32Const(4));
+    out.writeByte(Wasm32.i32Add);
+    out.write(Wasm.localGet(i));
+    out.writeByte(Wasm32.i32Add);
+    out.write(Wasm.localSet(aAddr));
+    _emitBytesEqualNoBreak(
+      out,
+      context,
+      aLoc: aAddr,
+      bLoc: sepData,
+      lenLoc: sepLen,
+      jLoc: j,
+      outLoc: isMatch,
+    );
+    out.write(Wasm.localGet(isMatch));
+    out.write(Wasm.localGet(sepLen));
+    out.write(Wasm32.i32Const(0));
+    out.writeByte(Wasm32.i32NotEquals);
+    out.writeByte(Wasm32.i32BitwiseAnd);
+    out.write(Wasm.localSet(isMatch));
+    // count += isMatch ; i += isMatch ? sepLen : 1
+    out.write(Wasm.localGet(count));
+    out.write(Wasm.localGet(isMatch));
+    out.writeByte(Wasm32.i32Add);
+    out.write(Wasm.localSet(count));
+    out.write(Wasm.localGet(i));
+    out.write(Wasm.localGet(sepLen));
+    out.write(Wasm32.i32Const(1));
+    out.write(Wasm.localGet(isMatch));
+    out.writeByte(Wasm.select);
+    out.writeByte(Wasm32.i32Add);
+    out.write(Wasm.localSet(i));
+    out.write(Wasm.br(context.controlDepth - rpt1));
+    out.writeByte(Wasm.end); // loop
+    context.controlDepth--;
+    out.writeByte(Wasm.end); // block
+    context.controlDepth--;
+
+    // list header (12) + data buffer ((count + 1) * 4)
+    out.write(Wasm32.i32Const(_listHeaderSize));
+    _emitInlineAlloc(out, context);
+    out.write(Wasm.localSet(listHdr));
+    out.write(Wasm.localGet(count));
+    out.write(Wasm32.i32Const(1));
+    out.writeByte(Wasm32.i32Add);
+    out.write(Wasm32.i32Const(4));
+    out.writeByte(Wasm32.i32Multiply);
+    _emitInlineAlloc(out, context);
+    out.write(Wasm.localSet(dataBuf));
+    // header: length = count+1, capacity = count+1, dataPtr = dataBuf
+    out.write(Wasm.localGet(listHdr));
+    out.write(Wasm.localGet(count));
+    out.write(Wasm32.i32Const(1));
+    out.writeByte(Wasm32.i32Add);
+    out.write(Wasm32.i32Store(2, 0));
+    out.write(Wasm.localGet(listHdr));
+    out.write(Wasm.localGet(count));
+    out.write(Wasm32.i32Const(1));
+    out.writeByte(Wasm32.i32Add);
+    out.write(Wasm32.i32Store(2, 4));
+    out.write(Wasm.localGet(listHdr));
+    out.write(Wasm.localGet(dataBuf));
+    out.write(Wasm32.i32Store(2, 8));
+
+    // --- Pass 2: emit each piece [ps, i) as a fresh String ---
+    out.write(Wasm32.i32Const(0));
+    out.write(Wasm.localSet(pieceIdx));
+    out.write(Wasm32.i32Const(0));
+    out.write(Wasm.localSet(ps));
+    out.write(Wasm32.i32Const(0));
+    out.write(Wasm.localSet(i));
+    out.write(Wasm.block(WasmType.voidType));
+    context.controlDepth++;
+    var brk2 = context.controlDepth;
+    out.write(Wasm.loop(WasmType.voidType));
+    context.controlDepth++;
+    var rpt2 = context.controlDepth;
+
+    // isEnd = i >= srcLen
+    out.write(Wasm.localGet(i));
+    out.write(Wasm.localGet(srcLen));
+    out.writeByte(Wasm32.i32GreaterThanOrEqualsUnsigned);
+    out.write(Wasm.localSet(isEnd));
+    // isMatch = (i + sepLen <= srcLen) & bytesEqual(src+4+i, sepData, sepLen) & sepLen!=0
+    out.write(Wasm.localGet(src));
+    out.write(Wasm32.i32Const(4));
+    out.writeByte(Wasm32.i32Add);
+    out.write(Wasm.localGet(i));
+    out.writeByte(Wasm32.i32Add);
+    out.write(Wasm.localSet(aAddr));
+    _emitBytesEqualNoBreak(
+      out,
+      context,
+      aLoc: aAddr,
+      bLoc: sepData,
+      lenLoc: sepLen,
+      jLoc: j,
+      outLoc: isMatch,
+    );
+    out.write(Wasm.localGet(isMatch));
+    out.write(Wasm.localGet(sepLen));
+    out.write(Wasm32.i32Const(0));
+    out.writeByte(Wasm32.i32NotEquals);
+    out.writeByte(Wasm32.i32BitwiseAnd);
+    out.write(Wasm.localGet(i));
+    out.write(Wasm.localGet(sepLen));
+    out.writeByte(Wasm32.i32Add);
+    out.write(Wasm.localGet(srcLen));
+    out.writeByte(Wasm32.i32LessThanOrEqualsUnsigned);
+    out.writeByte(Wasm32.i32BitwiseAnd);
+    out.write(Wasm.localSet(isMatch));
+    // doEmit = isEnd | isMatch
+    out.write(Wasm.localGet(isEnd));
+    out.write(Wasm.localGet(isMatch));
+    out.writeByte(Wasm32.i32BitwiseOr);
+    out.write(Wasm.localSet(doEmit));
+
+    // if (doEmit) { emit piece [ps, i) ; dataBuf[pieceIdx++] = strPtr }
+    out.write(Wasm.localGet(doEmit));
+    out.write(Wasm.ifInstruction(WasmType.voidType));
+    // pieceLen = i - ps
+    out.write(Wasm.localGet(i));
+    out.write(Wasm.localGet(ps));
+    out.writeByte(Wasm32.i32Subtract);
+    out.write(Wasm.localSet(pieceLen));
+    // strPtr = alloc(pieceLen + 4) ; store pieceLen ; memcpy(strPtr+4, src+4+ps, pieceLen)
+    out.write(Wasm.localGet(pieceLen));
+    out.write(Wasm32.i32Const(4));
+    out.writeByte(Wasm32.i32Add);
+    _emitInlineAlloc(out, context);
+    out.write(Wasm.localSet(strPtr));
+    out.write(Wasm.localGet(strPtr));
+    out.write(Wasm.localGet(pieceLen));
+    out.write(Wasm32.i32Store());
+    out.write(Wasm.localGet(strPtr));
+    out.write(Wasm32.i32Const(4));
+    out.writeByte(Wasm32.i32Add);
+    out.write(Wasm.localGet(src));
+    out.write(Wasm32.i32Const(4));
+    out.writeByte(Wasm32.i32Add);
+    out.write(Wasm.localGet(ps));
+    out.writeByte(Wasm32.i32Add);
+    out.write(Wasm.localGet(pieceLen));
+    out.write(Wasm.memoryCopy);
+    // dataBuf[pieceIdx * 4] = strPtr
+    out.write(Wasm.localGet(dataBuf));
+    out.write(Wasm.localGet(pieceIdx));
+    out.write(Wasm32.i32Const(4));
+    out.writeByte(Wasm32.i32Multiply);
+    out.writeByte(Wasm32.i32Add);
+    out.write(Wasm.localGet(strPtr));
+    out.write(Wasm32.i32Store());
+    // pieceIdx++
+    out.write(Wasm.localGet(pieceIdx));
+    out.write(Wasm32.i32Const(1));
+    out.writeByte(Wasm32.i32Add);
+    out.write(Wasm.localSet(pieceIdx));
+    out.writeByte(Wasm.end); // if
+
+    // if (isEnd) break
+    out.write(Wasm.localGet(isEnd));
+    out.write(Wasm.brIf(context.controlDepth - brk2));
+
+    // ps = isMatch ? i + sepLen : ps ; i += isMatch ? sepLen : 1
+    out.write(Wasm.localGet(i));
+    out.write(Wasm.localGet(sepLen));
+    out.writeByte(Wasm32.i32Add);
+    out.write(Wasm.localGet(ps));
+    out.write(Wasm.localGet(isMatch));
+    out.writeByte(Wasm.select);
+    out.write(Wasm.localSet(ps));
+    out.write(Wasm.localGet(i));
+    out.write(Wasm.localGet(sepLen));
+    out.write(Wasm32.i32Const(1));
+    out.write(Wasm.localGet(isMatch));
+    out.writeByte(Wasm.select);
+    out.writeByte(Wasm32.i32Add);
+    out.write(Wasm.localSet(i));
+    out.write(Wasm.br(context.controlDepth - rpt2));
+
+    out.writeByte(Wasm.end); // loop
+    context.controlDepth--;
+    out.writeByte(Wasm.end); // block
+    context.controlDepth--;
+
+    out.write(Wasm.localGet(listHdr));
+    context.stackPush(ASTTypeArray(_astTypeString), "$varName.split");
+    context.assertStackLength(s0 + 1, "After String.split");
+    return out;
   }
 
   /// `s.compareTo(other)` -> `-1`/`0`/`1` (lexicographic byte comparison), as an
