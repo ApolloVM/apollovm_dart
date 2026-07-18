@@ -110,11 +110,13 @@ test('generic Box<int> field round-trips', () => _testWasm(
   handles multi-char separators and leading/trailing empty pieces. An empty `sep`
   yields a single whole-string piece (Dart's char-split for `''` is a follow-up)
   — `apollovm_wasm_string_split_test`.
+- **Done (index)**: `s[i]` -> a length-1 String (the byte at `s + 4 + i`). Also
+  added `String[]` (`readIndex`) to the interpreter, which lacked it —
+  `apollovm_wasm_string_index_test`.
 - **Still open**: chaining a getter/method onto a method/index *result*
   (`s.toUpperCase().length`, `s.split(',')[0].length`, `s.substring(0,2) == 'x'`)
   — the receiver must be a named local; a bare `String == String` returning a
-  `bool` is a separate pre-existing limitation. (Note: Dart `String` has no
-  `operator []`, so `s[i]` is not a real gap.)
+  `bool` is a separate pre-existing limitation.
 - **Fix direction**: same allocate-buffer + byte-loop pattern
   (`_generateStringCaseConvert`, `_emitBytesEqualNoBreak`). `.split`/`.replaceAll`
   build a fresh buffer/`List` from scan results. Stored length is UTF-8 bytes, so

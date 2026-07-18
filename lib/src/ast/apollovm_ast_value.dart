@@ -333,6 +333,9 @@ class ASTValueStatic<T> extends ASTValue<T> {
 
     if (value is List) {
       return value[index] as V;
+    } else if (value is String) {
+      // Dart `String[index]` returns the character at [index] as a String.
+      return value[index] as V;
     } else if (value is Iterable) {
       return value.elementAt(index);
     } else if (value is Map) {
