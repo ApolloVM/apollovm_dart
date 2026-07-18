@@ -144,11 +144,28 @@ class Java11GrammarDefinition extends Java11GrammarLexer {
               }) &
               identifier() &
               typeParameters().optional() &
+              (string('extends').trimHidden() & ref0(type)).optional() &
+              (string('implements').trimHidden() &
+                      ref0(type) &
+                      (char(',').trimHidden() & ref0(type)).star())
+                  .optional() &
               classCodeBlock())
           .map((v) {
             var name = v[1] as String;
-            var block = v[3];
-            var clazz = ASTClassNormal(name, ASTType<VMObject>(name), null);
+            var ext = v[3];
+            var block = v[5];
+            // `extends Base` records the superclass name.
+            String? superName;
+            if (ext is List) {
+              var t = ext[1];
+              if (t is ASTType) superName = t.name;
+            }
+            var clazz = ASTClassNormal(
+              name,
+              ASTType<VMObject>(name),
+              null,
+              superClassName: superName,
+            );
             clazz.set(block);
             _classTypeParameters.clear();
             return clazz;

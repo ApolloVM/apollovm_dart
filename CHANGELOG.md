@@ -1,3 +1,22 @@
+## 2.2.0
+
+### Class inheritance (`extends`) is now functional
+
+`extends` was parsed but had no runtime effect — inherited methods and fields
+were invisible and `super` was unresolved. Now:
+
+- **Inherited methods** resolve through the superclass chain, for both bare calls
+  (`base()` inside a subclass) and receiver calls (`obj.base()`); a subclass
+  override still wins over the inherited method.
+- **Inherited fields** are initialized onto instances (superclass-first) and are
+  readable/writable from a subclass.
+- **`super.method()`** dispatches to the parent's (overridden) method, resolved
+  relative to the class where the call is written (correct for multi-level
+  hierarchies).
+- The **Java** (`extends`) and **C#** (`: Base`) grammars now record the
+  superclass they were previously dropping, so inheritance works across those
+  languages too.
+
 ## 2.1.1
 
 ### `static` class fields are now supported

@@ -286,11 +286,16 @@ abstract class ASTClass<T> extends ASTEntryPointBlock {
     VMContext? parentContext,
   ]) => VMClassContext(this, parent: parentContext, typeResolver: typeResolver);
 
-  /// Resolves a function/constructor visible from inside this class. Falls back
-  /// to the enclosing [ASTRoot] (reached via the `parentNode` chain set by
-  /// `ASTRoot.resolveNode`) so a method can instantiate sibling classes (their
-  /// constructors) and call top-level functions — the class-method execution
-  /// context is rooted at the class, not the program root.
+  /// The resolved superclass this class `extends`, or `null` if none. Overridden
+  /// by [ASTClassNormal] (which carries the `extends` name).
+  ASTClass? get superClass => null;
+
+  /// Resolves a function/constructor visible from inside this class. Checks this
+  /// class's own functions, then the superclass chain (inherited methods), then
+  /// falls back to the enclosing [ASTRoot] (reached via the `parentNode` chain
+  /// set by `ASTRoot.resolveNode`) so a method can instantiate sibling classes
+  /// (their constructors) and call top-level functions — the class-method
+  /// execution context is rooted at the class, not the program root.
   @override
   ASTInvocableDeclaration? getFunction(
     String fName,
@@ -305,6 +310,15 @@ abstract class ASTClass<T> extends ASTEntryPointBlock {
       caseInsensitive: caseInsensitive,
     );
     if (f != null) return f;
+
+    // Inherited method from the superclass chain.
+    var sf = superClass?.getFunction(
+      fName,
+      parametersSignature,
+      context,
+      caseInsensitive: caseInsensitive,
+    );
+    if (sf != null) return sf;
 
     for (ASTNode? node = parentNode; node != null; node = node.parentNode) {
       if (node is ASTRoot) {
@@ -617,6 +631,24 @@ class ASTClassNormal extends ASTClass<VMObject> {
   /// Returns `true` if this class is `abstract`.
   bool get isAbstract => kind == ASTClassKind.abstractClass;
 
+  ASTClass? _superClass;
+  bool _superClassResolved = false;
+
+  /// The resolved superclass named by [superClassName] (via the enclosing
+  /// [ASTRoot]), or `null` if there is no `extends` or it can't be resolved.
+  @override
+  ASTClass? get superClass {
+    if (!_superClassResolved) {
+      _superClassResolved = true;
+      var name = superClassName;
+      if (name != null && name != this.name) {
+        var node = getNodeIdentifier(name);
+        if (node is ASTClass) _superClass = node;
+      }
+    }
+    return _superClass;
+  }
+
   @override
   void set(ASTBlock? other) {
     if (other == null) return;
@@ -818,6 +850,14 @@ class ASTClassNormal extends ASTClass<VMObject> {
       }
     }
 
+    // Fall back to an inherited field from the superclass chain.
+    field ??= superClass is ASTClassNormal
+        ? (superClass as ASTClassNormal).getField(
+            name,
+            caseInsensitive: caseInsensitive,
+          )
+        : null;
+
     return field;
   }
 
@@ -906,6 +946,13 @@ class ASTClassNormal extends ASTClass<VMObject> {
   ) async {
     if (instance is! ASTClassInstance<VMObject>) {
       throw _exceptionNotClassInstance(instance);
+    }
+
+    // Initialize inherited fields first (superclass chain), so a subclass's
+    // own fields are applied last.
+    var superClass = this.superClass;
+    if (superClass is ASTClassNormal) {
+      await superClass.initializeInstance(context, runStatus, instance);
     }
 
     for (var field in _fields.values) {
