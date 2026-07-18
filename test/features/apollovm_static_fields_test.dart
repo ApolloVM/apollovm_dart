@@ -141,6 +141,107 @@ void main() {
         );
       },
     );
+
+    test('qualified read of a null-default static field', () async {
+      expect(
+        await _runStatic(
+          'dart',
+          'class C { static int x; }'
+              ' class M { static bool run() { return C.x == null; } }',
+          'M',
+          'run',
+        ),
+        isTrue,
+      );
+    });
+
+    test('every qualified compound operator on a static field', () async {
+      Future<Object?> op(String stmt) => _runStatic(
+        'dart',
+        'class C { static int v = 12; }'
+            ' class M { static int run() { $stmt; return C.v; } }',
+        'M',
+        'run',
+      );
+      expect(await op('C.v -= 2'), equals(10));
+      expect(await op('C.v *= 3'), equals(36));
+      expect(await op('C.v ~/= 5'), equals(2));
+
+      // `/=` yields a double, so use a double-typed static field.
+      expect(
+        await _runStatic(
+          'dart',
+          'class C { static double v = 12.0; }'
+              ' class M { static double run() { C.v /= 5; return C.v; } }',
+          'M',
+          'run',
+        ),
+        equals(2.4),
+      );
+    });
+
+    test('a static field carries its declared type', () async {
+      // Assigning `C.v` to a typed local exercises static-field type resolution.
+      expect(
+        await _runStatic(
+          'dart',
+          'class C { static int v = 42; }'
+              ' class M { static int run() { int y = C.v; return y; } }',
+          'M',
+          'run',
+        ),
+        equals(42),
+      );
+    });
+  });
+
+  group('Static-field internals (direct)', () {
+    Future<ASTClassNormal> loadClass(String src) async {
+      var vm = ApolloVM();
+      expect(
+        await vm.loadCodeUnit(SourceCodeUnit('dart', src, id: 't')),
+        isTrue,
+      );
+      return vm
+          .getNamespaceWithClass('C', language: 'dart')
+          .first
+          .getClass('C')!;
+    }
+
+    test(
+      'ASTStaticFieldVariable read/write/resolveType/resolveVariable',
+      () async {
+        var clazz = await loadClass('class C { static int count = 7; }');
+        var v = ASTStaticFieldVariable(clazz, 'count');
+        var ctx = VMScopeContext(ASTBlock(null));
+
+        expect(v.resolveVariable(ctx), same(v));
+        expect(await v.resolveType(ctx), isA<ASTTypeInt>());
+        var read = await v.getValue(ctx);
+        expect(read.getValueNoContext(), equals(7));
+        await v.setValue(ctx, ASTValueInt(99));
+        expect((await v.getValue(ctx)).getValueNoContext(), equals(99));
+      },
+    );
+
+    test('resolveType of an unknown field falls back to dynamic', () async {
+      var clazz = await loadClass('class C { static int count = 7; }');
+      var v = ASTStaticFieldVariable(clazz, 'missing');
+      var ctx = VMScopeContext(ASTBlock(null));
+      expect(await v.resolveType(ctx), isA<ASTTypeDynamic>());
+    });
+
+    test('getStaticFieldValue resolves a name case-insensitively', () async {
+      var clazz = await loadClass('class C { static int count = 7; }');
+      var ctx = VMScopeContext(ASTBlock(null));
+      expect(clazz.hasStaticField('COUNT', caseInsensitive: true), isTrue);
+      var v = await clazz.getStaticFieldValue(
+        ctx,
+        'COUNT',
+        caseInsensitive: true,
+      );
+      expect(v?.getValueNoContext(), equals(7));
+    });
   });
 
   group('Cross-language static fields', () {
