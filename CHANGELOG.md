@@ -1,3 +1,24 @@
+## 2.1.1
+
+### Correctness fixes (parser & interpreter)
+
+- **Compound assignment `~/=` no longer crashes the parser.** `~/=` (Dart) and
+  `//=` (Python) matched the grammar but had no handler, so parsing threw an
+  uncaught error out of `loadCodeUnit` instead of building the AST. `~/=`/`//=`
+  are now fully supported, and any *other* still-unsupported compound operator
+  (e.g. JavaScript/TypeScript `%=`) now surfaces as a clean `SyntaxError`
+  instead of an uncaught crash.
+- **`Enum.values` can be assigned to a typed or inferred list.** It was built
+  with a `dynamic` element type while its declared type is `List<Enum>`, so
+  `var v = Color.values;` / `List<Color> v = Color.values;` failed the
+  declaration cast. It now carries the enum's own element type.
+- **`ASTValue.fromValue<int>` on a non-whole double** now throws a clean
+  `ApolloVMCastException` instead of a raw Dart `TypeError`.
+
+Division semantics are unchanged and remain intentionally per-language
+(Dart/JS/TS/Python `/` yields a `double`; Java/C#/Go/Kotlin `/` on ints is
+truncating integer division); regression guards now pin both.
+
 ## 2.1.0
 
 ### Wasm backend — loop increment fix and initial String methods
