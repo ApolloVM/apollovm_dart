@@ -85,26 +85,26 @@ test('generic Box<int> field round-trips', () => _testWasm(
 
 ---
 
-## GAP B — String methods & getters (HIGHEST IMPACT, partially done)
+## GAP B — String methods & getters (HIGHEST IMPACT, mostly done)
 
-- **Done**: `.length`, `.isEmpty`, `.isNotEmpty` (read the `[len:i32][utf8]`
-  header) — see `apollovm_wasm_string_length_test.dart`; `.toUpperCase`,
-  `.toLowerCase` (ASCII, fresh buffer + case-bit shift) — see
+- **Done (getters)**: `.length`, `.isEmpty`, `.isNotEmpty` (read the
+  `[len:i32][utf8]` header) — `apollovm_wasm_string_length_test.dart`.
+- **Done (transforms)**: `.toUpperCase`, `.toLowerCase` (ASCII case-bit shift) —
   `apollovm_wasm_string_case_test.dart`.
-- **Still open** (compile error `UnimplementedError: Wasm getter/method .X on
-  String is not supported yet.`): `.substring`, `.contains`, `.indexOf`,
-  `.trim`, `.split`, `.replaceAll` (and siblings). Also: chaining a getter/method
-  onto a method *result* (`s.toUpperCase().length`) — the receiver must be a
-  named local today.
-- **Trigger**: any String manipulation beyond concatenation/interpolation and
-  the length/emptiness getters above. Still the broadest gap.
-- **Fix direction**: implement runtime helpers over the String memory layout the
-  backend already uses for `__streq`/concatenation (see `_emitStringConcat2` and
-  `_generateStringCaseConvert` for the allocate-buffer + byte-loop pattern).
-  `.substring` (copy a slice), `.indexOf`/`.contains` (byte scan), `.split`,
-  `.replaceAll` build on the same buffer ops. Note the stored length is UTF-8
-  bytes, so any method whose Dart semantics are in UTF-16 code units is only
-  correct for ASCII until the layout carries a code-unit count.
+- **Done (slice/search)**: `.substring(start,[end])` (fresh-buffer `memory.copy`
+  slice), `.codeUnitAt(i)`, `.startsWith`/`.endsWith`, `.indexOf`, `.contains`
+  (byte scans over the layout, OOB-guarded) — `apollovm_wasm_string_methods_test`
+  and `_tryGenerateStringMethod`.
+- **Still open**: `.trim`, `.split` (returns a `List`), `.replaceAll` /
+  `.replaceFirst`, `.padLeft`/`.padRight`, `.compareTo`, index `[]`. Also:
+  chaining a getter/method onto a method *result* (`s.toUpperCase().length`,
+  `s.substring(0,2) == 'x'`) — the receiver must be a named local, and a bare
+  `String == String` returning a `bool` is a separate pre-existing limitation.
+- **Fix direction**: same allocate-buffer + byte-loop pattern
+  (`_generateStringCaseConvert`, `_emitBytesEqualNoBreak`). `.split`/`.replaceAll`
+  build a fresh buffer/`List` from scan results. Stored length is UTF-8 bytes, so
+  byte-indexed methods are exact for ASCII; UTF-16-code-unit semantics need the
+  layout to carry a code-unit count.
 
 ```dart
 test('String.substring', () => _testWasm(
@@ -242,10 +242,11 @@ test('return a List', () => _testWasm(
 ## Suggested order
 
 GAPs **C** (getters), **D** (static fields), **E** (inheritance/`super`) and **G**
-(nested collections / `m[0][1]`) are now **DONE**. Remaining:
+(nested collections / `m[0][1]`) are **DONE**; **GAP B** (String methods) is mostly
+done (slice/search/case complete). Remaining:
 
-1. **GAP B** (remaining String methods) — by far the widest impact on real code
-   (`.length`/`.isEmpty`/`.isNotEmpty` already done).
+1. **GAP B tail** — `.trim`, `.split`, `.replaceAll`/`.replaceFirst`,
+   `.padLeft`/`.padRight`, `.compareTo`, index `[]`.
 2. **GAP A** (generic field i64/boxing) and **GAP F** (aggregate returns) —
    value-representation work; related boxing concerns.
 
