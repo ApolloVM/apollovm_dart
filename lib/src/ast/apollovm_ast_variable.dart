@@ -293,6 +293,18 @@ class ASTScopeVariable<T> extends ASTVariable {
 
     return variable.resolveMapped((v) {
       if (v == null) {
+        // A bare reference to a `static` field of the enclosing class (e.g.
+        // `count` inside a `static` method of the class that declares it). The
+        // AST identifier resolves to the field declaration; route reads/writes
+        // to the class's static-field store.
+        var idNode = resolvedIdentifier;
+        if (idNode is ASTClassField && idNode.modifiers.isStatic) {
+          var clazz = idNode.parentNode;
+          if (clazz is ASTClassNormal) {
+            return ASTStaticFieldVariable(clazz, name);
+          }
+        }
+
         var typeResolver = context.typeResolver;
         var resolveType = typeResolver.resolveType(name);
         return resolveType.resolveMapped((t) {
@@ -392,4 +404,33 @@ class ASTStaticClassAccessorVariable<T> extends ASTVariable {
   FutureOr<ASTValue> getValue(VMContext context) {
     return staticAccessor;
   }
+}
+
+/// [ASTVariable] for a bare reference to a `static` field of [clazz], e.g.
+/// `count` used inside a `static` method of the class that declares it. Reads
+/// and writes go to the class's static-field store (shared by all instances and
+/// by qualified `ClassName.field` access).
+class ASTStaticFieldVariable<T> extends ASTVariable {
+  final ASTClassNormal clazz;
+
+  ASTStaticFieldVariable(this.clazz, super.name);
+
+  @override
+  Iterable<ASTNode> get children => [];
+
+  @override
+  FutureOr<ASTType> resolveType(VMContext? context) =>
+      clazz.getField(name)?.type ?? ASTTypeDynamic.instance;
+
+  @override
+  ASTVariable resolveVariable(VMContext context) => this;
+
+  @override
+  FutureOr<ASTValue> getValue(VMContext context) => clazz
+      .getStaticFieldValue(context, name)
+      .resolveMapped((v) => v ?? ASTValueNull.instance);
+
+  @override
+  FutureOr<void> setValue(VMContext context, ASTValue value) =>
+      clazz.setStaticFieldValue(context, name, value).resolveMapped((_) {});
 }

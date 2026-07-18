@@ -1,5 +1,15 @@
 ## 2.1.1
 
+### `static` class fields are now supported
+
+`static` fields previously had no class-level storage — they were initialized
+onto every instance, and reading one (`ClassName.field`, or a bare reference
+inside a `static` method) threw at runtime. Now each class has a lazily
+initialized static-field store, shared by qualified `ClassName.field` access and
+bare references inside the class's own `static` methods, for read, write and
+compound assignment. The Java and C# grammars also now record the `static` field
+modifier (they were dropping it), so this works across those languages too.
+
 ### Correctness fixes (parser & interpreter)
 
 - **Compound assignment `~/=` no longer crashes the parser.** `~/=` (Dart) and

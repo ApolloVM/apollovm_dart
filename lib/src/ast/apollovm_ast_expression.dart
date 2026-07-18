@@ -1874,6 +1874,15 @@ class ASTExpressionVariableAssignment extends ASTExpression {
   Iterable<ASTNode> get children => [variable, expression];
 
   @override
+  void resolveNode(ASTNode? parentNode) {
+    super.resolveNode(parentNode);
+    // Resolve the assignment target so a bare `static` field reference (whose
+    // resolution depends on the AST identifier) works on both read and write.
+    variable.resolveNode(this);
+    expression.resolveNode(this);
+  }
+
+  @override
   FutureOr<ASTType> resolveType(VMContext? context) =>
       expression.resolveType(context);
 
@@ -3100,6 +3109,17 @@ class ASTExpressionObjectGetterAccess extends ASTExpressionGetterAccess
     return node is ASTClassEnum ? node : null;
   }
 
+  /// If [variable] names a class that declares a `static` field [name] (i.e.
+  /// this is a `ClassName.staticField` access), returns that class; otherwise
+  /// `null`.
+  ASTClassNormal? _staticFieldClass() {
+    final v = variable;
+    if (v is! ASTScopeVariable) return null;
+    var node = getNodeIdentifier(v.name);
+    if (node is ASTClassNormal && node.hasStaticField(name)) return node;
+    return null;
+  }
+
   /// Resolves an enum static access (`EnumType.entry` or `EnumType.values`):
   /// an entry yields its cached `const` instance (a singleton, so `==` is
   /// identity); `values` yields the list of all instances in declaration order.
@@ -3168,6 +3188,9 @@ class ASTExpressionObjectGetterAccess extends ASTExpressionGetterAccess
       if (enumClass.entries.any((e) => e.name == name)) return enumClass.type;
     }
 
+    var staticFieldType = _staticFieldClass()?.getField(name)?.type;
+    if (staticFieldType != null) return staticFieldType;
+
     if (context == null) {
       return super.resolveType(context);
     }
@@ -3198,6 +3221,9 @@ class ASTExpressionObjectGetterAccess extends ASTExpressionGetterAccess
       if (enumClass.entries.any((e) => e.name == name)) return enumClass.type;
     }
 
+    var staticFieldType = _staticFieldClass()?.getField(name)?.type;
+    if (staticFieldType != null) return staticFieldType;
+
     return _getVariableValue(context).resolveMapped((obj) {
       if (obj is ASTClassInstance) {
         var classContext = obj.createContext(context);
@@ -3220,6 +3246,20 @@ class ASTExpressionObjectGetterAccess extends ASTExpressionGetterAccess
       return enumEntry.resolveMapped(
         (ret) => _callChainFunction(parentContext, runStatus, ret),
       );
+    }
+
+    // `ClassName.staticField` read.
+    var staticClass = _staticFieldClass();
+    if (staticClass != null) {
+      return staticClass
+          .getStaticFieldValue(parentContext, name)
+          .resolveMapped(
+            (v) => _callChainFunction(
+              parentContext,
+              runStatus,
+              v ?? ASTValueNull.instance,
+            ),
+          );
     }
 
     return _getVariableValue(parentContext).resolveMapped((obj) {
@@ -3294,12 +3334,56 @@ class ASTExpressionObjectSetterAssignment extends ASTExpression {
   FutureOr<ASTType> resolveType(VMContext? context) =>
       expression.resolveType(context);
 
+  /// If [variable] names a class that declares a `static` field [name], returns
+  /// that class (i.e. this is a `ClassName.staticField = …` assignment).
+  ASTClassNormal? _staticFieldClass() {
+    final v = variable;
+    if (v is! ASTScopeVariable) return null;
+    var node = getNodeIdentifier(v.name);
+    if (node is ASTClassNormal && node.hasStaticField(name)) return node;
+    return null;
+  }
+
+  FutureOr<ASTValue> _applyOperator(ASTValue current, ASTValue value) {
+    switch (operator) {
+      case ASTAssignmentOperator.set:
+        return value;
+      case ASTAssignmentOperator.sum:
+        return current + value;
+      case ASTAssignmentOperator.subtract:
+        return current - value;
+      case ASTAssignmentOperator.multiply:
+        return current * value;
+      case ASTAssignmentOperator.divide:
+        return current / value;
+      case ASTAssignmentOperator.divideAsInt:
+        return current ~/ value;
+    }
+  }
+
   @override
   FutureOr<ASTValue> run(
     VMContext parentContext,
     ASTRunStatus runStatus,
   ) async {
     var context = defineRunContext(parentContext);
+
+    // `ClassName.staticField = value` (and compound ops).
+    var staticClass = _staticFieldClass();
+    if (staticClass != null) {
+      var value = await expression.run(context, runStatus);
+      ASTValue resultValue;
+      if (operator == ASTAssignmentOperator.set) {
+        resultValue = value;
+      } else {
+        var current =
+            await staticClass.getStaticFieldValue(context, name) ??
+            ASTValueNull.instance;
+        resultValue = await _applyOperator(current, value);
+      }
+      await staticClass.setStaticFieldValue(context, name, resultValue);
+      return resultValue;
+    }
 
     var obj = await variable.getValue(context);
     if (obj is! ASTClassInstance) {
@@ -3311,23 +3395,8 @@ class ASTExpressionObjectSetterAssignment extends ASTExpression {
     var classContext = obj.createContext(context);
     var value = await expression.run(context, runStatus);
 
-    FutureOr<ASTValue> result;
-    switch (operator) {
-      case ASTAssignmentOperator.set:
-        result = value;
-      case ASTAssignmentOperator.sum:
-        result = (await _currentField(classContext, obj)) + value;
-      case ASTAssignmentOperator.subtract:
-        result = (await _currentField(classContext, obj)) - value;
-      case ASTAssignmentOperator.multiply:
-        result = (await _currentField(classContext, obj)) * value;
-      case ASTAssignmentOperator.divide:
-        result = (await _currentField(classContext, obj)) / value;
-      case ASTAssignmentOperator.divideAsInt:
-        result = (await _currentField(classContext, obj)) ~/ value;
-    }
-
-    var resultValue = await result;
+    var current = await _currentField(classContext, obj);
+    var resultValue = await _applyOperator(current, value);
     await obj.setField(classContext, name, resultValue);
     return resultValue;
   }

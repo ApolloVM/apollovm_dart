@@ -821,6 +821,71 @@ class ASTClassNormal extends ASTClass<VMObject> {
     return field;
   }
 
+  /// Per-class storage for `static` field values, lazily initialized on first
+  /// access. Static fields belong to the class, not to each instance.
+  Map<String, ASTValue>? _staticFieldValues;
+
+  /// Whether [name] is a `static` field declared on this class.
+  bool hasStaticField(String name, {bool caseInsensitive = false}) {
+    var f = getField(name, caseInsensitive: caseInsensitive);
+    return f != null && f.modifiers.isStatic;
+  }
+
+  Future<Map<String, ASTValue>> _ensureStaticFields(
+    VMContext context,
+    ASTRunStatus runStatus,
+  ) async {
+    var store = _staticFieldValues;
+    if (store != null) return store;
+    store = _staticFieldValues = <String, ASTValue>{};
+    for (var field in _fields.values) {
+      if (!field.modifiers.isStatic) continue;
+      if (field is ASTClassFieldWithInitialValue) {
+        store[field.name] = await field.getInitialValue(context, runStatus);
+      } else {
+        store[field.name] = ASTValueNull.instance;
+      }
+    }
+    return store;
+  }
+
+  String _resolveStaticFieldName(
+    Map<String, ASTValue> store,
+    String name,
+    bool caseInsensitive,
+  ) {
+    if (caseInsensitive && !store.containsKey(name)) {
+      for (var k in store.keys) {
+        if (equalsIgnoreAsciiCase(k, name)) return k;
+      }
+    }
+    return name;
+  }
+
+  /// Reads a `static` field value (initializing static fields on first use).
+  Future<ASTValue?> getStaticFieldValue(
+    VMContext context,
+    String name, {
+    bool caseInsensitive = false,
+  }) async {
+    var store = await _ensureStaticFields(context, ASTRunStatus.dummy);
+    return store[_resolveStaticFieldName(store, name, caseInsensitive)];
+  }
+
+  /// Writes a `static` field value; returns the previous value.
+  Future<ASTValue?> setStaticFieldValue(
+    VMContext context,
+    String name,
+    ASTValue value, {
+    bool caseInsensitive = false,
+  }) async {
+    var store = await _ensureStaticFields(context, ASTRunStatus.dummy);
+    var key = _resolveStaticFieldName(store, name, caseInsensitive);
+    var prev = store[key];
+    store[key] = value;
+    return prev;
+  }
+
   @override
   FutureOr<ASTClassInstance<VMObject>?> createInstance(
     VMClassContext context,
@@ -844,6 +909,9 @@ class ASTClassNormal extends ASTClass<VMObject> {
     }
 
     for (var field in _fields.values) {
+      // `static` fields belong to the class, not the instance (see
+      // `getStaticFieldValue`/`setStaticFieldValue`).
+      if (field.modifiers.isStatic) continue;
       if (field is ASTClassFieldWithInitialValue) {
         var value = await field.getInitialValue(context, runStatus);
         instance.vmObject.setFieldValue(field.name, value);

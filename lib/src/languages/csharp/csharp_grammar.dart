@@ -322,7 +322,12 @@ class CSharpGrammarDefinition extends CSharpGrammarLexer {
                 (v[0] as ASTModifiers?) ?? ASTModifiers.modifiersNone;
             var type = v[1];
             var name = v[2];
-            return ASTClassField(type, name, modifiers.isFinal);
+            return ASTClassField(
+              type,
+              name,
+              modifiers.isFinal,
+              modifiers: modifiers,
+            );
           });
 
   Parser<ASTClassField> classFieldDeclarationWithValue() =>
@@ -343,6 +348,7 @@ class CSharpGrammarDefinition extends CSharpGrammarLexer {
               name,
               expression,
               modifiers.isFinal,
+              modifiers: modifiers,
             );
           });
 
