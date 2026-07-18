@@ -1,3 +1,23 @@
+## 2.13.0
+
+### Wasm: generic-class fields (`Box<T>`) + aggregate-return coverage
+
+The on-the-fly WebAssembly compiler now supports a generic class with a
+type-parameter field (`class Box<T> { T value; ... }`). The field is stored boxed
+(the constructor boxes the argument), and reading it back at the instantiation
+type unboxes to the concrete representation. Two fixes closed this: the
+return-expression path now threads its context into the value-conversion helper
+(it previously hit a module-less path and threw), and that helper gained an
+`Object → String` / `bool` / instance unbox case alongside the existing numeric
+one. Covers `Box<int|double|String|bool>`, generic fields in arithmetic, and
+multi-parameter classes such as `Pair<int, String>`.
+
+Also adds regression tests confirming that returning a `List`/`Map` across the
+module boundary works (`List<int|double|String>` via literal, arrow, or
+built-with-`.add`, and `Map<String,int>`).
+
+With this, every lettered gap in `WASM_BACKEND_PLAN.md` (A–G) is closed.
+
 ## 2.12.0
 
 ### String index `s[i]` (interpreter + Wasm)
