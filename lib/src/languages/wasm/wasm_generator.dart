@@ -2125,6 +2125,17 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
   int _elemSize(ASTType elemType) =>
       (elemType is ASTTypeInt || elemType is ASTTypeDouble) ? 8 : 4;
 
+  // Scratch-local slot numbers for a collection literal's header/buffer locals,
+  // parameterized by nesting [depth]. Depth 0 keeps the original slots (6/9 for
+  // a list; 15/16/17 for a map) so single-level literals stay byte-identical;
+  // deeper levels use a disjoint high range (lists and maps in separate bands)
+  // so a nested literal never aliases the enclosing one's locals.
+  int _listHdrSlot(int depth) => depth == 0 ? 6 : 200 + depth * 2;
+  int _listDataSlot(int depth) => depth == 0 ? 9 : 201 + depth * 2;
+  int _mapHdrSlot(int depth) => depth == 0 ? 15 : 400 + depth * 3;
+  int _mapKeysSlot(int depth) => depth == 0 ? 16 : 401 + depth * 3;
+  int _mapValsSlot(int depth) => depth == 0 ? 17 : 402 + depth * 3;
+
   /// A class-instance reference: an i32 pointer to a heap struct.
   bool _isWasmObjectRef(ASTType t) => t is ASTType<VMObject>;
 
@@ -2189,13 +2200,17 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     return elemType;
   }
 
-  /// Element types that compile to Wasm list storage: `int`/`double` (8B) and
-  /// `String`/`bool` (4B i32). Other element types are unsupported.
+  /// Element types that compile to Wasm list storage: `int`/`double` (8B),
+  /// `String`/`bool` (4B i32), and a **nested collection** (`List`/`Map`, stored
+  /// as a 4B i32 pointer to the inner header). Other element types are
+  /// unsupported.
   bool _isSupportedElemType(ASTType t) =>
       t is ASTTypeInt ||
       t is ASTTypeDouble ||
       t is ASTTypeString ||
-      t is ASTTypeBool;
+      t is ASTTypeBool ||
+      t is ASTTypeArray ||
+      t is ASTTypeMap;
 
   @override
   BytesOutput generateASTExpressionListLiteral(
@@ -2243,8 +2258,12 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     var n = values.length;
     // Indirect layout: header [length@0][capacity@4][dataPtr@8]; elements live
     // in a separate buffer so `.add` can realloc without moving the handle.
-    var hdrLocal = context.scratchLocal(_astTypeString, 6);
-    var dataLocal = context.scratchLocal(_astTypeString, 9);
+    // Depth-offset the scratch slots so a nested list literal (an element that is
+    // itself a `List`/`Map`) doesn't alias this literal's header/data locals.
+    var depth = context.collectionLiteralDepth;
+    var hdrLocal = context.scratchLocal(_astTypeString, _listHdrSlot(depth));
+    var dataLocal = context.scratchLocal(_astTypeString, _listDataSlot(depth));
+    context.collectionLiteralDepth = depth + 1;
 
     final s0 = context.stackLength;
 
@@ -2282,6 +2301,8 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       context.stackDrop(); // value consumed by the store
       _emitElemStore(out, elemType, i * size);
     }
+
+    context.collectionLiteralDepth = depth;
 
     // list handle (the header pointer)
     out.write(Wasm.localGet(hdrLocal));
@@ -3043,9 +3064,13 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     var keySize = _mapKeySize(keyType);
     var valSize = _elemSize(valueType);
 
-    var hdrLocal = context.scratchLocal(_astTypeString, 15);
-    var keysLocal = context.scratchLocal(_astTypeString, 16);
-    var valsLocal = context.scratchLocal(_astTypeString, 17);
+    // Depth-offset the scratch slots so a nested collection value (a `Map`/`List`
+    // value) doesn't alias this literal's header/keys/values locals.
+    var depth = context.collectionLiteralDepth;
+    var hdrLocal = context.scratchLocal(_astTypeString, _mapHdrSlot(depth));
+    var keysLocal = context.scratchLocal(_astTypeString, _mapKeysSlot(depth));
+    var valsLocal = context.scratchLocal(_astTypeString, _mapValsSlot(depth));
+    context.collectionLiteralDepth = depth + 1;
 
     final s0 = context.stackLength;
 
@@ -3089,6 +3114,8 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       context.stackDrop();
       _emitElemStore(out, valueType, i * valSize);
     }
+
+    context.collectionLiteralDepth = depth;
 
     out.write(Wasm.localGet(hdrLocal));
     context.stackPush(mapType, "map literal");
@@ -4580,6 +4607,24 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     var localVar = _getLocalVariable(context, name);
     var containerType = localVar.type;
 
+    // Nested/chained access (`m[0][1]` / `m['a']['b']`): push the base container,
+    // then apply each index to the value produced by the previous level (an inner
+    // `List`/`Map` pointer). Each intermediate value stays on the stack.
+    if (expression.extraIndices.isNotEmpty) {
+      final s0 = context.stackLength;
+      _localVariableGet(out, context, localVar.index, name);
+      context.stackPush(containerType, "chain base `$name`");
+      var curType = containerType;
+      for (var indexExpr in [
+        expression.expression,
+        ...expression.extraIndices,
+      ]) {
+        curType = _emitApplyIndexOnStack(out, context, curType, indexExpr);
+      }
+      context.assertStackLength(s0 + 1, "After chained index `$name`");
+      return out;
+    }
+
     if (containerType is ASTTypeMap) {
       return _generateMapGet(expression, localVar, out: out, context: context);
     }
@@ -4612,6 +4657,88 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     context.stackPush(_elemStackType(elemType), "list[index]");
     context.assertStackLength(s0 + 1, "After list index");
     return out;
+  }
+
+  /// Applies one subscript to the container whose header pointer is on top of the
+  /// (real and virtual) Wasm stack, typed [containerType]. Reads the element at
+  /// [indexExpr], replacing the container on the stack with the element value.
+  /// Returns the element/value type (used to drive the next chained level).
+  ASTType _emitApplyIndexOnStack(
+    BytesOutput out,
+    WasmContext context,
+    ASTType containerType,
+    ASTExpression indexExpr,
+  ) {
+    if (containerType is ASTTypeArray) {
+      var elemType = containerType.componentType;
+      var size = _elemSize(elemType);
+      // stack: [header] -> [dataPtr]
+      out.write(Wasm32.i32Load(2, 8)); // dataPtr = load(header, 8)
+      generateASTExpression(
+        indexExpr,
+        out: out,
+        context: context,
+      ); // index (i64)
+      out.writeByte(Wasm64.i64WrapToi32);
+      out.write(Wasm32.i32Const(size));
+      out.writeByte(Wasm32.i32Multiply);
+      out.writeByte(Wasm32.i32Add); // dataPtr + index*size
+      _emitElemLoad(out, elemType, 0);
+      context.stackDrop(); // the index
+      context.stackDrop(); // the container
+      context.stackPush(_elemStackType(elemType), "list[index] (chain)");
+      return elemType;
+    }
+
+    if (containerType is ASTTypeMap) {
+      var mapType = _requireMapType(containerType, 'chain', 'm[k]');
+      var keyType = mapType.keyType;
+      var valueType = mapType.valueType;
+      var valSize = _elemSize(valueType);
+
+      var hdr = context.scratchLocal(_astTypeString, 15);
+      var keys = context.scratchLocal(_astTypeString, 16);
+      var iLoc = context.scratchLocal(_astTypeString, 18);
+      var keyLoc = context.scratchLocal(keyType, 19);
+      var result = context.scratchLocal(valueType, 25);
+
+      // header is on the stack: pop it into a local for the scan.
+      out.write(Wasm.localSet(hdr));
+      context.stackDrop(); // the container
+      generateASTExpression(indexExpr, out: out, context: context); // key
+      context.stackDrop();
+      out.write(Wasm.localSet(keyLoc));
+      _emitZeroDefault(out, valueType);
+      out.write(Wasm.localSet(result));
+
+      _emitMapScan(
+        out,
+        context,
+        keyType: keyType,
+        hdrScratch: hdr,
+        keysScratch: keys,
+        iScratch: iLoc,
+        keyScratch: keyLoc,
+        onMatch: () {
+          out.write(Wasm.localGet(hdr));
+          out.write(Wasm32.i32Load(2, 12)); // valuesPtr
+          out.write(Wasm.localGet(iLoc));
+          out.write(Wasm32.i32Const(valSize));
+          out.writeByte(Wasm32.i32Multiply);
+          out.writeByte(Wasm32.i32Add);
+          _emitElemLoad(out, valueType, 0);
+          out.write(Wasm.localSet(result));
+        },
+      );
+
+      out.write(Wasm.localGet(result));
+      context.stackPush(_elemStackType(valueType), "map[key] (chain)");
+      return valueType;
+    }
+
+    throw UnimplementedError(
+      "Wasm chained index access on $containerType is not supported yet.",
+    );
   }
 
   /// `m[k]` map lookup: linear scan by key; pushes the matching value, or a
@@ -4699,12 +4826,14 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     out ??= newOutput();
     context ??= WasmContext();
 
-    // Desugar a compound assignment `c[k] OP= v` into `c[k] = (c[k] OP v)`.
+    // Desugar a compound assignment `c[k] OP= v` into `c[k] = (c[k] OP v)`
+    // (carrying any chained indices so `m[0][1] += v` desugars correctly).
     if (expression.operator != ASTAssignmentOperator.set) {
       var binOp = _compoundToOperator(expression.operator);
       var access = ASTExpressionVariableEntryAccess(
         expression.variable,
         expression.keyExpression,
+        expression.extraKeys,
       );
       var operation = ASTExpressionOperation(
         access,
@@ -4716,6 +4845,7 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
         expression.keyExpression,
         ASTAssignmentOperator.set,
         operation,
+        expression.extraKeys,
       );
       desugared.resolveNode(expression.parentNode);
       return _generateWasmEntryAssignment(
@@ -4728,6 +4858,17 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     var name = expression.variable.name;
     var localVar = _getLocalVariable(context, name);
     var containerType = localVar.type;
+
+    // Chained write (`m[0][1] = v`): navigate through all but the last index to
+    // the innermost container, then store at the last index.
+    if (expression.extraKeys.isNotEmpty) {
+      return _generateChainedEntryAssignment(
+        expression,
+        localVar,
+        out: out,
+        context: context,
+      );
+    }
 
     if (containerType is ASTTypeMap) {
       return _generateMapSet(expression, localVar, out: out, context: context);
@@ -4794,6 +4935,60 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     _emitElemStore(out, elemType, 0);
 
     context.assertStackLength(s0, "After list[i] = v");
+    return out;
+  }
+
+  /// Chained subscript assignment `m[0][1] = v`: navigate through all but the
+  /// last index (reading each level's inner `List`/`Map` pointer onto the stack)
+  /// then store `v` at the last index of the innermost container. The innermost
+  /// container must be a `List`; navigation levels may be `List` or `Map`.
+  BytesOutput _generateChainedEntryAssignment(
+    ASTExpressionVariableEntryAssignment expression,
+    ({ASTType type, int index}) localVar, {
+    required BytesOutput out,
+    required WasmContext context,
+  }) {
+    var name = expression.variable.name;
+    final s0 = context.stackLength;
+
+    // Push the base container, then navigate all-but-last index.
+    _localVariableGet(out, context, localVar.index, name);
+    context.stackPush(localVar.type, "chain base `$name`");
+    var curType = localVar.type;
+    var indices = [expression.keyExpression, ...expression.extraKeys];
+    for (var i = 0; i < indices.length - 1; ++i) {
+      curType = _emitApplyIndexOnStack(out, context, curType, indices[i]);
+    }
+
+    if (curType is! ASTTypeArray) {
+      // Writing into an innermost `Map` (`list[0]['k'] = v`) needs the full
+      // scan/append path against a stack container — left as a follow-up.
+      throw UnimplementedError(
+        "Wasm chained assignment into $curType is not supported yet.",
+      );
+    }
+
+    var elemType = curType.componentType;
+    var size = _elemSize(elemType);
+
+    // Innermost list header is on the stack: addr = dataPtr + lastIndex*size.
+    out.write(Wasm32.i32Load(2, 8)); // dataPtr
+    generateASTExpression(
+      indices.last,
+      out: out,
+      context: context,
+    ); // index i64
+    out.writeByte(Wasm64.i64WrapToi32);
+    out.write(Wasm32.i32Const(size));
+    out.writeByte(Wasm32.i32Multiply);
+    out.writeByte(Wasm32.i32Add); // addr
+    generateASTExpression(expression.expression, out: out, context: context);
+    _emitElemStore(out, elemType, 0);
+
+    context.stackDrop(); // RHS value
+    context.stackDrop(); // last index
+    context.stackDrop(); // innermost container
+    context.assertStackLength(s0, "After chained assignment `$name`");
     return out;
   }
 
@@ -11214,6 +11409,14 @@ class WasmContext {
   /// set, integer division emits a non-trapping guard that raises a catchable
   /// exception on a zero/overflowing divisor instead of trapping the module.
   bool exceptionMode = false;
+
+  /// Nesting depth of the collection literal (`List`/`Map`) currently being
+  /// generated: 0 for a top-level literal, +1 for each literal nested as an
+  /// element/value. Used to offset the header/buffer scratch-local slots so a
+  /// nested literal never aliases the enclosing literal's locals (which the
+  /// global scratch cache would otherwise share). Depth 0 keeps the original
+  /// slot numbers, so single-level collections stay byte-identical.
+  int collectionLiteralDepth = 0;
 
   /// Number of currently-open structured control instructions (`block`/`loop`/
   /// `if`). A Wasm `br L` targets the structure `L` levels up from the innermost,

@@ -192,16 +192,28 @@ test('inherited superclass method', () => _testWasm(
 
 ---
 
-## GAP G — nested lists & nested indexing (`m[0][1]`) (INTERPRETER-SUPPORTED since 2.2.0)
+## GAP G — nested lists & nested indexing (`m[0][1]`) — DONE
 
-- **Error** (compile): `UnimplementedError: Wasm list literal of element type
-  List<int> is not supported yet.` — the blocker is the **2D list literal**
-  (`[[1, 2], [3, 4]]`), not the index chain itself.
-- **Trigger**: a list whose element type is a `List`/`Map` (a nested collection),
-  and, once buildable, chained access/assignment `m[0][1]` / `m['a']['b'] = v`.
-- **Fix direction**: support a nested-collection element type in list/map literal
-  codegen (element is a pointer to another list/map header), then confirm the
-  chained index/key read+write path compiles.
+A nested collection is stored as an i32 pointer to the inner header, so a
+`List`/`Map` literal can now hold `List`/`Map` elements (`_isSupportedElemType`
+accepts `ASTTypeArray`/`ASTTypeMap`; `_emitElemStore`/`_emitElemLoad` already
+handled the i32-pointer slot). Nested literals use **depth-offset scratch locals**
+(`collectionLiteralDepth` on the context, distinct slot bands per level) so an
+inner literal never aliases the enclosing literal's header/buffer locals — depth 0
+keeps the original slots, so single-level collections stay byte-identical.
+
+Chained subscripts read and write through every level: `_emitApplyIndexOnStack`
+applies one index to a container pointer already on the stack (list or map),
+looping over `expression.expression + extraIndices` for reads and navigating
+all-but-last for `m[0][1] = v` writes (`_generateChainedEntryAssignment`,
+including the `+=` compound form). Covers 2D/3D lists, nested maps, list-of-map,
+map-of-list, mixed navigation, and writes (incl. through a map into a nested
+list). See `apollovm_wasm_nested_collection_test.dart`.
+
+**Remaining (follow-up):** writing into an *innermost `Map`* (`list[0]['k'] = v`)
+— reads of that shape work, but the write path only stores into an innermost
+`List`. Also `getList()[0]` / `m[1].length` (a subscript/method on a non-variable
+receiver) is a separate parser/receiver gap.
 
 ```dart
 test('nested list read', () => _testWasm(
@@ -229,15 +241,12 @@ test('return a List', () => _testWasm(
 
 ## Suggested order
 
-GAP G below is **already implemented in the AST interpreter** (2.2.0), so closing
-it brings the Wasm backend to parity with what source already runs. GAPs **C**
-(getters), **D** (static fields) and **E** (inheritance/`super`) are now **DONE**.
+GAPs **C** (getters), **D** (static fields), **E** (inheritance/`super`) and **G**
+(nested collections / `m[0][1]`) are now **DONE**. Remaining:
 
 1. **GAP B** (remaining String methods) — by far the widest impact on real code
    (`.length`/`.isEmpty`/`.isNotEmpty` already done).
-2. **GAP G** (nested collections / `m[0][1]`) — list/map literal codegen for a
-   nested element type; interpreter-supported.
-3. **GAP A** (generic field i64/boxing) and **GAP F** (aggregate returns) —
+2. **GAP A** (generic field i64/boxing) and **GAP F** (aggregate returns) —
    value-representation work; related boxing concerns.
 
 After each fix: `dart test -t wasm -x wasm-gc -x wasm-chrome` must stay green

@@ -1,3 +1,20 @@
+## 2.6.0
+
+### Wasm: nested collections & chained indexing (`m[0][1]`)
+
+The on-the-fly WebAssembly compiler now supports collections nested inside
+collections and chained subscript access. A nested collection is stored as a
+pointer to the inner header, so a `List`/`Map` literal can hold `List`/`Map`
+elements (`[[1, 2], [3, 4]]`, `{'a': {'b': 5}}`), and chained subscripts read and
+write through every level (`m[0][1]`, `m['a']['b']`, `m[0]['x']`, `m['k'][1]`),
+including compound assignment (`m[0][1] += 5`) and multi-level nesting. Nested
+literals use depth-offset scratch locals so an inner literal never clobbers the
+enclosing one's buffers; single-level collections stay byte-identical.
+
+Writing into an *innermost* `Map` (`list[0]['k'] = v`) — reads of that shape
+already work — and a subscript/method on a non-variable receiver (`getList()[0]`,
+`m[1].length`) remain follow-ups.
+
 ## 2.5.0
 
 ### Wasm: custom instance getters
