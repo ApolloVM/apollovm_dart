@@ -57,11 +57,16 @@ void main() {
     });
 
     test('non-whole double is not narrowed to int', () {
-      // A non-whole double can't be represented as an `ASTValue<int>`, so the
-      // internal `as ASTValue<int>` narrowing throws rather than silently
-      // truncating.
-      expect(() => ASTValue.fromValue<int>(4.5), throwsA(isA<TypeError>()));
-      // Without a target type, the double is preserved.
+      // A non-whole double can't be represented as an `ASTValue<int>`; the
+      // narrowing now surfaces a clean ApolloVM diagnostic instead of a raw
+      // Dart `TypeError`.
+      expect(
+        () => ASTValue.fromValue<int>(4.5),
+        throwsA(isA<ApolloVMCastException>()),
+      );
+      // A whole double still narrows to int; without a target type the double
+      // is preserved.
+      expect(ASTValue.fromValue<int>(4.0), isA<ASTValueInt>());
       expect(ASTValue.fromValue(4.5), isA<ASTValueDouble>());
     });
   });
