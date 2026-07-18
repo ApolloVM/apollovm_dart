@@ -1,3 +1,15 @@
+## 2.3.0
+
+### Wasm: `static` class fields
+
+The on-the-fly WebAssembly compiler now supports `static` class fields (bringing
+it toward parity with the interpreter, which gained them in 2.1.1). Each static
+field becomes a typed, mutable module **global** seeded with its literal
+`int`/`double`/`bool` initializer; a bare reference inside a `static` method
+reads and writes it (including compound assignment like `c += 1`), and values
+persist across calls. Qualified `Class.field` from another class, inherited
+static fields, and non-literal initializers remain follow-ups.
+
 ## 2.2.0
 
 ### Nested / chained index access (`m[0][1]`)

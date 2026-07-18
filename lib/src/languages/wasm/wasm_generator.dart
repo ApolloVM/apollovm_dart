@@ -96,6 +96,21 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
 
     var functions = [...baseFunctions, ...anonClosures.map((c) => c.function)];
     var module = WasmModuleContext(functions, classLayouts: classLayouts);
+
+    // Register a module global for each `static` field, up front (before any
+    // enum-entry global) so global indices are stable. Only literal `int`/
+    // `double`/`bool` initializers are seeded; others start at 0.
+    for (var clazz in root.classes) {
+      for (var field in clazz.fields) {
+        if (!field.modifiers.isStatic) continue;
+        module.registerStaticFieldGlobal(
+          '${clazz.name}.${field.name}',
+          field.type,
+          _staticFieldInitNum(field),
+        );
+      }
+    }
+
     for (var c in anonClosures) {
       module.registerClosure(c);
     }
@@ -207,6 +222,40 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     }
     return WasmClassLayout(clazz.name, offsets, types, offset);
   }
+
+  /// The seed value for a `static` field global: the field's literal `int` /
+  /// `double` / `bool` initializer (bool as `0`/`1`), or `0` when there is no
+  /// initializer or it is not a compile-time literal.
+  num _staticFieldInitNum(ASTClassField field) {
+    if (field is ASTClassFieldWithInitialValue) {
+      try {
+        var v = field.getInitialValueNoContext();
+        if (v is ASTValue) {
+          var raw = v.getValueNoContext();
+          if (raw is bool) return raw ? 1 : 0;
+          if (raw is num) return raw;
+        }
+      } catch (_) {
+        // Non-literal initializer: leave the global at 0.
+      }
+    }
+    return 0;
+  }
+
+  /// The `"Class.field"` key of a bare `static` field [name] of the current
+  /// class (via `context.classLayout`), or `null` if it isn't a static field.
+  String? _staticFieldKey(WasmContext context, String name) {
+    var module = context.module;
+    var className = context.classLayout?.className;
+    if (module == null || className == null) return null;
+    var key = '$className.$name';
+    return module.staticFieldGlobalIndexOf(key) != null ? key : null;
+  }
+
+  /// The virtual-stack type used for a value of [type]: a `bool` is an i32,
+  /// otherwise the type itself (`int`↔i64 / `double`↔f64, as elsewhere).
+  ASTType _wasmStackTypeFor(ASTType type) =>
+      type is ASTTypeBool ? _astTypeInt32 : type;
 
   /// Synthesizes the module functions for a class: one per constructor (Wasm
   /// signature = the constructor's value params, returns an i32 object pointer)
@@ -1176,6 +1225,37 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
         description: "Global \$hp",
       ),
     ];
+
+    // Static-field globals (mutable, typed by the field): one per `static`
+    // field, seeded with its literal initializer. Placed right after `$hp`.
+    for (var sf in module.staticFieldGlobals) {
+      final int typeByte;
+      final List<int> initConst;
+      if (sf.type is ASTTypeInt) {
+        typeByte = WasmType.i64Type.value;
+        initConst = Wasm64.i64Const(sf.init.toInt());
+      } else if (sf.type is ASTTypeDouble) {
+        typeByte = WasmType.f64Type.value;
+        initConst = Wasm64.f64Const(sf.init.toDouble());
+      } else {
+        // `bool` and reference/other types use an i32 global (0 by default).
+        typeByte = WasmType.i32Type.value;
+        initConst = Wasm32.i32Const(sf.init.toInt());
+      }
+      entries.add(
+        BytesOutput(
+          data: [
+            BytesOutput(data: typeByte, description: "Global type"),
+            BytesOutput(data: Wasm.globalMutable, description: "Mutable"),
+            BytesOutput(
+              data: [...initConst, Wasm.end],
+              description: "Init (${sf.key} = ${sf.init})",
+            ),
+          ],
+          description: "Static field global `${sf.key}`",
+        ),
+      );
+    }
 
     // Globals 1..N (mutable i32, init 0): one per enum entry, caching its
     // lazily-built `const` instance pointer (0 = not yet built).
@@ -4024,6 +4104,20 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       return _generateFieldGet(out, context, name);
     }
 
+    // A bare `static` field of the current class reads its module global.
+    var staticKey = _staticFieldKey(context, name);
+    if (staticKey != null) {
+      final s0 = context.stackLength;
+      var type = context.module!.staticFieldTypeOf(staticKey)!;
+      out.write(
+        Wasm.globalGet(context.module!.staticFieldGlobalIndexOf(staticKey)!),
+        description: "[OP] static field get `$staticKey`",
+      );
+      context.stackPush(_wasmStackTypeFor(type), "static field `$name`");
+      context.assertStackLength(s0 + 1, "After static field get `$name`");
+      return out;
+    }
+
     var localVar = _getLocalVariable(context, name);
 
     final stackLng0 = context.stackLength;
@@ -4066,6 +4160,39 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     // `this + offset`.
     if (context.isFieldAccess(name)) {
       return _generateFieldSet(expression, out: out, context: context);
+    }
+
+    // A bare `static` field of the current class stores to its module global.
+    var staticKey = _staticFieldKey(context, name);
+    if (staticKey != null) {
+      final s0 = context.stackLength;
+      if (op == ASTAssignmentOperator.set) {
+        generateASTExpression(
+          expression.expression,
+          out: out,
+          context: context,
+        );
+      } else {
+        // Compound op: read the current value (`ASTExpressionVariableAccess`
+        // resolves to the static global), apply the operator with the RHS.
+        generateASTExpressionOperation(
+          ASTExpressionOperation(
+            ASTExpressionVariableAccess(variable),
+            op.asASTExpressionOperator!,
+            expression.expression,
+          ),
+          out: out,
+          context: context,
+        );
+      }
+      context.assertStackLength(s0 + 1, "After static assign value `$name`");
+      out.write(
+        Wasm.globalSet(context.module!.staticFieldGlobalIndexOf(staticKey)!),
+        description: "[OP] static field set `$staticKey`",
+      );
+      // Keep the phantom virtual entry (the real stack is balanced by
+      // `global.set`), matching the local-assignment contract.
+      return out;
     }
 
     var localVar = _getLocalVariable(context, name);
@@ -8446,6 +8573,17 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       context.stackPush(_elemStackType(type), 'boxed `$name` (return)');
     } else if (context.isFieldAccess(name)) {
       _generateFieldGet(out, context, name);
+    } else if (_staticFieldKey(context, name) != null) {
+      var key = _staticFieldKey(context, name)!;
+      var type = context.module!.staticFieldTypeOf(key)!;
+      out.write(
+        Wasm.globalGet(context.module!.staticFieldGlobalIndexOf(key)!),
+        description: "[OP] static field get `$key` (return)",
+      );
+      context.stackPush(
+        _wasmStackTypeFor(type),
+        'static field `$name` (return)',
+      );
     } else {
       var localVar = _getLocalVariable(context, name);
       _localVariableGet(out, context, localVar.index, name, '(return)');
@@ -10532,14 +10670,53 @@ class WasmModuleContext {
   int get enumEntryGlobalCount => _enumEntryGlobals.length;
 
   /// Registers (or reuses) the cache global for enum-entry [key], returning its
-  /// Wasm global index.
+  /// Wasm global index. Enum globals follow the heap pointer (index 0) and the
+  /// static-field globals (see [registerStaticFieldGlobal]).
   int enumEntryGlobalIndex(String key) {
+    var base = 1 + staticFieldGlobalCount;
     var i = _enumEntryGlobals.indexOf(key);
-    if (i >= 0) return 1 + i;
+    if (i >= 0) return base + i;
     _enumEntryGlobals.add(key);
     requiresMemory = true;
     requiresHeapGlobal = true; // ensures the Global section is emitted
-    return _enumEntryGlobals.length; // 1 + (length-1)
+    return base + (_enumEntryGlobals.length - 1);
+  }
+
+  // --- Static field globals (one typed mutable global per `static` field) ---
+
+  /// Static-field globals in index order: each holds the field's value. Placed
+  /// right after the heap-pointer global `$hp` (index 0), so a field's global
+  /// index is `1 + its position` here. Registered up front at module build
+  /// (before any enum globals), so indices are stable.
+  final List<({String key, ASTType type, num init})> _staticFieldGlobals = [];
+  final Map<String, int> _staticFieldGlobalIndex = {};
+
+  /// Number of static-field globals (emitted after `$hp`, before enum globals).
+  int get staticFieldGlobalCount => _staticFieldGlobals.length;
+
+  /// The registered static-field globals, in index order.
+  List<({String key, ASTType type, num init})> get staticFieldGlobals =>
+      List.unmodifiable(_staticFieldGlobals);
+
+  /// Registers a `static` field global for [key] (`"Class.field"`), returning
+  /// its Wasm global index. Idempotent per key.
+  int registerStaticFieldGlobal(String key, ASTType type, num init) {
+    var existing = _staticFieldGlobalIndex[key];
+    if (existing != null) return existing;
+    var index = 1 + _staticFieldGlobals.length; // after `$hp` (index 0)
+    _staticFieldGlobals.add((key: key, type: type, init: init));
+    _staticFieldGlobalIndex[key] = index;
+    requiresHeapGlobal = true; // ensures the Global section is emitted
+    return index;
+  }
+
+  /// The global index of static field [key] (`"Class.field"`), or `null`.
+  int? staticFieldGlobalIndexOf(String key) => _staticFieldGlobalIndex[key];
+
+  /// The declared type of static field [key] (`"Class.field"`), or `null`.
+  ASTType? staticFieldTypeOf(String key) {
+    var idx = _staticFieldGlobalIndex[key];
+    return idx == null ? null : _staticFieldGlobals[idx - 1].type;
   }
 
   /// Ensures the exported `__alloc(i32 size) -> i32 ptr` bump-allocator function

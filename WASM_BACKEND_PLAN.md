@@ -132,25 +132,19 @@ test('instance getter', () => _testWasm(
 
 ---
 
-## GAP D — `static` fields (INTERPRETER-SUPPORTED since 2.1.1)
+## GAP D — `static` fields — DONE (bare access)
 
-> The AST interpreter fully supports `static` fields (read/write, qualified and
-> bare, incl. inherited) as of 2.1.1. Wasm is the only backend that can't compile
-> them, so this is now a straight interpret-works / Wasm-doesn't gap.
+Static fields now compile to typed, mutable module **globals** (one per field,
+placed after the heap pointer and before the enum-entry caches), seeded with
+their literal `int`/`double`/`bool` initializer. A bare reference inside a
+`static` method reads/writes the global (`global.get`/`global.set`), including
+compound assignment; values persist across calls. See
+`apollovm_wasm_static_field_test.dart`.
 
-- **Error** (compile): `Bad state: Can't find local variable \`count\` in
-  context.`
-- **Trigger**: reading/writing a `static` field (`return count;`, `C.count`,
-  `C.count = v`). Static *methods* work; static *fields* don't resolve.
-- **Fix direction**: give static fields module-level storage (a global or a
-  fixed memory slot, per declaring class) and resolve a bare/`Class.`-qualified
-  static-field name to a load/store from it.
-
-```dart
-test('static field read', () => _testWasm(
-  'class C { static int count = 7; static int run() { return count; } }',
-  'C.run', {[]: 7}));
-```
+**Remaining (follow-up):** qualified `C.field` from *another* class (goes through
+the getter path, not the bare-variable path), inherited static fields (walk the
+superclass chain), and non-literal initializers (need a start function). Bare
+same-class access — the common case — is covered.
 
 ---
 
