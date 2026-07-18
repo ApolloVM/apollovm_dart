@@ -114,20 +114,29 @@ test('String.substring', () => _testWasm(
 
 ---
 
-## GAP C — custom instance getters
+## GAP C — custom instance getters — DONE
 
-- **Error** (compile): `UnimplementedError: Wasm getter .x on C is not
-  supported yet.`
-- **Trigger**: a user-declared getter, `int get x { return _x; }`, read as
-  `c.x`. (External/plain field reads already work; this is the *getter method*
-  form.)
-- **Fix direction**: lower a getter access to a zero-argument method call on the
-  receiver, reusing the instance-method-call path.
+A user-declared getter (`int get x { ... }`) is synthesized as a zero-argument
+instance method (see `_buildClassFunctions`), so a getter access via a receiver
+(`c.x`) lowers to a 0-arg method call on the receiver — reusing the whole
+instance-method path (argument marshalling, return conversion) and the
+superclass-chain resolution, so **inherited getters** and **overrides** resolve
+just like methods. `hasGetter` distinguishes a getter from a same-named 0-arg
+method (both compile to the same shape). Covers `int`/`double`/`bool`/`String`
+getters, a computed-expression getter body, a getter used inside an expression
+(read once or twice), inherited, and overridden getters. See
+`apollovm_wasm_getter_test.dart`.
+
+**Remaining (follow-up):** **bare** getter access inside a method body (`x`
+resolving to `this.x`, no receiver) is not wired — the AST interpreter does not
+resolve it yet either, so closing it means fixing both together, and it is left
+as a shared follow-up. Setters (`set x(v)`) are likewise unimplemented.
 
 ```dart
 test('instance getter', () => _testWasm(
   'class C { int _x = 5; int get x { return _x; } }'
-  ' int run() { var c = C(); return c.x; }', 'run', {[]: 5}));
+  ' class M { static int go() { var c = C(); return c.x; } }',
+  'M.go', {[]: 5}));
 ```
 
 ---
@@ -221,16 +230,14 @@ test('return a List', () => _testWasm(
 ## Suggested order
 
 GAP G below is **already implemented in the AST interpreter** (2.2.0), so closing
-it brings the Wasm backend to parity with what source already runs. GAPs **D**
-(static fields) and **E** (inheritance/`super`) are now **DONE**.
+it brings the Wasm backend to parity with what source already runs. GAPs **C**
+(getters), **D** (static fields) and **E** (inheritance/`super`) are now **DONE**.
 
 1. **GAP B** (remaining String methods) — by far the widest impact on real code
    (`.length`/`.isEmpty`/`.isNotEmpty` already done).
-2. **GAP C** (getters) — small, common; lower a getter access to a zero-arg
-   method call on the receiver.
-3. **GAP G** (nested collections / `m[0][1]`) — list/map literal codegen for a
+2. **GAP G** (nested collections / `m[0][1]`) — list/map literal codegen for a
    nested element type; interpreter-supported.
-4. **GAP A** (generic field i64/boxing) and **GAP F** (aggregate returns) —
+3. **GAP A** (generic field i64/boxing) and **GAP F** (aggregate returns) —
    value-representation work; related boxing concerns.
 
 After each fix: `dart test -t wasm -x wasm-gc -x wasm-chrome` must stay green
