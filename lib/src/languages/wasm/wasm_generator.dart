@@ -4642,6 +4642,18 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       return _generateMapGet(expression, localVar, out: out, context: context);
     }
 
+    // `s[i]` on a String: a fresh length-1 String holding the byte at `s + 4 + i`
+    // (Dart's `String[]` returns a length-1 String).
+    if (containerType is ASTTypeString) {
+      return _generateStringIndexAccess(
+        localVar,
+        name,
+        expression.expression,
+        out: out,
+        context: context,
+      );
+    }
+
     if (containerType is! ASTTypeArray) {
       throw UnimplementedError(
         "Wasm index access on `$name` ($containerType) is not supported yet.",
@@ -11126,6 +11138,55 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     context.controlDepth--;
     out.writeByte(Wasm.end); // block
     context.controlDepth--;
+  }
+
+  /// `s[i]` -> a fresh length-1 String holding the byte at `s + 4 + i`.
+  BytesOutput _generateStringIndexAccess(
+    ({ASTType type, int index}) recv,
+    String varName,
+    ASTExpression indexExpr, {
+    required BytesOutput out,
+    required WasmContext context,
+  }) {
+    var module = context.module!;
+    module.requiresMemory = true;
+    module.requiresHeapGlobal = true;
+    final s0 = context.stackLength;
+
+    var src = context.scratchLocal(_astTypeString, 60);
+    var dest = context.scratchLocal(_astTypeString, 61);
+    var ch = context.scratchLocal(_astTypeString, 62);
+
+    // ch = load8(src + 4 + i)
+    _localVariableGet(out, context, recv.index, varName);
+    out.write(Wasm.localSet(src));
+    out.write(Wasm.localGet(src));
+    out.write(Wasm32.i32Const(4));
+    out.writeByte(Wasm32.i32Add);
+    generateASTExpression(indexExpr, out: out, context: context); // index (i64)
+    context.stackDrop();
+    out.writeByte(Wasm64.i64WrapToi32);
+    out.writeByte(Wasm32.i32Add);
+    out.write(Wasm32.i32Load8U());
+    out.write(Wasm.localSet(ch));
+
+    // dest = alloc(1 + 4) ; store len=1 ; store8(dest + 4, ch)
+    out.write(Wasm32.i32Const(5));
+    _emitInlineAlloc(out, context);
+    out.write(Wasm.localSet(dest));
+    out.write(Wasm.localGet(dest));
+    out.write(Wasm32.i32Const(1));
+    out.write(Wasm32.i32Store());
+    out.write(Wasm.localGet(dest));
+    out.write(Wasm32.i32Const(4));
+    out.writeByte(Wasm32.i32Add);
+    out.write(Wasm.localGet(ch));
+    out.write(Wasm32.i32Store8());
+
+    out.write(Wasm.localGet(dest));
+    context.stackPush(_astTypeString, "$varName[index]");
+    context.assertStackLength(s0 + 1, "After String index");
+    return out;
   }
 
   /// Pushes `1` if the char in [chLoc] is ASCII whitespace (space, or `\t`..`\r`,

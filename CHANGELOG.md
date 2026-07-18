@@ -1,3 +1,13 @@
+## 2.12.0
+
+### String index `s[i]` (interpreter + Wasm)
+
+Adds `String[i]` — Dart's index operator, which returns the character at `i` as a
+length-1 String — to the AST interpreter core (which was missing it, throwing a
+null-pointer error) and to the on-the-fly WebAssembly compiler. Both backends now
+agree. This restores functionality briefly dropped in 2.11.0, where `s[i]` had
+been mistaken for invalid Dart; it is valid, so it is now supported end to end.
+
 ## 2.11.0
 
 ### Wasm: String `split`
