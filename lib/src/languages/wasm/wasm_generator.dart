@@ -8960,7 +8960,7 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     var stack0Type = context.stackGet(0)!.type;
     var returnType = context.returnsGet(0)!.type;
 
-    _autoConvertStackTypes(stack0Type, returnType, out: out);
+    _autoConvertStackTypes(stack0Type, returnType, out: out, context: context);
 
     out.writeByte(
       Wasm.functionReturn,
@@ -8990,6 +8990,20 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
         out,
         context,
         targetType is ASTTypeDouble ? _astTypeDouble64 : _astTypeInt64,
+      );
+      return out;
+    }
+
+    // A boxed `Object` flowing into a concrete non-numeric i32 target — a generic
+    // `T` field (`Box<String>`, `Box<bool>`) read back at its instantiation type.
+    // The box payload holds the i32 value (String pointer, or a bool 0/1), so
+    // extract it. (A generic instance field — `Box<SomeClass>` — is a follow-up:
+    // the read result types as `dynamic`, so further member access isn't wired.)
+    if (_isObjectType(stackType) &&
+        (targetType is ASTTypeString || targetType is ASTTypeBool)) {
+      out.write(
+        Wasm32.i32Load(2, _boxPayloadOffset),
+        description: "[OP] unbox Object payload (i32)",
       );
       return out;
     }

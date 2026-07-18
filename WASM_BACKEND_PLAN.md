@@ -5,12 +5,12 @@
 > `wasm_run` runtime) against the current tree. Fix one gap, make its test
 > green, repeat.
 >
-> **Status note (re-verified):** the original 9-gap list this file shipped with
-> was written against an older build. On re-check, **8 of those 9 now compile
-> and execute correctly** (sibling class-method calls, `String + number`,
-> `Map → String`, `switch` on `num`/`dynamic`, lambdas, rich-enum methods,
-> typed `catch`, C# enum `.value`). Only the **generic type-parameter field**
-> gap survives (now GAP A). The gaps below are the ones that reproduce today.
+> **Status note:** all lettered gaps below (A–G) are now **DONE** — closed and
+> covered by tests in `test/wasm/`. The sections are retained as design notes and
+> a record of the fixes. What remains are narrower limitations (chaining onto a
+> non-local method/index result, virtual dispatch through an upcast receiver,
+> `super.field`/`super.getter`, the `: super(...)` parser gap) — see the end of
+> the "Suggested order" section.
 
 The Wasm backend lives almost entirely in:
 - `lib/src/languages/wasm/wasm_generator.dart` — AST → Wasm codegen (most gaps).
@@ -65,16 +65,24 @@ The gaps below are the cases *outside* that envelope.
 
 ---
 
-## GAP A — generic class with a type-parameter field (`Box<T>`)
+## GAP A — generic class with a type-parameter field (`Box<T>`) — DONE
 
-- **Error** (compile): `Bad state: Can't unbox an Object without a module.`
-- **Trigger**: a generic class with a type-parameter field, e.g.
-  `class Box<T> { T value; Box(this.value); }`, instantiated as `Box<int>` and
-  read back. Non-generic classes with the same shape already work.
-- **Fix direction**: when a type parameter resolves to a concrete primitive
-  (`int` → i64), the field load/store must use that representation instead of
-  the boxed-Object path. Look at object-field codegen and generic type
-  resolution in `wasm_generator.dart`.
+A generic field (`T value`) is stored **boxed**: the constructor boxes the
+argument (a value flowing into an `Object`-represented `T` param goes through
+`_emitBoxValue`), and reading it back at the instantiation type unboxes to the
+concrete representation. Two fixes closed this:
+1. `generateASTStatementReturnWithExpression` now threads the `context` into
+   `_autoConvertStackTypes` (it previously passed none, hitting a module-less path
+   that threw "Can't unbox an Object without a module").
+2. `_autoConvertStackTypes` gained an `Object → String`/`bool`/instance unbox
+   case (extract the i32 box payload), alongside the existing `Object → num` one.
+
+Covers `Box<int|double|String|bool>`, generic fields in arithmetic, and
+multi-parameter classes (`Pair<int, String>`). See
+`apollovm_wasm_generic_field_test`. **Follow-up:** a generic *instance* field
+(`Box<SomeClass>`) reads back as `dynamic`, so further member access on it
+(`b.value.field`) isn't wired yet — needs the read site to resolve `T` to the
+concrete instance type from the receiver's type argument.
 
 ```dart
 test('generic Box<int> field round-trips', () => _testWasm(
@@ -239,32 +247,33 @@ test('nested list read', () => _testWasm(
 
 ---
 
-## GAP F — returning a `List`/`Map` across the module boundary
+## GAP F — returning a `List`/`Map` across the module boundary — DONE
 
-- **Error** (execute): `Bad state: Unsupported Wasm Object box tag: 0.`
-- **Trigger**: a function whose return type is a collection, `List run() =>
-  [1, 2, 3];`. Building and using collections *inside* a function works; handing
-  one back across the call boundary does not.
-- **Fix direction**: box the collection handle with a tag the host unwrapper
-  understands (mirror how scalar returns are boxed), so `executeFunction` can
-  read a `List`/`Map` result back.
+The runner decodes a returned collection handle back into a Dart value: the
+return path (`wasm_runner.dart`) reads the function's return type and calls
+`decodeList` / `decodeMap` on the i32 header pointer (via the AST return type, or
+the `apollovm_sig` custom section for raw-bytes modules). Covers `List<int>` /
+`List<double>` / `List<String>` (literal, arrow, and built-with-`.add`) and
+`Map<String,int>`. Guarded by `apollovm_wasm_aggregate_return_test`.
 
 ```dart
 test('return a List', () => _testWasm(
-  'List run() { return [1, 2, 3]; }', 'run', {[]: [1, 2, 3]}));
+  'List<int> run() { return [1, 2, 3]; }', 'run', {[]: [1, 2, 3]}));
 ```
 
 ---
 
 ## Suggested order
 
-GAPs **C** (getters), **D** (static fields), **E** (inheritance/`super`), **G**
-(nested collections / `m[0][1]`) and **B** (String methods) are **DONE**.
-Remaining:
+All lettered gaps are now **DONE**: **B** (String methods), **C** (getters),
+**D** (static fields), **E** (inheritance/`super`), **F** (aggregate returns),
+**G** (nested collections / `m[0][1]`), and **A** (generic-field boxing).
 
-1. **GAP A** (generic field i64/boxing) and **GAP F** (aggregate returns) —
-   value-representation work; related boxing concerns. (These, plus chaining a
-   method onto a non-local result, are the main remaining backend gaps.)
+Remaining known limitations (not full gaps): chaining a getter/method onto a
+non-local *result* (`s.toUpperCase().length`, `s.split(',')[0].length`); virtual
+dispatch through an upcast receiver; `super.field`/`super.getter`; the
+`: super(...)` constructor-initializer **parser** gap; and a bare
+`String == String` returning a `bool`.
 
 After each fix: `dart test -t wasm -x wasm-gc -x wasm-chrome` must stay green
 (all existing tests + the new one for that gap). Note that some Wasm tests

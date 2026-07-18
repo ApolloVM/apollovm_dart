@@ -3,7 +3,7 @@ description: >-
   Portable multi-language VM: parse, run and translate Dart, Java, Kotlin, Go,
   C#, JavaScript, TypeScript, Lua and Python — with on-the-fly Wasm compilation
   and MCP/LSP servers.
-version: 2.12.0
+version: 2.13.0
 repository: https://github.com/ApolloVM/apollovm_dart
 issue_tracker: https://github.com/ApolloVM/apollovm_dart/issues
 
