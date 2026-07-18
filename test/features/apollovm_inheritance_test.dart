@@ -419,5 +419,44 @@ void main() {
         equals(8),
       );
     });
+
+    test('JavaScript: inherited method', () async {
+      expect(
+        await _run(
+          'javascript',
+          'class A { base() { return 100; } }'
+              ' class B extends A { run() { return this.base(); } }',
+          'B',
+          'run',
+        ),
+        equals(100),
+      );
+    });
+
+    test('TypeScript: inherited method', () async {
+      expect(
+        await _run(
+          'typescript',
+          'class A { base(): number { return 100; } }'
+              ' class B extends A { run(): number { return this.base(); } }',
+          'B',
+          'run',
+        ),
+        equals(100),
+      );
+    });
+
+    test('Python: inherited method', () async {
+      expect(
+        await _run(
+          'python',
+          'class A:\n    def base(self):\n        return 100\n'
+              'class B(A):\n    def run(self):\n        return self.base()\n',
+          'B',
+          'run',
+        ),
+        equals(100),
+      );
+    });
   });
 }

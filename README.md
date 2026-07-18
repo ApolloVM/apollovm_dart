@@ -129,7 +129,7 @@ Same legend and **Wasm** column semantics as the table above.
 | Constructors & instantiation (`new Foo(...)` / `Foo(...)`)    | ✅ | ✅ | ✅ | 🧩⁹ | ✅ | ✅ | ✅ | 🧩¹ | ✅ | ✅ |
 | Methods                                                       | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Static / visibility modifiers                                 | ✅ | ✅ | 🧩³ | 🧩¹⁰ | ✅ | 🧩² | ✅ | 🚫  | 🚫  | 🧩⁴ |
-| Inheritance (`extends`) / interfaces                          | ✅ | ✅ | ✅ | 🚧 | ✅ | ✅ | ✅ | 🚫  | ✅ | 🚧 |
+| Inheritance (`extends`) / superclass members¹³               | ✅ | ✅ | 🚧 | 🚧 | ✅ | ✅ | ✅ | 🚫  | ✅ | 🚧 |
 | Enums (rich: ctor args, fields, methods)⁶                     | ✅ | ✅ | ✅ | 🚧 | ✅ | 🚫  | ✅ | 🚫  | ✅ | ✅⁶ |
 | Generics (generic classes + instantiation + type erasure)    | ✅ | ✅ | ✅ | 🚧 | ✅ | 🚫  | ✅ | 🚫  | 🚫  | 🚧 |
 | Type inference (`var` / `val` / `auto`)                       | ✅ | ✅ | ✅ | ✅ | ✅ | 🚫  | ✅ | 🚫  | 🚫  | ✅⁵ |
@@ -168,7 +168,15 @@ across `import`). The languages marked `🚫` have no equivalent construct — p
 monkey patching and metatables are not the same thing — so generating an extension for them
 throws `UnsupportedSyntaxError` rather than emitting a semantically different shim. &nbsp;
 ¹² C# has no extension *property*, so an extension declaring a getter cannot be emitted as C#;
-its methods round-trip, with `this`/`self` translated both ways.
+its methods round-trip, with `this`/`self` translated both ways. &nbsp;
+¹³ A subclass inherits its superclass's methods, fields, getters and `static`
+fields; `super.method()` / `super.getter` / `super.field` reach the parent, and a
+subclass override wins. Works for the languages that record their base class:
+Dart, Java (`extends`), C# / TS / JS (`: Base` / `extends`), Python. Kotlin's
+`class B : A()` base clause and Go embedding aren't parsed yet (`🚧`), and the
+Wasm backend doesn't compile inheritance yet. Constructor initializer lists with
+an explicit `: super(v)` call are not parsed yet — set inherited fields from the
+constructor body or a `this.param`.
 
 > Per-language behavior is normalized to a shared AST, so types and constructs map
 > cleanly when translating between languages (e.g. C# `string` ⇄ Dart `String`,
