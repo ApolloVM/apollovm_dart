@@ -132,15 +132,19 @@ test('instance getter', () => _testWasm(
 
 ---
 
-## GAP D — reading a `static` field
+## GAP D — `static` fields (INTERPRETER-SUPPORTED since 2.1.1)
+
+> The AST interpreter fully supports `static` fields (read/write, qualified and
+> bare, incl. inherited) as of 2.1.1. Wasm is the only backend that can't compile
+> them, so this is now a straight interpret-works / Wasm-doesn't gap.
 
 - **Error** (compile): `Bad state: Can't find local variable \`count\` in
   context.`
-- **Trigger**: reading a `static` field from a static method (`return count;` or
-  `C.count`). Static *methods* work; static *fields* don't resolve.
+- **Trigger**: reading/writing a `static` field (`return count;`, `C.count`,
+  `C.count = v`). Static *methods* work; static *fields* don't resolve.
 - **Fix direction**: give static fields module-level storage (a global or a
-  fixed memory slot) and resolve a bare/`Class.`-qualified static-field name to
-  a load from it.
+  fixed memory slot, per declaring class) and resolve a bare/`Class.`-qualified
+  static-field name to a load/store from it.
 
 ```dart
 test('static field read', () => _testWasm(
@@ -150,22 +154,44 @@ test('static field read', () => _testWasm(
 
 ---
 
-## GAP E — inherited / `super` method calls
+## GAP E — inheritance: methods, fields, getters, `static`, `super` (INTERPRETER-SUPPORTED since 2.2.0)
 
-- **Error** (compile): `Unsupported operation: Can't call non-static method
-  'A.base' without an instance.`
-- **Trigger**: a subclass calling a concrete method it inherits from its
-  superclass (`class B extends A { int run() { return base() + 2; } }`), and
-  `super.method()` / `super(...)`. A class calling *its own* methods works.
-- **Fix direction**: walk the superclass chain when resolving an unqualified
-  method call and when laying out the vtable / function index table, so an
-  inherited method is callable on a subclass instance.
+> The AST interpreter fully implements inheritance as of 2.2.0: inherited
+> methods (override wins), inherited fields, inherited getters, inherited static
+> fields, and `super.method()` / `super.getter` / `super.field`. The Wasm
+> backend compiles none of it yet.
+
+- **Errors** (compile): `Can't call non-static method 'A.base' without an
+  instance.` (inherited method); `Can't find local variable \`x\`` (inherited
+  field); `Can't find local variable \`super\`` (`super.*`).
+- **Trigger**: any access to a member declared on a superclass, or `super`.
+- **Fix direction**: resolve the superclass chain when laying out object fields
+  and the method/function index table (vtable), so inherited members are
+  reachable on a subclass instance; model `super` as the current instance with
+  dispatch starting at the enclosing class's superclass.
 
 ```dart
 test('inherited superclass method', () => _testWasm(
   'class A { int base() { return 1; } }'
-  ' class B extends A { int run() { return base() + 2; } }'
-  ' int run() { var b = B(); return b.run(); }', 'run', {[]: 3}));
+  ' class B extends A { int run() { return base() + 2; } }', 'B.run', {[]: 3}));
+```
+
+---
+
+## GAP G — nested lists & nested indexing (`m[0][1]`) (INTERPRETER-SUPPORTED since 2.2.0)
+
+- **Error** (compile): `UnimplementedError: Wasm list literal of element type
+  List<int> is not supported yet.` — the blocker is the **2D list literal**
+  (`[[1, 2], [3, 4]]`), not the index chain itself.
+- **Trigger**: a list whose element type is a `List`/`Map` (a nested collection),
+  and, once buildable, chained access/assignment `m[0][1]` / `m['a']['b'] = v`.
+- **Fix direction**: support a nested-collection element type in list/map literal
+  codegen (element is a pointer to another list/map header), then confirm the
+  chained index/key read+write path compiles.
+
+```dart
+test('nested list read', () => _testWasm(
+  'int run() { var m = [[1, 2], [3, 4]]; return m[0][1]; }', 'run', {[]: 2}));
 ```
 
 ---
@@ -189,12 +215,19 @@ test('return a List', () => _testWasm(
 
 ## Suggested order
 
+GAPs D, E and G below are **already implemented in the AST interpreter** (2.1.1 /
+2.2.0), so closing them brings the Wasm backend to parity with what source
+already runs — good candidates to prioritize.
+
 1. **GAP B** (remaining String methods) — by far the widest impact on real code
    (`.length`/`.isEmpty`/`.isNotEmpty` already done).
-2. **GAP D** (static field reads) and **GAP C** (getters) — small, common,
-   independent.
-3. **GAP E** (inheritance/`super`) — one subsystem (method resolution + vtable).
-4. **GAP A** (generic field i64/boxing) and **GAP F** (aggregate returns) —
+2. **GAP D** (static fields) and **GAP C** (getters) — small, common,
+   independent; D is interpreter-supported.
+3. **GAP E** (inheritance/`super`) — one subsystem (field layout + method/vtable
+   resolution over the superclass chain); interpreter-supported.
+4. **GAP G** (nested collections / `m[0][1]`) — list/map literal codegen for a
+   nested element type; interpreter-supported.
+5. **GAP A** (generic field i64/boxing) and **GAP F** (aggregate returns) —
    value-representation work; related boxing concerns.
 
 After each fix: `dart test -t wasm -x wasm-gc -x wasm-chrome` must stay green

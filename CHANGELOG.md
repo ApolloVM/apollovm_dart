@@ -1,5 +1,12 @@
 ## 2.2.0
 
+### Nested / chained index access (`m[0][1]`)
+
+Indexing into a nested collection now works for both reads and writes:
+`m[0][1]`, `m['a']['b']`, `m['a'][0]`, and deeper chains, including compound
+assignment (`m[1][0] += 5`). Previously only a single `[...]` on a bare variable
+was supported. Single-index access is unchanged.
+
 ### Class inheritance (`extends`) is now functional
 
 `extends` was parsed but had no runtime effect — inherited methods and fields
@@ -17,9 +24,10 @@ were invisible and `super` was unresolved. Now:
   parent method (resolved relative to the class where the call is written, so it
   is correct for multi-level hierarchies), `super.getter` reads the parent
   getter, and `super.field` reads/writes the inherited field.
-- The **Java** (`extends`) and **C#** (`: Base`) grammars now record the
-  superclass they were previously dropping, so inheritance works across those
-  languages too.
+- The **Java** (`extends`), **C#** (`: Base`) and **JavaScript** (`extends`)
+  grammars now record the superclass they were previously dropping, so
+  inheritance works across those languages (and TypeScript / Python) too.
+  (Kotlin's `class B : A()` base clause is not parsed yet.)
 
 Not yet supported: constructor initializer lists with an explicit
 super-constructor call (`B(v) : super(v)`) — inherited fields are still set from

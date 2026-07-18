@@ -117,8 +117,16 @@ class JavaScriptGrammarDefinition extends JavaScriptGrammarLexer {
               classCodeBlock())
           .map((v) {
             var name = v[1] as String;
+            var ext = v[2];
             var block = v[3] as ASTBlock;
-            var clazz = ASTClassNormal(name, ASTType<VMObject>(name), null);
+            // `class B extends A` records the superclass name.
+            var superName = ext is List ? ext[1] as String : null;
+            var clazz = ASTClassNormal(
+              name,
+              ASTType<VMObject>(name),
+              null,
+              superClassName: superName,
+            );
             clazz.set(block);
             return clazz;
           });

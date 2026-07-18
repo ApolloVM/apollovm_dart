@@ -1221,6 +1221,17 @@ abstract class ApolloCodeGenerator
       headIndented: false,
     );
     out.write(']');
+    // Chained keys for a nested write target (`m[0][1] = v`).
+    for (var extra in expression.extraKeys) {
+      out.write('[');
+      generateASTExpression(
+        extra,
+        out: out,
+        indent: '$indent  ',
+        headIndented: false,
+      );
+      out.write(']');
+    }
 
     var op = getASTAssignmentOperatorText(expression.operator);
     out.write(' ');
@@ -2268,6 +2279,17 @@ abstract class ApolloCodeGenerator
       headIndented: false,
     );
     out.write(']');
+    // Chained indices for nested access (`m[0][1]`).
+    for (var extra in expression.extraIndices) {
+      out.write('[');
+      generateASTExpression(
+        extra,
+        out: out,
+        indent: indent,
+        headIndented: false,
+      );
+      out.write(']');
+    }
     return out;
   }
 
