@@ -148,26 +148,37 @@ same-class access — the common case — is covered.
 
 ---
 
-## GAP E — inheritance: methods, fields, getters, `static`, `super` (INTERPRETER-SUPPORTED since 2.2.0)
+## GAP E — inheritance: methods, fields, `super` — DONE
 
-> The AST interpreter fully implements inheritance as of 2.2.0: inherited
-> methods (override wins), inherited fields, inherited getters, inherited static
-> fields, and `super.method()` / `super.getter` / `super.field`. The Wasm
-> backend compiles none of it yet.
+A subclass instance now carries its superclass's fields **first** in the heap
+layout ([`_allInstanceFields`], superclass-first), so an inherited field sits at
+the same offset on a subclass instance as on the superclass — a superclass method
+compiled once against the superclass layout reads/writes the correct slot when
+invoked on a subclass instance. Method resolution (`methodIndex` /
+`methodIndexForCall`) walks the `extends` chain: the most-derived class that
+declares the method wins (an override), otherwise the inherited superclass method.
+`super.m(args)` keeps the current instance as the receiver but starts dispatch at
+the enclosing class's superclass (skipping the override). The subclass constructor
+also runs inherited field initializers (superclass-first). See
+`apollovm_wasm_inheritance_test.dart`. Covered: inherited method (bare and via a
+receiver, with args), inherited field read/write (incl. `double`), own+inherited
+fields at distinct offsets, override-wins, `super.m()` / `super.m(args)`, and a
+two-level `extends` chain.
 
-- **Errors** (compile): `Can't call non-static method 'A.base' without an
-  instance.` (inherited method); `Can't find local variable \`x\`` (inherited
-  field); `Can't find local variable \`super\`` (`super.*`).
-- **Trigger**: any access to a member declared on a superclass, or `super`.
-- **Fix direction**: resolve the superclass chain when laying out object fields
-  and the method/function index table (vtable), so inherited members are
-  reachable on a subclass instance; model `super` as the current instance with
-  dispatch starting at the enclosing class's superclass.
+**Remaining (follow-up):** dispatch is *static* (by the receiver's declared type),
+not virtual — an upcast receiver (`A a = B();`) calls the declared type's method,
+not the runtime type's; a true vtable would be needed for polymorphic dispatch.
+`super.field` / `super.getter` and inherited user-getters are not wired (GAP C is
+still open for getters generally). Static members are intentionally **not**
+inherited (matching Dart). The `: super(...)` constructor-initializer syntax is a
+separate **parser** gap (the Dart grammar doesn't parse it yet).
 
 ```dart
 test('inherited superclass method', () => _testWasm(
-  'class A { int base() { return 1; } }'
-  ' class B extends A { int run() { return base() + 2; } }', 'B.run', {[]: 3}));
+  'class A { int base() { return 9; } }'
+  ' class B extends A { int run() { return base(); } }'
+  ' class M { static int go() { var b = B(); return b.run(); } }',
+  'M.go', {[]: 9}));
 ```
 
 ---
@@ -209,19 +220,17 @@ test('return a List', () => _testWasm(
 
 ## Suggested order
 
-GAPs D, E and G below are **already implemented in the AST interpreter** (2.1.1 /
-2.2.0), so closing them brings the Wasm backend to parity with what source
-already runs — good candidates to prioritize.
+GAP G below is **already implemented in the AST interpreter** (2.2.0), so closing
+it brings the Wasm backend to parity with what source already runs. GAPs **D**
+(static fields) and **E** (inheritance/`super`) are now **DONE**.
 
 1. **GAP B** (remaining String methods) — by far the widest impact on real code
    (`.length`/`.isEmpty`/`.isNotEmpty` already done).
-2. **GAP D** (static fields) and **GAP C** (getters) — small, common,
-   independent; D is interpreter-supported.
-3. **GAP E** (inheritance/`super`) — one subsystem (field layout + method/vtable
-   resolution over the superclass chain); interpreter-supported.
-4. **GAP G** (nested collections / `m[0][1]`) — list/map literal codegen for a
+2. **GAP C** (getters) — small, common; lower a getter access to a zero-arg
+   method call on the receiver.
+3. **GAP G** (nested collections / `m[0][1]`) — list/map literal codegen for a
    nested element type; interpreter-supported.
-5. **GAP A** (generic field i64/boxing) and **GAP F** (aggregate returns) —
+4. **GAP A** (generic field i64/boxing) and **GAP F** (aggregate returns) —
    value-representation work; related boxing concerns.
 
 After each fix: `dart test -t wasm -x wasm-gc -x wasm-chrome` must stay green
