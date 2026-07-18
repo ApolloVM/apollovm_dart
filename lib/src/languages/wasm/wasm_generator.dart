@@ -10438,7 +10438,142 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
         context: context,
       );
     }
+    if (name == 'compareTo' && args.length == 1) {
+      return _generateStringCompareTo(
+        recv,
+        varName,
+        args[0],
+        out: out,
+        context: context,
+      );
+    }
     return null;
+  }
+
+  /// `s.compareTo(other)` -> `-1`/`0`/`1` (lexicographic byte comparison), as an
+  /// `int` (i64). Matches `String.compareTo`, which returns exactly `-1`/`0`/`1`.
+  BytesOutput _generateStringCompareTo(
+    ({ASTType type, int index}) recv,
+    String varName,
+    ASTExpression argExpr, {
+    required BytesOutput out,
+    required WasmContext context,
+  }) {
+    context.module!.requiresMemory = true;
+    final s0 = context.stackLength;
+
+    var src = context.scratchLocal(_astTypeString, 60);
+    var srcLen = context.scratchLocal(_astTypeString, 61);
+    var sub = context.scratchLocal(_astTypeString, 62);
+    var subLen = context.scratchLocal(_astTypeString, 63);
+    var minLen = context.scratchLocal(_astTypeString, 64);
+    var i = context.scratchLocal(_astTypeString, 65);
+    var ca = context.scratchLocal(_astTypeString, 66);
+    var cb = context.scratchLocal(_astTypeString, 67);
+    var result = context.scratchLocal(_astTypeString, 68);
+
+    generateASTExpression(argExpr, out: out, context: context);
+    context.stackDrop();
+    out.write(Wasm.localSet(sub));
+    _localVariableGet(out, context, recv.index, varName);
+    out.write(Wasm.localSet(src));
+    out.write(Wasm.localGet(src));
+    out.write(Wasm32.i32Load());
+    out.write(Wasm.localSet(srcLen));
+    out.write(Wasm.localGet(sub));
+    out.write(Wasm32.i32Load());
+    out.write(Wasm.localSet(subLen));
+
+    // minLen = (srcLen < subLen) ? srcLen : subLen
+    out.write(Wasm.localGet(srcLen));
+    out.write(Wasm.localGet(subLen));
+    out.write(Wasm.localGet(srcLen));
+    out.write(Wasm.localGet(subLen));
+    out.writeByte(Wasm32.i32LessThanUnsigned);
+    out.writeByte(Wasm.select);
+    out.write(Wasm.localSet(minLen));
+
+    // result = 0 ; i = 0
+    out.write(Wasm32.i32Const(0));
+    out.write(Wasm.localSet(result));
+    out.write(Wasm32.i32Const(0));
+    out.write(Wasm.localSet(i));
+
+    out.write(Wasm.block(WasmType.voidType));
+    context.controlDepth++;
+    final brk = context.controlDepth;
+    out.write(Wasm.loop(WasmType.voidType));
+    context.controlDepth++;
+    final rpt = context.controlDepth;
+    // if (i >= minLen) break
+    out.write(Wasm.localGet(i));
+    out.write(Wasm.localGet(minLen));
+    out.writeByte(Wasm32.i32GreaterThanOrEqualsUnsigned);
+    out.write(Wasm.brIf(context.controlDepth - brk));
+    // ca = src[i] ; cb = sub[i]
+    out.write(Wasm.localGet(src));
+    out.write(Wasm32.i32Const(4));
+    out.writeByte(Wasm32.i32Add);
+    out.write(Wasm.localGet(i));
+    out.writeByte(Wasm32.i32Add);
+    out.write(Wasm32.i32Load8U());
+    out.write(Wasm.localSet(ca));
+    out.write(Wasm.localGet(sub));
+    out.write(Wasm32.i32Const(4));
+    out.writeByte(Wasm32.i32Add);
+    out.write(Wasm.localGet(i));
+    out.writeByte(Wasm32.i32Add);
+    out.write(Wasm32.i32Load8U());
+    out.write(Wasm.localSet(cb));
+    // sign = (ca < cb) ? -1 : 1 ; result = (ca != cb) ? sign : result
+    out.write(Wasm32.i32Const(-1));
+    out.write(Wasm32.i32Const(1));
+    out.write(Wasm.localGet(ca));
+    out.write(Wasm.localGet(cb));
+    out.writeByte(Wasm32.i32LessThanUnsigned);
+    out.writeByte(Wasm.select);
+    out.write(Wasm.localGet(result));
+    out.write(Wasm.localGet(ca));
+    out.write(Wasm.localGet(cb));
+    out.writeByte(Wasm32.i32NotEquals);
+    out.writeByte(Wasm.select);
+    out.write(Wasm.localSet(result));
+    // break when ca != cb
+    out.write(Wasm.localGet(ca));
+    out.write(Wasm.localGet(cb));
+    out.writeByte(Wasm32.i32NotEquals);
+    out.write(Wasm.brIf(context.controlDepth - brk));
+    // i++
+    out.write(Wasm.localGet(i));
+    out.write(Wasm32.i32Const(1));
+    out.writeByte(Wasm32.i32Add);
+    out.write(Wasm.localSet(i));
+    out.write(Wasm.br(context.controlDepth - rpt));
+    out.writeByte(Wasm.end); // loop
+    context.controlDepth--;
+    out.writeByte(Wasm.end); // block
+    context.controlDepth--;
+
+    // Tie-break on length when the common prefix is equal (result still 0):
+    // result = (result == 0) ? ((srcLen>subLen) - (srcLen<subLen)) : result
+    out.write(Wasm.localGet(srcLen));
+    out.write(Wasm.localGet(subLen));
+    out.writeByte(Wasm32.i32GreaterThanUnsigned);
+    out.write(Wasm.localGet(srcLen));
+    out.write(Wasm.localGet(subLen));
+    out.writeByte(Wasm32.i32LessThanUnsigned);
+    out.writeByte(Wasm32.i32Subtract); // gt - lt in {-1, 0, 1}
+    out.write(Wasm.localGet(result));
+    out.write(Wasm.localGet(result));
+    out.writeByte(Wasm32.i32EqualsToZero);
+    out.writeByte(Wasm.select); // (result == 0) ? lengthCmp : result
+    out.write(Wasm.localSet(result));
+
+    out.write(Wasm.localGet(result));
+    out.writeByte(Wasm32.i32ExtendToI64Signed);
+    context.stackPush(_astTypeInt64, "$varName.compareTo");
+    context.assertStackLength(s0 + 1, "After String.compareTo");
+    return out;
   }
 
   /// `s.replaceAll(from, to)` / `s.replaceFirst(from, to)`: returns a fresh

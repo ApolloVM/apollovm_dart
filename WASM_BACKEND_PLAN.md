@@ -102,13 +102,13 @@ test('generic Box<int> field round-trips', () => _testWasm(
   passes (count matches to size the output buffer, then build it); handles
   grow/shrink/removal and matches at the ends; an empty `from` returns a copy —
   `apollovm_wasm_string_replace_test`.
-- **Still open**: `.split` (returns a `List`), index `[]`, and `.compareTo` (the
-  *interpreter* core lacks `String.compareTo` too — closing it means adding it to
-  `apollovm_core_base.dart` first, then the Wasm side; the Wasm codegen is a
-  straightforward lexicographic byte compare). Also: chaining a getter/method
-  onto a method *result* (`s.toUpperCase().length`, `s.substring(0,2) == 'x'`) —
-  the receiver must be a named local, and a bare `String == String` returning a
-  `bool` is a separate pre-existing limitation.
+- **Done (compareTo)**: `.compareTo(other)` — lexicographic byte compare
+  returning `-1`/`0`/`1`. Also added `String.compareTo` to the interpreter core
+  (`apollovm_core_base.dart`), which lacked it — `apollovm_wasm_string_compareto_test`.
+- **Still open**: `.split` (returns a `List`) and index `[]`. Also: chaining a
+  getter/method onto a method *result* (`s.toUpperCase().length`,
+  `s.substring(0,2) == 'x'`) — the receiver must be a named local, and a bare
+  `String == String` returning a `bool` is a separate pre-existing limitation.
 - **Fix direction**: same allocate-buffer + byte-loop pattern
   (`_generateStringCaseConvert`, `_emitBytesEqualNoBreak`). `.split`/`.replaceAll`
   build a fresh buffer/`List` from scan results. Stored length is UTF-8 bytes, so
@@ -254,8 +254,8 @@ GAPs **C** (getters), **D** (static fields), **E** (inheritance/`super`) and **G
 (nested collections / `m[0][1]`) are **DONE**; **GAP B** (String methods) is mostly
 done (slice/search/case complete). Remaining:
 
-1. **GAP B tail** — `.split`, index `[]`, and `.compareTo` (needs interpreter
-   core support first). (`.trim`/`.pad`/`.replaceAll`/`.replaceFirst` done.)
+1. **GAP B tail** — `.split` (returns a `List`) and index `[]`. (`.trim`/`.pad`/
+   `.replaceAll`/`.replaceFirst`/`.compareTo` done.)
 2. **GAP A** (generic field i64/boxing) and **GAP F** (aggregate returns) —
    value-representation work; related boxing concerns.
 

@@ -1,3 +1,15 @@
+## 2.10.0
+
+### String `compareTo` (interpreter + Wasm)
+
+Adds `String.compareTo(other)` to the AST interpreter core (which was missing it)
+and to the on-the-fly WebAssembly compiler, so it now works on both backends with
+matching results. The Wasm implementation is a lexicographic byte comparison over
+the `[len][utf8]` layout, returning `-1` / `0` / `1` (a shorter string that is a
+prefix of the other sorts first).
+
+Still to come for String in Wasm: `split` (returns a `List`) and index `[]`.
+
 ## 2.9.0
 
 ### Wasm: String `replaceAll` / `replaceFirst`
