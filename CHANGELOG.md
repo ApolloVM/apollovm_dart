@@ -1,3 +1,16 @@
+## 2.8.0
+
+### Wasm: String trim & pad methods
+
+The on-the-fly WebAssembly compiler now supports the String trim and pad methods
+over its `[len][utf8]` layout: `trim()` / `trimLeft()` / `trimRight()` (ASCII
+whitespace stripping) and `padLeft(width, [pad])` / `padRight(width, [pad])`
+(single-byte pad, default space). These join the slice/search methods added in
+2.7.0. Byte-indexed, so exact for ASCII text.
+
+Still to come: `split`, `replaceAll` / `replaceFirst`, index `[]`, and
+`compareTo` (which also needs `String.compareTo` in the interpreter core first).
+
 ## 2.7.0
 
 ### Wasm: String slice & search methods
