@@ -2630,11 +2630,46 @@ class ASTExpressionObjectFunctionInvocation
     variable.resolveNode(this);
   }
 
+  /// Whether this is a `super.method(...)` call (the receiver is `super`).
+  bool get _isSuper => variable.name == 'super';
+
+  /// The class whose body textually contains this invocation (the *static*
+  /// enclosing class, used to resolve `super` relative to where it is written,
+  /// not the runtime instance's class — important for multi-level hierarchies).
+  ASTClass? _enclosingClass() {
+    for (ASTNode? n = parentNode; n != null; n = n.parentNode) {
+      if (n is ASTClass) return n;
+    }
+    return null;
+  }
+
   FutureOr<ASTValue> _getVariableValue(VMContext parentContext) {
+    if (_isSuper) {
+      // `super` is the current instance; the superclass drives method dispatch
+      // (see `_getObjectClass`).
+      var obj = parentContext.getClassInstance();
+      if (obj == null) {
+        throw ApolloVMRuntimeError(
+          "Can't resolve `super`: no class instance in scope.",
+        );
+      }
+      return obj;
+    }
     return variable.getValue(parentContext);
   }
 
   FutureOr<ASTClass> _getObjectClass(VMContext parentContext) {
+    if (_isSuper) {
+      var enclosing = _enclosingClass();
+      var superClass = enclosing?.superClass;
+      if (superClass == null) {
+        throw ApolloVMRuntimeError(
+          "Can't resolve `super`: class `${enclosing?.name}` has no superclass.",
+        );
+      }
+      return superClass;
+    }
+
     var retObj = _getVariableValue(parentContext);
 
     return retObj.resolveMapped((obj) {
@@ -3084,11 +3119,43 @@ class ASTExpressionObjectGetterAccess extends ASTExpressionGetterAccess
     variable.resolveNode(this);
   }
 
+  /// Whether the receiver is `super` (`super.field` / `super.getter`).
+  bool get _isSuper => variable.name == 'super';
+
+  /// The class whose body textually contains this access, for resolving `super`
+  /// relative to where it is written (not the runtime instance's class).
+  ASTClass? _enclosingClass() {
+    for (ASTNode? n = parentNode; n != null; n = n.parentNode) {
+      if (n is ASTClass) return n;
+    }
+    return null;
+  }
+
   FutureOr<ASTValue> _getVariableValue(VMContext parentContext) {
+    if (_isSuper) {
+      var obj = parentContext.getClassInstance();
+      if (obj == null) {
+        throw ApolloVMRuntimeError(
+          "Can't resolve `super`: no class instance in scope.",
+        );
+      }
+      return obj;
+    }
     return variable.getValue(parentContext);
   }
 
   FutureOr<ASTClass> _getObjectClass(VMContext parentContext) {
+    if (_isSuper) {
+      var superClass = _enclosingClass()?.superClass;
+      if (superClass == null) {
+        throw ApolloVMRuntimeError(
+          "Can't resolve `super`: class "
+          "`${_enclosingClass()?.name}` has no superclass.",
+        );
+      }
+      return superClass;
+    }
+
     var retObj = _getVariableValue(parentContext);
 
     return retObj.resolveMapped((obj) {
@@ -3385,7 +3452,11 @@ class ASTExpressionObjectSetterAssignment extends ASTExpression {
       return resultValue;
     }
 
-    var obj = await variable.getValue(context);
+    // `super.field = value`: a field is not polymorphic, so `super.field`
+    // refers to the same instance field as `this.field`.
+    var obj = variable.name == 'super'
+        ? context.getClassInstance()
+        : await variable.getValue(context);
     if (obj is! ASTClassInstance) {
       throw ApolloVMRuntimeError(
         "Can't set field `$name`: target is not a class instance: $obj",

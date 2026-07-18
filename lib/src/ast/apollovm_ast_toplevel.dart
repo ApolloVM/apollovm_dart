@@ -286,11 +286,16 @@ abstract class ASTClass<T> extends ASTEntryPointBlock {
     VMContext? parentContext,
   ]) => VMClassContext(this, parent: parentContext, typeResolver: typeResolver);
 
-  /// Resolves a function/constructor visible from inside this class. Falls back
-  /// to the enclosing [ASTRoot] (reached via the `parentNode` chain set by
-  /// `ASTRoot.resolveNode`) so a method can instantiate sibling classes (their
-  /// constructors) and call top-level functions — the class-method execution
-  /// context is rooted at the class, not the program root.
+  /// The resolved superclass this class `extends`, or `null` if none. Overridden
+  /// by [ASTClassNormal] (which carries the `extends` name).
+  ASTClass? get superClass => null;
+
+  /// Resolves a function/constructor visible from inside this class. Checks this
+  /// class's own functions, then the superclass chain (inherited methods), then
+  /// falls back to the enclosing [ASTRoot] (reached via the `parentNode` chain
+  /// set by `ASTRoot.resolveNode`) so a method can instantiate sibling classes
+  /// (their constructors) and call top-level functions — the class-method
+  /// execution context is rooted at the class, not the program root.
   @override
   ASTInvocableDeclaration? getFunction(
     String fName,
@@ -306,6 +311,15 @@ abstract class ASTClass<T> extends ASTEntryPointBlock {
     );
     if (f != null) return f;
 
+    // Inherited method from the superclass chain.
+    var sf = superClass?.getFunction(
+      fName,
+      parametersSignature,
+      context,
+      caseInsensitive: caseInsensitive,
+    );
+    if (sf != null) return sf;
+
     for (ASTNode? node = parentNode; node != null; node = node.parentNode) {
       if (node is ASTRoot) {
         return node.getFunction(
@@ -317,6 +331,24 @@ abstract class ASTClass<T> extends ASTEntryPointBlock {
       }
     }
     return null;
+  }
+
+  /// Resolves a getter visible from this class: own getters first, then the
+  /// superclass chain (inherited getters).
+  @override
+  ASTGetterDeclaration? getGetter(
+    String fName,
+    VMContext context, {
+    bool caseInsensitive = false,
+  }) {
+    var g = super.getGetter(fName, context, caseInsensitive: caseInsensitive);
+    if (g != null) return g;
+
+    return superClass?.getGetter(
+      fName,
+      context,
+      caseInsensitive: caseInsensitive,
+    );
   }
 
   List<ASTConstructorSet> get constructors;
@@ -617,6 +649,24 @@ class ASTClassNormal extends ASTClass<VMObject> {
   /// Returns `true` if this class is `abstract`.
   bool get isAbstract => kind == ASTClassKind.abstractClass;
 
+  ASTClass? _superClass;
+  bool _superClassResolved = false;
+
+  /// The resolved superclass named by [superClassName] (via the enclosing
+  /// [ASTRoot]), or `null` if there is no `extends` or it can't be resolved.
+  @override
+  ASTClass? get superClass {
+    if (!_superClassResolved) {
+      _superClassResolved = true;
+      var name = superClassName;
+      if (name != null && name != this.name) {
+        var node = getNodeIdentifier(name);
+        if (node is ASTClass) _superClass = node;
+      }
+    }
+    return _superClass;
+  }
+
   @override
   void set(ASTBlock? other) {
     if (other == null) return;
@@ -818,6 +868,14 @@ class ASTClassNormal extends ASTClass<VMObject> {
       }
     }
 
+    // Fall back to an inherited field from the superclass chain.
+    field ??= superClass is ASTClassNormal
+        ? (superClass as ASTClassNormal).getField(
+            name,
+            caseInsensitive: caseInsensitive,
+          )
+        : null;
+
     return field;
   }
 
@@ -862,23 +920,65 @@ class ASTClassNormal extends ASTClass<VMObject> {
     return name;
   }
 
-  /// Reads a `static` field value (initializing static fields on first use).
+  /// Whether this class itself declares a `static` field [name] (not inherited).
+  bool _declaresStaticFieldLocally(String name, bool caseInsensitive) {
+    var f = _fields[name];
+    if (f == null && caseInsensitive) {
+      for (var entry in _fields.entries) {
+        if (equalsIgnoreAsciiCase(entry.key, name)) {
+          f = entry.value;
+          break;
+        }
+      }
+    }
+    return f != null && f.modifiers.isStatic;
+  }
+
+  /// The superclass as an [ASTClassNormal], if it declares static-field storage.
+  ASTClassNormal? get _superClassNormal =>
+      superClass is ASTClassNormal ? superClass as ASTClassNormal : null;
+
+  /// Reads a `static` field value (initializing static fields on first use). A
+  /// field inherited from the superclass is read from the class that declares
+  /// it (static storage is per-declaring-class).
   Future<ASTValue?> getStaticFieldValue(
     VMContext context,
     String name, {
     bool caseInsensitive = false,
   }) async {
+    if (!_declaresStaticFieldLocally(name, caseInsensitive)) {
+      var sc = _superClassNormal;
+      if (sc != null) {
+        return sc.getStaticFieldValue(
+          context,
+          name,
+          caseInsensitive: caseInsensitive,
+        );
+      }
+    }
     var store = await _ensureStaticFields(context, ASTRunStatus.dummy);
     return store[_resolveStaticFieldName(store, name, caseInsensitive)];
   }
 
-  /// Writes a `static` field value; returns the previous value.
+  /// Writes a `static` field value; returns the previous value. An inherited
+  /// static field is written through to its declaring class.
   Future<ASTValue?> setStaticFieldValue(
     VMContext context,
     String name,
     ASTValue value, {
     bool caseInsensitive = false,
   }) async {
+    if (!_declaresStaticFieldLocally(name, caseInsensitive)) {
+      var sc = _superClassNormal;
+      if (sc != null) {
+        return sc.setStaticFieldValue(
+          context,
+          name,
+          value,
+          caseInsensitive: caseInsensitive,
+        );
+      }
+    }
     var store = await _ensureStaticFields(context, ASTRunStatus.dummy);
     var key = _resolveStaticFieldName(store, name, caseInsensitive);
     var prev = store[key];
@@ -906,6 +1006,13 @@ class ASTClassNormal extends ASTClass<VMObject> {
   ) async {
     if (instance is! ASTClassInstance<VMObject>) {
       throw _exceptionNotClassInstance(instance);
+    }
+
+    // Initialize inherited fields first (superclass chain), so a subclass's
+    // own fields are applied last.
+    var superClass = this.superClass;
+    if (superClass is ASTClassNormal) {
+      await superClass.initializeInstance(context, runStatus, instance);
     }
 
     for (var field in _fields.values) {

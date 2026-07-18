@@ -250,8 +250,21 @@ class CSharpGrammarDefinition extends CSharpGrammarLexer {
               classCodeBlock())
           .map((v) {
             var name = v[2] as String;
+            var baseList = v[4];
             var block = v[5];
-            var clazz = ASTClassNormal(name, ASTType<VMObject>(name), null);
+            // The first entry of a C# base list (`: Base, IFace, …`) is the
+            // base class; record it as the superclass.
+            String? superName;
+            if (baseList is List && baseList.length > 1) {
+              var firstBase = baseList[1];
+              if (firstBase is ASTType) superName = firstBase.name;
+            }
+            var clazz = ASTClassNormal(
+              name,
+              ASTType<VMObject>(name),
+              null,
+              superClassName: superName,
+            );
             clazz.set(block);
             _classTypeParameters.clear();
             return clazz;
