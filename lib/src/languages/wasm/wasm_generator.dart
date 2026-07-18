@@ -3761,6 +3761,40 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       return out;
     }
 
+    // String `==` / `!=` -> content equality via the `__streq` helper. Both
+    // operands are String handles (i32 pointers); a numeric comparison would
+    // test pointer identity (and emit invalid Wasm when the pointers reach an
+    // `i64.eq`), not content. `__streq(a, b)` returns an i32 bool (1 if the
+    // bytes are equal); `!=` inverts it with `i32.eqz`. The result is an i32
+    // bool, matching the numeric `==`/`!=` comparison result type below.
+    if ((expression.operator == ASTExpressionOperator.equals ||
+            expression.operator == ASTExpressionOperator.notEquals) &&
+        stackType1 is ASTTypeString &&
+        stackType2 is ASTTypeString) {
+      var module = context.module!;
+      module.ensureStrEqFunction();
+      var strEqIndex = module.synthFunctionIndex('__streq')!;
+
+      // Operands were tracked on the virtual stack during generation above;
+      // drop them and re-emit the buffers so the two String handles sit on the
+      // real stack as `__streq`'s two i32 arguments.
+      context.stackDrop(); // operand 2 (stack2)
+      context.stackDrop(); // operand 1 (stack1)
+
+      out.writeBytes(exp1Out);
+      out.writeBytes(exp2Out);
+      out.write(Wasm.call(strEqIndex)); // __streq(a, b) -> i32 0/1
+      if (expression.operator == ASTExpressionOperator.notEquals) {
+        out.writeByte(
+          Wasm32.i32EqualsToZero,
+          description: "[OP] invert __streq for String `!=`",
+        );
+      }
+      context.stackPush(_astTypeInt32, "String ==/!= result (i32 bool)");
+      context.assertStackLength(stackLng0 + 1, "After String equality");
+      return out;
+    }
+
     // A boxed `Object`/`dynamic` operand (e.g. an element read from a
     // `List<Object>`, which the interpreter treats dynamically) carries an i32
     // box pointer, not a number. Unbox it to a concrete numeric value before
