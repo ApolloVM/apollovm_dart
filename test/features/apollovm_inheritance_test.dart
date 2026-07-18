@@ -185,6 +185,213 @@ void main() {
     });
   });
 
+  group('super fields', () {
+    test('super.field reads the inherited instance field', () async {
+      expect(
+        await _run(
+          'dart',
+          'class A { int x = 7; }'
+              ' class B extends A { int g() { return super.x; } }'
+              ' class M { static int run() { var b = B(); return b.g(); } }',
+          'M',
+          'run',
+        ),
+        equals(7),
+      );
+    });
+
+    test('super.field = value writes the inherited instance field', () async {
+      expect(
+        await _run(
+          'dart',
+          'class A { int x = 7; }'
+              ' class B extends A { int g() { super.x = 20; return x; } }'
+              ' class M { static int run() { var b = B(); return b.g(); } }',
+          'M',
+          'run',
+        ),
+        equals(20),
+      );
+    });
+
+    test('super.getter in a class with no superclass errors clearly', () async {
+      var vm = ApolloVM();
+      await vm.loadCodeUnit(
+        SourceCodeUnit(
+          'dart',
+          'class A { int get v { return super.v; } }'
+              ' class M { static int run() { var a = A(); return a.v; } }',
+          id: 'test',
+        ),
+      );
+      await expectLater(
+        vm
+            .createRunner('dart')!
+            .executeClassMethod(
+              '',
+              'M',
+              'run',
+              positionalParameters: const [[]],
+              classInstanceFields: const {},
+            ),
+        throwsA(isA<ApolloVMRuntimeError>()),
+      );
+    });
+
+    test('super.getter dispatches to the parent (overridden) getter', () async {
+      expect(
+        await _run(
+          'dart',
+          'class A { int get v { return 1; } }'
+              ' class B extends A { int get v { return 2; }'
+              ' int g() { return super.v; } }'
+              ' class M { static int run() { var b = B(); return b.g(); } }',
+          'M',
+          'run',
+        ),
+        equals(1),
+      );
+    });
+  });
+
+  group('Inherited getters', () {
+    test('an inherited getter is readable on an instance', () async {
+      expect(
+        await _run(
+          'dart',
+          'class A { int _x = 4; int get gx { return _x; } }'
+              ' class B extends A {}'
+              ' class M { static int run() { var b = B(); return b.gx; } }',
+          'M',
+          'run',
+        ),
+        equals(4),
+      );
+    });
+
+    test('a getter override wins over the inherited getter', () async {
+      expect(
+        await _run(
+          'dart',
+          'class A { int get gx { return 1; } }'
+              ' class B extends A { int get gx { return 2; } }'
+              ' class M { static int run() { var b = B(); return b.gx; } }',
+          'M',
+          'run',
+        ),
+        equals(2),
+      );
+    });
+  });
+
+  group('Inherited static fields', () {
+    test('a subclass reads an inherited static field (qualified)', () async {
+      expect(
+        await _run(
+          'dart',
+          'class A { static int c = 9; }'
+              ' class B extends A {}'
+              ' class M { static int run() { return B.c; } }',
+          'M',
+          'run',
+        ),
+        equals(9),
+      );
+    });
+
+    test(
+      'writing an inherited static field goes to the declaring class',
+      () async {
+        // `B.c = 20` writes through to `A.c` (static storage is per-declaring
+        // class), so reading `A.c` back sees the new value.
+        expect(
+          await _run(
+            'dart',
+            'class A { static int c = 9; }'
+                ' class B extends A {}'
+                ' class M { static int run() { B.c = 20; return A.c; } }',
+            'M',
+            'run',
+          ),
+          equals(20),
+        );
+      },
+    );
+  });
+
+  group('Constructors with inheritance', () {
+    test(
+      'a subclass constructor sets an inherited field by bare name',
+      () async {
+        expect(
+          await _run(
+            'dart',
+            'class A { int x = 0; }'
+                ' class B extends A { B(int v) { x = v; } }'
+                ' class M { static int run() { var b = B(9); return b.x; } }',
+            'M',
+            'run',
+          ),
+          equals(9),
+        );
+      },
+    );
+
+    test('a subclass `this.param` binds an inherited field', () async {
+      expect(
+        await _run(
+          'dart',
+          'class A { int x = 0; }'
+              ' class B extends A { B(this.x); }'
+              ' class M { static int run() { var b = B(13); return b.x; } }',
+          'M',
+          'run',
+        ),
+        equals(13),
+      );
+    });
+
+    test(
+      'the default constructor initializes inherited field values',
+      () async {
+        expect(
+          await _run(
+            'dart',
+            'class A { int x = 42; }'
+                ' class B extends A {}'
+                ' class M { static int run() { var b = B(); return b.x; } }',
+            'M',
+            'run',
+          ),
+          equals(42),
+        );
+      },
+    );
+  });
+
+  group('Known limitations', () {
+    test(
+      'a constructor initializer list (`: super(v)`) does not parse yet',
+      () async {
+        // Documents a current parser gap: explicit super-constructor calls in an
+        // initializer list are not supported. Inherited fields are still set via
+        // the constructor body or `this.param`.
+        var vm = ApolloVM();
+        await expectLater(
+          vm.loadCodeUnit(
+            SourceCodeUnit(
+              'dart',
+              'class A { int x = 0; A(int v) { x = v; } }'
+                  ' class B extends A { B(int v) : super(v); }',
+              id: 'test',
+            ),
+          ),
+          throwsA(isA<SyntaxError>()),
+        );
+      },
+    );
+  });
+
   group('Cross-language inheritance', () {
     test('Java: inherited method + override', () async {
       expect(

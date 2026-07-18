@@ -333,6 +333,24 @@ abstract class ASTClass<T> extends ASTEntryPointBlock {
     return null;
   }
 
+  /// Resolves a getter visible from this class: own getters first, then the
+  /// superclass chain (inherited getters).
+  @override
+  ASTGetterDeclaration? getGetter(
+    String fName,
+    VMContext context, {
+    bool caseInsensitive = false,
+  }) {
+    var g = super.getGetter(fName, context, caseInsensitive: caseInsensitive);
+    if (g != null) return g;
+
+    return superClass?.getGetter(
+      fName,
+      context,
+      caseInsensitive: caseInsensitive,
+    );
+  }
+
   List<ASTConstructorSet> get constructors;
 
   void resolveNodeConstructors(ASTNode? parentNode);
@@ -902,23 +920,65 @@ class ASTClassNormal extends ASTClass<VMObject> {
     return name;
   }
 
-  /// Reads a `static` field value (initializing static fields on first use).
+  /// Whether this class itself declares a `static` field [name] (not inherited).
+  bool _declaresStaticFieldLocally(String name, bool caseInsensitive) {
+    var f = _fields[name];
+    if (f == null && caseInsensitive) {
+      for (var entry in _fields.entries) {
+        if (equalsIgnoreAsciiCase(entry.key, name)) {
+          f = entry.value;
+          break;
+        }
+      }
+    }
+    return f != null && f.modifiers.isStatic;
+  }
+
+  /// The superclass as an [ASTClassNormal], if it declares static-field storage.
+  ASTClassNormal? get _superClassNormal =>
+      superClass is ASTClassNormal ? superClass as ASTClassNormal : null;
+
+  /// Reads a `static` field value (initializing static fields on first use). A
+  /// field inherited from the superclass is read from the class that declares
+  /// it (static storage is per-declaring-class).
   Future<ASTValue?> getStaticFieldValue(
     VMContext context,
     String name, {
     bool caseInsensitive = false,
   }) async {
+    if (!_declaresStaticFieldLocally(name, caseInsensitive)) {
+      var sc = _superClassNormal;
+      if (sc != null) {
+        return sc.getStaticFieldValue(
+          context,
+          name,
+          caseInsensitive: caseInsensitive,
+        );
+      }
+    }
     var store = await _ensureStaticFields(context, ASTRunStatus.dummy);
     return store[_resolveStaticFieldName(store, name, caseInsensitive)];
   }
 
-  /// Writes a `static` field value; returns the previous value.
+  /// Writes a `static` field value; returns the previous value. An inherited
+  /// static field is written through to its declaring class.
   Future<ASTValue?> setStaticFieldValue(
     VMContext context,
     String name,
     ASTValue value, {
     bool caseInsensitive = false,
   }) async {
+    if (!_declaresStaticFieldLocally(name, caseInsensitive)) {
+      var sc = _superClassNormal;
+      if (sc != null) {
+        return sc.setStaticFieldValue(
+          context,
+          name,
+          value,
+          caseInsensitive: caseInsensitive,
+        );
+      }
+    }
     var store = await _ensureStaticFields(context, ASTRunStatus.dummy);
     var key = _resolveStaticFieldName(store, name, caseInsensitive);
     var prev = store[key];
