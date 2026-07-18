@@ -65,6 +65,11 @@ abstract class ASTValue<T> with ASTNode implements ASTTypedNode {
         if (n == o) {
           return ASTValueInt(n) as ASTValue<V>;
         }
+        // A non-whole double can't be represented as an `int`; surface a clean
+        // ApolloVM diagnostic instead of a raw Dart `TypeError` from the cast.
+        throw ApolloVMCastException(
+          "Can't represent double `$o` as an `int` (ASTValue<int>).",
+        );
       }
       return ASTValueDouble(o) as ASTValue<V>;
     }

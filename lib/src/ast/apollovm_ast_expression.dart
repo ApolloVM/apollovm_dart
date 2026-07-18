@@ -3113,10 +3113,14 @@ class ASTExpressionObjectGetterAccess extends ASTExpressionGetterAccess
     if (enumClass == null) return null;
 
     if (name == 'values') {
+      // Build the values list with the enum's own element type (not `dynamic`)
+      // so the value's runtime type matches the `List<Enum>` advertised by
+      // `resolveType`/`resolveRuntimeType`; otherwise assigning `Enum.values`
+      // to a `List<Enum>` (or a `var`) fails the declaration cast check.
       return enumClass
           .getValues(context)
           .resolveMapped(
-            (list) => ASTValueArray(ASTTypeDynamic.instance, list),
+            (list) => ASTValueArray<ASTType, dynamic>(enumClass.type, list),
           );
     }
 

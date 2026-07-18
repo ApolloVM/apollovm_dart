@@ -640,6 +640,8 @@ ASTAssignmentOperator getASTAssignmentOperator(String op) {
       return ASTAssignmentOperator.multiply;
     case '/=':
       return ASTAssignmentOperator.divide;
+    case '~/=':
+      return ASTAssignmentOperator.divideAsInt;
     case '+=':
       return ASTAssignmentOperator.sum;
     case '-=':

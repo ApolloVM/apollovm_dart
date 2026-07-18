@@ -88,7 +88,29 @@ abstract class ApolloSourceCodeParser extends ApolloCodeParser<String> {
   Future<ParseResult<String>> parse(CodeUnit<String> codeUnit) async {
     check(codeUnit);
 
-    var result = _grammarParser.parse(codeUnit.code);
+    final Result<dynamic> result;
+    try {
+      result = _grammarParser.parse(codeUnit.code);
+    } on SyntaxError {
+      // Intentional grammar-action validation error — preserve the established
+      // contract of propagating it to the caller.
+      rethrow;
+    } on UnsupportedSyntaxError {
+      // Intentional "unsupported syntax" grammar-action error — also propagates.
+      rethrow;
+    } catch (e) {
+      // Any OTHER error from a grammar action (a `.map` callback) — e.g. the
+      // grammar matched a compound operator (`%=`, `<<=`, …) the AST builder
+      // doesn't support yet, which threw a raw `UnsupportedError`. Surface it as
+      // a clean parse error instead of letting it escape `loadCodeUnit` as an
+      // uncaught Dart exception.
+      return ParseResult(
+        codeUnit,
+        errorMessage: "Can't parse code: $e",
+        errorPosition: 0,
+        errorLineAndColumn: const [1, 1],
+      );
+    }
 
     if (result is! Success) {
       Result<dynamic> errorResult = result;
