@@ -1,3 +1,17 @@
+## 2.9.0
+
+### Wasm: String `replaceAll` / `replaceFirst`
+
+The on-the-fly WebAssembly compiler now supports `replaceAll(from, to)` and
+`replaceFirst(from, to)` over its `[len][utf8]` layout. Each is compiled as two
+passes — the first counts non-overlapping matches to size the output buffer, the
+second builds it (copying `to` for a match, else one byte). Handles a replacement
+that grows, shrinks, or removes the match, and matches at either end; an empty
+`from` returns a copy (avoiding a non-terminating scan).
+
+Still to come for String: `split` (returns a `List`), index `[]`, and `compareTo`
+(which also needs `String.compareTo` in the interpreter core first).
+
 ## 2.8.0
 
 ### Wasm: String trim & pad methods

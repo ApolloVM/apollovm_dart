@@ -10428,7 +10428,295 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
         context: context,
       );
     }
+    if ((name == 'replaceAll' || name == 'replaceFirst') && args.length == 2) {
+      return _generateStringReplace(
+        recv,
+        varName,
+        args,
+        all: name == 'replaceAll',
+        out: out,
+        context: context,
+      );
+    }
     return null;
+  }
+
+  /// `s.replaceAll(from, to)` / `s.replaceFirst(from, to)`: returns a fresh
+  /// String with (all / the first) non-overlapping occurrence(s) of `from`
+  /// replaced by `to`. Two passes over the byte layout — pass 1 counts matches
+  /// to size the output buffer, pass 2 builds it. An empty `from` is treated as
+  /// no match (returns a copy) to avoid a non-terminating scan.
+  BytesOutput _generateStringReplace(
+    ({ASTType type, int index}) recv,
+    String varName,
+    List<ASTExpression> args, {
+    required bool all,
+    required BytesOutput out,
+    required WasmContext context,
+  }) {
+    var module = context.module!;
+    module.requiresMemory = true;
+    module.requiresHeapGlobal = true;
+    final s0 = context.stackLength;
+
+    var src = context.scratchLocal(_astTypeString, 60);
+    var srcLen = context.scratchLocal(_astTypeString, 61);
+    var from = context.scratchLocal(_astTypeString, 62);
+    var fromLen = context.scratchLocal(_astTypeString, 63);
+    var to = context.scratchLocal(_astTypeString, 64);
+    var toLen = context.scratchLocal(_astTypeString, 65);
+    var count = context.scratchLocal(_astTypeString, 66);
+    var i = context.scratchLocal(_astTypeString, 67);
+    var dest = context.scratchLocal(_astTypeString, 68);
+    var outLen = context.scratchLocal(_astTypeString, 69);
+    var w = context.scratchLocal(_astTypeString, 70);
+    var match = context.scratchLocal(_astTypeString, 71);
+    var j = context.scratchLocal(_astTypeString, 72);
+    var aAddr = context.scratchLocal(_astTypeString, 73);
+    var fromData = context.scratchLocal(_astTypeString, 74);
+
+    // from = arg0 ; to = arg1 ; src = recv
+    generateASTExpression(args[0], out: out, context: context);
+    context.stackDrop();
+    out.write(Wasm.localSet(from));
+    generateASTExpression(args[1], out: out, context: context);
+    context.stackDrop();
+    out.write(Wasm.localSet(to));
+    _localVariableGet(out, context, recv.index, varName);
+    out.write(Wasm.localSet(src));
+    out.write(Wasm.localGet(src));
+    out.write(Wasm32.i32Load());
+    out.write(Wasm.localSet(srcLen));
+    out.write(Wasm.localGet(from));
+    out.write(Wasm32.i32Load());
+    out.write(Wasm.localSet(fromLen));
+    out.write(Wasm.localGet(to));
+    out.write(Wasm32.i32Load());
+    out.write(Wasm.localSet(toLen));
+    // fromData = from + 4 (the pattern's byte start, reused by both passes)
+    out.write(Wasm.localGet(from));
+    out.write(Wasm32.i32Const(4));
+    out.writeByte(Wasm32.i32Add);
+    out.write(Wasm.localSet(fromData));
+
+    // Pass 1: count non-overlapping matches into `count`.
+    _emitReplaceScan(
+      out,
+      context,
+      src: src,
+      srcLen: srcLen,
+      fromData: fromData,
+      fromLen: fromLen,
+      iLoc: i,
+      matchLoc: match,
+      jLoc: j,
+      aAddr: aAddr,
+      counterLoc: count,
+      all: all,
+      dest: null,
+      w: w,
+      to: to,
+      toLen: toLen,
+    );
+
+    // outLen = srcLen + count * (toLen - fromLen)
+    out.write(Wasm.localGet(srcLen));
+    out.write(Wasm.localGet(count));
+    out.write(Wasm.localGet(toLen));
+    out.write(Wasm.localGet(fromLen));
+    out.writeByte(Wasm32.i32Subtract);
+    out.writeByte(Wasm32.i32Multiply);
+    out.writeByte(Wasm32.i32Add);
+    out.write(Wasm.localSet(outLen));
+
+    // dest = alloc(outLen + 4) ; store outLen
+    out.write(Wasm.localGet(outLen));
+    out.write(Wasm32.i32Const(4));
+    out.writeByte(Wasm32.i32Add);
+    _emitInlineAlloc(out, context);
+    out.write(Wasm.localSet(dest));
+    out.write(Wasm.localGet(dest));
+    out.write(Wasm.localGet(outLen));
+    out.write(Wasm32.i32Store());
+
+    // Pass 2: build the output at `dest`.
+    _emitReplaceScan(
+      out,
+      context,
+      src: src,
+      srcLen: srcLen,
+      fromData: fromData,
+      fromLen: fromLen,
+      iLoc: i,
+      matchLoc: match,
+      jLoc: j,
+      aAddr: aAddr,
+      counterLoc: count,
+      all: all,
+      dest: dest,
+      w: w,
+      to: to,
+      toLen: toLen,
+    );
+
+    out.write(Wasm.localGet(dest));
+    context.stackPush(_astTypeString, "$varName.replace");
+    context.assertStackLength(s0 + 1, "After String.replace");
+    return out;
+  }
+
+  /// One scan pass for [_generateStringReplace]. With [dest] null it counts
+  /// matches into [counterLoc]; otherwise it builds the output at [dest] (copying
+  /// `to` for a match, else one byte), reusing [counterLoc] to gate replaceFirst.
+  void _emitReplaceScan(
+    BytesOutput out,
+    WasmContext context, {
+    required int src,
+    required int srcLen,
+    required int fromData,
+    required int fromLen,
+    required int iLoc,
+    required int matchLoc,
+    required int jLoc,
+    required int aAddr,
+    required int counterLoc,
+    required bool all,
+    required int? dest,
+    required int w,
+    required int to,
+    required int toLen,
+  }) {
+    final building = dest != null;
+    out.write(Wasm32.i32Const(0));
+    out.write(Wasm.localSet(counterLoc));
+    out.write(Wasm32.i32Const(0));
+    out.write(Wasm.localSet(iLoc));
+    if (building) {
+      out.write(Wasm32.i32Const(0));
+      out.write(Wasm.localSet(w));
+    }
+
+    out.write(Wasm.block(WasmType.voidType));
+    context.controlDepth++;
+    final brk = context.controlDepth;
+    out.write(Wasm.loop(WasmType.voidType));
+    context.controlDepth++;
+    final rpt = context.controlDepth;
+
+    // if (i >= srcLen) break
+    out.write(Wasm.localGet(iLoc));
+    out.write(Wasm.localGet(srcLen));
+    out.writeByte(Wasm32.i32GreaterThanOrEqualsUnsigned);
+    out.write(Wasm.brIf(context.controlDepth - brk));
+
+    // aAddr = src + 4 + i ; match = (fromLen bytes at aAddr == from)
+    out.write(Wasm.localGet(src));
+    out.write(Wasm32.i32Const(4));
+    out.writeByte(Wasm32.i32Add);
+    out.write(Wasm.localGet(iLoc));
+    out.writeByte(Wasm32.i32Add);
+    out.write(Wasm.localSet(aAddr));
+    _emitBytesEqualNoBreak(
+      out,
+      context,
+      aLoc: aAddr,
+      bLoc: fromData,
+      lenLoc: fromLen,
+      jLoc: jLoc,
+      outLoc: matchLoc,
+    );
+    // match &= (fromLen != 0) & (i + fromLen <= srcLen)
+    out.write(Wasm.localGet(matchLoc));
+    out.write(Wasm.localGet(fromLen));
+    out.write(Wasm32.i32Const(0));
+    out.writeByte(Wasm32.i32NotEquals);
+    out.writeByte(Wasm32.i32BitwiseAnd);
+    out.write(Wasm.localGet(iLoc));
+    out.write(Wasm.localGet(fromLen));
+    out.writeByte(Wasm32.i32Add);
+    out.write(Wasm.localGet(srcLen));
+    out.writeByte(Wasm32.i32LessThanOrEqualsUnsigned);
+    out.writeByte(Wasm32.i32BitwiseAnd);
+    out.write(Wasm.localSet(matchLoc));
+    // replaceFirst: only the first match counts (gate on counter == 0)
+    if (!all) {
+      out.write(Wasm.localGet(matchLoc));
+      out.write(Wasm.localGet(counterLoc));
+      out.writeByte(Wasm32.i32EqualsToZero);
+      out.writeByte(Wasm32.i32BitwiseAnd);
+      out.write(Wasm.localSet(matchLoc));
+    }
+
+    if (!building) {
+      // count += match ; i += match ? fromLen : 1
+      out.write(Wasm.localGet(counterLoc));
+      out.write(Wasm.localGet(matchLoc));
+      out.writeByte(Wasm32.i32Add);
+      out.write(Wasm.localSet(counterLoc));
+      out.write(Wasm.localGet(iLoc));
+      out.write(Wasm.localGet(fromLen));
+      out.write(Wasm32.i32Const(1));
+      out.write(Wasm.localGet(matchLoc));
+      out.writeByte(Wasm.select);
+      out.writeByte(Wasm32.i32Add);
+      out.write(Wasm.localSet(iLoc));
+    } else {
+      out.write(Wasm.localGet(matchLoc));
+      out.write(Wasm.ifInstruction(WasmType.voidType));
+      // match: memory.copy(dest + 4 + w, to + 4, toLen)
+      out.write(Wasm.localGet(dest));
+      out.write(Wasm32.i32Const(4));
+      out.writeByte(Wasm32.i32Add);
+      out.write(Wasm.localGet(w));
+      out.writeByte(Wasm32.i32Add);
+      out.write(Wasm.localGet(to));
+      out.write(Wasm32.i32Const(4));
+      out.writeByte(Wasm32.i32Add);
+      out.write(Wasm.localGet(toLen));
+      out.write(Wasm.memoryCopy);
+      // w += toLen ; i += fromLen ; count++
+      out.write(Wasm.localGet(w));
+      out.write(Wasm.localGet(toLen));
+      out.writeByte(Wasm32.i32Add);
+      out.write(Wasm.localSet(w));
+      out.write(Wasm.localGet(iLoc));
+      out.write(Wasm.localGet(fromLen));
+      out.writeByte(Wasm32.i32Add);
+      out.write(Wasm.localSet(iLoc));
+      out.write(Wasm.localGet(counterLoc));
+      out.write(Wasm32.i32Const(1));
+      out.writeByte(Wasm32.i32Add);
+      out.write(Wasm.localSet(counterLoc));
+      out.writeByte(Wasm.elseInstruction);
+      // no match: dest[4 + w] = src[4 + i] ; w++ ; i++
+      out.write(Wasm.localGet(dest));
+      out.write(Wasm32.i32Const(4));
+      out.writeByte(Wasm32.i32Add);
+      out.write(Wasm.localGet(w));
+      out.writeByte(Wasm32.i32Add);
+      out.write(Wasm.localGet(src));
+      out.write(Wasm32.i32Const(4));
+      out.writeByte(Wasm32.i32Add);
+      out.write(Wasm.localGet(iLoc));
+      out.writeByte(Wasm32.i32Add);
+      out.write(Wasm32.i32Load8U());
+      out.write(Wasm32.i32Store8());
+      out.write(Wasm.localGet(w));
+      out.write(Wasm32.i32Const(1));
+      out.writeByte(Wasm32.i32Add);
+      out.write(Wasm.localSet(w));
+      out.write(Wasm.localGet(iLoc));
+      out.write(Wasm32.i32Const(1));
+      out.writeByte(Wasm32.i32Add);
+      out.write(Wasm.localSet(iLoc));
+      out.writeByte(Wasm.end); // if
+    }
+
+    out.write(Wasm.br(context.controlDepth - rpt));
+    out.writeByte(Wasm.end); // loop
+    context.controlDepth--;
+    out.writeByte(Wasm.end); // block
+    context.controlDepth--;
   }
 
   /// Pushes `1` if the char in [chLoc] is ASCII whitespace (space, or `\t`..`\r`,
