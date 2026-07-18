@@ -10406,7 +10406,314 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
         context: context,
       );
     }
+    if ((name == 'trim' || name == 'trimLeft' || name == 'trimRight') &&
+        args.isEmpty) {
+      return _generateStringTrim(
+        recv,
+        varName,
+        left: name != 'trimRight',
+        right: name != 'trimLeft',
+        out: out,
+        context: context,
+      );
+    }
+    if ((name == 'padLeft' || name == 'padRight') &&
+        (args.length == 1 || args.length == 2)) {
+      return _generateStringPad(
+        recv,
+        varName,
+        args,
+        left: name == 'padLeft',
+        out: out,
+        context: context,
+      );
+    }
     return null;
+  }
+
+  /// Pushes `1` if the char in [chLoc] is ASCII whitespace (space, or `\t`..`\r`,
+  /// i.e. `0x09..0x0D`), else `0`.
+  void _emitCharIsWhitespace(BytesOutput out, int chLoc) {
+    out.write(Wasm.localGet(chLoc));
+    out.write(Wasm32.i32Const(0x20));
+    out.writeByte(Wasm32.i32Equals); // ch == ' '
+    out.write(Wasm.localGet(chLoc));
+    out.write(Wasm32.i32Const(0x09));
+    out.writeByte(Wasm32.i32GreaterThanOrEqualsUnsigned);
+    out.write(Wasm.localGet(chLoc));
+    out.write(Wasm32.i32Const(0x0D));
+    out.writeByte(Wasm32.i32LessThanOrEqualsUnsigned);
+    out.writeByte(Wasm32.i32BitwiseAnd); // 0x09 <= ch <= 0x0D
+    out.writeByte(Wasm32.i32BitwiseOr);
+  }
+
+  /// `s.trim()` / `s.trimLeft()` / `s.trimRight()`: returns a fresh String with
+  /// ASCII whitespace stripped from the requested side(s).
+  BytesOutput _generateStringTrim(
+    ({ASTType type, int index}) recv,
+    String varName, {
+    required bool left,
+    required bool right,
+    required BytesOutput out,
+    required WasmContext context,
+  }) {
+    var module = context.module!;
+    module.requiresMemory = true;
+    module.requiresHeapGlobal = true;
+    final s0 = context.stackLength;
+
+    var src = context.scratchLocal(_astTypeString, 60);
+    var srcLen = context.scratchLocal(_astTypeString, 61);
+    var a = context.scratchLocal(_astTypeString, 62);
+    var b = context.scratchLocal(_astTypeString, 63);
+    var ch = context.scratchLocal(_astTypeString, 64);
+    var dest = context.scratchLocal(_astTypeString, 65);
+    var newLen = context.scratchLocal(_astTypeString, 66);
+
+    _localVariableGet(out, context, recv.index, varName);
+    out.write(Wasm.localSet(src));
+    out.write(Wasm.localGet(src));
+    out.write(Wasm32.i32Load());
+    out.write(Wasm.localSet(srcLen));
+
+    // a = 0 ; b = srcLen
+    out.write(Wasm32.i32Const(0));
+    out.write(Wasm.localSet(a));
+    out.write(Wasm.localGet(srcLen));
+    out.write(Wasm.localSet(b));
+
+    if (left) {
+      // while (a < b && isWs(src[a])) a++
+      out.write(Wasm.block(WasmType.voidType));
+      context.controlDepth++;
+      final brk = context.controlDepth;
+      out.write(Wasm.loop(WasmType.voidType));
+      context.controlDepth++;
+      final rpt = context.controlDepth;
+      // if (a >= b) break
+      out.write(Wasm.localGet(a));
+      out.write(Wasm.localGet(b));
+      out.writeByte(Wasm32.i32GreaterThanOrEqualsUnsigned);
+      out.write(Wasm.brIf(context.controlDepth - brk));
+      // ch = src[a] ; if (!isWs(ch)) break
+      out.write(Wasm.localGet(src));
+      out.write(Wasm32.i32Const(4));
+      out.writeByte(Wasm32.i32Add);
+      out.write(Wasm.localGet(a));
+      out.writeByte(Wasm32.i32Add);
+      out.write(Wasm32.i32Load8U());
+      out.write(Wasm.localSet(ch));
+      _emitCharIsWhitespace(out, ch);
+      out.writeByte(Wasm32.i32EqualsToZero); // !isWs
+      out.write(Wasm.brIf(context.controlDepth - brk));
+      // a++
+      out.write(Wasm.localGet(a));
+      out.write(Wasm32.i32Const(1));
+      out.writeByte(Wasm32.i32Add);
+      out.write(Wasm.localSet(a));
+      out.write(Wasm.br(context.controlDepth - rpt));
+      out.writeByte(Wasm.end);
+      context.controlDepth--;
+      out.writeByte(Wasm.end);
+      context.controlDepth--;
+    }
+
+    if (right) {
+      // while (b > a && isWs(src[b-1])) b--
+      out.write(Wasm.block(WasmType.voidType));
+      context.controlDepth++;
+      final brk = context.controlDepth;
+      out.write(Wasm.loop(WasmType.voidType));
+      context.controlDepth++;
+      final rpt = context.controlDepth;
+      // if (b <= a) break
+      out.write(Wasm.localGet(b));
+      out.write(Wasm.localGet(a));
+      out.writeByte(Wasm32.i32LessThanOrEqualsUnsigned);
+      out.write(Wasm.brIf(context.controlDepth - brk));
+      // ch = src[b-1] ; if (!isWs(ch)) break
+      out.write(Wasm.localGet(src));
+      out.write(Wasm32.i32Const(4));
+      out.writeByte(Wasm32.i32Add);
+      out.write(Wasm.localGet(b));
+      out.write(Wasm32.i32Const(1));
+      out.writeByte(Wasm32.i32Subtract);
+      out.writeByte(Wasm32.i32Add);
+      out.write(Wasm32.i32Load8U());
+      out.write(Wasm.localSet(ch));
+      _emitCharIsWhitespace(out, ch);
+      out.writeByte(Wasm32.i32EqualsToZero);
+      out.write(Wasm.brIf(context.controlDepth - brk));
+      // b--
+      out.write(Wasm.localGet(b));
+      out.write(Wasm32.i32Const(1));
+      out.writeByte(Wasm32.i32Subtract);
+      out.write(Wasm.localSet(b));
+      out.write(Wasm.br(context.controlDepth - rpt));
+      out.writeByte(Wasm.end);
+      context.controlDepth--;
+      out.writeByte(Wasm.end);
+      context.controlDepth--;
+    }
+
+    // newLen = b - a ; dest = alloc(newLen+4) ; copy [a, b)
+    out.write(Wasm.localGet(b));
+    out.write(Wasm.localGet(a));
+    out.writeByte(Wasm32.i32Subtract);
+    out.write(Wasm.localSet(newLen));
+    out.write(Wasm.localGet(newLen));
+    out.write(Wasm32.i32Const(4));
+    out.writeByte(Wasm32.i32Add);
+    _emitInlineAlloc(out, context);
+    out.write(Wasm.localSet(dest));
+    out.write(Wasm.localGet(dest));
+    out.write(Wasm.localGet(newLen));
+    out.write(Wasm32.i32Store());
+    // memory.copy(dest+4, src+4+a, newLen)
+    out.write(Wasm.localGet(dest));
+    out.write(Wasm32.i32Const(4));
+    out.writeByte(Wasm32.i32Add);
+    out.write(Wasm.localGet(src));
+    out.write(Wasm32.i32Const(4));
+    out.writeByte(Wasm32.i32Add);
+    out.write(Wasm.localGet(a));
+    out.writeByte(Wasm32.i32Add);
+    out.write(Wasm.localGet(newLen));
+    out.write(Wasm.memoryCopy);
+
+    out.write(Wasm.localGet(dest));
+    context.stackPush(_astTypeString, "$varName.trim");
+    context.assertStackLength(s0 + 1, "After String.trim");
+    return out;
+  }
+
+  /// `s.padLeft(width, [pad])` / `s.padRight(width, [pad])`: returns a fresh
+  /// String padded to at least [width] bytes with the first byte of `pad`
+  /// (default space). A single-byte pad is assumed (the common case).
+  BytesOutput _generateStringPad(
+    ({ASTType type, int index}) recv,
+    String varName,
+    List<ASTExpression> args, {
+    required bool left,
+    required BytesOutput out,
+    required WasmContext context,
+  }) {
+    var module = context.module!;
+    module.requiresMemory = true;
+    module.requiresHeapGlobal = true;
+    final s0 = context.stackLength;
+
+    var src = context.scratchLocal(_astTypeString, 60);
+    var srcLen = context.scratchLocal(_astTypeString, 61);
+    var width = context.scratchLocal(_astTypeString, 62);
+    var padCh = context.scratchLocal(_astTypeString, 63);
+    var padCount = context.scratchLocal(_astTypeString, 64);
+    var dest = context.scratchLocal(_astTypeString, 65);
+    var newLen = context.scratchLocal(_astTypeString, 66);
+    var k = context.scratchLocal(_astTypeString, 67);
+
+    // width = arg0 ; padCh = arg1[0] or ' '
+    generateASTExpression(args[0], out: out, context: context);
+    context.stackDrop();
+    out.writeByte(Wasm64.i64WrapToi32);
+    out.write(Wasm.localSet(width));
+    if (args.length >= 2) {
+      generateASTExpression(args[1], out: out, context: context);
+      context.stackDrop();
+      out.write(Wasm32.i32Const(4));
+      out.writeByte(Wasm32.i32Add);
+      out.write(Wasm32.i32Load8U()); // pad[0]
+      out.write(Wasm.localSet(padCh));
+    } else {
+      out.write(Wasm32.i32Const(0x20));
+      out.write(Wasm.localSet(padCh));
+    }
+
+    _localVariableGet(out, context, recv.index, varName);
+    out.write(Wasm.localSet(src));
+    out.write(Wasm.localGet(src));
+    out.write(Wasm32.i32Load());
+    out.write(Wasm.localSet(srcLen));
+
+    // padCount = (width > srcLen) ? width - srcLen : 0
+    out.write(Wasm.localGet(width));
+    out.write(Wasm.localGet(srcLen));
+    out.writeByte(Wasm32.i32Subtract);
+    out.write(Wasm32.i32Const(0));
+    out.write(Wasm.localGet(width));
+    out.write(Wasm.localGet(srcLen));
+    out.writeByte(Wasm32.i32GreaterThanUnsigned);
+    out.writeByte(Wasm.select); // (width>srcLen) ? (width-srcLen) : 0
+    out.write(Wasm.localSet(padCount));
+
+    // newLen = srcLen + padCount ; dest = alloc(newLen+4)
+    out.write(Wasm.localGet(srcLen));
+    out.write(Wasm.localGet(padCount));
+    out.writeByte(Wasm32.i32Add);
+    out.write(Wasm.localSet(newLen));
+    out.write(Wasm.localGet(newLen));
+    out.write(Wasm32.i32Const(4));
+    out.writeByte(Wasm32.i32Add);
+    _emitInlineAlloc(out, context);
+    out.write(Wasm.localSet(dest));
+    out.write(Wasm.localGet(dest));
+    out.write(Wasm.localGet(newLen));
+    out.write(Wasm32.i32Store());
+
+    // Copy the source bytes to their position (offset padCount for padLeft).
+    out.write(Wasm.localGet(dest));
+    out.write(Wasm32.i32Const(4));
+    out.writeByte(Wasm32.i32Add);
+    if (left) {
+      out.write(Wasm.localGet(padCount));
+      out.writeByte(Wasm32.i32Add);
+    }
+    out.write(Wasm.localGet(src));
+    out.write(Wasm32.i32Const(4));
+    out.writeByte(Wasm32.i32Add);
+    out.write(Wasm.localGet(srcLen));
+    out.write(Wasm.memoryCopy);
+
+    // Fill the pad bytes: k = 0 ; while (k < padCount) dest[base+k] = padCh.
+    // base = padLeft ? dest+4 : dest+4+srcLen.
+    out.write(Wasm32.i32Const(0));
+    out.write(Wasm.localSet(k));
+    out.write(Wasm.block(WasmType.voidType));
+    context.controlDepth++;
+    final brk = context.controlDepth;
+    out.write(Wasm.loop(WasmType.voidType));
+    context.controlDepth++;
+    final rpt = context.controlDepth;
+    out.write(Wasm.localGet(k));
+    out.write(Wasm.localGet(padCount));
+    out.writeByte(Wasm32.i32GreaterThanOrEqualsUnsigned);
+    out.write(Wasm.brIf(context.controlDepth - brk));
+    // addr = dest + 4 + (left ? 0 : srcLen) + k
+    out.write(Wasm.localGet(dest));
+    out.write(Wasm32.i32Const(4));
+    out.writeByte(Wasm32.i32Add);
+    if (!left) {
+      out.write(Wasm.localGet(srcLen));
+      out.writeByte(Wasm32.i32Add);
+    }
+    out.write(Wasm.localGet(k));
+    out.writeByte(Wasm32.i32Add);
+    out.write(Wasm.localGet(padCh));
+    out.write(Wasm32.i32Store8());
+    out.write(Wasm.localGet(k));
+    out.write(Wasm32.i32Const(1));
+    out.writeByte(Wasm32.i32Add);
+    out.write(Wasm.localSet(k));
+    out.write(Wasm.br(context.controlDepth - rpt));
+    out.writeByte(Wasm.end);
+    context.controlDepth--;
+    out.writeByte(Wasm.end);
+    context.controlDepth--;
+
+    out.write(Wasm.localGet(dest));
+    context.stackPush(_astTypeString, "$varName.pad");
+    context.assertStackLength(s0 + 1, "After String.pad");
+    return out;
   }
 
   /// `s.codeUnitAt(i)` -> the (unsigned) byte at `s + 4 + i` as an `int` (i64).

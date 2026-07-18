@@ -95,9 +95,14 @@ test('generic Box<int> field round-trips', () => _testWasm(
   slice), `.codeUnitAt(i)`, `.startsWith`/`.endsWith`, `.indexOf`, `.contains`
   (byte scans over the layout, OOB-guarded) — `apollovm_wasm_string_methods_test`
   and `_tryGenerateStringMethod`.
-- **Still open**: `.trim`, `.split` (returns a `List`), `.replaceAll` /
-  `.replaceFirst`, `.padLeft`/`.padRight`, `.compareTo`, index `[]`. Also:
-  chaining a getter/method onto a method *result* (`s.toUpperCase().length`,
+- **Done (trim/pad)**: `.trim`/`.trimLeft`/`.trimRight` (ASCII-whitespace strip)
+  and `.padLeft`/`.padRight(width,[pad])` (single-byte pad) —
+  `apollovm_wasm_string_methods2_test`.
+- **Still open**: `.split` (returns a `List`), `.replaceAll` / `.replaceFirst`,
+  index `[]`, and `.compareTo` (the *interpreter* core lacks `String.compareTo`
+  too — closing it means adding it to `apollovm_core_base.dart` first, then the
+  Wasm side; the Wasm codegen is straightforward, a lexicographic byte compare).
+  Also: chaining a getter/method onto a method *result* (`s.toUpperCase().length`,
   `s.substring(0,2) == 'x'`) — the receiver must be a named local, and a bare
   `String == String` returning a `bool` is a separate pre-existing limitation.
 - **Fix direction**: same allocate-buffer + byte-loop pattern
@@ -245,8 +250,8 @@ GAPs **C** (getters), **D** (static fields), **E** (inheritance/`super`) and **G
 (nested collections / `m[0][1]`) are **DONE**; **GAP B** (String methods) is mostly
 done (slice/search/case complete). Remaining:
 
-1. **GAP B tail** — `.trim`, `.split`, `.replaceAll`/`.replaceFirst`,
-   `.padLeft`/`.padRight`, `.compareTo`, index `[]`.
+1. **GAP B tail** — `.split`, `.replaceAll`/`.replaceFirst`, index `[]`, and
+   `.compareTo` (needs interpreter core support first). (`.trim`/`.pad` done.)
 2. **GAP A** (generic field i64/boxing) and **GAP F** (aggregate returns) —
    value-representation work; related boxing concerns.
 
