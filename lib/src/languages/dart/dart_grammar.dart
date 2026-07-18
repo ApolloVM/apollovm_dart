@@ -1391,11 +1391,24 @@ class DartGrammarDefinition extends DartGrammarLexer {
   });
 
   Parser<ASTExpressionVariableEntryAccess> expressionVariableEntryAccess() =>
-      (variable() & char('[') & ref0(expression) & char(']')).map((v) {
-        var variable = v[0];
-        var expression = v[2];
-        return ASTExpressionVariableEntryAccess(variable, expression);
-      });
+      (variable() &
+              char('[') &
+              ref0(expression) &
+              char(']') &
+              (char('[').trimHidden() & ref0(expression) & char(']')).star())
+          .map((v) {
+            var variable = v[0];
+            var expression = v[2];
+            // Chained `[..]` accesses for nested indexing (`m[0][1]`).
+            var extra = (v[4] as List)
+                .map((e) => (e as List)[1] as ASTExpression)
+                .toList();
+            return ASTExpressionVariableEntryAccess(
+              variable,
+              expression,
+              extra,
+            );
+          });
 
   Parser<ASTExpressionObjectEntryFunctionInvocation>
   expressionObjectEntryFunctionInvocation() =>
@@ -1582,10 +1595,23 @@ class DartGrammarDefinition extends DartGrammarLexer {
               char('[') &
               ref0(expression) &
               char(']').trimHidden() &
+              (char('[').trimHidden() & ref0(expression) & char(']'))
+                  .star()
+                  .map((l) => (l as List)) &
               assigmentOperator() &
               ref0(expression))
           .map((v) {
-            return ASTExpressionVariableEntryAssignment(v[0], v[2], v[4], v[5]);
+            // Chained `[..]` keys for a nested write target (`m[0][1] = v`).
+            var extra = (v[4] as List)
+                .map((e) => (e as List)[1] as ASTExpression)
+                .toList();
+            return ASTExpressionVariableEntryAssignment(
+              v[0],
+              v[2],
+              v[5],
+              v[6],
+              extra,
+            );
           });
 
   /// `obj.field = value` (and `this.field = value`), including `+=` etc.

@@ -1,5 +1,12 @@
 ## 2.2.0
 
+### Nested / chained index access (`m[0][1]`)
+
+Indexing into a nested collection now works for both reads and writes:
+`m[0][1]`, `m['a']['b']`, `m['a'][0]`, and deeper chains, including compound
+assignment (`m[1][0] += 5`). Previously only a single `[...]` on a bare variable
+was supported. Single-index access is unchanged.
+
 ### Class inheritance (`extends`) is now functional
 
 `extends` was parsed but had no runtime effect — inherited methods and fields

@@ -95,6 +95,7 @@ The **Wasm** column shows what the on-the-fly WebAssembly compiler currently sup
 | Parameter default values         | ✅ | 🚫  | ✅ | 🚫 | ✅ | 🚫  | 🚫  | 🚫  | ✅ | ✅ |
 | String interpolation / concat    | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | List & map / dict literals       | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Index access (`a[i]`, nested `m[i][j]`)¹² | ✅ | 🧩 | 🧩 | 🧩 | 🧩 | 🧩 | 🧩 | 🧩 | 🧩 | ✅ |
 | `null` / `None` / `nil`          | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 
 ¹ Lua numeric-for (`for i = a, b do`). &nbsp; ² Lua `repeat … until`. &nbsp;
@@ -110,7 +111,12 @@ The **Wasm** column shows what the on-the-fly WebAssembly compiler currently sup
 `func() any { if c { return a } else { return b } }()`. &nbsp;
 ¹¹ Go bitwise use `&`/`|`/`^` (xor)/`<<`/`>>`, unary `^` for NOT and `&^` (AND-NOT).
 `try`/`catch`/`throw` (Go uses `defer`/`recover`/`panic`) and `async`/`await`
-(Go uses goroutines/channels) are not applicable / not implemented yet.
+(Go uses goroutines/channels) are not applicable / not implemented yet. &nbsp;
+¹² Reading and writing list/map entries by index/key (`a[i]`, `m['k']`), including
+compound assignment (`a[i] += 1`). **Chained/nested** access and assignment
+(`m[0][1]`, `m['a']['b'] = v`) run on the shared interpreter and are parsed from
+**Dart** source; the other languages currently parse a single `[...]` only (`🧩`),
+with nested-index parsing being extended per grammar.
 
 ### Classes, types & OOP
 

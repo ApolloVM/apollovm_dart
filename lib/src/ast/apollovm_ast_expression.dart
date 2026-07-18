@@ -594,24 +594,40 @@ class ASTExpressionVariableEntryAccess extends ASTExpression {
   ASTVariable variable;
   ASTExpression expression;
 
-  ASTExpressionVariableEntryAccess(this.variable, this.expression);
+  /// Additional chained index/key expressions for nested access
+  /// (`m[0][1]` / `m['a']['b']`): the first index is [expression], and each
+  /// entry here is applied to the previous element in order.
+  final List<ASTExpression> extraIndices;
+
+  ASTExpressionVariableEntryAccess(
+    this.variable,
+    this.expression, [
+    this.extraIndices = const [],
+  ]);
+
+  /// All index expressions in order (the first plus any chained ones).
+  List<ASTExpression> get _indices => [expression, ...extraIndices];
 
   @override
   bool get isComplex => false;
 
   @override
-  Iterable<ASTNode> get children => [variable, expression];
+  Iterable<ASTNode> get children => [variable, ..._indices];
 
   @override
   FutureOr<ASTType> resolveType(VMContext? context) =>
       variable.resolveType(context).resolveMapped((variableType) {
-        if (variableType is ASTTypeArray) {
-          return variableType.elementType;
-        } else if (variableType is ASTTypeMap) {
-          return variableType.valueType;
-        } else {
-          return ASTTypeDynamic.instance;
+        var cur = variableType;
+        for (var _ in _indices) {
+          if (cur is ASTTypeArray) {
+            cur = cur.elementType;
+          } else if (cur is ASTTypeMap) {
+            cur = cur.valueType;
+          } else {
+            cur = ASTTypeDynamic.instance;
+          }
         }
+        return cur;
       });
 
   @override
@@ -619,7 +635,9 @@ class ASTExpressionVariableEntryAccess extends ASTExpression {
     super.resolveNode(parentNode);
 
     variable.resolveNode(parentNode);
-    expression.resolveNode(parentNode);
+    for (var i in _indices) {
+      i.resolveNode(parentNode);
+    }
   }
 
   @override
@@ -627,26 +645,66 @@ class ASTExpressionVariableEntryAccess extends ASTExpression {
       parentNode?.getNodeIdentifier(name, requester: requester);
 
   @override
-  FutureOr<ASTValue> run(VMContext parentContext, ASTRunStatus runStatus) {
+  FutureOr<ASTValue> run(
+    VMContext parentContext,
+    ASTRunStatus runStatus,
+  ) async {
     var context = defineRunContext(parentContext);
 
-    return expression.run(context, runStatus).resolveMapped((key) {
-      return variable.getValue(context).resolveMapped((value) {
-        // A Map is always accessed by key, even with a numeric key. Only a
-        // positional container (e.g. a List) uses a numeric index.
-        var isMap = value.type is ASTTypeMap;
-        if (!isMap && key is ASTValueNum) {
-          var idx = key.getValue(context).toInt();
-          return _run2(context, value, idx: idx, readIndex: true);
-        } else {
-          return key
-              .getValue(context)
-              .resolveMapped(
-                (Object? k) => _run2(context, value, key: k, readIndex: false),
-              );
-        }
-      });
+    var value = await variable.getValue(context);
+
+    // Single index: keep the original statically-typed read path (precise
+    // element type + null-pointer diagnostics).
+    if (extraIndices.isEmpty) {
+      return _applyIndexTyped(context, runStatus, value, expression);
+    }
+
+    // Nested access (`m[0][1]`): read each level dynamically so a typed nested
+    // value (`List<List<int>>`) doesn't force an element-type cast on the
+    // intermediate `List` values.
+    for (var indexExpr in _indices) {
+      value = await _applyIndexDynamic(context, runStatus, value, indexExpr);
+    }
+    return value;
+  }
+
+  FutureOr<ASTValue> _applyIndexTyped(
+    VMContext context,
+    ASTRunStatus runStatus,
+    ASTValue value,
+    ASTExpression indexExpr,
+  ) {
+    return indexExpr.run(context, runStatus).resolveMapped((key) {
+      var isMap = value.type is ASTTypeMap;
+      if (!isMap && key is ASTValueNum) {
+        var idx = key.value.toInt();
+        return _run2(context, value, idx: idx, readIndex: true);
+      } else {
+        return key
+            .getValue(context)
+            .resolveMapped(
+              (Object? k) => _run2(context, value, key: k, readIndex: false),
+            );
+      }
     });
+  }
+
+  Future<ASTValue> _applyIndexDynamic(
+    VMContext context,
+    ASTRunStatus runStatus,
+    ASTValue value,
+    ASTExpression indexExpr,
+  ) async {
+    var key = await indexExpr.run(context, runStatus);
+    var isMap = value.type is ASTTypeMap;
+    if (!isMap && key is ASTValueNum) {
+      var raw = await value.readIndex(context, key.value.toInt());
+      return ASTValue.fromValue(raw);
+    } else {
+      var k = await key.getValue(context);
+      var raw = await value.readKey(context, k as Object);
+      return ASTValue.fromValue(raw);
+    }
   }
 
   FutureOr<ASTValue> _run2(
@@ -1978,24 +2036,38 @@ class ASTExpressionVariableEntryAssignment extends ASTExpression {
 
   ASTExpression expression;
 
+  /// Additional chained index/key expressions for a nested write target
+  /// (`m[0][1] = v`): the full index list is `[keyExpression, ...extraKeys]`;
+  /// all but the last navigate to the container, and the last is written.
+  final List<ASTExpression> extraKeys;
+
   ASTExpressionVariableEntryAssignment(
     this.variable,
     this.keyExpression,
     this.operator,
-    this.expression,
-  );
+    this.expression, [
+    this.extraKeys = const [],
+  ]);
 
   @override
   bool get isComplex => true;
 
   @override
-  Iterable<ASTNode> get children => [variable, keyExpression, expression];
+  Iterable<ASTNode> get children => [
+    variable,
+    keyExpression,
+    ...extraKeys,
+    expression,
+  ];
 
   @override
   void resolveNode(ASTNode? parentNode) {
     super.resolveNode(parentNode);
     variable.resolveNode(parentNode);
     keyExpression.resolveNode(parentNode);
+    for (var k in extraKeys) {
+      k.resolveNode(parentNode);
+    }
     expression.resolveNode(parentNode);
   }
 
@@ -2014,21 +2086,37 @@ class ASTExpressionVariableEntryAssignment extends ASTExpression {
   ) async {
     var context = defineRunContext(parentContext);
 
-    var keyValue = await keyExpression.run(context, runStatus);
     var value = await expression.run(context, runStatus);
     var container = await variable.getValue(context);
 
-    // A Map is always accessed by key (even a numeric one); a positional
-    // container (List) by index.
-    var isMap = container.type is ASTTypeMap;
+    // Navigate to the target container through all but the last index
+    // (`m[0][1] = v` writes into `m[0]`).
+    var allKeys = [keyExpression, ...extraKeys];
+    for (var i = 0; i < allKeys.length - 1; i++) {
+      var nav = await (await allKeys[i].run(
+        context,
+        runStatus,
+      )).getValue(context);
+      var raw = _byKey(container, nav)
+          ? await container.readKey(context, nav as Object)
+          : await container.readIndex(context, (nav as num).toInt());
+      container = ASTValue.fromValue(raw);
+    }
+
+    var keyValue = await allKeys.last.run(context, runStatus);
     var key = await keyValue.getValue(context);
+
+    // A Map is accessed by key; a positional container (List) by index. A
+    // non-numeric key always implies key access (handles dynamically-wrapped
+    // intermediate maps whose static type is not `ASTTypeMap`).
+    var byKey = _byKey(container, key);
 
     ASTValue result;
     if (operator == ASTAssignmentOperator.set) {
       result = value;
     } else {
-      var currentRaw = isMap
-          ? await container.readKey(context, key)
+      var currentRaw = byKey
+          ? await container.readKey(context, key as Object)
           : await container.readIndex(context, (key as num).toInt());
       var current = ASTValue.fromValue(currentRaw);
       result = await switch (operator) {
@@ -2042,7 +2130,7 @@ class ASTExpressionVariableEntryAssignment extends ASTExpression {
     }
 
     var resultRaw = await result.getValue(context);
-    if (isMap) {
+    if (byKey) {
       await container.writeKey(context, key, resultRaw);
     } else {
       await container.writeIndex(context, (key as num).toInt(), resultRaw);
@@ -2050,6 +2138,9 @@ class ASTExpressionVariableEntryAssignment extends ASTExpression {
 
     return result;
   }
+
+  static bool _byKey(ASTValue container, Object? key) =>
+      container.type is ASTTypeMap || key is! num;
 
   @override
   String toString({bool asGroup = false}) {
@@ -2061,7 +2152,8 @@ class ASTExpressionVariableEntryAssignment extends ASTExpression {
       ASTAssignmentOperator.divide => '/=',
       ASTAssignmentOperator.divideAsInt => '~/=',
     };
-    return '$variable[$keyExpression] $op $expression';
+    var keys = [keyExpression, ...extraKeys].map((k) => '[$k]').join();
+    return '$variable$keys $op $expression';
   }
 }
 
