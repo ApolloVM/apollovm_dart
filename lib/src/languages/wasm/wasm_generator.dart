@@ -379,6 +379,37 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       }
     }
 
+    // User-declared getters (`int get x { ... }`) compile to a zero-argument
+    // instance method (`this` is param 0). A getter access then lowers to a
+    // 0-arg method call, and an inherited getter resolves through the same
+    // superclass-chain method lookup as an inherited method.
+    for (var getter in clazz.getter) {
+      if (getter is! ASTClassGetterDeclaration) continue;
+      if (getter.modifiers.isStatic) continue;
+      // A fabricated 0-arg method carrying the getter's name/return type: used
+      // only for resolution (`.method.name` / `.parameters.size`); the body is
+      // the getter block passed as `block:` below.
+      var method = ASTClassFunctionDeclaration(
+        clazz,
+        getter.name,
+        ASTFunctionParametersDeclaration(const []),
+        getter.returnType,
+      );
+      method.clazz = clazz;
+      result.add(
+        _WasmMethodFunction(
+          clazz,
+          method,
+          '${clazz.name}.${getter.name}',
+          ASTFunctionParametersDeclaration([
+            ASTFunctionParameterDeclaration(clazz.type, 'this', 0, false),
+          ]),
+          getter.returnType,
+          block: getter,
+        ),
+      );
+    }
+
     return result;
   }
 
@@ -5058,6 +5089,22 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       context.stackPush(_elemStackType(fieldType), "$varName.$name");
       context.assertStackLength(s0 + 1, "After getter $varName.$name");
       return out;
+    }
+
+    // `obj.x` where `x` is a user-declared getter: it compiled to a zero-arg
+    // method (see `_buildClassFunctions`), so lower the access to a method call.
+    // `hasGetter`/`methodIndex` walk the `extends` chain, so an inherited getter
+    // resolves too.
+    if (classLayout != null &&
+        (context.module?.hasGetter(listType.name, name) ?? false)) {
+      return _emitClassMethodCall(
+        recv: localVar,
+        receiverDesc: varName,
+        methodName: name,
+        arguments: const [],
+        out: out,
+        context: context,
+      );
     }
 
     // `.length`/`.isEmpty`/`.isNotEmpty` read header[0] (length), which is the
@@ -10485,6 +10532,17 @@ class WasmModuleContext {
   String? superClassNameOf(String? className) {
     if (className == null) return null;
     return classDeclarations[className]?.superClass?.name;
+  }
+
+  /// Whether [className] (or a superclass) declares a user getter named [name].
+  /// Distinguishes a getter access from a same-named 0-arg method (a getter is
+  /// compiled as a zero-arg method, so `methodIndex` alone can't tell them
+  /// apart).
+  bool hasGetter(String? className, String name) {
+    for (var cn = className; cn != null; cn = superClassNameOf(cn)) {
+      if (classDeclarations[cn]?.getGetterWithName(name) != null) return true;
+    }
+    return false;
   }
 
   // --- Function table (for closures / function values via `call_indirect`) ---

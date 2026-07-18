@@ -1,3 +1,20 @@
+## 2.5.0
+
+### Wasm: custom instance getters
+
+The on-the-fly WebAssembly compiler now supports user-declared instance getters
+(`int get x { ... }`). A getter is synthesized as a zero-argument instance method,
+so an access via a receiver (`c.x`) lowers to a 0-arg method call — reusing the
+whole instance-method path (argument marshalling, return conversion) and the
+superclass-chain resolution, so inherited and overridden getters resolve just like
+methods. Covers `int`/`double`/`bool`/`String` getters, a computed-expression
+getter body, and a getter used inside an expression (read once or twice), plus
+inherited and overridden getters.
+
+Bare getter access inside a method body (`x` resolving to `this.x`, no receiver)
+and setters remain follow-ups (bare access is not resolved by the interpreter yet
+either).
+
 ## 2.4.0
 
 ### Wasm: class inheritance (`extends` / `super`)
