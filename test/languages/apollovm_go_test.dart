@@ -298,6 +298,38 @@ func f(a int, b int) int {
       expect(ret.getValueNoContext(), equals(22));
     });
 
+    test('`&^` (AND NOT / bit clear) clears the masked bits', () async {
+      // `a &^ b` == `a & (~b)`: clear in `a` the bits set in `b`.
+      // 12 (1100) &^ 10 (1010) = 1100 & 0101 = 0100 = 4.
+      var ret = await _call(
+        'go',
+        r'''
+func f(a int, b int) int {
+  return a &^ b
+}
+''',
+        'f',
+        positionalParameters: [12, 10],
+      );
+      expect(ret.getValueNoContext(), equals(4));
+    });
+
+    test('`&^` round-trips through Go generation', () async {
+      // The desugaring must still execute correctly when combined with `&`.
+      var ret = await _call(
+        'go',
+        r'''
+func f(a int, b int, c int) int {
+  return (a &^ b) & c
+}
+''',
+        'f',
+        positionalParameters: [15, 10, 7],
+      );
+      // 15 &^ 10 = 1111 & 0101 = 0101 = 5; 5 & 7 = 0101 & 0111 = 0101 = 5.
+      expect(ret.getValueNoContext(), equals(5));
+    });
+
     test('switch (no fall-through)', () async {
       var ret = await _call(
         'go',
