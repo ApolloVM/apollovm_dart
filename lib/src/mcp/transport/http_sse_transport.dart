@@ -85,7 +85,12 @@ class HttpSseTransport {
 
   Future<void> _handleRequest(HttpRequest request) async {
     final path = request.uri.path;
-    if (request.method == 'GET' && (path == '/sse' || path == '/')) {
+    if (request.method == 'OPTIONS') {
+      // CORS preflight: browsers send this before a cross-origin POST. Answer it
+      // with the allowed methods/headers instead of a 404, which would block the
+      // subsequent request.
+      await _handlePreflight(request);
+    } else if (request.method == 'GET' && (path == '/sse' || path == '/')) {
       _openSseSession(request);
     } else if (request.method == 'POST' &&
         (path == '/message' || path == '/sse' || path == '/')) {
@@ -94,6 +99,17 @@ class HttpSseTransport {
       request.response.statusCode = HttpStatus.notFound;
       await request.response.close();
     }
+  }
+
+  Future<void> _handlePreflight(HttpRequest request) async {
+    final response = request.response;
+    response.statusCode = HttpStatus.noContent;
+    response.headers
+      ..set('Access-Control-Allow-Origin', '*')
+      ..set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+      ..set('Access-Control-Allow-Headers', 'Content-Type')
+      ..set('Access-Control-Max-Age', '86400');
+    await response.close();
   }
 
   void _openSseSession(HttpRequest request) {

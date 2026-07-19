@@ -711,6 +711,25 @@ class TokenIndex {
               tokens[start].isIdent &&
               _modifierKeywords.contains(tokens[start].value));
       if (!hasType) return 0;
+      // Extend the range to the terminating `;` so the whole declaration —
+      // type, name, and any `= initializer` — is selectable, matching how
+      // methods and enum members cover their full entry rather than stopping at
+      // the name. Scan from the terminator to the first `;` at bracket depth 0
+      // (an initializer's own `(`/`[`/`{ }` and their contents are skipped).
+      var fullEnd = nameTok.end;
+      var depth = 0;
+      for (var k = j; k < tokens.length; k++) {
+        final tk = tokens[k];
+        if (tk.sym('(') || tk.sym('[') || tk.sym('{')) {
+          depth++;
+        } else if (tk.sym(')') || tk.sym(']') || tk.sym('}')) {
+          if (depth == 0) break;
+          depth--;
+        } else if (depth == 0 && tk.sym(';')) {
+          fullEnd = tk.end;
+          break;
+        }
+      }
       onDecl(
         DeclSite(
           name: nameTok.value,
@@ -718,7 +737,7 @@ class TokenIndex {
           nameStart: nameTok.start,
           nameEnd: nameTok.end,
           fullStart: idents.first.start,
-          fullEnd: nameTok.end,
+          fullEnd: fullEnd,
           container: container,
         ),
       );

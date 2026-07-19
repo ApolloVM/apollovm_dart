@@ -206,6 +206,45 @@ class Config {
     expect(kinds['Config'], DeclKind.classDecl);
   });
 
+  group('field / variable ranges cover the whole declaration', () {
+    String fieldRangeOf(String src, String name) {
+      final d = TokenIndex.scan(src).declarations.firstWhere(
+        (d) =>
+            (d.kind == DeclKind.field || d.kind == DeclKind.variable) &&
+            d.name == name,
+      );
+      return src.substring(d.fullStart, d.fullEnd);
+    }
+
+    test('a field without an initializer covers up to `;`', () {
+      const src = 'class Box {\n  int width;\n}\n';
+      expect(fieldRangeOf(src, 'width'), 'int width;');
+    });
+
+    test('a field with an initializer covers the initializer', () {
+      const src = 'class Box {\n  int count = 5;\n}\n';
+      expect(fieldRangeOf(src, 'count'), 'int count = 5;');
+    });
+
+    test('a top-level variable covers its full initializer', () {
+      const src = 'var total = 1 + 2;\n';
+      expect(fieldRangeOf(src, 'total'), 'var total = 1 + 2;');
+    });
+
+    test('an initializer with brackets/commas is not cut short', () {
+      const src = 'final xs = [1, 2, 3];\n';
+      expect(fieldRangeOf(src, 'xs'), 'final xs = [1, 2, 3];');
+    });
+
+    test('the name span still covers only the name', () {
+      const src = 'class Box {\n  int width;\n}\n';
+      final d = TokenIndex.scan(
+        src,
+      ).declarations.firstWhere((d) => d.name == 'width');
+      expect(src.substring(d.nameStart, d.nameEnd), 'width');
+    });
+  });
+
   test('handles generic return types and a constructor', () {
     final idx = TokenIndex.scan('''
 class Box {

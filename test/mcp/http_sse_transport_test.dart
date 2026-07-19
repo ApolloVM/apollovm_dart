@@ -111,4 +111,21 @@ void main() {
     expect(resp.statusCode, HttpStatus.notFound);
     await resp.drain<void>();
   });
+
+  test('CORS preflight (OPTIONS) is answered, not 404', () async {
+    final port = transport.port!;
+    final req = await http.openUrl(
+      'OPTIONS',
+      Uri.parse('http://127.0.0.1:$port/message'),
+    );
+    final resp = await req.close();
+    expect(resp.statusCode, HttpStatus.noContent);
+    expect(resp.headers.value('access-control-allow-origin'), '*');
+    expect(
+      resp.headers.value('access-control-allow-methods'),
+      contains('POST'),
+    );
+    expect(resp.headers.value('access-control-allow-headers'), isNotNull);
+    await resp.drain<void>();
+  });
 }

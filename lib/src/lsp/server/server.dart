@@ -532,9 +532,23 @@ class LspServer {
     final ident = cur?.ident;
     if (ident == null) return const [];
 
+    // `context.includeDeclaration` (defaults to `true` per LSP) controls whether
+    // the declaration occurrence itself is part of the result. When `false`, drop
+    // any occurrence that coincides with a declaration of the same name.
+    final context = p['context'];
+    final includeDeclaration = context is Map
+        ? context['includeDeclaration'] != false
+        : true;
+    final declStarts = includeDeclaration
+        ? const <int>{}
+        : <int>{
+            for (final d in unit.tokenIndex.declarations)
+              if (d.name == ident.name) d.nameStart,
+          };
+
     return [
       for (final t in unit.tokenIndex.identifiers)
-        if (t.name == ident.name)
+        if (t.name == ident.name && !declStarts.contains(t.start))
           Location(uri, unit.lineIndex.rangeAt(t.start, t.end)).toJson(),
     ];
   }
