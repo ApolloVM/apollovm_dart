@@ -264,4 +264,51 @@ func main() {
       expect(result['isError'], isTrue);
     });
   });
+
+  // Client arguments arrive as decoded JSON: a whole number sent as `1000.0`
+  // decodes to `double`, a wrong-typed value is whatever the client sent. These
+  // must be coerced, never cast with a raw `as int?`/`as List?` that throws a
+  // `TypeError` and crashes the tool.
+  group('client-arg coercion (no raw TypeError)', () {
+    const limits = McpLimits(timeoutMs: 2000);
+
+    test('execute tolerates a JSON-double timeoutMs', () async {
+      final r = await computeTool('apollovm.execute', {
+        'language': 'dart',
+        'source': dartSource,
+        'timeoutMs': 1000.0, // JSON number → double
+      }, limits);
+      expect(r['isError'], isFalse);
+      expect(r['result'], 42);
+    });
+
+    test('execute tolerates a non-list `args`', () async {
+      final r = await computeTool('apollovm.execute', {
+        'language': 'dart',
+        'source': dartSource,
+        'args': 'not-a-list',
+      }, limits);
+      expect(r['isError'], isFalse);
+      expect(r['result'], 42);
+    });
+
+    test('execute tolerates a numeric className (treated as absent)', () async {
+      final r = await computeTool('apollovm.execute', {
+        'language': 'dart',
+        'source': dartSource,
+        'className': 123,
+      }, limits);
+      expect(r['isError'], isFalse);
+    });
+
+    test('ast tolerates a JSON-double maxDepth', () async {
+      final r = await computeTool('apollovm.ast', {
+        'language': 'dart',
+        'source': dartSource,
+        'maxDepth': 2.0,
+      }, limits);
+      expect(r['isError'], isFalse);
+      expect(r['ast'], isNotNull);
+    });
+  });
 }

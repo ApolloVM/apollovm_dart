@@ -1,3 +1,25 @@
+## 2.15.0
+
+### LSP & MCP correctness fixes
+
+- **LSP `textDocument/references` now honors `context.includeDeclaration`.** The
+  flag was plumbed through every layer but discarded, so the declaration
+  occurrence was always returned. When `includeDeclaration` is `false`, the
+  occurrence that coincides with the symbol's declaration is now excluded.
+- **LSP field/variable `documentSymbol` range covers the whole declaration.** A
+  field/variable range previously stopped at the name; it now extends to the
+  terminating `;` (skipping over any `(`/`[`/`{ }` in an initializer), matching
+  how methods and enum members already cover their full entry.
+- **MCP tools coerce client arguments instead of hard-casting them.** Decoded
+  JSON numbers may arrive as `double` (e.g. `1000.0`) or as strings, so
+  `timeoutMs`/`maxDepth`/`args`/`className` were coerced via new
+  `mcpCoerceInt`/`_strOrNull`/`_listOrEmpty` helpers rather than an unsafe
+  `as int?`/`as List?` that threw a raw `TypeError` and crashed the tool. Applies
+  to `apollovm.execute`/`apollovm.ast` and both isolate executors.
+- **MCP HTTP/SSE transport answers CORS preflight.** `HttpSseTransport` now
+  responds to `OPTIONS` with `Access-Control-Allow-Origin/Methods/Headers`
+  (`204`) instead of a `404`, unblocking cross-origin browser POSTs.
+
 ## 2.14.0
 
 ### Wasm: `String ==` / `String !=` content equality

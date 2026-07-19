@@ -136,6 +136,31 @@ void main() {
     expect(locs.every((l) => l['uri'] == _uri), isTrue);
   });
 
+  test('references honors context.includeDeclaration', () async {
+    const uri = 'file:///ws/refs.dart';
+    const content = '''
+int total = 0;
+int run() {
+  return total + total;
+}
+''';
+    Future<int> countRefs(bool includeDeclaration) async {
+      final c = _Client();
+      await c.open(uri, content);
+      final resp = await c.request('textDocument/references', {
+        'textDocument': _td(uri),
+        'position': c.pos(0, 5), // the `total` declaration
+        'context': {'includeDeclaration': includeDeclaration},
+      });
+      return (resp['result'] as List).length;
+    }
+
+    // `total`: 1 declaration + 2 uses.
+    expect(await countRefs(true), 3);
+    // With the declaration excluded, only the 2 uses remain.
+    expect(await countRefs(false), 2);
+  });
+
   test('rename edits every same-name occurrence', () async {
     final c = _Client();
     await c.open(_uri, _content);

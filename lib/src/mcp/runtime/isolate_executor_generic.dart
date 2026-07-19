@@ -17,7 +17,7 @@ Future<Map<String, Object?>> computeToolIsolated(
   Map<String, Object?> args,
   McpLimits limits,
 ) {
-  final timeoutMs = (args['timeoutMs'] as int?) ?? limits.timeoutMs;
+  final timeoutMs = mcpCoerceInt(args['timeoutMs']) ?? limits.timeoutMs;
   return runToolInIsolate(
     toolName,
     args,

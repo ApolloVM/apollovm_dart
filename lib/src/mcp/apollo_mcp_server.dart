@@ -82,7 +82,7 @@ final class ApolloMcpServer extends MCPServer with ToolsSupport {
 
     final Map<String, Object?> result;
     if (limits.runsInIsolate(name)) {
-      final timeoutMs = (args['timeoutMs'] as int?) ?? limits.timeoutMs;
+      final timeoutMs = mcpCoerceInt(args['timeoutMs']) ?? limits.timeoutMs;
       result = await runToolInIsolate(
         name,
         args,

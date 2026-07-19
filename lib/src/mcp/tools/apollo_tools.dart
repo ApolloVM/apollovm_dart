@@ -159,8 +159,42 @@ List<Tool> buildTools() => [
   ...buildLspTools(),
 ];
 
-String _str(Map<String, Object?> args, String key, [String fallback = '']) =>
-    (args[key] as String?) ?? fallback;
+// Client arguments arrive as decoded JSON, so their runtime types are whatever
+// the client sent. These coercions never throw a raw `TypeError`: a wrong or
+// missing value degrades to the fallback/`null` instead of crashing the tool.
+
+String _str(Map<String, Object?> args, String key, [String fallback = '']) {
+  final v = args[key];
+  return v is String ? v : fallback;
+}
+
+/// Nullable string; a non-string (or missing) value is treated as absent.
+String? _strOrNull(Map<String, Object?> args, String key) {
+  final v = args[key];
+  return v is String ? v : null;
+}
+
+/// Nullable int. JSON numbers may decode to `double` (e.g. `1000.0`) and some
+/// clients send numbers as strings, so accept `num` and numeric `String`.
+int? _intOrNull(Map<String, Object?> args, String key) =>
+    mcpCoerceInt(args[key]);
+
+/// Coerces an arbitrary decoded-JSON [value] to `int?` without throwing a
+/// `TypeError`. JSON numbers may decode to `double` (e.g. `1000.0`) and some
+/// clients send numbers as strings, so `num` and numeric `String` are accepted;
+/// anything else (or `null`) yields `null`.
+int? mcpCoerceInt(Object? value) {
+  if (value is int) return value;
+  if (value is num) return value.toInt();
+  if (value is String) return int.tryParse(value.trim());
+  return null;
+}
+
+/// A list of arbitrary elements; a non-list (or missing) value yields `const []`.
+List<Object?> _listOrEmpty(Map<String, Object?> args, String key) {
+  final v = args[key];
+  return v is List ? v.cast<Object?>() : const [];
+}
 
 /// Runs the tool named [name] with [args] and returns its JSON result map.
 ///
@@ -198,7 +232,7 @@ Future<Map<String, Object?>> computeTool(
       if (o.root == null) {
         return <String, Object?>{'diagnostics': o.diagnostics, 'isError': true};
       }
-      final requested = (args['maxDepth'] as int?) ?? limits.maxAstDepth;
+      final requested = _intOrNull(args, 'maxDepth') ?? limits.maxAstDepth;
       final depth = math.min(requested, limits.maxAstDepth);
       return <String, Object?>{
         'ast': astNodeToJson(o.root!, maxDepth: depth),
@@ -223,14 +257,14 @@ Future<Map<String, Object?>> computeTool(
       return <String, Object?>{...typesToJson(o.root!), 'isError': false};
 
     case executeToolName:
-      final rawArgs = (args['args'] as List?)?.cast<Object?>() ?? const [];
+      final rawArgs = _listOrEmpty(args, 'args');
       final o = await rt.execute(
         _str(args, 'language'),
         _str(args, 'source'),
         function: _str(args, 'function', 'main'),
-        className: args['className'] as String?,
+        className: _strOrNull(args, 'className'),
         args: rawArgs,
-        timeoutMs: args['timeoutMs'] as int?,
+        timeoutMs: _intOrNull(args, 'timeoutMs'),
       );
       return <String, Object?>{
         'result': o.result,
