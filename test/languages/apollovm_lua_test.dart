@@ -376,6 +376,47 @@ end
     });
   });
 
+  // Dart -> Lua generator fidelity for constructs whose Lua form differs
+  // structurally from the source: `..` concatenation, 1-based array indexing,
+  // and parenthesized interpolation subexpressions.
+  group('Dart -> Lua generation fidelity', () {
+    Future<String> luaBody(String dart) async =>
+        _extractCodeUnit(await _translate('dart', dart, 'lua'));
+
+    test('String-variable concatenation uses `..`, not `+`', () async {
+      var lua = await luaBody('String f(String a, String b) { return a + b; }');
+      expect(lua, contains('return a .. b'));
+      expect(lua, isNot(contains('a + b')));
+    });
+
+    test('numeric `+` stays `+`', () async {
+      var lua = await luaBody('int f(int a, int b) { return a + b; }');
+      expect(lua, contains('return a + b'));
+    });
+
+    test('list index is shifted to Lua 1-based', () async {
+      var lua = await luaBody('int f(List<int> xs) { return xs[0]; }');
+      expect(lua, contains('xs[1]'));
+    });
+
+    test('map key access is left unchanged', () async {
+      var lua = await luaBody('int f(Map<String, int> m) { return m["k"]; }');
+      expect(lua, contains('m["k"]'));
+    });
+
+    test('non-literal list index gets `+ 1`', () async {
+      var lua = await luaBody('int f(List<int> xs, int i) { return xs[i]; }');
+      expect(lua, contains('xs[(i) + 1]'));
+    });
+
+    test('interpolated comparison is parenthesized under `..`', () async {
+      var lua = await luaBody(
+        'String f(int a, int b) { return "r=\${a < b}"; }',
+      );
+      expect(lua, contains('"r=" .. (a < b)'));
+    });
+  });
+
   // The table-based class convention is bidirectional: a class written in
   // another language translates to idiomatic Lua and re-executes identically.
   group('Lua cross-language classes', () {

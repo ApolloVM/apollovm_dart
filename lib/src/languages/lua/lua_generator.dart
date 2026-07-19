@@ -802,10 +802,86 @@ class ApolloCodeGeneratorLua extends ApolloCodeGenerator {
     if (expression.operator != ASTExpressionOperator.add) return false;
     var a = expression.expression1;
     var b = expression.expression2;
-    return a.isLiteralString ||
+    if (a.isLiteralString ||
         b.isLiteralString ||
         a.hasDescendantLiteralString ||
-        b.hasDescendantLiteralString;
+        b.hasDescendantLiteralString) {
+      return true;
+    }
+    // A `+` where either operand is statically String-typed (e.g. two `String`
+    // variables, `s1 + s2`) is also concatenation and must use `..` in Lua.
+    return _isStringTyped(a) || _isStringTyped(b);
+  }
+
+  /// Whether [e] resolves synchronously to a `String` type. Falls back to
+  /// `false` when the type is unknown or only resolvable asynchronously, so a
+  /// numeric `+` is never mistaken for concatenation.
+  bool _isStringTyped(ASTExpression e) {
+    var t = e.resolveType(null);
+    return t is ASTTypeString;
+  }
+
+  @override
+  StringBuffer generateASTExpressionVariableEntryAccess(
+    ASTExpressionVariableEntryAccess expression, {
+    StringBuffer? out,
+    String indent = '',
+    bool headIndented = true,
+  }) {
+    out ??= newOutput();
+    if (headIndented) out.write(indent);
+
+    generateASTVariable(
+      expression.variable,
+      out: out,
+      indent: indent,
+      headIndented: headIndented,
+    );
+
+    // Lua tables are 1-indexed for their array part, so a list index coming from
+    // a 0-based language (`list[0]`) must become `list[1]`. Map/table keys
+    // (strings or explicit keys) are left untouched. The Lua grammar does not
+    // parse index-access expressions, so every node reaching this generator
+    // originates from a 0-based source language — there is no Lua→Lua round-trip
+    // that would double-shift.
+    var t = expression.variable.resolveType(null);
+    ASTType? containerType = t is ASTType ? t : null;
+
+    for (var idx in [expression.expression, ...expression.extraIndices]) {
+      out.write('[');
+      if (containerType is ASTTypeArray) {
+        _writeLuaArrayIndex(idx, out, indent);
+      } else {
+        generateASTExpression(
+          idx,
+          out: out,
+          indent: indent,
+          headIndented: false,
+        );
+      }
+      out.write(']');
+      // Descend one container level for the next chained index (`m[0][1]`).
+      containerType = containerType is ASTTypeArray
+          ? containerType.elementType
+          : (containerType is ASTTypeMap ? containerType.valueType : null);
+    }
+    return out;
+  }
+
+  /// Writes a 0-based array index shifted to Lua's 1-based convention. An
+  /// integer literal is incremented in place (`list[0]` -> `list[1]`); any other
+  /// index expression gets `+ 1` appended (`list[i]` -> `list[(i) + 1]`).
+  void _writeLuaArrayIndex(ASTExpression idx, StringBuffer out, String indent) {
+    if (idx is ASTExpressionLiteral) {
+      var v = idx.value;
+      if (v is ASTValueInt) {
+        out.write(v.value + 1);
+        return;
+      }
+    }
+    out.write('(');
+    generateASTExpression(idx, out: out, indent: indent, headIndented: false);
+    out.write(') + 1');
   }
 
   @override
@@ -1037,7 +1113,12 @@ class ApolloCodeGeneratorLua extends ApolloCodeGenerator {
     } else if (value is ASTValueStringVariable) {
       return value.variable.name;
     } else if (value is ASTValueStringExpression) {
-      return generateASTExpression(value.expression).toString();
+      var inner = generateASTExpression(value.expression).toString();
+      // Lua's `..` binds tighter than comparison/logical operators, so an
+      // interpolated subexpression like `${a < b}` or `${a and b}` must be
+      // parenthesized or it would mis-associate with the surrounding
+      // concatenation (`"x" .. a < b` parses as `("x" .. a) < b`).
+      return value.expression.isComplex ? '($inner)' : inner;
     } else if (value is ASTValueStringConcatenation) {
       return value.values.map(_valuePart).join(' .. ');
     } else {

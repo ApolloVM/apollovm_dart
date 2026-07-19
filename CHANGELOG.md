@@ -20,6 +20,26 @@
   responds to `OPTIONS` with `Access-Control-Allow-Origin/Methods/Headers`
   (`204`) instead of a `404`, unblocking cross-origin browser POSTs.
 
+### Go & Lua generator correctness fixes
+
+- **Go `&^` (AND NOT / bit clear) now computes `a & (~b)`.** It was mapped to a
+  plain bitwise-AND (`a & b`), silently producing wrong results and corrupting
+  Go→Go round-trips. It is now desugared at parse time to a bitwise-AND whose
+  right operand is the bitwise complement of the right-hand side, at the same
+  precedence as `&`.
+- **Lua string-variable concatenation emits `..`.** A `+` whose operands are
+  statically `String`-typed (e.g. `s1 + s2`, with no string *literal* to trip
+  the old heuristic) now generates Lua `..` instead of an invalid `+`.
+- **Lua list indexing is shifted to Lua's 1-based convention.** A list index
+  coming from a 0-based source language (`list[0]`) now generates `list[1]`
+  (`list[i]` → `list[(i) + 1]`). Map/table key access is left unchanged. The Lua
+  grammar does not parse index-access expressions, so no Lua→Lua round-trip is
+  double-shifted.
+- **Lua string-interpolation subexpressions are parenthesized.** An interpolated
+  expression that binds looser than `..` (e.g. `"${a < b}"`) is now wrapped in
+  parentheses (`"x" .. (a < b)`) so it no longer mis-associates under Lua's
+  concatenation precedence.
+
 ## 2.14.0
 
 ### Wasm: `String ==` / `String !=` content equality

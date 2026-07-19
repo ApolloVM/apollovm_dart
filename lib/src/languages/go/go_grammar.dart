@@ -703,7 +703,9 @@ class GoGrammarDefinition extends GoGrammarLexer {
 
   Parser<ASTExpression> expressionOperationChain() =>
       (ref0(expressionNoOperation) &
-              (expressionOperator() & ref0(expressionNoOperation)).star())
+              (ref0(goAndNotOperand) |
+                      (expressionOperator() & ref0(expressionNoOperation)))
+                  .star())
           .map((v) {
             var exp1 = v[0];
             var rest = v[1] as List;
@@ -718,7 +720,6 @@ class GoGrammarDefinition extends GoGrammarLexer {
   Parser<ASTExpressionOperator> expressionOperator() =>
       (string('&&') |
               string('||') |
-              string('&^') |
               string('<<') |
               string('>>') |
               string('==') |
@@ -736,12 +737,23 @@ class GoGrammarDefinition extends GoGrammarLexer {
               char('<') |
               char('>'))
           .trimHidden()
-          .map((v) {
-            // `&^` (AND NOT) has no dedicated AST operator; approximate as
-            // bitwise-AND (rare; keeps parsing robust).
-            if (v == '&^') return ASTExpressionOperator.bitwiseAnd;
-            return getASTExpressionOperator(v as String);
-          });
+          .map((v) => getASTExpressionOperator(v as String));
+
+  /// Go `&^` (bit clear / AND NOT): `a &^ b` == `a & (^b)` == `a & (~b)`. There
+  /// is no dedicated binary AST operator, so desugar it to a bitwise-AND whose
+  /// right operand is the bitwise complement of `b`. Returned in the same
+  /// `[operator, operand]` shape as a normal operator/operand pair so the
+  /// operator-precedence reducer treats it exactly like `&`.
+  ///
+  /// This must be tried before [expressionOperator], whose `&` would otherwise
+  /// consume the `&` of `&^` and leave a dangling `^`.
+  Parser<List> goAndNotOperand() =>
+      (string('&^').trimHidden() & ref0(expressionNoOperation)).map(
+        (v) => <dynamic>[
+          ASTExpressionOperator.bitwiseAnd,
+          ASTExpressionBitwiseNot(v[1] as ASTExpression),
+        ],
+      );
 
   Parser<ASTExpression> expressionNoOperation() =>
       (expressionConditionalIIFE() |
