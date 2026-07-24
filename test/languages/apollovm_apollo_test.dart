@@ -569,7 +569,8 @@ run() {
     test('rich enum body parses without semicolons', () async {
       // The enhanced-enum body (fields + a body-less `const` constructor) parses
       // even though Apollo statement semicolons are optional.
-      expect(await _loads(r'''
+      expect(
+        await _loads(r'''
 enum Planet {
   earth(5.97, 6371),
   mars(0.642, 3389)
@@ -584,7 +585,9 @@ enum Planet {
     return mass / (radius * radius)
   }
 }
-'''), isTrue);
+'''),
+        isTrue,
+      );
     });
   });
 
