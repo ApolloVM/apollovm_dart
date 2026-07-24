@@ -81,13 +81,73 @@ void main() {
       await _compile('class A { int x = 5; } int f(A a) { return a?.x; }');
     });
 
-    test('the null literal remains an unsupported Wasm construct', () async {
-      // Wasm has no `null` value; assigning a null literal is a clean error,
-      // not a silent miscompilation.
+    test('a null literal in a concrete numeric slot is a clean error', () async {
+      // `int` is i64 in Wasm and has no encoding for `null`, so this is an
+      // explicit unsupported-construct error — not a silent miscompilation, and
+      // not a module that fails to validate.
       await expectLater(
         _compile('int f(int b) { int? x = null; return x ?? b; }'),
-        throwsA(anyOf(isA<UnimplementedError>(), isA<UnsupportedError>())),
+        throwsA(isA<UnsupportedSyntaxError>()),
       );
+    });
+
+    test('a null literal in a String slot is a clean error', () async {
+      await expectLater(
+        _compile('int f() { String? s = null; return 0; }'),
+        throwsA(isA<UnsupportedSyntaxError>()),
+      );
+    });
+  });
+
+  // `null` *is* representable in the boxed-`Object` domain: it is the box
+  // pointer 0 (it needs no cell, and the heap never allocates at address 0).
+  group('Wasm null in the boxed-Object domain', () {
+    test('a null literal compiles in a `var` / `Object?` slot', () async {
+      await _compile('int f(int n) { var a = n > 0 ? 1 : null; return 0; }');
+      await _compile('Object? f() { return null; }');
+    });
+
+    test('a `null` arm in a ternary boxes the other arm', () async {
+      // Both arms must agree on the block's result type, so the `int` arm is
+      // boxed rather than left as an i64 (which would not validate).
+      var whenNull = await _compileAndMaybeRun(
+        'Object? f(int n) { return n > 0 ? 1 : null; }',
+        'f',
+        [0],
+      );
+      expect(whenNull, isNull);
+
+      var whenValue = await _compileAndMaybeRun(
+        'Object? f(int n) { return n > 0 ? 1 : null; }',
+        'f',
+        [5],
+      );
+      if (whenValue != null) expect(whenValue, 1);
+    });
+
+    test('`== null` distinguishes the null box from a value', () async {
+      const src =
+          'int f(int n) { Object? a = n > 0 ? 1 : null; '
+          'if (a == null) { return -1; } return 1; }';
+
+      var isNullCase = await _compileAndMaybeRun(src, 'f', [0]);
+      if (isNullCase != null) expect(isNullCase, -1);
+
+      var notNullCase = await _compileAndMaybeRun(src, 'f', [5]);
+      if (notNullCase != null) expect(notNullCase, 1);
+    });
+
+    test('`??` falls back when the boxed left operand is null', () async {
+      // In the *numeric* domain `a ?? b` still yields `a` (a number is never
+      // null); a boxed operand is tested against the null box.
+      const src =
+          'Object? f(int n) { Object? a = n > 0 ? 1 : null; return a ?? 99; }';
+
+      var fellBack = await _compileAndMaybeRun(src, 'f', [0]);
+      if (fellBack != null) expect(fellBack, 99);
+
+      var kept = await _compileAndMaybeRun(src, 'f', [5]);
+      if (kept != null) expect(kept, 1);
     });
   });
 }

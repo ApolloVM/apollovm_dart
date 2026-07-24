@@ -495,6 +495,18 @@ class ApolloRunnerWasm extends ApolloRunner {
         mapReturn = (keyTag: sigReturn.elemTag, valTag: sigReturn.valTag);
       }
 
+      // `Object`/`dynamic` return: an i32 boxed-`Object` pointer, where 0 is
+      // `null` (see `_readBox`). Without this the caller would see the raw
+      // pointer — notably `0` instead of `null`.
+      // For a module loaded from raw bytes the reconstructed AST return type is
+      // the *Wasm* type (i32), so the signature tag is the only source of truth.
+      // Tag 5 is strictly `Object`/`dynamic`; a class instance carries tag 8.
+      var objectReturn = astFunction?.returnType;
+      var returnsObject =
+          objectReturn is ASTTypeObject ||
+          objectReturn is ASTTypeDynamic ||
+          sigReturn?.tag == _tagObject;
+
       if (returnsString) {
         res = decodeString(res as int);
       } else if (returnsBool && res is! bool) {
@@ -503,6 +515,18 @@ class ApolloRunnerWasm extends ApolloRunner {
         res = decodeList(res as int, listReturn);
       } else if (mapReturn != null) {
         res = decodeMap(res as int, mapReturn.keyTag, mapReturn.valTag);
+      } else if (returnsObject) {
+        var boxPtr = res as int;
+        if (boxPtr == _boxPtrNull) {
+          // The null box needs no cell — and a module that only ever returns
+          // `null` may not even declare a memory.
+          res = null;
+        } else {
+          var mem = loadedModule.readMemory();
+          res = mem == null
+              ? boxPtr
+              : _readBox(ByteData.sublistView(mem), boxPtr, decodeString);
+        }
       }
     }
 
@@ -672,6 +696,10 @@ class ApolloRunnerWasm extends ApolloRunner {
     int boxPtr,
     String Function(int) decodeString,
   ) {
+    // `null` is the box pointer 0 — it has no cell, so return before reading a
+    // tag from address 0.
+    if (boxPtr == _boxPtrNull) return null;
+
     var tag = bd.getInt32(boxPtr + 0, Endian.little);
     switch (tag) {
       case _boxTagInt:
@@ -717,6 +745,10 @@ class ApolloRunnerWasm extends ApolloRunner {
   static const int _boxTagString = 4;
   static const int _boxTagInstance = 5;
   static const int _boxSize = 16;
+
+  /// The boxed-`Object` pointer representing `null`. The heap never allocates
+  /// at address 0. Must match `wasm_generator.dart`'s `_boxPtrNull`.
+  static const int _boxPtrNull = 0;
 
   /// Per-module signature cache, keyed by the wasm binary's identity.
   final Map<Uint8List, ({Map<String, _WasmSig> sigs, Set<String> asyncFns})>

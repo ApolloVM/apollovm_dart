@@ -1,3 +1,56 @@
+## 2.18.0
+
+### Wasm: `null` in the boxed-`Object` domain
+
+Compiling a `null` literal to Wasm threw a bare
+`UnimplementedError: generateASTExpressionNullValue` — a leftover `TODO` — so an
+ordinary Dart idiom such as `var a = args.length > 0 ? args[0] : null;` could
+not be compiled at all.
+
+`null` is now a real value in the backend's *boxed* domain: **the boxed-`Object`
+pointer 0**. The heap never allocates at address 0, so it needs no cell, costs no
+allocation, and is distinguishable from every real box.
+
+- **Ternary arms unify.** Both arms of a conditional are now coerced to the
+  block's result type, and an arm that is `null` forces that type to a boxed
+  `Object` — otherwise `c ? 1 : null` mixed an i64 with an i32 and produced a
+  module that failed to validate.
+- **`??` tests a boxed operand.** It previously always yielded its left operand
+  ("a Wasm value is never null"), which remains correct in the *numeric* domain.
+  A boxed operand is now compared against the null box, so `a ?? 99` falls back
+  when `a` is null.
+- **String interpolation prints `null`.** The box-to-string helper checks the
+  null box before dereferencing a tag.
+- **`__alloc` look-ahead.** Boxing allocates, but the alloc export is decided
+  *before* the Code section while the boxing is only discovered while writing
+  it — so `[1, null, 3]` and `a ?? 99` aborted at run time with
+  `No exported Wasm function __alloc`. The generator now scans function bodies
+  for a `null` literal up front.
+- **An `Object?` return decodes to `null`** instead of the raw pointer `0`. Two
+  causes: the return path had no `Object` case, and `_typeTag`'s fallback gave
+  tag `5` to *both* `Object` and a class instance, so the runner could not tell
+  a box from a bare instance pointer. A class instance now carries tag `8`,
+  leaving `5` unambiguously "boxed value".
+
+Where `null` genuinely has no representation — a slot whose Wasm type is
+concrete, such as `int` (i64) or `String` (a string pointer) — the compiler now
+reports an `UnsupportedSyntaxError` naming the type and suggesting `var` /
+`Object?` / `dynamic`, rather than emitting a module that fails to validate.
+
+### Null-safety analyzer: operands and nullable-to-non-nullable assignment
+
+The analyzer checked unconditional *member/method/index* access on a nullable,
+and the `null` *literal* assigned to a non-nullable slot. Two adjacent mistakes
+went unreported:
+
+- **A nullable operand in an operation** (`x + (y ?? 0)` where `x` is `int?`)
+  now reports `unchecked-nullable-operand`. `??`, `==` and `!=` are exempt — a
+  nullable operand is exactly what they exist to handle — and `!` or a preceding
+  null check still suppress it.
+- **A nullable *value* assigned to a non-nullable slot** (`int x = a;` where `a`
+  is `int?`) now reports `nullable-to-non-nullable`. Previously only a literal
+  `null` was caught, so the same error one step removed passed silently.
+
 ## 2.17.0
 
 ### Null-safety fixes: nullable parameters, null-aware typing, access chains
