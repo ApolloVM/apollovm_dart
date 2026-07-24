@@ -5,6 +5,7 @@
 import 'package:petitparser/petitparser.dart';
 
 import '../../apollovm_base.dart';
+import '../../apollovm_parser.dart';
 import '../../ast/apollovm_ast_base.dart';
 import '../../ast/apollovm_ast_expression.dart';
 import '../../ast/apollovm_ast_statement.dart';
@@ -796,8 +797,10 @@ class ApolloGrammarDefinition extends ApolloGrammarLexer {
               statementBreak() |
               statementContinue() |
               statementDoWhileLoop() |
-              statementForLoop() |
               statementForEach() |
+              statementForRange() |
+              statementForLoop() |
+              statementForParensError() |
               statementWhileLoop() |
               statementReturn() |
               statementFunctionDeclaration() |
@@ -947,16 +950,19 @@ class ApolloGrammarDefinition extends ApolloGrammarLexer {
       (statementVariableDeclaration() | statementExpression())
           .cast<ASTStatement>();
 
-  // Apollo: the surrounding parentheses of the C-style `for` header are
-  // optional (the two internal `;` separators still delimit init/cond/cont).
+  // Apollo: the classic C-style `for` header REQUIRES parentheses (this
+  // disambiguates it from the range-based `for` and from a statement that
+  // merely starts with a `for`-shaped identifier). See [statementForRange] for
+  // the concise counting form and [statementForParensError] for the error given
+  // when the parentheses are omitted.
   Parser<ASTStatementForLoop> statementForLoop() =>
       (string('for').trimHidden() &
-              char('(').trimHidden().optional() &
+              char('(').trimHidden() &
               ref0(statementSimple) &
               ref0(expression) &
               char(';').trimHidden() &
               ref0(expression) &
-              char(')').trimHidden().optional() &
+              char(')').trimHidden() &
               codeBlock())
           .map((v) {
             var initExp = v[2];
@@ -965,6 +971,138 @@ class ApolloGrammarDefinition extends ApolloGrammarLexer {
             var block = v[7];
             return ASTStatementForLoop(initExp, condExp, contExp, block);
           });
+
+  /// Range-based counting `for` — desugars to a classic [ASTStatementForLoop]:
+  ///
+  ///     for i++ from 0..limit    =>  for (var i = 0;     i <= limit; i++)
+  ///     for i-- from limit..0    =>  for (var i = limit; i >= 0;     i--)
+  ///     for i++ from 0..<limit   =>  for (var i = 0;     i <  limit; i++)
+  ///     for i-- from limit..>0   =>  for (var i = limit; i >  0;     i--)
+  ///     for i += 2 from 0..limit =>  for (var i = 0;     i <= limit; i += 2)
+  ///     for i -= 2 from limit..0 =>  for (var i = limit; i >= 0;     i -= 2)
+  ///
+  /// Direction (ascending/descending) comes from the step (`++`/`+=` vs
+  /// `--`/`-=`); the range operator (`..` inclusive, `..<` exclusive-upper,
+  /// `..>` exclusive-lower) selects the comparison.
+  Parser<ASTStatementForLoop> statementForRange() =>
+      (string('for').trimHidden() &
+              identifier().trimHidden() &
+              rangeStep() &
+              rangeFromToken() &
+              ref0(expression) &
+              rangeOperator() &
+              ref0(expression) &
+              codeBlock())
+          .map((v) {
+            var varName = v[1] as String;
+            var step = v[2] as List;
+            var startExp = v[4] as ASTExpression;
+            var rangeOp = v[5] as String;
+            var endExp = v[6] as ASTExpression;
+            var block = v[7] as ASTBlock;
+            return _buildRangeForLoop(
+              varName,
+              step,
+              startExp,
+              rangeOp,
+              endExp,
+              block,
+            );
+          });
+
+  /// Whole-word `from` keyword separating the loop step from the range.
+  Parser rangeFromToken() =>
+      (string('from') & ref0(identifierPartLexicalToken).not()).trimHidden();
+
+  /// The loop step of a range `for`, as `[op, amountExpr?]`:
+  /// `++`/`--` (unit step) or `+= expr`/`-= expr` (custom step).
+  Parser<List> rangeStep() =>
+      ((string('++') | string('--')).trimHidden().map((op) => <dynamic>[op]) |
+              ((string('+=') | string('-=')).trimHidden() & ref0(expression))
+                  .map((v) => <dynamic>[v[0], v[1]]))
+          .cast<List>();
+
+  /// A range operator: `..` (inclusive), `..<` (exclusive upper) or `..>`
+  /// (exclusive lower). Longer operators are tried first.
+  Parser<String> rangeOperator() =>
+      (string('..<') | string('..>') | string('..'))
+          .trimHidden()
+          .cast<String>();
+
+  ASTStatementForLoop _buildRangeForLoop(
+    String varName,
+    List step,
+    ASTExpression startExp,
+    String rangeOp,
+    ASTExpression endExp,
+    ASTBlock block,
+  ) {
+    var stepOp = step[0] as String;
+    var ascending = stepOp == '++' || stepOp == '+=';
+
+    // Continue expression: `i++`/`i--` or `i += n`/`i -= n`.
+    ASTExpression continueExp;
+    if (stepOp == '++' || stepOp == '--') {
+      continueExp = ASTExpressionVariableDirectOperation(
+        ASTScopeVariable(varName),
+        getASTAssignmentDirectOperator(stepOp),
+        false,
+      );
+    } else {
+      continueExp = ASTExpressionVariableAssignment(
+        ASTScopeVariable(varName),
+        getASTAssignmentOperator(stepOp),
+        step[1] as ASTExpression,
+      );
+    }
+
+    // Comparison operator: `..<`/`..>` are always strict; `..` depends on the
+    // iteration direction.
+    String compareOp;
+    if (rangeOp == '..<') {
+      compareOp = '<';
+    } else if (rangeOp == '..>') {
+      compareOp = '>';
+    } else {
+      compareOp = ascending ? '<=' : '>=';
+    }
+
+    var conditionExp = ASTExpressionOperation(
+      ASTExpressionVariableAccess(ASTScopeVariable(varName)),
+      getASTExpressionOperator(compareOp),
+      endExp,
+    );
+
+    // Init statement: `var <name> = <start>`.
+    var varType = ASTTypeVar();
+    varType.associateToType(startExp);
+    var initStatement = ASTStatementVariableDeclaration(
+      varType,
+      varName,
+      startExp,
+      unmodifiable: false,
+    );
+
+    return ASTStatementForLoop(initStatement, conditionExp, continueExp, block);
+  }
+
+  /// Emits a helpful error when a classic `for` omits its now-mandatory
+  /// parentheses (e.g. `for var i = 0; i < n; i++ { … }`). It matches the
+  /// paren-less classic-`for` header — reached only after the parenthesized,
+  /// range and for-each forms have been tried — and throws, so the malformed
+  /// loop is a clean syntax error rather than being silently mis-parsed as a
+  /// sequence of statements beginning with an identifier `for`.
+  Parser<ASTStatement> statementForParensError() =>
+      (string('for').trimHidden() &
+              char('(').not() &
+              ref0(statementSimple) &
+              ref0(expression) &
+              char(';').trimHidden())
+          .map<ASTStatement>(
+            (v) => throw SyntaxError(
+              'Classic for loops require parentheses:\nfor (...)',
+            ),
+          );
 
   // Apollo: parentheses of the `for … in …` header are optional.
   Parser<ASTStatementForEach> statementForEach() =>

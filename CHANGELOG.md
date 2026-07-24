@@ -10,10 +10,18 @@
     multiline, raw (`r'...'`), `$var`/`${expr}` interpolation and adjacent-string
     concatenation.
   - **Parentheses are optional** in control-flow conditions (`if`, `else if`,
-    `while`, `do`/`while`, `switch`, `for`, `catch`). Both `if age >= 18 { … }`
+    `while`, `do`/`while`, `switch`, `catch`). Both `if age >= 18 { … }`
     and `if (age >= 18) { … }` parse.
+  - **Concise range-based `for`** — `for i++ from 0..limit { … }` with ascending
+    (`++`/`+=`) and descending (`--`/`-=`) steps, custom steps, and inclusive
+    (`..`) / exclusive (`..<`, `..>`) bounds; it desugars to a classic
+    `for (var i = …; …; …)`. The classic C-style loop stays available but now
+    **requires parentheses** (a paren-less header is a clear syntax error).
   - **`async` is a leading declaration modifier** (`async User loadUser(…) { … }`,
-    `async main() { … }`); the trailing Dart form `main() async {}` is rejected.
+    `async main() { … }`). The canonical/generated form is leading `async` with
+    the unwrapped return type; the Dart spellings (`async Future<User> f()`,
+    `Future<User> f() async`, and trailing `async`) are also parsed and
+    normalized to it.
   - **Statement-terminating semicolons are optional.**
   - **Primitive types are capitalized-only** (`Int`, `Double`, `Bool`, `Num`,
     `Void`); translating Apollo to Dart lowercases them, and Dart→Apollo

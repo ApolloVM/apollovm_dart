@@ -165,17 +165,55 @@ switch role {
 
 ### For
 
-Both the C-style and for-in forms accept optional parentheses:
+Apollo has three `for` forms: the concise **range-based** counting loop, the
+**classic C-style** loop, and **for-in** iteration.
+
+#### Range-based `for`
+
+The range form is the concise, readable way to write a counting loop. The step
+(`++`/`+=` ascending, `--`/`-=` descending) drives the direction, and the range
+operator selects the bound:
 
 ```apollo
-for var i = 0; i < items.length; i = i + 1 {
+for i++ from 0..limit   { ... }   // ascending, inclusive     (i <= limit)
+for i-- from limit..0   { ... }   // descending, inclusive    (i >= 0)
+for i++ from 0..<limit  { ... }   // ascending, exclusive up  (i <  limit)
+for i-- from limit..>0  { ... }   // descending, exclusive lo (i >  0)
+for i += 2 from 0..limit { ... }  // custom step, ascending   (i += 2)
+for i -= 2 from limit..0 { ... }  // custom step, descending  (i -= 2)
+```
+
+Each range loop is exactly equivalent to (and currently regenerates as) the
+classic form — e.g. `for i++ from 0..limit` ≡ `for (var i = 0; i <= limit; i++)`.
+
+#### Classic C-style `for`
+
+The classic loop is still supported, but its header **must be parenthesized**
+(this removes the ambiguity with the range form):
+
+```apollo
+for (var i = 0; i <= limit; i++) {
   print(items[i])
 }
+```
 
+Omitting the parentheses is a syntax error:
+
+```text
+Classic for loops require parentheses:
+for (...)
+```
+
+#### For-in
+
+```apollo
 for String name in names {
   print(name)
 }
 ```
+
+(For-in parentheses remain optional — `for (String name in names)` is also
+accepted.)
 
 ---
 

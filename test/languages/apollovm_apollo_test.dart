@@ -295,6 +295,83 @@ Int fact(Int n) {
     });
   });
 
+  group('Apollo for loops', () {
+    // sum(k for k in range) via each range-`for` form.
+    Future<int> sum(String header, {int n = 3}) async {
+      var ret = await _call(
+        '''
+Int f(Int n) {
+  var s = 0
+  $header {
+    s = s + i
+  }
+  return s
+}
+''',
+        'f',
+        positionalParameters: [n],
+      );
+      return ret.getValueNoContext() as int;
+    }
+
+    test('ascending inclusive `for i++ from 0..n`', () async {
+      expect(await sum('for i++ from 0..n', n: 3), equals(0 + 1 + 2 + 3));
+    });
+
+    test('descending inclusive `for i-- from n..0`', () async {
+      expect(await sum('for i-- from n..0', n: 3), equals(3 + 2 + 1 + 0));
+    });
+
+    test('ascending exclusive upper `for i++ from 0..<n`', () async {
+      expect(await sum('for i++ from 0..<n', n: 3), equals(0 + 1 + 2));
+    });
+
+    test('descending exclusive lower `for i-- from n..>0`', () async {
+      expect(await sum('for i-- from n..>0', n: 3), equals(3 + 2 + 1));
+    });
+
+    test('ascending custom step `for i += 2 from 0..n`', () async {
+      expect(await sum('for i += 2 from 0..n', n: 6), equals(0 + 2 + 4 + 6));
+    });
+
+    test('descending custom step `for i -= 2 from n..0`', () async {
+      expect(await sum('for i -= 2 from n..0', n: 6), equals(6 + 4 + 2 + 0));
+    });
+
+    test('classic `for` with parentheses still works', () async {
+      expect(
+        await sum('for (var i = 0; i <= n; i++)', n: 3),
+        equals(0 + 1 + 2 + 3),
+      );
+    });
+
+    test('classic `for` without parentheses is a syntax error', () async {
+      Object? error;
+      try {
+        await _run('run() { for var i = 0; i < 3; i++ { print(i) } }\n');
+      } catch (e) {
+        error = e;
+      }
+      expect(error, isNotNull);
+      expect(
+        error.toString(),
+        contains('Classic for loops require parentheses'),
+      );
+    });
+
+    test('range `for` desugars to a classic parenthesized `for`', () async {
+      var apollo = _extractCodeUnit(
+        await _translate(r'''
+run(Int n) {
+  for i++ from 0..n { print(i) }
+}
+''', 'apollo'),
+      );
+      expect(apollo, contains('for (var i = 0; i <= n'));
+      expect(apollo, contains('i++)'));
+    });
+  });
+
   group('Apollo async spellings (Dart-compatibility)', () {
     // The canonical form is a leading `async` with the unwrapped return type;
     // the two Dart-flavoured spellings are accepted and normalized to it.
