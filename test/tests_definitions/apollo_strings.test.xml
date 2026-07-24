@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="Apollo strings: quotes, interpolation, multiline, raw, adjacent (Dart syntax)">
+    <source language="apollo">
+        <![CDATA[
+String single() {
+  var name = 'John'
+  return name
+}
+
+String interp(Int id) {
+  var user = 'u$id'
+  return "Hello ${user}"
+}
+
+String multiline() {
+  var text = '''
+Line 1
+Line 2'''
+  return text
+}
+
+String raw() {
+  return r'C:\temp\file.txt'
+}
+
+String adjacent() {
+  return "Hello "
+      "World"
+}
+
+run() {
+  print(single())
+  print(interp(7))
+  print(multiline())
+  print(raw())
+  print(adjacent())
+}
+        ]]>
+    </source>
+    <call function="run">
+        []
+    </call>
+    <output>
+        ["John", "Hello u7", "\nLine 1\nLine 2", "C:\\temp\\file.txt", "Hello World"]
+    </output>
+</test>

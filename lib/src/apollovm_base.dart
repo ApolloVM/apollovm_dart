@@ -22,6 +22,9 @@ import 'ast/apollovm_ast_type.dart';
 import 'ast/apollovm_ast_value.dart';
 import 'ast/apollovm_ast_variable.dart';
 import 'core/apollovm_core_base.dart';
+import 'languages/apollo/apollo_generator.dart';
+import 'languages/apollo/apollo_parser.dart';
+import 'languages/apollo/apollo_runner.dart';
 import 'languages/csharp/csharp_generator.dart';
 import 'languages/csharp/csharp_parser.dart';
 import 'languages/csharp/csharp_runner.dart';
@@ -60,7 +63,7 @@ import 'resolution/symbol_table.dart';
 /// The Apollo VM.
 class ApolloVM implements VMTypeResolver {
   // ignore: non_constant_identifier_names
-  static final String VERSION = '2.15.0';
+  static final String VERSION = '2.16.0';
 
   static int _idCount = 0;
 
@@ -69,6 +72,8 @@ class ApolloVM implements VMTypeResolver {
   /// Returns a parser for a [language].
   ApolloCodeParser<T>? getParser<T extends Object>(String language) {
     switch (language) {
+      case 'apollo':
+        return ApolloParserApollo.instance as ApolloCodeParser<T>;
       case 'dart':
         return ApolloParserDart.instance as ApolloCodeParser<T>;
       case 'java':
@@ -252,6 +257,11 @@ class ApolloVM implements VMTypeResolver {
     bool importCorePackageMath = false,
   }) {
     switch (language) {
+      case 'apollo':
+        return ApolloRunnerApollo(
+          this,
+          importCorePackageMath: importCorePackageMath,
+        );
       case 'dart':
         return ApolloRunnerDart(
           this,
@@ -327,6 +337,8 @@ class ApolloVM implements VMTypeResolver {
     ApolloSourceCodeStorage codeStorage,
   ) {
     switch (language) {
+      case 'apollo':
+        return ApolloCodeGeneratorApollo(codeStorage);
       case 'dart':
         return ApolloCodeGeneratorDart(codeStorage);
       case 'java':
@@ -453,6 +465,8 @@ class ApolloVM implements VMTypeResolver {
     }
 
     switch (extension) {
+      case 'apollo':
+        return 'apollo';
       case 'dart':
         return 'dart';
       case 'java':

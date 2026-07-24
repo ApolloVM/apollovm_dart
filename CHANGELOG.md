@@ -1,3 +1,30 @@
+## 2.16.0
+
+### New language: Apollo (`.apollo`)
+
+- **Added the Apollo language**, a Dart-derived language designed for both humans
+  and coding agents. Apollo parses, runs, translates to/from every other
+  supported language, and regenerates back to Apollo source. It uses Dart as its
+  reference, diverging in a few deliberate ways:
+  - **Strings use the exact Dart syntax** — single/double quotes, triple-quoted
+    multiline, raw (`r'...'`), `$var`/`${expr}` interpolation and adjacent-string
+    concatenation.
+  - **Parentheses are optional** in control-flow conditions (`if`, `else if`,
+    `while`, `do`/`while`, `switch`, `for`, `catch`). Both `if age >= 18 { … }`
+    and `if (age >= 18) { … }` parse.
+  - **`async` is a leading declaration modifier** (`async User loadUser(…) { … }`,
+    `async main() { … }`); the trailing Dart form `main() async {}` is rejected.
+  - **Statement-terminating semicolons are optional.**
+  - **Primitive types are capitalized-only** (`Int`, `Double`, `Bool`, `Num`,
+    `Void`); translating Apollo to Dart lowercases them, and Dart→Apollo
+    capitalizes them.
+  - **Typed catch** is written `catch IOException error { … }` (parentheses
+    optional).
+- The language is registered as `apollo` (file extension `.apollo`) across the
+  parser/runner/generator dispatch, exported from the public library, and covered
+  by round-trip test fixtures, a dedicated test suite, and an example
+  (`example/apollovm_example_apollo.dart`).
+
 ## 2.15.0
 
 ### LSP & MCP correctness fixes
