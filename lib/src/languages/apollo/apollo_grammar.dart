@@ -124,14 +124,20 @@ class ApolloGrammarDefinition extends ApolloGrammarLexer {
   Parser<ASTFunctionDeclaration> functionDeclaration() =>
       (asyncToken().optional() &
               functionSignature() &
+              asyncToken().optional() &
               (arrowBody() | codeBlock()))
           .map((v) {
-            var isAsync = v[0] != null;
+            // `async` may lead (canonical Apollo) or trail (Dart form) — both
+            // accepted so agent-produced Dart parses.
+            var isAsync = v[0] != null || v[2] != null;
             var sig = v[1] as List;
-            var returnType = sig[0] as ASTType;
+            var returnType = _normalizeAsyncReturnType(
+              sig[0] as ASTType,
+              isAsync,
+            );
             var name = sig[1] as String;
             var parameters = sig[2] as ASTFunctionParametersDeclaration;
-            var block = v[2];
+            var block = v[3];
             return ASTFunctionDeclaration(
               name,
               parameters,
@@ -140,6 +146,21 @@ class ApolloGrammarDefinition extends ApolloGrammarLexer {
               modifiers: ASTModifiers(isStatic: true, isAsync: isAsync),
             );
           });
+
+  /// Canonicalizes an `async` function's declared return type: a return type
+  /// written as `Future<T>` (the `async Future<T> f()` and `Future<T> f() async`
+  /// forms) is unwrapped to `T`, so all three async spellings produce the same
+  /// AST as the official `async T f()` form (and regenerate to it). A bare
+  /// `Future` with no type argument is left as-is.
+  static ASTType _normalizeAsyncReturnType(ASTType returnType, bool isAsync) {
+    if (isAsync && returnType is ASTTypeFuture) {
+      var generics = returnType.generics;
+      if (generics != null && generics.isNotEmpty) {
+        return generics.first;
+      }
+    }
+    return returnType;
+  }
 
   /// A function/method signature `[ReturnType] name(params)` → a
   /// `[ASTType returnType, String name, ASTFunctionParametersDeclaration params]`
@@ -711,19 +732,25 @@ class ApolloGrammarDefinition extends ApolloGrammarLexer {
   Parser<ASTFunctionDeclaration> classFunctionDeclaration() =>
       (methodModifiers() &
               functionSignature() &
+              asyncToken().optional() &
               (arrowBody() | char(';').trimHidden() | codeBlock()))
           .map((v) {
             var mods = v[0] as ({bool isStatic, bool isAsync});
             var sig = v[1] as List;
-            var returnType = sig[0] as ASTType;
+            // `async` may lead (via [methodModifiers]) or trail (Dart form).
+            var isAsync = mods.isAsync || v[2] != null;
+            var returnType = _normalizeAsyncReturnType(
+              sig[0] as ASTType,
+              isAsync,
+            );
             var name = sig[1] as String;
             var parameters = sig[2] as ASTFunctionParametersDeclaration;
             var modifiers = ASTModifiers(
               isStatic: mods.isStatic,
-              isAsync: mods.isAsync,
+              isAsync: isAsync,
             );
             // An abstract/interface method has no body (`;` instead of a block).
-            var block = v[2] is ASTBlock ? v[2] as ASTBlock : null;
+            var block = v[3] is ASTBlock ? v[3] as ASTBlock : null;
             if (block == null) {
               modifiers = modifiers.copyWith(isAbstract: true);
             }
@@ -1087,23 +1114,30 @@ class ApolloGrammarDefinition extends ApolloGrammarLexer {
       (codeBlock()).map((v) => ASTStatementBlock(v));
 
   Parser<ASTStatementFunctionDeclaration> statementFunctionDeclaration() =>
-      (asyncToken().optional() & functionSignature() & codeBlock()).map((v) {
-        var isAsync = v[0] != null;
-        var sig = v[1] as List;
-        var returnType = sig[0] as ASTType;
-        var name = sig[1] as String;
-        var parameters = sig[2] as ASTFunctionParametersDeclaration;
-        var block = v[2];
-        return ASTStatementFunctionDeclaration(
-          ASTFunctionDeclaration(
-            name,
-            parameters,
-            returnType,
-            block: block,
-            modifiers: ASTModifiers(isStatic: true, isAsync: isAsync),
-          ),
-        );
-      });
+      (asyncToken().optional() &
+              functionSignature() &
+              asyncToken().optional() &
+              codeBlock())
+          .map((v) {
+            var isAsync = v[0] != null || v[2] != null;
+            var sig = v[1] as List;
+            var returnType = _normalizeAsyncReturnType(
+              sig[0] as ASTType,
+              isAsync,
+            );
+            var name = sig[1] as String;
+            var parameters = sig[2] as ASTFunctionParametersDeclaration;
+            var block = v[3];
+            return ASTStatementFunctionDeclaration(
+              ASTFunctionDeclaration(
+                name,
+                parameters,
+                returnType,
+                block: block,
+                modifiers: ASTModifiers(isStatic: true, isAsync: isAsync),
+              ),
+            );
+          });
 
   Parser<ASTStatementVariableDeclaration> statementVariableDeclaration() =>
       (

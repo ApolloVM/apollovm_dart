@@ -56,7 +56,7 @@ async User loadUser(Int id) {
 becomes, in Dart:
 
 ```dart
-User loadUser(int id) async {
+Future<User> loadUser(int id) async {
   return await fetch(id);
 }
 ```
@@ -294,12 +294,24 @@ async main() {
 }
 ```
 
-### Not allowed: trailing `async`
+### Accepted async spellings (Dart-compatibility)
+
+The **canonical** form — and the one Apollo always regenerates — is the leading
+`async` with the unwrapped return type: `async User loadUser(Int id)`. So that
+agent-produced Dart still parses, Apollo also accepts two equivalent spellings
+and normalizes them to the canonical form:
 
 ```apollo
-main() async {   // ❌ rejected — Apollo does not allow trailing `async`
-}
+async User loadUser(Int id) { ... }          // canonical / generated
+async Future<User> loadUser(Int id) { ... }  // leading async, explicit Future
+Future<User> loadUser(Int id) async { ... }  // trailing async (Dart form)
 ```
+
+All three parse to the same declaration and regenerate as
+`async User loadUser(Int id) { ... }`. A `Future<T>` return type on an `async`
+function is unwrapped to `T`. The trailing-`async` (Dart) form is likewise
+accepted for any function (e.g. `main() async { ... }`), but Apollo always emits
+the leading form.
 
 ---
 

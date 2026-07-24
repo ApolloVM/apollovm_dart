@@ -295,15 +295,45 @@ Int fact(Int n) {
     });
   });
 
-  group('Apollo invalid syntax', () {
-    test('trailing `async` (Dart-style) is rejected', () async {
-      expect(await _loads('main() async {\n}\n'), isFalse);
-      expect(await _loads('run() async {\n  print("x")\n}\n'), isFalse);
+  group('Apollo async spellings (Dart-compatibility)', () {
+    // The canonical form is a leading `async` with the unwrapped return type;
+    // the two Dart-flavoured spellings are accepted and normalized to it.
+    const forms = {
+      'canonical (async User)': 'async User foo(Int id) { return id }',
+      'leading Future (async Future<User>)':
+          'async Future<User> foo(Int id) { return id }',
+      'trailing (Future<User> ... async)':
+          'Future<User> foo(Int id) async { return id }',
+      'trailing (User ... async)': 'User foo(Int id) async { return id }',
+    };
+
+    for (var e in forms.entries) {
+      test('${e.key} loads and regenerates as `async User`', () async {
+        expect(await _loads('${e.value}\n'), isTrue);
+        var apollo = _extractCodeUnit(
+          await _translate('${e.value}\n', 'apollo'),
+        );
+        expect(apollo, contains('async User foo(Int id)'));
+        // A Future<T> return type is unwrapped to T on an async function.
+        expect(apollo, isNot(contains('Future')));
+      });
+    }
+
+    test('leading-async form is the canonical / regenerated one', () async {
+      var apollo = _extractCodeUnit(
+        await _translate('async run() { print("x") }\n', 'apollo'),
+      );
+      expect(apollo, contains('async dynamic run()'));
     });
 
-    test('the leading-async form of the same program loads', () async {
-      expect(await _loads('async run() {\n  print("x")\n}\n'), isTrue);
-    });
+    test(
+      'trailing `async` (Dart form) is accepted for a plain function',
+      () async {
+        expect(await _loads('main() async {\n}\n'), isTrue);
+        var output = await _run('run() async { print("x") }\n');
+        expect(output, equals(['x']));
+      },
+    );
   });
 
   group('Apollo translate + re-execute', () {
