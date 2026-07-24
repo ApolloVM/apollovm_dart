@@ -1312,6 +1312,16 @@ class DartGrammarDefinition extends DartGrammarLexer {
               expressionBitwiseNot() |
               expressionLiteral() |
               expressionGroupFunctionInvocation() |
+              // `(expr).field`, `(expr)?.field`, `(expr).a.b` — a member chain
+              // on a parenthesized receiver.
+              //
+              // Deliberately *after* the group-invocation rule: putting it
+              // first lets it win on parenthesized arithmetic and changes how
+              // the operation chain groups, which breaks round-trip generation.
+              // The cost is that a call followed by a field — `(e).m().field` —
+              // still does not parse, since the invocation rule consumes
+              // `(e).m()` and only chains further calls.
+              expressionGroupMemberChain() |
               expressionGroup() |
               expressionListEmptyLiteral() |
               expressionListLiteral() |
@@ -1319,8 +1329,14 @@ class DartGrammarDefinition extends DartGrammarLexer {
               expressionMapLiteral() |
               expressionVariableDirectOperation() |
               expressionVariableEntryAssignment() |
+              expressionObjectFieldChainAssignment() |
               expressionObjectFieldAssignment() |
               expressionVariableAssigment() |
+              // Multi-segment member access (`a.b.c`, `a.b?.c`, `a.b.m()`).
+              // Placed after the assignment rules so a chained *write* still
+              // reaches them first, and before the single-segment access rules
+              // (it requires two or more segments, so it can't shadow them).
+              expressionMemberChain() |
               expressionFunctionInvocation() |
               expressionObjectEntryFunctionInvocation() |
               expressionVariableEntryAccess() |
@@ -1554,6 +1570,156 @@ class DartGrammarDefinition extends DartGrammarLexer {
             )..namedArguments = named;
           });
 
+  /// One segment of a member-access chain: an optional `!` asserting the
+  /// *preceding* value, the `.` or `?.` accessor, the member name, and — when
+  /// it is a method call — its argument list.
+  Parser<
+    ({
+      bool assertReceiver,
+      bool isNullAware,
+      String name,
+      ({List<ASTExpression> positional, Map<String, ASTExpression>? named})?
+      args,
+    })
+  >
+  memberChainSegment() =>
+      (char('!').optional() &
+              (string('?.') | char('.')) &
+              identifier() &
+              (char('(').trimHidden() &
+                      ref0(callArguments).optional() &
+                      char(')').trimHidden())
+                  .optional())
+          .map((v) {
+            var call = v[3] as List?;
+            return (
+              assertReceiver: v[0] == '!',
+              isNullAware: v[1] == '?.',
+              name: v[2] as String,
+              args: call == null
+                  ? null
+                  : (call[1]
+                            as ({
+                              List<ASTExpression> positional,
+                              Map<String, ASTExpression>? named,
+                            })?) ??
+                        (positional: <ASTExpression>[], named: null),
+            );
+          });
+
+  /// A member-access chain on a parenthesized receiver: `(a).v`, `(a)?.v`,
+  /// `(a.next)?.v`, `(a).b.c`.
+  ///
+  /// The grammar previously accepted only `(expr).method()` (via
+  /// [expressionGroupFunctionInvocation]), so a *field* read off a group — and
+  /// any `?.` after one — failed to parse. Segments fold exactly as in
+  /// [expressionMemberChain].
+  Parser<ASTExpression> expressionGroupMemberChain() =>
+      (ref0(expressionGroup) & ref0(memberChainSegment).plus()).map((v) {
+        var current = v[0] as ASTExpression;
+        var segments = (v[1] as List)
+            .cast<
+              ({
+                bool assertReceiver,
+                bool isNullAware,
+                String name,
+                ({
+                  List<ASTExpression> positional,
+                  Map<String, ASTExpression>? named,
+                })?
+                args,
+              })
+            >();
+
+        for (var seg in segments) {
+          var variable = ASTExpressionVariable(current);
+          var args = seg.args;
+          if (args != null) {
+            current = ASTExpressionObjectFunctionInvocation(
+              variable,
+              seg.name,
+              args.positional,
+              null,
+              seg.isNullAware,
+              seg.assertReceiver,
+            )..namedArguments = args.named;
+          } else {
+            current = ASTExpressionObjectGetterAccess(
+              variable,
+              seg.name,
+              null,
+              seg.isNullAware,
+              seg.assertReceiver,
+            );
+          }
+        }
+
+        return current;
+      });
+
+  /// A member-access chain of **two or more** segments: `a.b.c`, `a.b?.c`,
+  /// `a.b!.c`, `a.b.m()`, `a.b?.m(x)` and any mix of them.
+  ///
+  /// Single-segment accesses keep their own dedicated rules (which also resolve
+  /// enum entries, static fields and import prefixes), so this only takes over
+  /// where nothing matched before — every chain here previously failed to parse.
+  ///
+  /// Each segment is folded onto the previous one, with the accumulated
+  /// expression wrapped as an [ASTExpressionVariable] receiver, so the existing
+  /// object-access nodes provide the runtime, null-aware and code-generation
+  /// behaviour.
+  Parser<ASTExpression> expressionMemberChain() =>
+      (variable() & ref0(memberChainSegment) & ref0(memberChainSegment).plus())
+          .map((v) {
+            var receiver = v[0] as ASTVariable;
+            var segments = [
+              v[1]
+                  as ({
+                    bool assertReceiver,
+                    bool isNullAware,
+                    String name,
+                    ({
+                      List<ASTExpression> positional,
+                      Map<String, ASTExpression>? named,
+                    })?
+                    args,
+                  }),
+              ...(v[2] as List).cast(),
+            ];
+
+            ASTExpression? current;
+
+            for (var seg in segments) {
+              // The head keeps the parsed receiver variable; later segments
+              // wrap the expression built so far.
+              var variable = current == null
+                  ? receiver
+                  : ASTExpressionVariable(current);
+
+              var args = seg.args;
+              if (args != null) {
+                current = ASTExpressionObjectFunctionInvocation(
+                  variable,
+                  seg.name,
+                  args.positional,
+                  null,
+                  seg.isNullAware,
+                  seg.assertReceiver,
+                )..namedArguments = args.named;
+              } else {
+                current = ASTExpressionObjectGetterAccess(
+                  variable,
+                  seg.name,
+                  null,
+                  seg.isNullAware,
+                  seg.assertReceiver,
+                );
+              }
+            }
+
+            return current!;
+          });
+
   Parser<ASTExpressionChainFunctionInvocation>
   expressionChainFunctionInvocation() =>
       (char('.').trimHidden() &
@@ -1720,6 +1886,83 @@ class DartGrammarDefinition extends DartGrammarLexer {
               extra,
             );
           });
+
+  /// `a.b.field = value` — a field write whose receiver is itself a member
+  /// chain (`a.b`, `a.b.c`, `a.b!.c`, …), including `+=`, `??=` etc.
+  ///
+  /// Requires **two or more** segments so the single-segment
+  /// [expressionObjectFieldAssignment] keeps handling `obj.field = value`. The
+  /// leading segments are folded into the receiver exactly as in
+  /// [expressionMemberChain]; the final segment names the field being written,
+  /// so it must be a plain `.name` (not `?.` and not a call).
+  Parser<ASTExpressionObjectSetterAssignment>
+  expressionObjectFieldChainAssignment() =>
+      (variable() &
+              ref0(memberChainSegment) &
+              ref0(memberChainSegment).plus() &
+              assigmentOperator() &
+              ref0(expression))
+          .map((v) {
+            var receiverVar = v[0] as ASTVariable;
+            var segments = [v[1], ...(v[2] as List)]
+                .cast<
+                  ({
+                    bool assertReceiver,
+                    bool isNullAware,
+                    String name,
+                    ({
+                      List<ASTExpression> positional,
+                      Map<String, ASTExpression>? named,
+                    })?
+                    args,
+                  })
+                >();
+
+            var op = v[3] as ASTAssignmentOperator;
+            var valueExpr = v[4] as ASTExpression;
+
+            var last = segments.last;
+            // The write target must be a plain field access.
+            if (last.isNullAware || last.args != null) {
+              return null;
+            }
+
+            ASTExpression? current;
+            for (var seg in segments.take(segments.length - 1)) {
+              var variable = current == null
+                  ? receiverVar
+                  : ASTExpressionVariable(current);
+
+              var args = seg.args;
+              if (args != null) {
+                current = ASTExpressionObjectFunctionInvocation(
+                  variable,
+                  seg.name,
+                  args.positional,
+                  null,
+                  seg.isNullAware,
+                  seg.assertReceiver,
+                )..namedArguments = args.named;
+              } else {
+                current = ASTExpressionObjectGetterAccess(
+                  variable,
+                  seg.name,
+                  null,
+                  seg.isNullAware,
+                  seg.assertReceiver,
+                );
+              }
+            }
+
+            return ASTExpressionObjectSetterAssignment(
+              ASTExpressionVariable(current!),
+              last.name,
+              op,
+              valueExpr,
+            );
+          })
+          .where((v) => v != null)
+          .cast<ASTExpressionObjectSetterAssignment>();
 
   /// `obj.field = value` (and `this.field = value`), including `+=` etc.
   Parser<ASTExpressionObjectSetterAssignment>

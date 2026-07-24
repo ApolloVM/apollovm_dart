@@ -798,6 +798,11 @@ class ApolloCodeGeneratorKotlin extends ApolloCodeGenerator {
     }
   }
 
+  /// Kotlin has the Elvis operator `?:` but no `??=`, so a null-coalescing
+  /// assignment is generated as `t = t ?: v`.
+  @override
+  bool get supportsNullCoalesceAssignment => false;
+
   /// Kotlin writes bitwise-not as `x.inv()` (a method call), not `~x`.
   @override
   StringBuffer generateASTExpressionBitwiseNot(

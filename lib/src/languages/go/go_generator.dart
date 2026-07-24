@@ -4,6 +4,7 @@
 
 import '../../apollovm_code_generator.dart';
 import '../../apollovm_code_storage.dart';
+import '../../apollovm_parser.dart';
 import '../../ast/apollovm_ast_base.dart';
 import '../../ast/apollovm_ast_expression.dart';
 import '../../ast/apollovm_ast_statement.dart';
@@ -1238,6 +1239,29 @@ class ApolloCodeGeneratorGo extends ApolloCodeGenerator {
     }
     return getASTExpressionOperatorText(operator);
   }
+
+  /// Go has neither a null-coalescing operator nor a conditional *expression*,
+  /// and this generator maps a nullable `T?` onto a plain Go `T` — which for a
+  /// value type (`int`, `string`, …) cannot be compared to `nil` at all. Any
+  /// rendering would therefore be code that does not compile, so `??` is
+  /// reported as unsupported instead of emitted.
+  ///
+  /// Supporting it properly means representing `T?` as `*T` throughout the Go
+  /// generator (declarations, assignments and dereferences), which is a
+  /// separate piece of work.
+  @override
+  String renderNullCoalesce(String a, String b) {
+    throw UnsupportedSyntaxError(
+      'Go has no null-coalescing operator (`??`) and no conditional '
+      'expression, and a nullable `T?` is generated as a non-nullable Go `T`, '
+      'which cannot be tested against `nil`.',
+    );
+  }
+
+  /// Go has no `??=`; the lowering to `t = t ?? v` still goes through
+  /// [renderNullCoalesce], which reports it as unsupported.
+  @override
+  bool get supportsNullCoalesceAssignment => false;
 
   /// Go writes bitwise NOT as a prefix `^`.
   @override

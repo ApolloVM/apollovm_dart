@@ -724,7 +724,11 @@ class ASTExpressionVariableEntryAccess extends ASTExpression {
             cur = ASTTypeDynamic.instance;
           }
         }
-        return cur;
+        // A null-aware index (`list?[i]`) short-circuits to `null`, so its
+        // static type is the *nullable* element type. Without this a
+        // `var v = xs?[0]` on a `List<int>` would infer plain `int` and reject
+        // the short-circuited `null` at declaration time.
+        return isNullAware ? cur.asNullable() : cur;
       });
 
   @override
@@ -3019,6 +3023,22 @@ class ASTExpressionObjectFunctionInvocation
     return _functionClass!;
   }
 
+  @override
+  FutureOr<ASTType> resolveType(VMContext? context) {
+    if (context == null || !isNullAware) return super.resolveType(context);
+
+    // A null-aware invocation (`obj?.m()`) short-circuits to `null` on a null
+    // receiver, which has no class to resolve the method against. Otherwise the
+    // call can still short-circuit at another site, so its static type is the
+    // nullable form of the method's return type.
+    return _getVariableValue(context).resolveMapped((obj) {
+      if (obj is ASTValueNull) return ASTTypeNull.instance;
+      return super
+          .resolveType(context)
+          .resolveMapped((type) => type.asNullable());
+    });
+  }
+
   /// If [variable] names a whole-module import prefix (`import 'x' as p; ...
   /// p.member(...)`), resolves `member` (a top-level function or a class
   /// constructor) in the imported module. Returns `null` when the receiver is
@@ -3624,19 +3644,31 @@ class ASTExpressionObjectGetterAccess extends ASTExpressionGetterAccess
     }
 
     return _getVariableValue(context).resolveMapped((obj) {
+      // Null-aware access (`obj?.field`) on a `null` receiver evaluates to
+      // `null`, and a `null` receiver has no class to resolve the getter
+      // against — mirror `run` and report `Null` instead of trying (and
+      // throwing `Class not set for type: Null`).
+      if (isNullAware && obj is ASTValueNull) {
+        return ASTTypeNull.instance;
+      }
+
       if (obj is ASTClassInstance) {
         var classContext = obj.createContext(context);
         return obj.getField(classContext, name).resolveMapped((fieldValue) {
           if (fieldValue != null) {
-            return fieldValue.type;
+            return _nullableIf(fieldValue.type);
           }
-          return super.resolveType(context);
+          return super.resolveType(context).resolveMapped(_nullableIf);
         });
       }
 
-      return super.resolveType(context);
+      return super.resolveType(context).resolveMapped(_nullableIf);
     });
   }
+
+  /// A null-aware access can always evaluate to `null`, so its static type is
+  /// the nullable form of the accessed member's type.
+  ASTType _nullableIf(ASTType type) => isNullAware ? type.asNullable() : type;
 
   @override
   FutureOr<ASTType<dynamic>> resolveRuntimeType(
@@ -3653,17 +3685,25 @@ class ASTExpressionObjectGetterAccess extends ASTExpressionGetterAccess
     if (staticFieldType != null) return staticFieldType;
 
     return _getVariableValue(context).resolveMapped((obj) {
+      // See `resolveType`: a short-circuited null-aware access has no receiver
+      // class to resolve against.
+      if (isNullAware && obj is ASTValueNull) {
+        return ASTTypeNull.instance;
+      }
+
       if (obj is ASTClassInstance) {
         var classContext = obj.createContext(context);
         return obj.getField(classContext, name).resolveMapped((fieldValue) {
           if (fieldValue != null) {
-            return fieldValue.type;
+            return _nullableIf(fieldValue.type);
           }
-          return super.resolveRuntimeType(context, node);
+          return super
+              .resolveRuntimeType(context, node)
+              .resolveMapped(_nullableIf);
         });
       }
 
-      return super.resolveRuntimeType(context, node);
+      return super.resolveRuntimeType(context, node).resolveMapped(_nullableIf);
     });
   }
 
