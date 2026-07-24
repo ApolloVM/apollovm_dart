@@ -181,7 +181,48 @@ class ASTType<V> with ASTNode implements ASTTypedNode {
 
   final List<ASTAnnotation>? annotations;
 
-  ASTType(this.name, {this.generics, this.superType, this.annotations});
+  /// Whether this type is nullable (the Dart `?` suffix, e.g. `String?`).
+  ///
+  /// This is per-instance metadata. It must only ever be set on a fresh,
+  /// non-interned copy produced by [asNullable] — never mutated on a shared
+  /// singleton/interned instance.
+  bool nullable;
+
+  ASTType(
+    this.name, {
+    this.generics,
+    this.superType,
+    this.annotations,
+    this.nullable = false,
+  });
+
+  /// Whether this type is nullable (alias for [nullable]).
+  bool get isNullable => nullable;
+
+  /// Returns a fresh, non-interned copy of this concrete type (with
+  /// [nullable] reset to `false`). Subclasses override to preserve their
+  /// concrete class so that structural dispatch (`is ASTTypeArray`, etc.) and
+  /// typed value conversion keep working on nullable variants.
+  ASTType cloneType() => ASTType(
+    name,
+    generics: generics,
+    superType: superType,
+    annotations: annotations,
+  );
+
+  /// Returns a version of this type with the given [nullable] flag.
+  ///
+  /// Returns `this` unchanged when the flag already matches (so shared
+  /// singletons are never mutated); otherwise returns a fresh [cloneType].
+  ASTType<V> asNullable([bool nullable = true]) {
+    if (this.nullable == nullable) return this;
+    final copy = cloneType() as ASTType<V>;
+    copy.nullable = nullable;
+    return copy;
+  }
+
+  /// Returns the non-nullable form of this type.
+  ASTType<V> withoutNullability() => asNullable(false);
 
   @override
   Iterable<ASTNode> get children => [...?generics, ...?annotations, ?superType];
@@ -225,12 +266,25 @@ class ASTType<V> with ASTNode implements ASTTypedNode {
   /// Return true if [this] can be cast to [type];
   bool canCastToType(ASTType type) => type.acceptsType(this);
 
+  /// Whether a value of [type] can be assigned to a slot of [this] type,
+  /// accounting for nullability:
+  /// - `null`/`Null` is assignable only when [this] is [nullable];
+  /// - otherwise the underlying (non-nullable) types must be compatible, i.e.
+  ///   a `T?` slot accepts a `T` value.
+  bool acceptsAssignment(ASTType type) {
+    if (type is ASTTypeNull) return nullable || acceptsType(type);
+    return withoutNullability().acceptsType(type.withoutNullability());
+  }
+
   /// Will return true if [type] can be cast to [this] type.
   /// Note: This is similar to Java `isInstance` and `isAssignableFrom`.
   bool acceptsType(ASTType type) {
     if (type == this) return true;
 
     if (type == ASTTypeGenericWildcard.instance) return true;
+
+    // A nullable type accepts `Null`; a non-nullable type does not.
+    if (type is ASTTypeNull) return nullable;
 
     if (name != type.name) {
       var typeSuperType = type.superType;
@@ -308,6 +362,7 @@ class ASTType<V> with ASTNode implements ASTTypedNode {
       other is ASTType &&
           runtimeType == other.runtimeType &&
           name == other.name &&
+          nullable == other.nullable &&
           generics == other.generics &&
           superType == other.superType;
 
@@ -318,6 +373,7 @@ class ASTType<V> with ASTNode implements ASTTypedNode {
     final generics = this.generics;
 
     return name.hashCode ^
+        (nullable ? 0x40000000 : 0) ^
         (superType?.hashCode ?? 0) ^
         (generics != null ? _listEquality.hash(generics) : 0);
   }
@@ -340,7 +396,8 @@ class ASTType<V> with ASTNode implements ASTTypedNode {
 
   @override
   String toString() {
-    return generics == null ? name : '$name<${generics!.join(',')}>';
+    var s = generics == null ? name : '$name<${generics!.join(',')}>';
+    return nullable ? '$s?' : s;
   }
 }
 
@@ -373,6 +430,14 @@ class ASTTypeInterface<V> extends ASTType<V> {
   }) : super(superType: superInterface);
 
   @override
+  ASTType cloneType() => ASTTypeInterface<V>(
+    name,
+    generics: generics,
+    superInterface: superType,
+    annotations: annotations,
+  );
+
+  @override
   Iterable<ASTNode> get children => [];
 }
 
@@ -392,6 +457,9 @@ class ASTTypeBool extends ASTTypePrimitive<bool> {
   static final ASTTypeBool instance = ASTTypeBool();
 
   ASTTypeBool() : super('bool');
+
+  @override
+  ASTType cloneType() => ASTTypeBool();
 
   @override
   Iterable<ASTNode> get children => [];
@@ -469,6 +537,9 @@ class ASTTypeNum<T extends num> extends ASTTypeNumber<T> {
   ASTTypeNum() : this._('num');
 
   @override
+  ASTType cloneType() => ASTTypeNum<T>._(name, bits: bits);
+
+  @override
   Iterable<ASTNode> get children => [];
 
   @override
@@ -541,6 +612,9 @@ class ASTTypeInt extends ASTTypeNum<int> with StrictType {
   ASTTypeInt({super.bits}) : super._('int');
 
   @override
+  ASTType cloneType() => ASTTypeInt(bits: bits);
+
+  @override
   bool acceptsType(ASTType type) {
     if (type == this) return true;
     return false;
@@ -609,6 +683,9 @@ class ASTTypeDouble extends ASTTypeNum<double> with StrictType {
   static final ASTTypeDouble instance64 = ASTTypeDouble(bits: 64);
 
   ASTTypeDouble({super.bits}) : super._('double');
+
+  @override
+  ASTType cloneType() => ASTTypeDouble(bits: bits);
 
   @override
   bool acceptsType(ASTType type) {
@@ -703,6 +780,9 @@ class ASTTypeString extends ASTTypePrimitive<String> {
   ASTTypeString() : super('String');
 
   @override
+  ASTType cloneType() => ASTTypeString();
+
+  @override
   Iterable<ASTNode> get children => [];
 
   @override
@@ -760,6 +840,9 @@ class ASTTypeObject extends ASTType<Object> {
   static final ASTTypeObject instance = ASTTypeObject();
 
   ASTTypeObject() : super('Object');
+
+  @override
+  ASTType cloneType() => ASTTypeObject();
 
   @override
   Iterable<ASTNode> get children => [];
@@ -885,6 +968,9 @@ class ASTTypeVar extends ASTType<dynamic> {
 
   ASTTypeVar({this.unmodifiable = false})
     : super(unmodifiable ? 'final' : 'var');
+
+  @override
+  ASTType cloneType() => ASTTypeVar(unmodifiable: unmodifiable);
 
   @override
   Iterable<ASTNode> get children => [];
@@ -1154,6 +1240,9 @@ class ASTTypeArray<T extends ASTType<V>, V> extends ASTType<List<V>> {
 
   ASTTypeArray._(this.componentType) : super('List', generics: [componentType]);
 
+  @override
+  ASTType cloneType() => ASTTypeArray<T, V>._(componentType);
+
   factory ASTTypeArray(T type) {
     if (type is ASTTypeString) {
       return ASTTypeArray.instanceOfString as ASTTypeArray<T, V>;
@@ -1238,6 +1327,9 @@ class ASTTypeArray2D<T extends ASTType<V>, V>
     extends ASTTypeArray<ASTTypeArray<T, V>, List<V>> {
   ASTTypeArray2D(super.type) : super._();
 
+  @override
+  ASTType cloneType() => ASTTypeArray2D<T, V>(componentType);
+
   factory ASTTypeArray2D.fromElementType(ASTType<V> elementType) {
     var a1 = ASTTypeArray<T, V>._(elementType as T);
     return ASTTypeArray2D<T, V>(a1);
@@ -1283,6 +1375,10 @@ class ASTTypeArray2D<T extends ASTType<V>, V>
 class ASTTypeArray3D<T extends ASTType<V>, V>
     extends ASTTypeArray2D<ASTTypeArray<T, V>, List<V>> {
   ASTTypeArray3D(ASTTypeArray2D<T, V> super.type);
+
+  @override
+  ASTType cloneType() =>
+      ASTTypeArray3D<T, V>(componentType as ASTTypeArray2D<T, V>);
 
   factory ASTTypeArray3D.fromElementType(ASTType<V> elementType) {
     var a1 = ASTTypeArray<T, V>(elementType as T);
@@ -1357,6 +1453,9 @@ class ASTTypeMap<TK extends ASTType<K>, TV extends ASTType<V>, K, V>
 
   ASTTypeMap(this.keyType, this.valueType)
     : super('Map', generics: [keyType, valueType]);
+
+  @override
+  ASTType cloneType() => ASTTypeMap<TK, TV, K, V>(keyType, valueType);
 
   @override
   Iterable<ASTNode> get children => [keyType, valueType];
@@ -1437,6 +1536,9 @@ class ASTTypeMap<TK extends ASTType<K>, TV extends ASTType<V>, K, V>
 class ASTTypeFuture<T extends ASTType<V>, V> extends ASTType<Future<V>> {
   ASTTypeFuture(T type) : super('Future', generics: [type]);
 
+  @override
+  ASTType cloneType() => ASTTypeFuture<T, V>(futureValueType as T);
+
   /// The type of the value the [Future] resolves to (the `T` in `Future<T>`).
   ASTType get futureValueType {
     var generics = this.generics;
@@ -1471,6 +1573,14 @@ class ASTTypeFuture<T extends ASTType<V>, V> extends ASTType<Future<V>> {
 class ASTTypeFunction<F extends Function> extends ASTType<F> {
   ASTTypeFunction([ASTType? returnType, List<ASTType>? parameters])
     : super('Function', generics: [?returnType, ...?parameters]);
+
+  @override
+  ASTType cloneType() {
+    final g = generics ?? const <ASTType>[];
+    final returnType = g.isNotEmpty ? g.first : null;
+    final params = g.length > 1 ? g.sublist(1) : null;
+    return ASTTypeFunction<F>(returnType, params);
+  }
 
   /// Any function type is accepted as another function type. Function values
   /// carry their own declaration and are checked at call time, so signature

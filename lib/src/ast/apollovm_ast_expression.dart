@@ -378,6 +378,93 @@ class ASTExpressionVariableAccess extends ASTExpression {
   }
 }
 
+/// [ASTExpression] for a Dart cascade (`receiver..a()..b = c`) and the
+/// null-aware cascade (`receiver?..a()`).
+///
+/// Each section is modeled as an operation on a synthetic
+/// [targetVariableName]; at runtime the receiver is evaluated once, bound to
+/// that name in a child scope, every section is executed against it, and the
+/// whole expression evaluates to the receiver. A null-aware cascade whose
+/// receiver is `null` short-circuits to `null`.
+class ASTExpressionCascade extends ASTExpression {
+  ASTExpression receiver;
+
+  /// The synthetic variable name the [sections] operate on.
+  final String targetVariableName;
+
+  final List<ASTExpression> sections;
+
+  bool isNullAware;
+
+  ASTExpressionCascade(
+    this.receiver,
+    this.targetVariableName,
+    this.sections, {
+    this.isNullAware = false,
+  });
+
+  @override
+  bool get isComplex => true;
+
+  @override
+  Iterable<ASTNode> get children => [receiver, ...sections];
+
+  @override
+  void resolveNode(ASTNode? parentNode) {
+    super.resolveNode(parentNode);
+    receiver.resolveNode(this);
+    for (var s in sections) {
+      s.resolveNode(this);
+    }
+  }
+
+  @override
+  FutureOr<ASTType> resolveType(VMContext? context) =>
+      receiver.resolveType(context);
+
+  @override
+  FutureOr<ASTValue> run(
+    VMContext parentContext,
+    ASTRunStatus runStatus,
+  ) async {
+    var recv = await receiver.run(parentContext, runStatus);
+
+    // Null-aware cascade (`obj?..`): short-circuit to `null`.
+    if (isNullAware && await _astValueIsNull(parentContext, recv)) {
+      return ASTValueNull.instance;
+    }
+
+    var cascadeContext = VMScopeContext(ASTBlock(null), parent: parentContext);
+    cascadeContext.declareVariableWithValue(
+      recv.type,
+      targetVariableName,
+      recv,
+    );
+
+    for (var section in sections) {
+      await section.run(cascadeContext, runStatus);
+    }
+
+    return recv;
+  }
+
+  @override
+  String toString({bool asGroup = false}) {
+    var b = StringBuffer('$receiver');
+    for (var i = 0; i < sections.length; i++) {
+      var s = sections[i].toString();
+      // Strip the synthetic target so `$target.sel` prints as `.sel`; the
+      // cascade operator then supplies the extra dot (`..sel`).
+      if (s.startsWith(targetVariableName)) {
+        s = s.substring(targetVariableName.length);
+      }
+      var op = (i == 0 && isNullAware) ? '?.' : '.';
+      b.write('$op$s');
+    }
+    return b.toString();
+  }
+}
+
 /// [ASTExpression] that declares a literal (number, boolean and String).
 class ASTExpressionLiteral extends ASTExpression {
   ASTValue value;
@@ -599,10 +686,20 @@ class ASTExpressionVariableEntryAccess extends ASTExpression {
   /// entry here is applied to the previous element in order.
   final List<ASTExpression> extraIndices;
 
+  /// Whether this is a null-aware index access (`list?[i]` / `map?[k]`): if the
+  /// receiver is `null`, the access short-circuits and evaluates to `null`.
+  bool isNullAware;
+
+  /// Whether the receiver carries a null-assertion (`list![i]`): if the
+  /// receiver is `null`, indexing it throws [ApolloVMNullPointerException].
+  bool assertReceiver;
+
   ASTExpressionVariableEntryAccess(
     this.variable,
     this.expression, [
     this.extraIndices = const [],
+    this.isNullAware = false,
+    this.assertReceiver = false,
   ]);
 
   /// All index expressions in order (the first plus any chained ones).
@@ -652,6 +749,18 @@ class ASTExpressionVariableEntryAccess extends ASTExpression {
     var context = defineRunContext(parentContext);
 
     var value = await variable.getValue(context);
+
+    // Null-assertion receiver (`list![i]`): throw on null.
+    if (assertReceiver && value is ASTValueNull) {
+      throw ApolloVMNullPointerException(
+        'Null check operator used on a null value',
+      );
+    }
+
+    // Null-aware index (`list?[i]`): short-circuit to `null`.
+    if (isNullAware && value is ASTValueNull) {
+      return ASTValueNull.instance;
+    }
 
     // Single index: keep the original statically-typed read path (precise
     // element type + null-pointer diagnostics).
@@ -824,6 +933,7 @@ enum ASTExpressionOperator {
   bitwiseXor,
   shiftLeft,
   shiftRight,
+  nullCoalesce,
 }
 
 ASTExpressionOperator getASTExpressionOperator(String op) {
@@ -867,6 +977,8 @@ ASTExpressionOperator getASTExpressionOperator(String op) {
       return ASTExpressionOperator.shiftLeft;
     case '>>':
       return ASTExpressionOperator.shiftRight;
+    case '??':
+      return ASTExpressionOperator.nullCoalesce;
     default:
       throw UnsupportedError(op);
   }
@@ -913,6 +1025,8 @@ String getASTExpressionOperatorText(ASTExpressionOperator op) {
       return '<<';
     case ASTExpressionOperator.shiftRight:
       return '>>';
+    case ASTExpressionOperator.nullCoalesce:
+      return '??';
   }
 }
 
@@ -967,6 +1081,53 @@ class ASTExpressionNegation extends ASTExpression {
   @override
   String toString({bool asGroup = false}) {
     var s = '!$expression';
+    return asGroup ? '($s)' : s;
+  }
+}
+
+/// [ASTExpression] for the Dart null-assertion postfix operator (`expr!`):
+/// evaluates [expression] and throws [ApolloVMNullPointerException] if the
+/// value is `null`, otherwise returns the (non-null) value.
+class ASTExpressionNullAssertion extends ASTExpression {
+  ASTExpression expression;
+
+  ASTExpressionNullAssertion(this.expression);
+
+  @override
+  bool get isComplex => false;
+
+  @override
+  Iterable<ASTNode> get children => [expression];
+
+  @override
+  void resolveNode(ASTNode? parentNode) {
+    super.resolveNode(parentNode);
+    expression.resolveNode(this);
+  }
+
+  @override
+  FutureOr<ASTType> resolveType(VMContext? context) => expression
+      .resolveType(context)
+      .resolveMapped((t) => t.withoutNullability());
+
+  @override
+  FutureOr<ASTValue> run(VMContext parentContext, ASTRunStatus runStatus) {
+    var context = defineRunContext(parentContext);
+    return expression.run(context, runStatus).resolveMapped((val) {
+      return _astValueIsNull(context, val).resolveMapped((isNull) {
+        if (isNull) {
+          throw ApolloVMNullPointerException(
+            'Null check operator used on a null value',
+          );
+        }
+        return val;
+      });
+    });
+  }
+
+  @override
+  String toString({bool asGroup = false}) {
+    var s = '$expression!';
     return asGroup ? '($s)' : s;
   }
 }
@@ -1234,6 +1395,13 @@ class ASTExpressionAwait extends ASTExpression {
 }
 
 /// [ASTExpression] for an operation between 2 expressions.
+/// Returns whether [val] represents `null` (a `null` literal/value, or a
+/// dynamic/boxed operand whose resolved value is `null`).
+FutureOr<bool> _astValueIsNull(VMContext context, ASTValue val) {
+  if (val is ASTValueNull) return true;
+  return val.getValue(context).resolveMapped((v) => v == null);
+}
+
 class ASTExpressionOperation extends ASTExpression {
   ASTExpression expression1;
   ASTExpressionOperator operator;
@@ -1290,6 +1458,15 @@ class ASTExpressionOperation extends ASTExpression {
       case ASTExpressionOperator.and:
       case ASTExpressionOperator.or:
         return ASTTypeBool.instance;
+      case ASTExpressionOperator.nullCoalesce:
+        {
+          var retT1 = expression1.resolveType(context);
+          var retT2 = expression2.resolveType(context);
+          return retT1.resolveBoth(retT2, (t1, t2) {
+            var nn = t1.withoutNullability();
+            return nn.commonType(t2) ?? t2;
+          });
+        }
     }
   }
 
@@ -1328,6 +1505,15 @@ class ASTExpressionOperation extends ASTExpression {
       case ASTExpressionOperator.and:
       case ASTExpressionOperator.or:
         return ASTTypeBool.instance;
+      case ASTExpressionOperator.nullCoalesce:
+        {
+          var retT1 = expression1.resolveRuntimeType(context, null);
+          var retT2 = expression2.resolveRuntimeType(context, null);
+          return retT1.resolveBoth(retT2, (t1, t2) {
+            var nn = t1.withoutNullability();
+            return nn.commonType(t2) ?? t2;
+          });
+        }
     }
   }
 
@@ -1412,6 +1598,18 @@ class ASTExpressionOperation extends ASTExpression {
 
     final operator = this.operator;
 
+    // Null-coalescing (`??`): evaluate the left operand; only evaluate the
+    // right operand when the left is `null`. Result is the left value when
+    // non-null, otherwise the right value.
+    if (operator == ASTExpressionOperator.nullCoalesce) {
+      return expression1.run(context, runStatus).resolveMapped((val1) {
+        return _astValueIsNull(context, val1).resolveMapped((isNull) {
+          if (!isNull) return val1;
+          return expression2.run(context, runStatus);
+        });
+      });
+    }
+
     // Short-circuit logical operators: only evaluate the right operand when the
     // left does not already determine the result. This matches Dart semantics
     // and keeps the interpreter consistent with the Wasm compiler.
@@ -1484,6 +1682,9 @@ class ASTExpressionOperation extends ASTExpression {
               return operatorShiftLeft(parentContext, c1, c2);
             case ASTExpressionOperator.shiftRight:
               return operatorShiftRight(parentContext, c1, c2);
+            case ASTExpressionOperator.nullCoalesce:
+              // Handled by the short-circuit branch above.
+              throw StateError('unreachable: nullCoalesce');
           }
         });
       });
@@ -1951,6 +2152,18 @@ class ASTExpressionVariableAssignment extends ASTExpression {
   ) async {
     var context = defineRunContext(parentContext);
 
+    // Null-coalescing assignment (`??=`): only evaluate the right-hand side and
+    // assign when the current value is `null`; otherwise leave it unchanged.
+    if (operator == ASTAssignmentOperator.nullCoalesce) {
+      var current = await variable.getValue(context);
+      if (!await _astValueIsNull(context, current)) {
+        return current;
+      }
+      var newValue = await expression.run(context, runStatus);
+      await variable.setValue(context, newValue);
+      return newValue;
+    }
+
     var value = await expression.run(context, runStatus);
     var variableValue = await variable.getValue(context);
 
@@ -1987,6 +2200,9 @@ class ASTExpressionVariableAssignment extends ASTExpression {
           result = variableValue * value;
           break;
         }
+      case ASTAssignmentOperator.nullCoalesce:
+        // Handled by the short-circuit branch above.
+        throw StateError('unreachable: nullCoalesce');
     }
 
     await variable.setValue(context, await result);
@@ -2020,6 +2236,10 @@ class ASTExpressionVariableAssignment extends ASTExpression {
       case ASTAssignmentOperator.divideAsInt:
         {
           return '$variable ~/= $expression';
+        }
+      case ASTAssignmentOperator.nullCoalesce:
+        {
+          return '$variable ??= $expression';
         }
     }
   }
@@ -2126,6 +2346,9 @@ class ASTExpressionVariableEntryAssignment extends ASTExpression {
         ASTAssignmentOperator.divideAsInt => current ~/ value,
         ASTAssignmentOperator.multiply => current * value,
         ASTAssignmentOperator.set => value,
+        // `m[k] ??= v`: keep the current value unless it is null.
+        ASTAssignmentOperator.nullCoalesce =>
+          (await _astValueIsNull(context, current)) ? value : current,
       };
     }
 
@@ -2151,6 +2374,7 @@ class ASTExpressionVariableEntryAssignment extends ASTExpression {
       ASTAssignmentOperator.multiply => '*=',
       ASTAssignmentOperator.divide => '/=',
       ASTAssignmentOperator.divideAsInt => '~/=',
+      ASTAssignmentOperator.nullCoalesce => '??=',
     };
     var keys = [keyExpression, ...extraKeys].map((k) => '[$k]').join();
     return '$variable$keys $op $expression';
@@ -2702,11 +2926,21 @@ class ASTExpressionObjectFunctionInvocation
     extends ASTExpressionFunctionInvocation {
   ASTVariable variable;
 
+  /// Whether this is a null-aware invocation (`obj?.method(...)`): if the
+  /// receiver is `null`, the call short-circuits and evaluates to `null`.
+  bool isNullAware;
+
+  /// Whether the receiver carries a null-assertion (`obj!.method(...)`): if the
+  /// receiver is `null`, the call throws [ApolloVMNullPointerException].
+  bool assertReceiver;
+
   ASTExpressionObjectFunctionInvocation(
     this.variable,
     String name,
     List<ASTExpression> arguments, [
     List<ASTExpressionChainFunctionInvocation>? chainFunctionInvocation,
+    this.isNullAware = false,
+    this.assertReceiver = false,
   ]) : super(name, arguments, chainFunctionInvocation);
 
   @override
@@ -2866,6 +3100,31 @@ class ASTExpressionObjectFunctionInvocation
       });
     }
 
+    // Null-assertion receiver (`obj!.method(...)`): throw on null.
+    if (assertReceiver) {
+      return _getVariableValue(parentContext).resolveMapped((obj) {
+        if (obj is ASTValueNull) {
+          throw ApolloVMNullPointerException(
+            'Null check operator used on a null value',
+          );
+        }
+        return _invoke(parentContext, runStatus);
+      });
+    }
+
+    // Null-aware invocation (`obj?.method(...)`): short-circuit to `null` when
+    // the receiver is `null`, without resolving/calling the method.
+    if (isNullAware) {
+      return _getVariableValue(parentContext).resolveMapped((obj) {
+        if (obj is ASTValueNull) return ASTValueNull.instance;
+        return _invoke(parentContext, runStatus);
+      });
+    }
+
+    return _invoke(parentContext, runStatus);
+  }
+
+  FutureOr<ASTValue> _invoke(VMContext parentContext, ASTRunStatus runStatus) {
     return _getFunction(parentContext).resolveMapped((f) {
       return _resolveArgumentsValues(
         parentContext,
@@ -3190,10 +3449,20 @@ class ASTExpressionObjectGetterAccess extends ASTExpressionGetterAccess
     with WithCallChainFunction {
   ASTVariable variable;
 
+  /// Whether this is a null-aware access (`obj?.field`): if the receiver is
+  /// `null`, the access short-circuits and evaluates to `null`.
+  bool isNullAware;
+
+  /// Whether the receiver carries a null-assertion (`obj!.field`): if the
+  /// receiver is `null`, accessing it throws [ApolloVMNullPointerException].
+  bool assertReceiver;
+
   ASTExpressionObjectGetterAccess(
     this.variable,
     String name, [
     List<ASTExpressionChainFunctionInvocation>? chainFunctionInvocation,
+    this.isNullAware = false,
+    this.assertReceiver = false,
   ]) : super(name) {
     _setChainFunctionInvocation(chainFunctionInvocation);
   }
@@ -3422,6 +3691,18 @@ class ASTExpressionObjectGetterAccess extends ASTExpressionGetterAccess
     }
 
     return _getVariableValue(parentContext).resolveMapped((obj) {
+      // Null-assertion receiver (`obj!.field`): throw on null.
+      if (assertReceiver && obj is ASTValueNull) {
+        throw ApolloVMNullPointerException(
+          'Null check operator used on a null value',
+        );
+      }
+
+      // Null-aware access (`obj?.field`): short-circuit to `null`.
+      if (isNullAware && obj is ASTValueNull) {
+        return ASTValueNull.instance;
+      }
+
       if (obj is ASTClassInstance) {
         var classContext = obj.createContext(parentContext);
         return obj.getField(classContext, name).resolveMapped((fieldValue) {
@@ -3503,7 +3784,11 @@ class ASTExpressionObjectSetterAssignment extends ASTExpression {
     return null;
   }
 
-  FutureOr<ASTValue> _applyOperator(ASTValue current, ASTValue value) {
+  FutureOr<ASTValue> _applyOperator(
+    VMContext context,
+    ASTValue current,
+    ASTValue value,
+  ) {
     switch (operator) {
       case ASTAssignmentOperator.set:
         return value;
@@ -3517,6 +3802,12 @@ class ASTExpressionObjectSetterAssignment extends ASTExpression {
         return current / value;
       case ASTAssignmentOperator.divideAsInt:
         return current ~/ value;
+      case ASTAssignmentOperator.nullCoalesce:
+        // `obj.field ??= v`: keep the current value unless it is null.
+        return _astValueIsNull(
+          context,
+          current,
+        ).resolveMapped((isNull) => isNull ? value : current);
     }
   }
 
@@ -3538,7 +3829,7 @@ class ASTExpressionObjectSetterAssignment extends ASTExpression {
         var current =
             await staticClass.getStaticFieldValue(context, name) ??
             ASTValueNull.instance;
-        resultValue = await _applyOperator(current, value);
+        resultValue = await _applyOperator(context, current, value);
       }
       await staticClass.setStaticFieldValue(context, name, resultValue);
       return resultValue;
@@ -3559,7 +3850,7 @@ class ASTExpressionObjectSetterAssignment extends ASTExpression {
     var value = await expression.run(context, runStatus);
 
     var current = await _currentField(classContext, obj);
-    var resultValue = await _applyOperator(current, value);
+    var resultValue = await _applyOperator(classContext, current, value);
     await obj.setField(classContext, name, resultValue);
     return resultValue;
   }

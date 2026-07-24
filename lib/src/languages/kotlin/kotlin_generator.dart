@@ -86,6 +86,15 @@ class ApolloCodeGeneratorKotlin extends ApolloCodeGenerator {
   }
 
   @override
+  bool get supportsNullableTypeSuffix => true;
+
+  @override
+  bool get supportsNullAwareOperators => true;
+
+  @override
+  String get nullAssertionSuffix => '!!';
+
+  @override
   String normalizeTypeName(String typeName, [String? callingFunction]) {
     switch (typeName) {
       case 'int':
@@ -781,6 +790,9 @@ class ApolloCodeGeneratorKotlin extends ApolloCodeGenerator {
         return 'shl';
       case ASTExpressionOperator.shiftRight:
         return 'shr';
+      // Kotlin's null-coalescing is the Elvis operator `?:`, not `??`.
+      case ASTExpressionOperator.nullCoalesce:
+        return '?:';
       default:
         return getASTExpressionOperatorText(operator);
     }

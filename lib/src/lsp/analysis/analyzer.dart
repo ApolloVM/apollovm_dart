@@ -114,6 +114,9 @@ class Analyzer {
         ast = result.root;
         symbols = collectSymbols(ast!);
         diagnostics.addAll(_importDiagnostics(ast, text, lineIndex));
+        if (language == 'dart') {
+          diagnostics.addAll(_nullSafetyDiagnostics(ast, text, lineIndex));
+        }
       } else {
         diagnostics.add(
           _parseErrorDiagnostic(result, lineIndex, text, language),
@@ -188,6 +191,51 @@ class Analyzer {
       }
     }
     return out;
+  }
+
+  /// Runs the pragmatic null-safety analysis pass and maps its findings to LSP
+  /// diagnostics. Locations are best-effort: the finding's representative
+  /// snippet is located in the source (first match).
+  List<Diagnostic> _nullSafetyDiagnostics(
+    ASTRoot ast,
+    String text,
+    LineIndex lineIndex,
+  ) {
+    final out = <Diagnostic>[];
+    List<NullSafetyDiagnostic> findings;
+    try {
+      findings = NullSafetyAnalyzer().analyze(ast);
+    } catch (_) {
+      // The analysis pass is best-effort; never let it break diagnostics.
+      return out;
+    }
+
+    for (final f in findings) {
+      final snippet = f.snippet;
+      final range = (snippet != null && text.contains(snippet))
+          ? _locate(text, snippet, lineIndex)
+          : lineIndex.rangeAt(0, 1);
+      out.add(
+        Diagnostic(
+          range: range,
+          message: f.message,
+          severity: _severityOf(f.severity),
+          code: f.code,
+        ),
+      );
+    }
+    return out;
+  }
+
+  int _severityOf(NullSafetySeverity s) {
+    switch (s) {
+      case NullSafetySeverity.error:
+        return DiagnosticSeverity.error;
+      case NullSafetySeverity.warning:
+        return DiagnosticSeverity.warning;
+      case NullSafetySeverity.info:
+        return DiagnosticSeverity.information;
+    }
   }
 
   Range _locate(String text, String needle, LineIndex lineIndex) {

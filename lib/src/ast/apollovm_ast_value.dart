@@ -89,18 +89,18 @@ abstract class ASTValue<T> with ASTNode implements ASTTypedNode {
 
     var valueType = resolveType(context);
     if (valueType is ASTType) {
-      return type.acceptsType(valueType);
+      return type.acceptsAssignment(valueType);
     } else {
       var value = context != null ? getValue(context) : getValueNoContext();
       var actualValueType = ASTType.from(value);
-      return type.acceptsType(actualValueType);
+      return type.acceptsAssignment(actualValueType);
     }
   }
 
   FutureOr<bool> isInstanceOfAsync(ASTType type) {
     var context = VMContext.getCurrent();
     return resolveType(context).resolveMapped((valueType) {
-      return type.acceptsType(valueType);
+      return type.acceptsAssignment(valueType);
     });
   }
 

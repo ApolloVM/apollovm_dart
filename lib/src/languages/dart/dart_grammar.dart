@@ -1162,9 +1162,19 @@ class DartGrammarDefinition extends DartGrammarLexer {
             );
           });
 
+  /// A primary expression optionally followed by the postfix null-assertion
+  /// operator (`expr!`). The `!` is only consumed when it is not the start of
+  /// `!=` (guarded by `char('=').not()`).
+  Parser<ASTExpression> expressionUnaryPostfix() =>
+      (ref0(expressionNoOperation) & (char('!') & char('=').not()).optional())
+          .map((v) {
+            var exp = v[0] as ASTExpression;
+            return v[1] != null ? ASTExpressionNullAssertion(exp) : exp;
+          });
+
   Parser<ASTExpression> expressionOperationChain() =>
-      (ref0(expressionNoOperation) &
-              (expressionOperator() & ref0(expressionNoOperation)).star())
+      (ref0(expressionUnaryPostfix) &
+              (expressionOperator() & ref0(expressionUnaryPostfix)).star())
           .map((v) {
             var exp1 = v[0];
 
@@ -1196,6 +1206,9 @@ class DartGrammarDefinition extends DartGrammarLexer {
               char('%') |
               string('&&') |
               string('||') |
+              // `??` must be matched before `?` disambiguation and before the
+              // single `&`/`|` operators; it is the null-coalescing operator.
+              string('??') |
               char('&') |
               char('|') |
               char('^'))
@@ -1212,8 +1225,88 @@ class DartGrammarDefinition extends DartGrammarLexer {
       (awaitToken() & (ref0(expressionNoOperation) | ref0(expressionGroup)))
           .map((v) => ASTExpressionAwait(v[1] as ASTExpression));
 
+  /// Synthetic variable name the cascade sections operate on. Stripped again
+  /// when the cascade is rendered back to source (see [ASTExpressionCascade]).
+  static const String cascadeTargetName = r'$cascadeTarget';
+
+  /// A cascade expression: `receiver..sel..sel` (and null-aware `receiver?..`).
+  /// Requires at least one `..`/`?..` section, so it never matches a plain
+  /// primary and can safely be tried first.
+  Parser<ASTExpression> expressionCascade() =>
+      ((expressionFunctionInvocation() |
+                      variable().map((v) => ASTExpressionVariableAccess(v)))
+                  .cast<ASTExpression>() &
+              cascadeSection().plus())
+          .map((v) {
+            var receiver = v[0] as ASTExpression;
+            var sectionsRaw = v[1] as List;
+            var isNullAware = false;
+            var sections = <ASTExpression>[];
+            for (var i = 0; i < sectionsRaw.length; i++) {
+              var rec =
+                  sectionsRaw[i]
+                      as ({bool isNullAware, ASTExpression selector});
+              if (i == 0) isNullAware = rec.isNullAware;
+              sections.add(rec.selector);
+            }
+            return ASTExpressionCascade(
+              receiver,
+              cascadeTargetName,
+              sections,
+              isNullAware: isNullAware,
+            );
+          });
+
+  Parser<({bool isNullAware, ASTExpression selector})> cascadeSection() =>
+      ((string('?..') | string('..')) & cascadeSelector()).map((v) {
+        return (isNullAware: v[0] == '?..', selector: v[1] as ASTExpression);
+      });
+
+  /// A single cascade selector applied to the implicit target: a method call
+  /// (`m(args)`), a setter (`f = v`, `f += v`), or a getter (`g`).
+  Parser<ASTExpression> cascadeSelector() =>
+      (identifier() &
+              ((char('(').trimHidden() &
+                          ref0(callArguments).optional() &
+                          char(')').trimHidden()) |
+                      (assigmentOperator() & ref0(expression)))
+                  .optional())
+          .map((v) {
+            var name = v[0] as String;
+            var rest = v[1];
+            var target = ASTScopeVariable(cascadeTargetName);
+
+            if (rest is List && rest.isNotEmpty && rest[0] == '(') {
+              var argsRec =
+                  rest[1]
+                      as ({
+                        List<ASTExpression> positional,
+                        Map<String, ASTExpression>? named,
+                      })?;
+              var args = argsRec?.positional ?? <ASTExpression>[];
+              var named = argsRec?.named;
+              return ASTExpressionObjectFunctionInvocation(
+                target,
+                name,
+                args,
+                const [],
+                false,
+              )..namedArguments = named;
+            } else if (rest is List && rest[0] is ASTAssignmentOperator) {
+              return ASTExpressionObjectSetterAssignment(
+                target,
+                name,
+                rest[0] as ASTAssignmentOperator,
+                rest[1] as ASTExpression,
+              );
+            } else {
+              return ASTExpressionObjectGetterAccess(target, name);
+            }
+          });
+
   Parser<ASTExpression> expressionNoOperation() =>
-      (expressionAwait() |
+      (expressionCascade() |
+              expressionAwait() |
               expressionAnonymousFunction() |
               expressionNegate() |
               expressionBitwiseNot() |
@@ -1303,7 +1396,8 @@ class DartGrammarDefinition extends DartGrammarLexer {
       // keyword is consumed and discarded — `new User()` and `User()` both
       // resolve to the class constructor via `ASTRoot.getFunction`.
       (newToken().optional() &
-              (identifier() & char('.')).optional() &
+              (identifier() & char('!').optional() & (string('?.') | char('.')))
+                  .optional() &
               identifier() &
               ref0(typeArguments).optional() &
               char('(').trimHidden() &
@@ -1313,6 +1407,8 @@ class DartGrammarDefinition extends DartGrammarLexer {
           .map((v) {
             var objOpt = v[1] as List?;
             var obj = objOpt != null ? objOpt[0] as String : null;
+            var assertReceiver = objOpt != null && objOpt[1] == '!';
+            var isNullAware = objOpt != null && objOpt[2] == '?.';
             var name = v[2] as String;
             // v[3]: optional generic type arguments (`<int>`), discarded — the
             // constructor/function resolves by name.
@@ -1335,6 +1431,8 @@ class DartGrammarDefinition extends DartGrammarLexer {
                 name,
                 args,
                 chainFunctions,
+                isNullAware,
+                assertReceiver,
               )..namedArguments = named;
             } else {
               return ASTExpressionLocalFunctionInvocation(
@@ -1346,13 +1444,15 @@ class DartGrammarDefinition extends DartGrammarLexer {
           });
 
   Parser<ASTExpressionGetterAccess> expressionGetterAccess() =>
-      ((identifier() & char('.')) &
+      ((identifier() & char('!').optional() & (string('?.') | char('.'))) &
               identifier().trimHidden() &
               expressionChainFunctionInvocation().star())
           .map((v) {
             var obj = v[0] as String?;
-            var name = v[2] as String;
-            var chainFunctions = (v[3] as List)
+            var assertReceiver = v[1] == '!';
+            var isNullAware = v[2] == '?.';
+            var name = v[3] as String;
+            var chainFunctions = (v[4] as List)
                 .whereType<ASTExpressionChainFunctionInvocation>()
                 .toList();
 
@@ -1365,6 +1465,8 @@ class DartGrammarDefinition extends DartGrammarLexer {
               variable,
               name,
               chainFunctions,
+              isNullAware,
+              assertReceiver,
             );
           });
 
@@ -1392,21 +1494,26 @@ class DartGrammarDefinition extends DartGrammarLexer {
 
   Parser<ASTExpressionVariableEntryAccess> expressionVariableEntryAccess() =>
       (variable() &
-              char('[') &
+              char('!').optional() &
+              (string('?[') | char('[')) &
               ref0(expression) &
               char(']') &
               (char('[').trimHidden() & ref0(expression) & char(']')).star())
           .map((v) {
             var variable = v[0];
-            var expression = v[2];
+            var assertReceiver = v[1] == '!';
+            var isNullAware = v[2] == '?[';
+            var expression = v[3];
             // Chained `[..]` accesses for nested indexing (`m[0][1]`).
-            var extra = (v[4] as List)
+            var extra = (v[5] as List)
                 .map((e) => (e as List)[1] as ASTExpression)
                 .toList();
             return ASTExpressionVariableEntryAccess(
               variable,
               expression,
               extra,
+              isNullAware,
+              assertReceiver,
             );
           });
 
@@ -1639,12 +1746,13 @@ class DartGrammarDefinition extends DartGrammarLexer {
           });
 
   Parser<ASTAssignmentOperator> assigmentOperator() =>
-      (char('=') |
+      (string('??=') |
               string('+=') |
               string('-=') |
               string('*=') |
               string('/=') |
-              string('~/='))
+              string('~/=') |
+              char('='))
           .trimHidden()
           .map((v) {
             return getASTAssignmentOperator(v);
@@ -1761,7 +1869,14 @@ class DartGrammarDefinition extends DartGrammarLexer {
           });
 
   Parser<ASTType> type() =>
-      (functionType() | typeNonFunction()).cast<ASTType>();
+      ((functionType() | typeNonFunction()).cast<ASTType>() &
+              char('?').trimHidden().optional())
+          .map((v) {
+            var t = v[0] as ASTType;
+            // A trailing `?` marks the whole type nullable (`String?`,
+            // `List<int>?`, `void Function()?`).
+            return v[1] != null ? t.asNullable() : t;
+          });
 
   /// Any type except a function type (used as the return type of a function
   /// type, and as the fallback when there is no trailing `Function(...)`).
@@ -1782,13 +1897,16 @@ class DartGrammarDefinition extends DartGrammarLexer {
 
   Parser<ASTType> functionTypeWithReturn() =>
       (ref0(typeNonFunction) &
+              char('?').trimHidden().optional() &
               string('Function').trim() &
               char('(').trimHidden() &
               functionTypeParameters().optional() &
               char(')').trimHidden())
           .map((v) {
             var returnType = v[0] as ASTType;
-            var parameters = v[3] as List<ASTType>?;
+            // A nullable return type (`String? Function(int)`).
+            if (v[1] != null) returnType = returnType.asNullable();
+            var parameters = v[4] as List<ASTType>?;
             return ASTTypeFunction(returnType, parameters);
           });
 

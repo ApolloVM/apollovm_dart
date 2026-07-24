@@ -3711,6 +3711,12 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       );
     }
 
+    // Null-coalescing (`a ?? b`): Wasm values are never `null`, so the left
+    // operand always determines the result — compile it and drop the right.
+    if (expression.operator == ASTExpressionOperator.nullCoalesce) {
+      return generateASTExpression(expression1, out: out, context: context);
+    }
+
     final stackLng0 = context.stackLength;
 
     var exp1Out = generateASTExpression(expression1, context: context);
@@ -4961,6 +4967,10 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
         return ASTExpressionOperator.divideAsInt;
       case ASTAssignmentOperator.set:
         throw ArgumentError("`set` is not a compound operator");
+      case ASTAssignmentOperator.nullCoalesce:
+        throw UnimplementedError(
+          "Wasm `??=` (null-coalescing assignment) is not supported yet.",
+        );
     }
   }
 
@@ -9369,6 +9379,14 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     } else if (expression is ASTExpressionLiteralFunction) {
       return generateASTExpressionLiteralFunction(
         expression,
+        out: out,
+        context: context,
+      );
+    } else if (expression is ASTExpressionNullAssertion) {
+      // Wasm's numeric domain has no `null`, so a null-assertion (`x!`) can
+      // never fail here — compile it as the inner expression.
+      return generateASTExpression(
+        expression.expression,
         out: out,
         context: context,
       );

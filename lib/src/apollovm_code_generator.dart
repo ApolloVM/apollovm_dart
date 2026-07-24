@@ -369,22 +369,42 @@ abstract class ApolloCodeGenerator
   }
 
   /// Emits a type, dispatching on its array rank.
+  /// Whether this target renders a nullable type with a trailing `?` suffix
+  /// (Dart, Kotlin, TypeScript). Targets without a nullable-type syntax
+  /// (Java, Go, …) leave this `false` and drop the suffix (best-effort).
+  bool get supportsNullableTypeSuffix => false;
+
+  /// Whether this target has native null-aware operators (`?.`, `?[`) that can
+  /// be emitted directly (Dart, Kotlin, TypeScript). Targets without them leave
+  /// this `false` and emit the plain `.`/`[` form (best-effort).
+  bool get supportsNullAwareOperators => false;
+
   StringBuffer generateASTType(
     ASTType type, {
     StringBuffer? out,
     String indent = '',
   }) {
+    out ??= newOutput();
+
     if (type is ASTTypeArray) {
-      return generateASTTypeArray(type, out: out, indent: indent);
+      generateASTTypeArray(type, out: out, indent: indent);
     } else if (type is ASTTypeArray2D) {
-      return generateASTTypeArray2D(type, out: out, indent: indent);
+      generateASTTypeArray2D(type, out: out, indent: indent);
     } else if (type is ASTTypeArray3D) {
-      return generateASTTypeArray3D(type, out: out, indent: indent);
+      generateASTTypeArray3D(type, out: out, indent: indent);
     } else if (type is ASTTypeFunction) {
-      return generateASTTypeFunction(type, out: out, indent: indent);
+      generateASTTypeFunction(type, out: out, indent: indent);
+    } else {
+      generateASTTypeDefault(type, out: out, indent: indent);
     }
 
-    return generateASTTypeDefault(type, out: out, indent: indent);
+    // Nullable `?` suffix (`String?`, `List<int>?`, `void Function()?`) for
+    // targets that support it.
+    if (type.nullable && supportsNullableTypeSuffix) {
+      out.write('?');
+    }
+
+    return out;
   }
 
   /// Renders a function type. The default drops the signature generics and
@@ -1448,6 +1468,20 @@ abstract class ApolloCodeGenerator
         indent: indent,
         headIndented: headIndented,
       );
+    } else if (expression is ASTExpressionNullAssertion) {
+      return generateASTExpressionNullAssertion(
+        expression,
+        out: out,
+        indent: indent,
+        headIndented: headIndented,
+      );
+    } else if (expression is ASTExpressionCascade) {
+      return generateASTExpressionCascade(
+        expression,
+        out: out,
+        indent: indent,
+        headIndented: headIndented,
+      );
     } else if (expression is ASTExpressionNegation) {
       return generateASTExpressionNegation(
         expression,
@@ -1817,6 +1851,83 @@ abstract class ApolloCodeGenerator
     return out;
   }
 
+  /// Renders a cascade (`receiver..sel..sel`, `receiver?..sel`). Each section
+  /// operates on the synthetic cascade target; rendering the section yields
+  /// `<target>.sel`, so the target prefix is stripped and the cascade operator
+  /// supplies the extra dot. Targets without cascades still emit valid (if less
+  /// idiomatic) output for the common single-section forms.
+  StringBuffer generateASTExpressionCascade(
+    ASTExpressionCascade expression, {
+    StringBuffer? out,
+    String indent = '',
+    bool headIndented = true,
+  }) {
+    out ??= newOutput();
+
+    if (headIndented) out.write(indent);
+
+    generateASTExpression(
+      expression.receiver,
+      out: out,
+      indent: indent,
+      headIndented: false,
+    );
+
+    final target = expression.targetVariableName;
+    final sections = expression.sections;
+
+    for (var i = 0; i < sections.length; i++) {
+      var s = generateASTExpression(
+        sections[i],
+        headIndented: false,
+      ).toString();
+      // Strip the synthetic target so `<target>.sel` becomes `.sel`.
+      if (s.startsWith(target)) {
+        s = s.substring(target.length);
+      }
+      var op = (i == 0 && expression.isNullAware && supportsNullAwareOperators)
+          ? '?.'
+          : '.';
+      out.write(op);
+      out.write(s);
+    }
+
+    return out;
+  }
+
+  /// The postfix null-assertion token for this target (`!` for Dart/TypeScript,
+  /// `!!` for Kotlin). Only emitted when [supportsNullAwareOperators] is true.
+  String get nullAssertionSuffix => '!';
+
+  /// The opening token for a null-aware index access (`?[` for Dart, `?.[` for
+  /// TypeScript). Only used when [supportsNullAwareOperators] is true.
+  String get nullAwareIndexOpen => '?[';
+
+  StringBuffer generateASTExpressionNullAssertion(
+    ASTExpressionNullAssertion expression, {
+    StringBuffer? out,
+    String indent = '',
+    bool headIndented = true,
+  }) {
+    out ??= newOutput();
+
+    if (headIndented) out.write(indent);
+
+    final inner = expression.expression;
+    final group = inner.isComplex;
+
+    if (group) out.write('(');
+    generateASTExpression(inner, out: out, indent: indent, headIndented: false);
+    if (group) out.write(')');
+
+    // Best-effort: targets without a null-assertion operator drop it.
+    if (supportsNullAwareOperators) {
+      out.write(nullAssertionSuffix);
+    }
+
+    return out;
+  }
+
   @override
   StringBuffer generateASTExpressionNegation(
     ASTExpressionNegation expression, {
@@ -1980,7 +2091,12 @@ abstract class ApolloCodeGenerator
       indent: indent,
       headIndented: false,
     );
-    out.write('.');
+    if (expression.assertReceiver && supportsNullAwareOperators) {
+      out.write(nullAssertionSuffix);
+    }
+    out.write(
+      expression.isNullAware && supportsNullAwareOperators ? '?.' : '.',
+    );
 
     final arguments = expression.arguments;
 
@@ -2159,7 +2275,12 @@ abstract class ApolloCodeGenerator
       indent: indent,
       headIndented: false,
     );
-    out.write('.');
+    if (expression.assertReceiver && supportsNullAwareOperators) {
+      out.write(nullAssertionSuffix);
+    }
+    out.write(
+      expression.isNullAware && supportsNullAwareOperators ? '?.' : '.',
+    );
 
     out.write(getterName);
 
@@ -2271,7 +2392,14 @@ abstract class ApolloCodeGenerator
       indent: indent,
       headIndented: headIndented,
     );
-    out.write('[');
+    if (expression.assertReceiver && supportsNullAwareOperators) {
+      out.write(nullAssertionSuffix);
+    }
+    out.write(
+      expression.isNullAware && supportsNullAwareOperators
+          ? nullAwareIndexOpen
+          : '[',
+    );
     generateASTExpression(
       expression.expression,
       out: out,
