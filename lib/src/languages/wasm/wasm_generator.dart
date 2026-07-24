@@ -127,6 +127,15 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       module.ensureAllocFunction();
     }
 
+    // A `null` literal is a boxed-`Object` pointer, so unifying it with a
+    // concrete value (`c ? 1 : null`, `[1, null, 3]`, `a ?? 99`) boxes that
+    // value — which allocates. `__alloc` has to exist before the Code section
+    // is written, and the boxing is only discovered while writing it, so look
+    // ahead for a `null` in any function body.
+    if (_hasNullLiteral(module)) {
+      module.ensureAllocFunction();
+    }
+
     // Body-first: generate the Code section first so that body codegen can
     // register host imports and string literals on [module]; the Type/Import/
     // Memory/Data sections below then reflect what was discovered.
@@ -426,8 +435,16 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     // A plain `num` (TS/JS `number`) is represented as i64 (int), so tag it as
     // int — NOT as `Object` (5), so the host passes a raw i64, not a box.
     if (t is ASTTypeNum) return 1;
-    return 5;
+    // `Object`/`dynamic` (5) is a *boxed* value the runner must decode. Anything
+    // else reaching here is a class instance, whose value is a bare pointer —
+    // tagged separately (8) so the runner doesn't try to read it as a box.
+    if (_isObjectTypeStatic(t) || t is ASTTypeNull) return 5;
+    return 8;
   }
+
+  /// Static form of `_isObjectType`, for use from [_typeTag].
+  static bool _isObjectTypeStatic(ASTType t) =>
+      t is ASTTypeObject || t is ASTTypeDynamic;
 
   /// Encodes a type as a descriptor for the `apollovm_sig` section. Scalars are
   /// a single tag byte; a list is `[6, <element tag>]` and a map is
@@ -464,6 +481,23 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
         // knows to pass a host-allocated box (not a raw scalar).
         if (needs(p.type)) return true;
       }
+    }
+    return false;
+  }
+
+  /// Whether any function body contains a `null` literal.
+  bool _hasNullLiteral(WasmModuleContext module) {
+    bool scan(ASTNode node, int depth) {
+      if (node is ASTExpressionNullValue) return true;
+      if (depth > 64) return false; // depth guard against a cyclic AST
+      for (final child in node.children) {
+        if (scan(child, depth + 1)) return true;
+      }
+      return false;
+    }
+
+    for (var f in module.functions) {
+      if (scan(f, 0)) return true;
     }
     return false;
   }
@@ -2158,12 +2192,24 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
   /// [_boxTagInstance]). A concrete class type stays a bare instance pointer.
   bool _isObjectType(ASTType t) => t is ASTTypeObject || t is ASTTypeDynamic;
 
+  /// Whether a slot of type [t] can hold the Wasm `null` (the boxed-`Object`
+  /// pointer 0). `var` counts: its type is inferred from the initializer, which
+  /// for a `null`-bearing expression resolves to a boxed `Object`.
+  bool _acceptsWasmNull(ASTType t) => _isObjectType(t) || t is ASTTypeVar;
+
   // Boxed-`Object` tags (must match `wasm_runner.dart`'s `_boxTag*`).
   static const int _boxTagInt = 1;
   static const int _boxTagDouble = 2;
   static const int _boxTagBool = 3;
   static const int _boxTagString = 4;
   static const int _boxTagInstance = 5;
+
+  /// The boxed-`Object` pointer representing `null`.
+  ///
+  /// The heap never allocates at address 0, so 0 is a free sentinel: `null`
+  /// needs no cell, and any real box compares unequal to it. Must match
+  /// `wasm_runner.dart`'s `_boxPtrNull`.
+  static const int _boxPtrNull = 0;
 
   // Boxed-`Object` cell layout (16 bytes).
   static const int _boxSize = 16;
@@ -3574,22 +3620,44 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       );
     }
 
+    // A `null` arm is the boxed-Object pointer 0, so the whole conditional has
+    // to yield a boxed `Object` — otherwise the other arm's concrete value
+    // (an i64 `int`, say) would disagree with the block's result type and
+    // produce a module that fails to validate.
+    if (expression.valueIfTrue is ASTExpressionNullValue ||
+        expression.valueIfFalse is ASTExpressionNullValue) {
+      resultType = ASTTypeObject.instance;
+    }
+
     out.write(
       Wasm.ifInstruction(resultType.wasmType),
       description: "[OP] conditional (ternary): $expression",
     );
     context.stackDrop(_astTypeInt32);
 
-    // `then` branch value.
+    // `then` branch value, coerced to the block's result type (the two arms can
+    // differ — e.g. `c ? 1 : null` mixes an `int` with a boxed `null`).
     generateASTExpression(expression.valueIfTrue, out: out, context: context);
+    _autoConvertStackTypes(
+      context.stackGet(0)!.type,
+      resultType,
+      out: out,
+      context: context,
+    );
     // The two branches are mutually exclusive: drop the `then` result from the
     // virtual stack before generating the `else` branch.
     context.stackDrop();
 
     out.writeByte(Wasm.elseInstruction, description: "[OP] conditional else");
 
-    // `else` branch value.
+    // `else` branch value, coerced the same way.
     generateASTExpression(expression.valueIfFalse, out: out, context: context);
+    _autoConvertStackTypes(
+      context.stackGet(0)!.type,
+      resultType,
+      out: out,
+      context: context,
+    );
 
     out.writeByte(Wasm.end, description: "[OP] conditional end");
 
@@ -3711,10 +3779,48 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       );
     }
 
-    // Null-coalescing (`a ?? b`): Wasm values are never `null`, so the left
-    // operand always determines the result — compile it and drop the right.
+    // Null-coalescing (`a ?? b`).
     if (expression.operator == ASTExpressionOperator.nullCoalesce) {
-      return generateASTExpression(expression1, out: out, context: context);
+      generateASTExpression(expression1, out: out, context: context);
+      var leftType = context.stackGet(0)!.type;
+
+      // In the numeric domain a value can never be null, so the left operand
+      // always determines the result and the right one is dropped.
+      if (!_isObjectType(leftType)) return out;
+
+      // A boxed value *can* be the null pointer, so test it and fall back to
+      // the right operand. The result is boxed either way.
+      var leftTmp = context.scratchLocal(_astTypeString, 78); // i32 box ptr
+      out.write(
+        Wasm.localSet(leftTmp),
+        description: "[OP] `??`: stash left operand",
+      );
+      context.stackDrop();
+
+      out.write(Wasm.localGet(leftTmp));
+      out.write(Wasm32.i32Const(_boxPtrNull));
+      out.writeByte(Wasm32.i32Equals, description: "[OP] `??`: left is null?");
+      out.write(Wasm.ifInstruction(WasmType.i32Type));
+
+      // then: the left operand is null — evaluate the right one, boxed.
+      generateASTExpression(expression2, out: out, context: context);
+      _autoConvertStackTypes(
+        context.stackGet(0)!.type,
+        ASTTypeObject.instance,
+        out: out,
+        context: context,
+      );
+      context.stackDrop();
+
+      out.writeByte(Wasm.elseInstruction);
+      out.write(
+        Wasm.localGet(leftTmp),
+        description: "[OP] `??`: left operand (non-null)",
+      );
+      out.writeByte(Wasm.end);
+
+      context.stackPush(ASTTypeObject.instance, "`??` result");
+      return out;
     }
 
     final stackLng0 = context.stackLength;
@@ -4242,8 +4348,24 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     BytesOutput? out,
     WasmContext? context,
   }) {
-    // TODO: implement generateASTExpressionNullValue
-    throw UnimplementedError("generateASTExpressionNullValue");
+    out ??= newOutput();
+    context ??= WasmContext();
+
+    // `null` is the boxed-`Object` pointer 0 (see [_boxPtrNull]): the heap never
+    // hands out address 0, so it is distinguishable from every real box, and it
+    // needs no allocation. It types as `Object`, so it unifies with any other
+    // boxed value — e.g. the two arms of `c ? args[0] : null`.
+    //
+    // Wasm has no null in its *numeric* domain, so this only works where the
+    // value stays boxed; a `null` flowing into an `int`/`double` slot still
+    // fails, at the point of that conversion.
+    out.write(
+      Wasm32.i32Const(_boxPtrNull),
+      description: "[OP] null (boxed Object pointer 0)",
+    );
+    context.stackPush(ASTTypeObject.instance, "null");
+
+    return out;
   }
 
   @override
@@ -9146,6 +9268,20 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       return out;
     }
 
+    // `null` exists only in the boxed-`Object` domain (see
+    // [generateASTExpressionNullValue]). A slot with a concrete Wasm
+    // representation — `int` as i64, `double` as f64, `String` as a string
+    // pointer — has no encoding for it, so refuse the declaration explicitly
+    // rather than emit a module that fails to validate.
+    if (value is ASTExpressionNullValue && !_acceptsWasmNull(statement.type)) {
+      throw UnsupportedSyntaxError(
+        "Wasm has no null value for `${statement.type}`: can't compile "
+        "`${statement.type} ${statement.name} = null`. Wasm represents `null` "
+        "only in the boxed-`Object` domain, so declare the variable as `var` / "
+        "`Object?` / `dynamic`, or give it a non-null initial value.",
+      );
+    }
+
     var name = statement.name;
 
     // A capture-free closure assigned to a call-only `var` carries no function
@@ -10148,6 +10284,19 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     );
     var truePtr = module.internStringLiteral('true');
     var falsePtr = module.internStringLiteral('false');
+    var nullPtr = module.internStringLiteral('null');
+
+    // if (box == null) -> "null". Checked first: a null box has no cell, so its
+    // tag must not be dereferenced.
+    out.write(Wasm.localGet(boxLocal));
+    out.write(Wasm32.i32Const(_boxPtrNull));
+    out.writeByte(Wasm32.i32Equals);
+    out.write(Wasm.ifInstruction(WasmType.i32Type));
+    out.write(
+      Wasm32.i32Const(nullPtr),
+      description: "[OP] box null -> \"null\"",
+    );
+    out.writeByte(Wasm.elseInstruction);
 
     // if (tag == int)
     out.write(Wasm.localGet(tagLocal));
@@ -10218,6 +10367,7 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     out.writeByte(Wasm.end); // bool
     out.writeByte(Wasm.end); // double
     out.writeByte(Wasm.end); // int
+    out.writeByte(Wasm.end); // null
 
     context.stackDrop(); // box ptr consumed
     context.stackPush(_astTypeString, "Object box to string");

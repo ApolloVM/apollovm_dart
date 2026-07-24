@@ -93,13 +93,29 @@ class NullSafetyAnalyzer {
       final value = stmt.value;
       if (value != null) {
         _analyzeExpression(value, scope);
-        if (value is ASTExpressionNullValue && !_isNullableSlot(stmt.type)) {
-          _add(
-            "A value of type 'Null' can't be assigned to the non-nullable "
-            "variable '${stmt.name}' of type '${stmt.type.name}'.",
-            code: 'null-to-non-nullable',
-            snippet: '${stmt.name} = null',
-          );
+        if (!_isNullableSlot(stmt.type)) {
+          if (value is ASTExpressionNullValue) {
+            _add(
+              "A value of type 'Null' can't be assigned to the non-nullable "
+              "variable '${stmt.name}' of type '${stmt.type.name}'.",
+              code: 'null-to-non-nullable',
+              snippet: '${stmt.name} = null',
+            );
+          } else {
+            // A nullable *variable* flowing into a non-nullable slot
+            // (`int x = a;` where `a` is `int?`) is the same error one step
+            // removed, and is only safe behind `!`, `??` or a null check.
+            final name = _nullableVariableRead(value, scope);
+            if (name != null) {
+              _add(
+                "A nullable value ('$name') can't be assigned to the "
+                "non-nullable variable '${stmt.name}' of type "
+                "'${stmt.type.name}'. Use '??', '!' or a null check.",
+                code: 'nullable-to-non-nullable',
+                snippet: '${stmt.name} = $name',
+              );
+            }
+          }
         }
       }
       scope.declare(stmt.name, stmt.type.nullable);
@@ -216,6 +232,8 @@ class NullSafetyAnalyzer {
           snippet: 'null!',
         );
       }
+    } else if (expr is ASTExpressionOperation) {
+      _checkOperationOperands(expr, scope);
     } else if (expr is ASTExpressionVariableAssignment) {
       // A reassignment invalidates promotion for that variable.
       final v = expr.variable;
@@ -250,6 +268,63 @@ class NullSafetyAnalyzer {
       code: 'unchecked-nullable-access',
       snippet: access,
     );
+  }
+
+  /// The name of the variable [expr] reads, when that variable is declared
+  /// nullable and has not been promoted by a preceding null check — i.e. the
+  /// expression can be `null` here. Otherwise `null`.
+  ///
+  /// Only a bare variable read qualifies: `x!` is an [ASTExpressionNullAssertion]
+  /// and `x ?? 0` an [ASTExpressionOperation], so both correctly fall through.
+  String? _nullableVariableRead(ASTExpression expr, _Scope scope) {
+    if (expr is! ASTExpressionVariableAccess) return null;
+
+    final v = expr.variable;
+    if (v is! ASTScopeVariable) return null;
+
+    final name = v.name;
+    if (scope.declaredNullable(name) != true) return null;
+    if (scope.isPromoted(name)) return null;
+
+    return name;
+  }
+
+  /// Reports a nullable operand used in an operation that would dereference it.
+  ///
+  /// `??`, `==` and `!=` are exempt: a nullable operand is exactly what they
+  /// exist to handle.
+  void _checkOperationOperands(ASTExpressionOperation expr, _Scope scope) {
+    final op = expr.operator;
+    if (op == ASTExpressionOperator.nullCoalesce ||
+        op == ASTExpressionOperator.equals ||
+        op == ASTExpressionOperator.notEquals) {
+      return;
+    }
+
+    // The diagnostic range is located by searching the source for the snippet,
+    // so pair the operand with the operator: a bare name like `x` would match
+    // its own declaration line instead of the operation.
+    final opText = getASTExpressionOperatorText(op);
+
+    final left = _nullableVariableRead(expr.expression1, scope);
+    if (left != null) {
+      _add(
+        "The operand '$left' can be 'null', so it can't be used in an "
+        "operation unconditionally. Use '??', '!' or a null check.",
+        code: 'unchecked-nullable-operand',
+        snippet: '$left $opText',
+      );
+    }
+
+    final right = _nullableVariableRead(expr.expression2, scope);
+    if (right != null) {
+      _add(
+        "The operand '$right' can be 'null', so it can't be used in an "
+        "operation unconditionally. Use '??', '!' or a null check.",
+        code: 'unchecked-nullable-operand',
+        snippet: '$opText $right',
+      );
+    }
   }
 
   /// Whether a declared slot [type] accepts `null` without a diagnostic
