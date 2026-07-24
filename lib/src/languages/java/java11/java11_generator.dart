@@ -401,6 +401,16 @@ class ApolloCodeGeneratorJava11 extends ApolloCodeGenerator {
     return getASTExpressionOperatorText(operator);
   }
 
+  /// Java has no null-coalescing operator, so `a ?? b` becomes the equivalent
+  /// ternary. `a` is repeated, which is safe for the variable/field/index reads
+  /// that `??` and `??=` target.
+  @override
+  String renderNullCoalesce(String a, String b) => '($a != null ? $a : $b)';
+
+  /// Java has no `??=`; a null-coalescing assignment becomes `t = (t != null ? t : v)`.
+  @override
+  bool get supportsNullCoalesceAssignment => false;
+
   @override
   StringBuffer generateASTExpressionListLiteral(
     ASTExpressionListLiteral expression, {

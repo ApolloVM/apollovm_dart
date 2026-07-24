@@ -2441,6 +2441,13 @@ abstract class ASTParametersDeclaration<P extends ASTParameterDeclaration> {
   /// Returns true if [param] accepts [type].
   ///
   /// - [exactType]: if true the [param] should be exact to [type].
+  ///
+  /// Passing an argument to a parameter is an *assignment*, so the non-exact
+  /// path uses [ASTType.acceptsAssignment]: a `T?` parameter accepts a `T`
+  /// argument (and `null`), while a `T` parameter still rejects `null`.
+  /// [ASTType.acceptsType] alone would reject `String` for a `String?` slot,
+  /// because [ASTTypeString] compares `nullable` in its `==` (the numeric types
+  /// only appeared to work because [StrictType] ignores it).
   static bool parameterAcceptsType(
     ASTParameterDeclaration? param,
     ASTType? type,
@@ -2452,7 +2459,7 @@ abstract class ASTParametersDeclaration<P extends ASTParameterDeclaration> {
 
     if (exactType) {
       if (param.type != type) return false;
-    } else if (type is! ASTTypeDynamic && !param.type.acceptsType(type)) {
+    } else if (type is! ASTTypeDynamic && !param.type.acceptsAssignment(type)) {
       return false;
     }
 

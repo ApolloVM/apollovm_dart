@@ -264,4 +264,244 @@ void main() {
       expect(await _run('int run() { int? a = null; a = 5; return a; }'), 5);
     });
   });
+
+  group('nullable parameters accept a non-null argument', () {
+    // Argument passing is an assignment, so a `T?` parameter must accept a `T`.
+    // `String?` used to be rejected ("parameters signature not compatible")
+    // because `ASTTypeString` compares `nullable` in `==`, while the numeric
+    // types only appeared to work because `StrictType` ignores it.
+    test('String? accepts a String', () async {
+      expect(
+        await _run("String run(String? s) { return s ?? 'x'; }", args: ['hi']),
+        'hi',
+      );
+    });
+
+    test('String? still accepts null', () async {
+      expect(
+        await _run("String run(String? s) { return s ?? 'x'; }", args: [null]),
+        'x',
+      );
+    });
+
+    test('int? / double? / List<int>? accept non-null arguments', () async {
+      expect(await _run('int run(int? a) { return a ?? 1; }', args: [7]), 7);
+      expect(
+        await _run('double run(double? d) { return d ?? 1.5; }', args: [2.5]),
+        2.5,
+      );
+      expect(
+        await _run(
+          'int run(List<int>? xs) { return xs?[0] ?? -1; }',
+          args: [
+            [3, 4],
+          ],
+        ),
+        3,
+      );
+    });
+
+    test('multiple nullable parameters, all non-null', () async {
+      expect(
+        await _run(
+          "String run(String? s, int? p) { return '\$s/\$p'; }",
+          args: ['hi', 9],
+        ),
+        'hi/9',
+      );
+    });
+  });
+
+  group('null-aware access stored in a local', () {
+    // A short-circuited `?.` / `?[` evaluates to null, so the expression's
+    // static type must be nullable — otherwise a `var` / `int?` declaration
+    // rejects that null at declaration time.
+    test('?. getter into `var` and into `int?`', () async {
+      expect(
+        await _run(
+          'int run() { String? s = null; var v = s?.length; return v ?? -1; }',
+        ),
+        -1,
+      );
+      expect(
+        await _run(
+          'int run() { String? s = null; int? v = s?.length; return v ?? -1; }',
+        ),
+        -1,
+      );
+      expect(
+        await _run(
+          "int run() { String? s = 'abcd'; var v = s?.length; return v ?? -1; }",
+        ),
+        4,
+      );
+    });
+
+    test('?. on a user class into a local', () async {
+      expect(
+        await _run(
+          'class A { int x = 5; } '
+          'int run() { A? a = null; var v = a?.x; return v ?? -1; }',
+        ),
+        -1,
+      );
+      expect(
+        await _run(
+          'class A { int x = 5; } '
+          'int run() { A a = A(); var v = a?.x; return v ?? -1; }',
+        ),
+        5,
+      );
+    });
+
+    test('?. method invocation into a local', () async {
+      expect(
+        await _run(
+          "int run() { String? s = null; String? v = s?.toUpperCase(); "
+          'return v == null ? -1 : 0; }',
+        ),
+        -1,
+      );
+    });
+
+    test('?[ index into `var`', () async {
+      expect(
+        await _run(
+          'int run() { List<int>? xs = null; var v = xs?[0]; return v ?? -1; }',
+        ),
+        -1,
+      );
+      expect(
+        await _run(
+          'int run() { List<int>? xs = [7, 8]; var v = xs?[1]; return v ?? -1; }',
+        ),
+        8,
+      );
+    });
+  });
+
+  group('member-access chains', () {
+    const cls =
+        'class C { int v = 3; C? next; void link(C n) { next = n; } '
+        'C mk() { var n = C(); n.v = 9; return n; } } ';
+
+    test('plain chain reads at depth 2 and 3', () async {
+      expect(
+        await _run(
+          '${cls}int run() { var a = C(); var b = C(); b.v = 7; a.link(b); '
+          'return a.next.v; }',
+        ),
+        7,
+      );
+      expect(
+        await _run(
+          '${cls}int run() { var a = C(); var b = C(); var d = C(); d.v = 7; '
+          'b.link(d); a.link(b); return a.next.next.v; }',
+        ),
+        7,
+      );
+    });
+
+    test('null-aware chain short-circuits at the first null link', () async {
+      expect(
+        await _run(
+          '${cls}int run() { var a = C(); return a.next?.next?.v ?? -1; }',
+        ),
+        -1,
+      );
+    });
+
+    test('`this.field.member` chain', () async {
+      expect(
+        await _run(
+          '${cls}class K { C c = C(); int read() { return this.c.v; } } '
+          'int run() { return K().read(); }',
+        ),
+        3,
+      );
+    });
+
+    test('method call inside a chain', () async {
+      expect(
+        await _run('${cls}int run() { var a = C(); return a.mk().v; }'),
+        9,
+      );
+      expect(
+        await _run(
+          '${cls}int run() { var a = C(); var b = C(); a.link(b); '
+          'return a.next.mk().v; }',
+        ),
+        9,
+      );
+    });
+
+    test('`!` inside a chain asserts the preceding link', () async {
+      expect(
+        await _run(
+          '${cls}int run() { var a = C(); var b = C(); a.link(b); '
+          'return a.next!.v; }',
+        ),
+        3,
+      );
+    });
+
+    test('chained field write', () async {
+      expect(
+        await _run(
+          '${cls}int run() { var a = C(); var b = C(); a.link(b); '
+          'a.next.v = 42; return a.next.v; }',
+        ),
+        42,
+      );
+    });
+
+    test('chain in an argument and in arithmetic', () async {
+      expect(
+        await _run(
+          '${cls}int add(int x) { return x + 1; } '
+          'int run() { var a = C(); var b = C(); a.link(b); '
+          'return add(a.next.v) + a.next.v * 2; }',
+        ),
+        10,
+      );
+    });
+
+    test('Dart round-trip keeps the chain', () async {
+      var out = await _regen(
+        '${cls}int run() { var a = C(); return a.next?.v ?? -1; }',
+      );
+      expect(out, contains('a.next?.v'));
+    });
+
+    test('single-segment access is unchanged', () async {
+      expect(await _run('${cls}int run() { var a = C(); return a.v; }'), 3);
+      expect(
+        await _run('${cls}int run() { var a = C(); a.v = 8; return a.v; }'),
+        8,
+      );
+    });
+
+    test('parenthesized receiver: (a).v, (a)?.v, (a.next)?.v', () async {
+      // Only `(expr).method()` used to parse; a *field* read off a group, and
+      // any `?.` after one, did not.
+      expect(await _run('${cls}int run() { var a = C(); return (a).v; }'), 3);
+      expect(
+        await _run('${cls}int run() { var a = C(); return (a)?.v ?? -1; }'),
+        3,
+      );
+      expect(
+        await _run(
+          '${cls}int run() { var a = C(); return (a.next)?.v ?? -1; }',
+        ),
+        -1,
+      );
+      // The existing group-invocation path still works.
+      expect(
+        await _run(
+          '${cls}int run() { var a = C(); var m = (a).mk(); return m.v; }',
+        ),
+        9,
+      );
+    });
+  });
 }

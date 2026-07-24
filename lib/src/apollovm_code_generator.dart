@@ -1194,25 +1194,57 @@ abstract class ApolloCodeGenerator
 
     if (headIndented) out.write(indent);
 
-    generateASTVariable(
+    // The assignment target, captured so `??=` can repeat it when the target
+    // language has no such operator (`t ??= v` -> `t = t ?? v`).
+    var target = generateASTVariable(
       expression.variable,
-      out: out,
       indent: indent,
-      headIndented: headIndented,
-    );
+      headIndented: false,
+    ).toString();
 
-    var op = getASTAssignmentOperatorText(expression.operator);
-    out.write(' ');
-    out.write(op);
-    out.write(' ');
-    generateASTExpression(
+    out.write(target);
+
+    var value = generateASTExpression(
       expression.expression,
-      out: out,
       indent: '$indent  ',
       headIndented: false,
-    );
+    ).toString();
+
+    _writeAssignment(out, expression.operator, target, value);
 
     return out;
+  }
+
+  /// Resolves the assignment operator text for the target language.
+  ///
+  /// Defaults to the shared spelling; a target overrides this where its own
+  /// differs (e.g. Python writes integer division as `//=`, not `~/=`).
+  String resolveASTAssignmentOperatorText(ASTAssignmentOperator operator) =>
+      getASTAssignmentOperatorText(operator);
+
+  /// Writes the operator and right-hand side of an assignment whose left-hand
+  /// side [target] has already been written to [out].
+  ///
+  /// A `??=` against a target without that operator is lowered to
+  /// `= target ?? value`, so only [renderNullCoalesce] has to be defined per
+  /// language.
+  void _writeAssignment(
+    StringBuffer out,
+    ASTAssignmentOperator operator,
+    String target,
+    String value,
+  ) {
+    if (operator == ASTAssignmentOperator.nullCoalesce &&
+        !supportsNullCoalesceAssignment) {
+      out.write(' = ');
+      out.write(renderNullCoalesce(target, value));
+      return;
+    }
+
+    out.write(' ');
+    out.write(resolveASTAssignmentOperatorText(operator));
+    out.write(' ');
+    out.write(value);
   }
 
   @override
@@ -1226,43 +1258,43 @@ abstract class ApolloCodeGenerator
 
     if (headIndented) out.write(indent);
 
-    generateASTVariable(
+    // The indexed write target, captured so `??=` can repeat it.
+    var target = generateASTVariable(
       expression.variable,
-      out: out,
       indent: indent,
-      headIndented: headIndented,
+      headIndented: false,
     );
 
-    out.write('[');
+    target.write('[');
     generateASTExpression(
       expression.keyExpression,
-      out: out,
+      out: target,
       indent: '$indent  ',
       headIndented: false,
     );
-    out.write(']');
+    target.write(']');
     // Chained keys for a nested write target (`m[0][1] = v`).
     for (var extra in expression.extraKeys) {
-      out.write('[');
+      target.write('[');
       generateASTExpression(
         extra,
-        out: out,
+        out: target,
         indent: '$indent  ',
         headIndented: false,
       );
-      out.write(']');
+      target.write(']');
     }
 
-    var op = getASTAssignmentOperatorText(expression.operator);
-    out.write(' ');
-    out.write(op);
-    out.write(' ');
-    generateASTExpression(
+    var targetStr = target.toString();
+    out.write(targetStr);
+
+    var value = generateASTExpression(
       expression.expression,
-      out: out,
       indent: '$indent  ',
       headIndented: false,
-    );
+    ).toString();
+
+    _writeAssignment(out, expression.operator, targetStr, value);
 
     return out;
   }
@@ -1600,6 +1632,17 @@ abstract class ApolloCodeGenerator
     final expression2 = expression.expression2;
     final operator = expression.operator;
 
+    // `a ?? b` has no operator form in several targets, so it goes through a
+    // dedicated hook that can desugar it into a conditional expression.
+    if (operator == ASTExpressionOperator.nullCoalesce) {
+      return generateASTExpressionNullCoalesce(
+        expression1,
+        expression2,
+        out: out,
+        indent: indent,
+      );
+    }
+
     var groupComplexExpressions = true;
 
     if (operator == ASTExpressionOperator.add) {
@@ -1649,6 +1692,61 @@ abstract class ApolloCodeGenerator
     if (group2) out.write('(');
     out.write(exp2);
     if (group2) out.write(')');
+
+    return out;
+  }
+
+  /// Renders the null-coalescing expression `a ?? b` from already-generated
+  /// operand texts.
+  ///
+  /// The default emits the operator form, resolved through
+  /// [resolveASTExpressionOperatorText] so a target with its own spelling (e.g.
+  /// Kotlin's Elvis `?:`) is honoured. Targets with no null-coalescing operator
+  /// (Java, Lua, Python) override this to desugar into a conditional; a target
+  /// that cannot express it at all (Go) throws an [UnsupportedSyntaxError].
+  ///
+  /// A desugaring override repeats [a] in its output, so it is only safe for
+  /// operands that can be evaluated twice — which is what `??` / `??=` targets
+  /// are in practice (variables, fields and index reads).
+  String renderNullCoalesce(String a, String b) {
+    var op = resolveASTExpressionOperatorText(
+      ASTExpressionOperator.nullCoalesce,
+      ASTNumType.nan,
+      ASTNumType.nan,
+    );
+    return '$a $op $b';
+  }
+
+  /// Whether the target language has a null-coalescing *assignment* operator
+  /// (`??=`). When false, `t ??= v` is generated as `t = t ?? v`, routing the
+  /// `??` through [renderNullCoalesce] so each target needs only one desugar.
+  ///
+  /// Dart, C#, JavaScript and TypeScript have `??=`; Kotlin, Java, Lua, Python
+  /// and Go do not.
+  bool get supportsNullCoalesceAssignment => true;
+
+  /// Generates the null-coalescing expression `a ?? b`.
+  StringBuffer generateASTExpressionNullCoalesce(
+    ASTExpression expression1,
+    ASTExpression expression2, {
+    StringBuffer? out,
+    String indent = '',
+  }) {
+    out ??= newOutput();
+
+    var a = generateASTExpression(
+      expression1,
+      indent: '$indent  ',
+      headIndented: false,
+    ).toString();
+
+    var b = generateASTExpression(
+      expression2,
+      indent: '$indent  ',
+      headIndented: false,
+    ).toString();
+
+    out.write(renderNullCoalesce(a, b));
 
     return out;
   }
@@ -2299,25 +2397,25 @@ abstract class ApolloCodeGenerator
 
     if (headIndented) out.write(indent);
 
-    generateASTVariable(
+    // The `obj.field` write target, captured so `??=` can repeat it.
+    var target = generateASTVariable(
       expression.variable,
-      out: out,
       indent: indent,
       headIndented: false,
     );
-    out.write('.');
-    out.write(normalizeIdentifier(expression.name));
+    target.write('.');
+    target.write(normalizeIdentifier(expression.name));
 
-    var op = getASTAssignmentOperatorText(expression.operator);
-    out.write(' ');
-    out.write(op);
-    out.write(' ');
-    generateASTExpression(
+    var targetStr = target.toString();
+    out.write(targetStr);
+
+    var value = generateASTExpression(
       expression.expression,
-      out: out,
       indent: '$indent  ',
       headIndented: false,
-    );
+    ).toString();
+
+    _writeAssignment(out, expression.operator, targetStr, value);
 
     return out;
   }
@@ -2429,7 +2527,18 @@ abstract class ApolloCodeGenerator
     String indent = '',
     bool headIndented = true,
   }) {
-    if (variable is ASTScopeVariable) {
+    if (variable is ASTExpressionVariable) {
+      // A member-access chain wraps each preceding segment as a receiver
+      // "variable"; generating it means generating that expression, not a name.
+      out ??= newOutput();
+      if (headIndented) out.write(indent);
+      return generateASTExpression(
+        variable.expression,
+        out: out,
+        indent: indent,
+        headIndented: false,
+      );
+    } else if (variable is ASTScopeVariable) {
       return generateASTScopeVariable(
         variable,
         callingFunction: callingFunction,

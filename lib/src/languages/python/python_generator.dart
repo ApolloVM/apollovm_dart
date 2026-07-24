@@ -1015,6 +1015,17 @@ class ApolloCodeGeneratorPython extends ApolloCodeGenerator {
     }
   }
 
+  /// Python has no null-coalescing operator, so `a ?? b` becomes a conditional
+  /// expression. It tests `is not None` rather than truthiness, so `0` / `''` /
+  /// `False` are preserved (unlike an `a or b` shortcut).
+  @override
+  String renderNullCoalesce(String a, String b) =>
+      '($a if $a is not None else $b)';
+
+  /// Python has no `??=`; it becomes `t = (t if t is not None else v)`.
+  @override
+  bool get supportsNullCoalesceAssignment => false;
+
   @override
   StringBuffer generateASTExpressionLiteralFunction(
     ASTExpressionLiteralFunction expression, {
@@ -1098,27 +1109,9 @@ class ApolloCodeGeneratorPython extends ApolloCodeGenerator {
     return out;
   }
 
+  /// Python spells integer division `//`, so its assignment form is `//=`.
   @override
-  StringBuffer generateASTExpressionVariableAssignment(
-    ASTExpressionVariableAssignment expression, {
-    StringBuffer? out,
-    String indent = '',
-    bool headIndented = true,
-  }) {
-    out ??= newOutput();
-    if (headIndented) out.write(indent);
-
-    generateASTVariable(expression.variable, out: out, headIndented: false);
-
-    out.write(' ');
-    out.write(_assignmentOperatorText(expression.operator));
-    out.write(' ');
-    generateASTExpression(expression.expression, out: out, headIndented: false);
-
-    return out;
-  }
-
-  String _assignmentOperatorText(ASTAssignmentOperator operator) {
+  String resolveASTAssignmentOperatorText(ASTAssignmentOperator operator) {
     var text = getASTAssignmentOperatorText(operator);
     return text == '~/=' ? '//=' : text;
   }

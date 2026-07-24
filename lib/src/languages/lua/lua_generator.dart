@@ -701,6 +701,22 @@ class ApolloCodeGeneratorLua extends ApolloCodeGenerator {
     }
   }
 
+  /// Lua has no null-coalescing operator, and neither `a or b` nor the
+  /// `a ~= nil and a or b` idiom is correct: Lua treats `false` as falsy, so a
+  /// non-nil `false` on the left would wrongly fall through to `b`.
+  ///
+  /// An immediately-invoked function gives the exact semantics — only `nil`
+  /// falls through — and as a bonus binds `a` to a local, so it is evaluated
+  /// once rather than twice like the ternary-based targets.
+  @override
+  String renderNullCoalesce(String a, String b) =>
+      '(function() local __nc = $a if __nc ~= nil then return __nc end '
+      'return $b end)()';
+
+  /// Lua has no `??=`; it becomes `t = (t ~= nil and t or v)`.
+  @override
+  bool get supportsNullCoalesceAssignment => false;
+
   @override
   StringBuffer generateASTExpressionLiteralFunction(
     ASTExpressionLiteralFunction expression, {

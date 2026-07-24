@@ -1,3 +1,65 @@
+## 2.17.0
+
+### Null-safety fixes: nullable parameters, null-aware typing, access chains
+
+Four gaps found by exercising the 2.16.0 null-safety surface end-to-end.
+
+- **A `T?` parameter now accepts a `T` argument.** Calling a method with a
+  `String?` parameter and a non-null `String` failed with `parameters signature
+  not compatible`, though passing `null` worked. Argument passing is an
+  assignment, so `ASTFunctionParameters.parameterAcceptsType` now uses
+  `ASTType.acceptsAssignment` instead of `acceptsType`. (`int?`/`double?` only
+  appeared to work because `StrictType` ignores `nullable` in `==`, while
+  `ASTTypeString` compares it — so `String?` and `String` were unequal and
+  `ASTTypeString.acceptsType` rejected the argument.) A non-nullable parameter
+  still rejects `null`.
+- **A null-aware access now reports a nullable static type.** Storing a
+  short-circuited result in a local failed: `var v = s?.length` on a `null`
+  receiver threw ``Class not set for type: Null``, and `var v = xs?[0]` threw
+  ``Can't cast initial (null) value to type: int``. `?.` (getter and method) and
+  `?[` now resolve to `T?`, and resolving the type of an access whose receiver
+  is `null` reports `Null` instead of trying to find a class for it. Using the
+  result in a `return`, inline with `??`, or in a string interpolation already
+  worked and is unchanged.
+- **Member-access chains parse.** `a.b.c`, `a.b?.c`, `a.b!.c`, `a.b.m()`,
+  `a.b?.m(x)` and chained writes (`a.b.c = v`) previously failed — the grammar
+  accepted only a *single* identifier receiver, so `a.next?.value` reported
+  ``SyntaxError: digit expected`` (the `?` was read as the start of a number)
+  and even plain `a.next.value` reported ``"(" expected``. A new chain rule
+  folds each segment onto the previous one, wrapping it in the new
+  `ASTExpressionVariable` (an `ASTVariable` backed by an expression) so the
+  existing object-access nodes supply the runtime, null-aware and
+  code-generation behaviour. Chains of any depth work, in any mix of `.`, `?.`
+  and `!`. Single-segment access keeps its own rules — the chain rule requires
+  two or more segments — so enum entries, static fields and import prefixes
+  resolve exactly as before. A field read off a parenthesized receiver
+  (`(a).v`, `(a)?.v`) also parses now; only `(expr).m().field` remains
+  unsupported.
+- **`??` and `??=` no longer leak into targets that cannot compile them.**
+  Java, Lua, Python and Go emitted `a ?? b` verbatim, and `??=` leaked into
+  *every* target — including Kotlin, which had a correct `?:` for `??` but no
+  hook for the assignment form. `??` now goes through an overridable
+  `renderNullCoalesce`, and `??=` is lowered to `t = t ?? v` wherever
+  `supportsNullCoalesceAssignment` is false, so each target defines only one
+  desugaring:
+  - Java: `(a != null ? a : b)`
+  - Python: `(a if a is not None else b)` — an `is not None` test, so `0`/`''`/
+    `False` are preserved
+  - Lua: an immediately-invoked function with an explicit `nil` test, because
+    both `a or b` and the `a ~= nil and a or b` idiom return `b` for a non-nil
+    `false`; it also binds `a` to a local, so it is evaluated once
+  - Kotlin: `?:` for `??`, and `t = t ?: v` for `??=`
+  - Dart, C#, JavaScript, TypeScript: unchanged, they have both operators
+  - Go: reports an `UnsupportedSyntaxError`. Go has neither a null-coalescing
+    operator nor a conditional *expression*, and this generator maps a nullable
+    `T?` onto a plain Go `T`, which for a value type cannot be compared to
+    `nil` — any rendering would be code that does not compile. Representing
+    `T?` as `*T` throughout the Go generator is separate work.
+
+Also adds an overridable `resolveASTAssignmentOperatorText`, which lets the
+Python generator drop its whole `generateASTExpressionVariableAssignment`
+override (it existed only to spell integer division `//=`).
+
 ## 2.16.0
 
 ### Dart null-safety support
