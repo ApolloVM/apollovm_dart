@@ -137,6 +137,30 @@ void main() {
       if (notNullCase != null) expect(notNullCase, 1);
     });
 
+    test('`== null` on a boxed String is not a content comparison', () async {
+      // The `__streq` path requires *both* operands to be String; `null` types
+      // as `Object`, so a String-vs-null comparison used to fall through to the
+      // numeric path — comparing contents against address 0, or pushing two i32
+      // handles into an `i64.eq` (an invalid module).
+      const src =
+          'int f(List<Object> a) { var s = a[0]; if (s == null) { return -1; } return 1; }';
+      var r = await _compileAndMaybeRun(src, 'f', [
+        ['x'],
+      ]);
+      if (r != null) expect(r, 1);
+    });
+
+    test('`== null` on a non-nullable String compiles and is false', () async {
+      // A Wasm String handle is never the null box, so the answer is constant —
+      // but it must still be a *valid* module.
+      var r = await _compileAndMaybeRun(
+        'int f(String s) { if (s == null) { return -1; } return 1; }',
+        'f',
+        ['x'],
+      );
+      if (r != null) expect(r, 1);
+    });
+
     test('`??` falls back when the boxed left operand is null', () async {
       // In the *numeric* domain `a ?? b` still yields `a` (a number is never
       // null); a boxed operand is tested against the null box.

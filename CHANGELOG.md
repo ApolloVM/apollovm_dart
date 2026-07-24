@@ -1,3 +1,67 @@
+## 2.19.0
+
+### `x == null` no longer throws
+
+`x == null` — the most common null check in Dart — threw for **any** typed left
+operand:
+
+```dart
+int? a = 1;  if (a == null) { … }
+// _TypeError: type 'Null' is not a subtype of type 'FutureOr<int>' in type cast
+```
+
+No ternary, nullable slot or `?.` was needed; `String s = 'x'; s == null` failed
+the same way. Only the reversed `null == x` worked, because `ASTValueNull.equals`
+type-tests instead of casting.
+
+`ASTValue.equals` read the other operand through `_getValue`, which casts it to
+*this* value's `T`. That is right for arithmetic — a mismatched operand there is
+a real error — but wrong for equality, where a different type must compare
+`false`. Equality now reads both operands uncast, so `x == null` is `false`,
+`x == 'other type'` is `false`, and neither throws. The three `equals` overrides
+(`ASTValueStatic`, `ASTValuePrimitive`, `ASTValueNum`) had the same cast and were
+fixed with it.
+
+This predates the null-safety work — it is in the base `ASTValue` — but 2.16.0
+made `x == null` the idiom people reach for, so it went from obscure to
+prominent.
+
+### Wasm: `== null` / `!= null` against the null box
+
+With `null` representable since 2.18.0, the equality paths had to learn about it.
+A comparison against a `null` literal is now recognised **before** the String and
+numeric paths:
+
+- a **boxed** operand compares its pointer against the null box, so
+  `a[0] == null` on a `List<Object>` answers correctly (it previously took the
+  `__streq` route and compared *contents* against address 0, reporting a non-null
+  String as null);
+- a **concrete** operand (`int`, `double`, `String`, an instance) can never be
+  the null box, so the result is a constant — and, importantly, a *valid* module.
+  `String s; s == null` previously pushed two i32 handles into an `i64.eq` and
+  produced a module that failed to validate.
+
+### Grammar: `(expr).m().field`
+
+A group *invocation* followed by member access did not parse — the
+group-invocation rule chains only further invocations, so a trailing `.field` had
+nothing to match it. A new rule reuses that rule for the head and folds the
+trailing segments. It requires at least one trailing segment, so `(expr).m()`
+keeps its own rule and parenthesized arithmetic is untouched (reordering the
+rules instead changes how the operation chain groups and breaks round-trip
+generation).
+
+### Go: no more `var s string = nil`
+
+The Go generator emitted `var s string = nil` for a nullable local — source that
+does not compile. It now reports an `UnsupportedSyntaxError` naming the type,
+consistent with how `??` is already handled. A `List`/`Map` still accepts `nil`,
+since those become a Go slice/map, which are nilable.
+
+Go's nullable representation remains the open item: supporting `T?` properly
+means generating `*T` throughout — declarations, zero values, every dereference,
+and parameter/return types.
+
 ## 2.18.0
 
 ### Wasm: `null` in the boxed-`Object` domain

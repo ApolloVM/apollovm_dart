@@ -179,6 +179,16 @@ abstract class ASTValue<T> with ASTNode implements ASTTypedNode {
       ? v.getValue(context) as FutureOr<T>
       : v.getValueNoContext() as FutureOr<T>;
 
+  /// Reads [v]'s value *without* forcing it into this value's type [T].
+  ///
+  /// [_getValue] casts to `FutureOr<T>`, which is right for arithmetic — where
+  /// a mismatched operand is a real error — but wrong for equality: comparing
+  /// against a different type must be `false`, not a throw. In particular
+  /// `x == null` would evaluate `null as FutureOr<int>` and fail with
+  /// ``type 'Null' is not a subtype of type 'FutureOr<int>'``.
+  FutureOr<Object?> _getValueUncast(VMContext? context, ASTValue v) =>
+      context != null ? v.getValue(context) : v.getValueNoContext();
+
   T? _getValueSafe(VMContext? context, ASTValue v) {
     try {
       var val = _getValue(context, v);
@@ -217,8 +227,8 @@ abstract class ASTValue<T> with ASTNode implements ASTTypedNode {
 
     if (other is ASTValue) {
       var context = VMContext.getCurrent();
-      var v1 = await _getValue(context, this);
-      var v2 = await _getValue(context, other);
+      var v1 = await _getValueUncast(context, this);
+      var v2 = await _getValueUncast(context, other);
       return v1 == v2;
     }
     return false;
@@ -435,7 +445,7 @@ class ASTValueStatic<T> extends ASTValue<T> {
       return value == other.value;
     } else if (other is ASTValue) {
       var context = VMContext.getCurrent();
-      var otherValue = await _getValue(context, other);
+      var otherValue = await _getValueUncast(context, other);
       return value == otherValue;
     }
 
@@ -486,7 +496,7 @@ abstract class ASTValuePrimitive<T> extends ASTValueStatic<T> {
       return value == other.value;
     } else if (other is ASTValue) {
       var context = VMContext.getCurrent();
-      var v2 = await _getValue(context, other);
+      var v2 = await _getValueUncast(context, other);
       return value == v2;
     }
 
@@ -620,7 +630,7 @@ abstract class ASTValueNum<T extends num> extends ASTValuePrimitive<T> {
       return value == other.value;
     } else if (other is ASTValue) {
       var context = VMContext.getCurrent();
-      var v2 = await _getValue(context, other);
+      var v2 = await _getValueUncast(context, other);
       return value == v2;
     }
     return false;
