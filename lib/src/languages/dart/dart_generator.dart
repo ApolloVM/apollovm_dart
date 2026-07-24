@@ -19,6 +19,12 @@ class ApolloCodeGeneratorDart extends ApolloCodeGenerator {
     : super('dart', codeStorage);
 
   @override
+  bool get supportsNullableTypeSuffix => true;
+
+  @override
+  bool get supportsNullAwareOperators => true;
+
+  @override
   String normalizeTypeName(String typeName, [String? callingFunction]) {
     switch (typeName) {
       case 'Integer':

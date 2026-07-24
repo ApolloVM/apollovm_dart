@@ -20,6 +20,16 @@ class ApolloCodeGeneratorTypeScript extends ApolloCodeGenerator {
   ApolloCodeGeneratorTypeScript(ApolloSourceCodeStorage codeStorage)
     : super('typescript', codeStorage);
 
+  // TypeScript has native `?.`, `!` and `??`, but a nullable *type* is written
+  // `T | null` (or an optional `?:` member), not a `T?` suffix — so the type
+  // suffix stays off (best-effort: nullability is dropped from type positions).
+  @override
+  bool get supportsNullAwareOperators => true;
+
+  // Null-aware element access in TS is `a?.[i]`, not `a?[i]`.
+  @override
+  String get nullAwareIndexOpen => '?.[';
+
   @override
   String normalizeTypeName(String typeName, [String? callingFunction]) {
     // Static-call targets (e.g. `Number.parseInt`) use the JS global object,

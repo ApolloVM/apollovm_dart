@@ -195,6 +195,25 @@ abstract class BaseGrammarLexer extends GrammarDefinition {
     _reduceOps(block, {ASTExpressionOperator.bitwiseXor});
     _reduceOps(block, {ASTExpressionOperator.bitwiseOr});
 
+    // Relational, then equality (looser than the bitwise operators).
+    _reduceOps(block, {
+      ASTExpressionOperator.greater,
+      ASTExpressionOperator.greaterOrEq,
+      ASTExpressionOperator.lower,
+      ASTExpressionOperator.lowerOrEq,
+    });
+    _reduceOps(block, {
+      ASTExpressionOperator.equals,
+      ASTExpressionOperator.notEquals,
+    });
+
+    // Logical AND, then OR.
+    _reduceOps(block, {ASTExpressionOperator.and});
+    _reduceOps(block, {ASTExpressionOperator.or});
+
+    // Null-coalescing (`??`) is the loosest binary operator.
+    _reduceOps(block, {ASTExpressionOperator.nullCoalesce});
+
     // Final left-to-right fallback
     while (block.length >= 3) {
       var e1 = block.removeAt(0);

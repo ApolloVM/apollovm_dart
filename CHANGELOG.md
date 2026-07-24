@@ -1,4 +1,41 @@
-## 2.15.0
+## 2.16.0
+
+### Dart null-safety support
+
+- **Nullable type syntax (`T?`).** The Dart grammar now parses the `?` suffix on
+  simple, generic, collection and function types (`String?`, `List<String?>`,
+  `Map<String, User?>`, `Future<User?>`, `void Function()?`,
+  `String? Function(int)`). `ASTType` carries an `isNullable`/`nullable` flag
+  (via `asNullable()` / `withoutNullability()`), and the Dart/Kotlin generators
+  round-trip the `?` suffix (TypeScript renders nullable *types* without the
+  suffix — `T?` on a member isn't valid TS — and other targets drop it,
+  best-effort).
+- **Null-aware operators.** Added full parse + runtime + Dart round-trip support
+  for `??` (null-coalescing), `??=` (null-coalescing assignment), `?.`
+  (null-aware getter and method invocation), `?[` (null-aware indexing), postfix
+  `!` (null assertion — standalone `x!` and before access: `x!.f`, `x!.m()`,
+  `x![i]` — throwing `ApolloVMNullPointerException` on null), and cascades
+  `..` / `?..` (null-aware). `??` is wired into the operator-precedence
+  reducer as the loosest binary operator (relational/equality/logical tiers were
+  made explicit at the same time).
+- **Assignability is nullability-aware.** `ASTType.acceptsAssignment` (used by the
+  runtime declaration/instance-of checks) accepts `null` only for nullable slots
+  and lets a `T?` slot accept a `T` value.
+- **Static null-safety analysis pass.** A new pragmatic, flow-aware analyzer
+  (`NullSafetyAnalyzer`) reports assigning `null` to a non-nullable
+  declaration/parameter and unconditional member/method/index access on a
+  nullable local, with flow promotion for `if (x != null) { … }` /
+  `if (x == null) … else { … }` and suppression via `?.`/`!`. Its diagnostics are
+  surfaced through the LSP analyzer for Dart documents.
+- **Cross-language generation.** Kotlin emits the Elvis operator `?:` for `??`
+  and `!!` for `!`; TypeScript emits `??`, `?.`, `?.[` (element access) and `!`.
+  Java, JavaScript, C#, Go, Python and Lua are best-effort (C#/JS keep native
+  `??`; the rest render the closest form without failing).
+- **Wasm compilation.** The Wasm backend lowers null-safety syntax within its
+  non-null numeric domain: `x!` compiles to `x`, `a ?? b` to its left operand,
+  `?.`/`?[` to plain access, and a nullable `T?` to the underlying numeric type.
+  A `null` *literal* stays an explicit unsupported-construct error (Wasm has no
+  null value) rather than a silent miscompilation.
 
 ### LSP & MCP correctness fixes
 

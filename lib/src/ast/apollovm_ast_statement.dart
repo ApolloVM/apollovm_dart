@@ -606,7 +606,8 @@ enum ASTAssignmentOperator {
   divide('/'),
   divideAsInt('~/'),
   sum('+'),
-  subtract('-');
+  subtract('-'),
+  nullCoalesce('??');
 
   final String symbol;
 
@@ -624,6 +625,8 @@ enum ASTAssignmentOperator {
         return ASTExpressionOperator.divide;
       case divideAsInt:
         return ASTExpressionOperator.divideAsInt;
+      case nullCoalesce:
+        return ASTExpressionOperator.nullCoalesce;
       default:
         return null;
     }
@@ -646,6 +649,8 @@ ASTAssignmentOperator getASTAssignmentOperator(String op) {
       return ASTAssignmentOperator.sum;
     case '-=':
       return ASTAssignmentOperator.subtract;
+    case '??=':
+      return ASTAssignmentOperator.nullCoalesce;
     default:
       throw UnsupportedError(op);
   }
@@ -665,6 +670,8 @@ String getASTAssignmentOperatorText(ASTAssignmentOperator op) {
       return '+=';
     case ASTAssignmentOperator.subtract:
       return '-=';
+    case ASTAssignmentOperator.nullCoalesce:
+      return '??=';
   }
 }
 
@@ -1031,7 +1038,7 @@ class ASTStatementVariableDeclaration<V> extends ASTStatementTyped {
     ASTExpression value,
   ) async {
     if (valueResolvedType != ASTTypeDynamic.instance &&
-        !valueResolvedType.canCastToType(variableResolvedType)) {
+        !variableResolvedType.acceptsAssignment(valueResolvedType)) {
       throw ApolloVMRuntimeError(
         "Can't cast value type ($valueResolvedType) to variable type ($variableResolvedType).",
       );
