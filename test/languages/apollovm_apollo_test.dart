@@ -405,6 +405,189 @@ run(Int n) {
     });
   });
 
+  group('Apollo language features', () {
+    test('break / continue inside a range for', () async {
+      var ret = await _call(
+        r'''
+Int f(Int n) {
+  var s = 0
+  for i++ from 0..n {
+    if i == 2 { continue }
+    if i == 5 { break }
+    s = s + i
+  }
+  return s
+}
+''',
+        'f',
+        positionalParameters: [10],
+      );
+      // 0 + 1 + (skip 2) + 3 + 4, then break at 5 => 8.
+      expect(ret.getValueNoContext(), equals(8));
+    });
+
+    test('nested range for', () async {
+      var ret = await _call(r'''
+Int f() {
+  var s = 0
+  for i++ from 1..3 {
+    for j++ from 1..3 {
+      s = s + i * j
+    }
+  }
+  return s
+}
+''', 'f');
+      expect(ret.getValueNoContext(), equals(36)); // (1+2+3)^2
+    });
+
+    test('do / while', () async {
+      var ret = await _call(r'''
+Int f() {
+  var i = 0
+  var s = 0
+  do {
+    s = s + i
+    i = i + 1
+  } while i < 3
+  return s
+}
+''', 'f');
+      expect(ret.getValueNoContext(), equals(3));
+    });
+
+    test('ternary conditional', () async {
+      var ret = await _call(
+        'Int f(Int a) { return a > 5 ? 100 : 1 }\n',
+        'f',
+        positionalParameters: [9],
+      );
+      expect(ret.getValueNoContext(), equals(100));
+    });
+
+    test('bitwise + shift operators', () async {
+      var ret = await _call(
+        'Int f(Int a, Int b) { return ((a & b) | (a ^ b)) + (a << 1) + (a >> 1) }\n',
+        'f',
+        positionalParameters: [6, 3],
+      );
+      expect(ret.getValueNoContext(), equals(22));
+    });
+
+    test('unary negation', () async {
+      var ret = await _call(
+        'Int f(Int a) { return -a }\n',
+        'f',
+        positionalParameters: [7],
+      );
+      expect(ret.getValueNoContext(), equals(-7));
+    });
+
+    test('closure captured and invoked', () async {
+      var ret = await _call(
+        r'''
+Int f(Int a) {
+  var double = (Int x) { return x * 2 }
+  return double(a) + 1
+}
+''',
+        'f',
+        positionalParameters: [20],
+      );
+      expect(ret.getValueNoContext(), equals(41));
+    });
+
+    test('list literal + index access', () async {
+      var ret = await _call(
+        'Int f() { var xs = [10, 20, 30] return xs[0] + xs[2] }\n',
+        'f',
+      );
+      expect(ret.getValueNoContext(), equals(40));
+    });
+
+    test('map literal + key access', () async {
+      var ret = await _call(
+        'Int f() { var m = {"a": 1, "b": 2} return m["b"] }\n',
+        'f',
+      );
+      expect(ret.getValueNoContext(), equals(2));
+    });
+
+    test('for-in over a list literal', () async {
+      var output = await _run(r'''
+run() {
+  for Int x in [1, 2, 3] {
+    print(x)
+  }
+}
+''');
+      expect(output, equals([1, 2, 3]));
+    });
+
+    test('getter', () async {
+      var output = await _run(r'''
+class C {
+  Int x = 10
+  Int get twice => x * 2
+  static run() {
+    var c = C()
+    print(c.twice)
+  }
+}
+''', className: 'C');
+      expect(output, equals([20]));
+    });
+
+    test('named / default parameters', () async {
+      var ret = await _call(
+        'Int area({Int w = 2, Int h = 3}) { return w * h }\n',
+        'area',
+      );
+      expect(ret.getValueNoContext(), equals(6));
+    });
+
+    test('enum + switch on enum value', () async {
+      var output = await _run(r'''
+enum Role { admin, user }
+
+String label(Role r) {
+  switch r {
+    case Role.admin: return "A"
+    case Role.user: return "U"
+  }
+  return "?"
+}
+
+run() {
+  print(label(Role.admin))
+  print(label(Role.user))
+}
+''');
+      expect(output, equals(['A', 'U']));
+    });
+
+    test('rich enum body parses without semicolons', () async {
+      // The enhanced-enum body (fields + a body-less `const` constructor) parses
+      // even though Apollo statement semicolons are optional.
+      expect(await _loads(r'''
+enum Planet {
+  earth(5.97, 6371),
+  mars(0.642, 3389)
+  ;
+
+  Double mass
+  Double radius
+
+  const Planet(Double mass, Double radius)
+
+  Double surfaceGravity() {
+    return mass / (radius * radius)
+  }
+}
+'''), isTrue);
+    });
+  });
+
   group('Apollo async spellings (Dart-compatibility)', () {
     // The canonical form is a leading `async` with the unwrapped return type;
     // the two Dart-flavoured spellings are accepted and normalized to it.

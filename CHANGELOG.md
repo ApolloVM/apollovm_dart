@@ -24,7 +24,9 @@
     the unwrapped return type; the Dart spellings (`async Future<User> f()`,
     `Future<User> f() async`, and trailing `async`) are also parsed and
     normalized to it.
-  - **Statement-terminating semicolons are optional.**
+  - **Statement-terminating semicolons are optional** — including on class
+    fields and body-less constructors, so an enhanced (`;`-separated) enum body
+    with a `const` constructor parses without any semicolons.
   - **Primitive types are capitalized-only** (`Int`, `Double`, `Bool`, `Num`,
     `Void`); translating Apollo to Dart lowercases them, and Dart→Apollo
     capitalizes them.

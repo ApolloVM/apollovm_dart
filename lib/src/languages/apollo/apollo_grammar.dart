@@ -584,7 +584,10 @@ class ApolloGrammarDefinition extends ApolloGrammarLexer {
       (constToken().trimHidden().optional() &
               classConstructorName() &
               constructorParametersDeclaration() &
-              (char(';').trim() | codeBlock()))
+              // A body-less constructor may end with `;` or, since Apollo
+              // semicolons are optional, with nothing at all (e.g. a rich-enum
+              // `const Foo(...)` before the closing `}`).
+              (char(';').trim() | codeBlock()).optional())
           .map((v) {
             var className = v[1];
             var parameters = v[2] as ASTConstructorParametersDeclaration;
