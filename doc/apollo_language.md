@@ -183,8 +183,13 @@ for i += 2 from 0..limit { ... }  // custom step, ascending   (i += 2)
 for i -= 2 from limit..0 { ... }  // custom step, descending  (i -= 2)
 ```
 
-Each range loop is exactly equivalent to (and currently regenerates as) the
-classic form — e.g. `for i++ from 0..limit` ≡ `for (var i = 0; i <= limit; i++)`.
+Each range loop is exactly equivalent to the classic form — e.g.
+`for i++ from 0..limit` ≡ `for (var i = 0; i <= limit; i++)`. The two are the
+same after parsing, and Apollo **regenerates the range sugar whenever a loop has
+this canonical counting shape** (so a classic `for (var i = 0; i <= n; i++)` also
+comes back as `for i++ from 0..n`). Loops that can't be expressed as a range —
+a typed loop variable (`for (Int i = …)`), a non-additive step (`i = i * 2`), or
+a direction that doesn't match its comparison — regenerate as the classic form.
 
 #### Classic C-style `for`
 

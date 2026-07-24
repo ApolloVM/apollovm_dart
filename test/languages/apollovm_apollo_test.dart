@@ -359,7 +359,7 @@ Int f(Int n) {
       );
     });
 
-    test('range `for` desugars to a classic parenthesized `for`', () async {
+    test('range `for` round-trips back to the range sugar', () async {
       var apollo = _extractCodeUnit(
         await _translate(r'''
 run(Int n) {
@@ -367,8 +367,41 @@ run(Int n) {
 }
 ''', 'apollo'),
       );
-      expect(apollo, contains('for (var i = 0; i <= n'));
-      expect(apollo, contains('i++)'));
+      expect(apollo, contains('for i++ from 0..n'));
+      expect(apollo, isNot(contains('for (')));
+    });
+
+    test('a canonical classic `for` is regenerated as range sugar', () async {
+      var apollo = _extractCodeUnit(
+        await _translate(r'''
+run(Int n) {
+  for (var i = 0; i < n; i++) { print(i) }
+}
+''', 'apollo'),
+      );
+      expect(apollo, contains('for i++ from 0..<n'));
+    });
+
+    test('a typed/non-counting classic `for` stays classic', () async {
+      // A typed loop variable can't be expressed by the range sugar.
+      var typed = _extractCodeUnit(
+        await _translate(r'''
+run(Int n) {
+  for (Int i = 0; i <= n; i++) { print(i) }
+}
+''', 'apollo'),
+      );
+      expect(typed, contains('for (Int i = 0'));
+      // A non-unit, non-additive step is not a counting loop.
+      var multiplic = _extractCodeUnit(
+        await _translate(r'''
+run(Int n) {
+  for (var i = 1; i <= n; i = i * 2) { print(i) }
+}
+''', 'apollo'),
+      );
+      expect(multiplic, contains('for (var i = 1'));
+      expect(multiplic, contains('i = i * 2'));
     });
   });
 

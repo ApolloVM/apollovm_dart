@@ -14,8 +14,10 @@
     and `if (age >= 18) { … }` parse.
   - **Concise range-based `for`** — `for i++ from 0..limit { … }` with ascending
     (`++`/`+=`) and descending (`--`/`-=`) steps, custom steps, and inclusive
-    (`..`) / exclusive (`..<`, `..>`) bounds; it desugars to a classic
-    `for (var i = …; …; …)`. The classic C-style loop stays available but now
+    (`..`) / exclusive (`..<`, `..>`) bounds. It is equivalent to a classic
+    `for (var i = …; …; …)`, and Apollo regenerates the range sugar for any loop
+    with this canonical counting shape (so a matching classic loop also comes
+    back as range sugar). The classic C-style loop stays available but now
     **requires parentheses** (a paren-less header is a clear syntax error).
   - **`async` is a leading declaration modifier** (`async User loadUser(…) { … }`,
     `async main() { … }`). The canonical/generated form is leading `async` with

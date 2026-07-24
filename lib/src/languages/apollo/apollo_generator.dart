@@ -18,6 +18,131 @@ class ApolloCodeGeneratorApollo extends ApolloCodeGenerator {
   ApolloCodeGeneratorApollo(ApolloSourceCodeStorage codeStorage)
     : super('apollo', codeStorage);
 
+  /// Emits the concise range-based `for` (`for i++ from 0..n { … }`) when the
+  /// loop matches the canonical counting shape; otherwise falls back to the
+  /// classic parenthesized form. This is the inverse of the range-`for`
+  /// desugaring in the grammar, so a range loop round-trips back to itself.
+  @override
+  StringBuffer generateASTStatementForLoop(
+    ASTStatementForLoop forLoop, {
+    StringBuffer? out,
+    String indent = '',
+    bool headIndented = true,
+  }) {
+    var rangeHeader = _tryFormatRangeFor(forLoop);
+    if (rangeHeader == null) {
+      return super.generateASTStatementForLoop(
+        forLoop,
+        out: out,
+        indent: indent,
+        headIndented: headIndented,
+      );
+    }
+
+    out ??= newOutput();
+    if (headIndented) out.write(indent);
+    out.write(rangeHeader);
+    out.write(' {\n');
+    out.write(
+      generateASTBlock(forLoop.loopBlock, indent: indent, withBrackets: false),
+    );
+    out.write(indent);
+    out.write('}');
+    return out;
+  }
+
+  /// Returns the range-`for` header (e.g. `for i++ from 0..n`) if [forLoop] has
+  /// the canonical counting shape produced by the range desugaring:
+  ///
+  ///  - init:  `var <i> = <start>` (untyped, mutable)
+  ///  - cond:  `<i> <cmp> <end>` with `cmp` one of `<= < >= >`
+  ///  - step:  `<i>++` / `<i>--` / `<i> += <k>` / `<i> -= <k>`
+  ///
+  /// with a direction (ascending `++`/`+=`, descending `--`/`-=`) consistent
+  /// with the comparison. Returns `null` for anything else (typed loop, mixed
+  /// variables, non-counting condition, …), so it stays a classic `for (...)`.
+  String? _tryFormatRangeFor(ASTStatementForLoop forLoop) {
+    // init: `var <name> = <start>`.
+    var init = forLoop.initStatement;
+    if (init is! ASTStatementVariableDeclaration) return null;
+    if (init.type is! ASTTypeVar || init.unmodifiable) return null;
+    var startExp = init.value;
+    if (startExp == null) return null;
+    var name = init.name;
+
+    // cond: `<name> <cmp> <end>`.
+    var cond = forLoop.conditionExpression;
+    if (cond is! ASTExpressionOperation) return null;
+    var lhs = cond.expression1;
+    if (lhs is! ASTExpressionVariableAccess || lhs.variable.name != name) {
+      return null;
+    }
+    var cmp = cond.operator;
+    var endExp = cond.expression2;
+
+    // step: `<name>++`/`<name>--` or `<name> += <k>`/`<name> -= <k>`.
+    var cont = forLoop.continueExpression;
+    bool ascending;
+    String stepText;
+    if (cont is ASTExpressionVariableDirectOperation) {
+      if (cont.variable.name != name) return null;
+      if (cont.operator == ASTAssignmentOperator.sum) {
+        ascending = true;
+        stepText = '$name++';
+      } else if (cont.operator == ASTAssignmentOperator.subtract) {
+        ascending = false;
+        stepText = '$name--';
+      } else {
+        return null;
+      }
+    } else if (cont is ASTExpressionVariableAssignment) {
+      if (cont.variable.name != name) return null;
+      var amount = generateASTExpression(
+        cont.expression,
+        headIndented: false,
+      ).toString();
+      if (cont.operator == ASTAssignmentOperator.sum) {
+        ascending = true;
+        stepText = '$name += $amount';
+      } else if (cont.operator == ASTAssignmentOperator.subtract) {
+        ascending = false;
+        stepText = '$name -= $amount';
+      } else {
+        return null;
+      }
+    } else {
+      return null;
+    }
+
+    // The comparison must match the direction; it selects the range operator.
+    String rangeOp;
+    if (ascending) {
+      if (cmp == ASTExpressionOperator.lowerOrEq) {
+        rangeOp = '..';
+      } else if (cmp == ASTExpressionOperator.lower) {
+        rangeOp = '..<';
+      } else {
+        return null;
+      }
+    } else {
+      if (cmp == ASTExpressionOperator.greaterOrEq) {
+        rangeOp = '..';
+      } else if (cmp == ASTExpressionOperator.greater) {
+        rangeOp = '..>';
+      } else {
+        return null;
+      }
+    }
+
+    var startText = generateASTExpression(
+      startExp,
+      headIndented: false,
+    ).toString();
+    var endText = generateASTExpression(endExp, headIndented: false).toString();
+
+    return 'for $stepText from $startText$rangeOp$endText';
+  }
+
   @override
   String normalizeTypeName(String typeName, [String? callingFunction]) {
     // Apollo primitive types are capitalized-only.
