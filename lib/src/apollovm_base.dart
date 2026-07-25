@@ -9,6 +9,7 @@ import 'package:collection/collection.dart'
     show MapEquality, equalsIgnoreAsciiCase;
 import 'package:swiss_knife/swiss_knife.dart';
 
+import 'analysis/null_safety_analyzer.dart';
 import 'apollovm_code_generator.dart';
 import 'apollovm_code_storage.dart';
 import 'apollovm_generated_output.dart';
@@ -60,11 +61,29 @@ import 'resolution/symbol_table.dart';
 /// The Apollo VM.
 class ApolloVM implements VMTypeResolver {
   // ignore: non_constant_identifier_names
-  static final String VERSION = '2.21.0';
+  static final String VERSION = '2.22.0';
 
   static int _idCount = 0;
 
   final int id = ++_idCount;
+
+  /// Whether [loadCodeUnit] rejects a code unit whose AST has null-safety
+  /// **errors**, throwing [NullSafetyError] before the unit is registered.
+  ///
+  /// Off by default, so loading behaves as it always has and a null-safety
+  /// mistake surfaces at runtime. Turning it on moves the failure to resolution
+  /// time, before any statement runs:
+  ///
+  /// ```dart
+  /// var vm = ApolloVM(nullSafetyChecks: true);
+  /// await vm.loadCodeUnit(unit); // throws on `int a; int? b; ... a + b`
+  /// ```
+  ///
+  /// Only [NullSafetySeverity.error] blocks; warnings and info are reported
+  /// through the LSP but never fail a load.
+  final bool nullSafetyChecks;
+
+  ApolloVM({this.nullSafetyChecks = false});
 
   /// Returns a parser for a [language].
   ApolloCodeParser<T>? getParser<T extends Object>(String language) {
@@ -234,6 +253,11 @@ class ApolloVM implements VMTypeResolver {
       throw StateError("`CodeUnit` namespace NOT defined. Parser: $parser");
     }
 
+    // Reject a unit with null-safety errors before it is registered, so the
+    // failure lands at resolution time rather than partway through a run. A
+    // `BinaryCodeUnit` (Wasm) carries no AST, so there is nothing to analyze.
+    _checkNullSafety(codeUnit);
+
     var langNamespaces = getLanguageNamespaces(language);
     var codeNamespace = langNamespaces.get(namespace);
 
@@ -244,6 +268,38 @@ class ApolloVM implements VMTypeResolver {
     _resolutionEngine?.invalidate(codeUnit.id);
 
     return true;
+  }
+
+  /// Throws [NullSafetyError] when [nullSafetyChecks] is on and [codeUnit]'s AST
+  /// has error-severity null-safety findings.
+  ///
+  /// Warnings and info never block — they stay diagnostic-only, as in the LSP.
+  /// The analysis is best-effort: it must never turn an internal failure into a
+  /// load failure, so an unexpected error inside the analyzer is swallowed (the
+  /// LSP path does the same).
+  void _checkNullSafety(CodeUnit codeUnit) {
+    if (!nullSafetyChecks) return;
+
+    var root = codeUnit.root;
+    if (root == null) return;
+
+    List<NullSafetyDiagnostic> findings;
+    try {
+      findings = NullSafetyAnalyzer().analyze(root);
+    } catch (_) {
+      return;
+    }
+
+    var errors = findings
+        .where((f) => f.severity == NullSafetySeverity.error)
+        .toList();
+    if (errors.isEmpty) return;
+
+    throw NullSafetyError(
+      "Can't load `${codeUnit.id}` (${codeUnit.language}): "
+      '${errors.length} null-safety error(s).',
+      findings: errors,
+    );
   }
 
   /// Creates a runner for the [language].

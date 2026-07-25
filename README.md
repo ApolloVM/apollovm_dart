@@ -148,6 +148,7 @@ compiles but drops its null semantics (the null check is not performed).
 | Cascades `..` / `?..`            | ✅ | 🧩 | 🧩 | 🧩 | 🧩 | 🧩 | 🧩 | 🧩 | 🧩 | 🚧 |
 | `x == null` / `x != null`        | ✅ | ✅ | ✅ | ✅¹⁶ | ✅ | ✅ | ✅ | ✅¹⁷ | ✅¹⁸ | ✅ |
 | Static null-safety analysis¹⁹    | ✅ | 🚫 | 🚫 | 🚫 | 🚫 | 🚫 | 🚫 | 🚫 | 🚫 | 🚫 |
+| Enforce analysis at load²⁰       | ✅ | 🚫 | 🚫 | 🚫 | 🚫 | 🚫 | 🚫 | 🚫 | 🚫 | 🚫 |
 
 ¹ Kotlin renders the suffix natively (`Int?`). &nbsp;
 ² Go has no nullable value types: a `T?` is generated as a pointer `*T` — reads
@@ -195,7 +196,23 @@ value) to a non-nullable slot, and unconditional member/method/index access or
 operator use on a nullable — with promotion for `if (x != null) { … }` /
 `if (x == null) … else { … }`, and suppression via `?.` / `!` / `??`. Its
 diagnostics are surfaced through the [LSP](#language-server-lsp) for Dart
-documents.
+documents. It analyzes top-level functions **and** class methods, constructors
+and getters. &nbsp;
+²⁰ `ApolloVM(nullSafetyChecks: true)` makes `loadCodeUnit` throw
+`NullSafetyError` when the AST has null-safety **errors**, so a mistake fails at
+resolution time instead of partway through a run:
+
+```dart
+var vm = ApolloVM(nullSafetyChecks: true);
+
+// class Foo { static void main(int a, int? b) { print(a); var c = a + b; } }
+await vm.loadCodeUnit(unit);
+// NullSafetyError — nothing printed, nothing executed.
+```
+
+Off by default, so loading is unchanged unless you opt in. Only `error`-severity
+findings block; warnings and info stay diagnostic-only. The thrown error carries
+the offending `findings`.
 
 > The `⚠️` cells are targets whose language has no equivalent construct: the
 > access is emitted without its null check (`a?.x` becomes `a.x`, `a!` becomes

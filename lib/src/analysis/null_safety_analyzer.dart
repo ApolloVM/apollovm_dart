@@ -33,6 +33,31 @@ class NullSafetyDiagnostic {
   String toString() => '[$code/${severity.name}] $message';
 }
 
+/// Thrown when loading a [CodeUnit] whose AST has null-safety **errors**, if the
+/// [ApolloVM] was created with `nullSafetyChecks: true`.
+///
+/// This makes a null-safety mistake fail at *resolution* time, before any code
+/// runs, instead of surfacing as an `ApolloVMNullPointerException` partway
+/// through execution — after earlier statements have already had their effects.
+///
+/// Only [NullSafetySeverity.error] findings raise it; warnings and info remain
+/// diagnostic-only (they are still reported through the LSP).
+class NullSafetyError extends Error {
+  final String message;
+
+  /// The error-severity findings that caused the failure.
+  final List<NullSafetyDiagnostic> findings;
+
+  NullSafetyError(this.message, {this.findings = const []});
+
+  @override
+  String toString() {
+    if (findings.isEmpty) return '[Null Safety] $message';
+    var list = findings.map((f) => '  - ${f.message}').join('\n');
+    return '[Null Safety] $message\n$list';
+  }
+}
+
 /// A pragmatic, flow-aware Dart null-safety analyzer.
 ///
 /// It is intentionally *not* a full soundness engine — it reasons only about
@@ -54,11 +79,41 @@ class NullSafetyAnalyzer {
   List<NullSafetyDiagnostic> analyze(ASTRoot root) {
     _findings.clear();
 
-    // Function/method/getter bodies are themselves `ASTBlock`s; analyze each
-    // as an independent flow unit seeded with its parameters.
+    // Function/method/getter bodies are themselves `ASTBlock`s; analyze each as
+    // an independent flow unit seeded with its parameters.
+    //
+    // Containers have to be walked explicitly. `ASTBlock.children` is only
+    // `[functions, statements]`, and:
+    //   - `ASTRoot` keeps its classes in a separate map, so
+    //     `root.descendantChildren` never enters a class body;
+    //   - `ASTClass` keeps constructors and getters outside `children` too.
+    // Without this, every method, constructor and getter of every class went
+    // unanalyzed.
     for (final node in root.descendantChildren) {
-      if (node is ASTInvocableDeclaration) {
-        _analyzeInvocable(node);
+      if (node is ASTInvocableDeclaration) _analyzeInvocable(node);
+    }
+
+    for (final clazz in root.classes) {
+      for (final node in clazz.descendantChildren) {
+        if (node is ASTInvocableDeclaration) _analyzeInvocable(node);
+      }
+      for (final set in clazz.constructors) {
+        for (final ctor in set.functions) {
+          _analyzeInvocable(ctor);
+        }
+      }
+      // A getter takes no parameters, so its scope starts empty.
+      for (final getter in clazz.getter) {
+        _analyzeBlock(getter, _Scope());
+      }
+    }
+
+    for (final extension in root.extensions) {
+      for (final node in extension.descendantChildren) {
+        if (node is ASTInvocableDeclaration) _analyzeInvocable(node);
+      }
+      for (final getter in extension.getter) {
+        _analyzeBlock(getter, _Scope());
       }
     }
 
