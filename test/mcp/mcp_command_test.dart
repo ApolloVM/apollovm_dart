@@ -130,4 +130,29 @@ void main() {
       expect(output, contains('apollovm.wasm'));
     });
   });
+
+  group('mcp call --null-safety', () {
+    // The flag is the same server default the serve path applies; `call` builds
+    // its own args map, so it has to set it explicitly.
+    const bad =
+        'class Foo { static void main(int a, int? b) { var c = a + b; } }';
+
+    test('reports the finding on a parse-based tool', () async {
+      final out = await runMcp([
+        'call',
+        'parse',
+        '-l',
+        'dart',
+        '-s',
+        bad,
+        '--null-safety',
+      ]);
+      expect(out, contains('unchecked-nullable-operand'));
+    });
+
+    test('reports nothing without the flag', () async {
+      final out = await runMcp(['call', 'parse', '-l', 'dart', '-s', bad]);
+      expect(out, isNot(contains('unchecked-nullable-operand')));
+    });
+  });
 }

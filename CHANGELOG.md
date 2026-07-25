@@ -1,3 +1,58 @@
+## 2.23.0
+
+### `nullSafetyChecks` is reachable from the CLI and MCP
+
+2.22.0 added `ApolloVM(nullSafetyChecks: true)`, but the only way to turn it on
+was to construct the VM in Dart. It is now exposed at every entry point that
+actually loads code.
+
+**CLI** — `--null-safety` on `run`, `translate` and `compile` (added once on the
+shared `CommandSourceFileBase`, like `--pub`):
+
+```shell
+$ apollovm run --null-safety foo.dart
+** NULL SAFETY: Can't load `foo.dart` (dart): 1 null-safety error(s).
+   - The operand 'b' can be 'null', so it can't be used in an operation
+     unconditionally. Use '??', '!' or a null check.
+$ echo $?
+1
+```
+
+The rejection is printed as a report rather than escaping as an unhandled error
+with a stack trace, and it is not restated as a parse failure. `main` now maps a
+command result of `false` to exit status 1, so a check can gate a build; no
+existing command path returns `false`.
+
+**MCP** — every source tool takes an optional `nullSafety` argument, and
+`--null-safety` on both `apollovm mcp serve` and `apollovm mcp call` sets the
+default (a per-call value always wins). The two tool kinds behave differently,
+by design:
+
+- the tools that **load** — `apollovm.execute`, `apollovm.translate`,
+  `apollovm.wasm` — reject the source, returning the findings as diagnostics
+  rather than throwing;
+- the **parse-based** tools — `apollovm.parse`, `apollovm.ast`,
+  `apollovm.symbols`, `apollovm.types` — never load anything, so a "fail the
+  load" flag would be meaningless. They add the findings to `diagnostics` and
+  still succeed, which is the useful form for inspection.
+
+The server default is merged into the tool arguments at the single dispatch
+point shared by the in-process and isolate paths. That matters: `_IsolateJob`
+carries only the arguments and limits, so a field on the server object would
+never reach a spawned isolate — and `apollovm.execute` runs in one by default.
+It is deliberately *not* stored in `McpLimits`, which is documented as resource
+and security limits.
+
+Adds `mcpCoerceBool` beside `mcpCoerceInt`, so a client sending `"true"` or `1`
+is handled rather than crashing the tool on a hard cast — the same class of bug
+2.16.0 fixed for the integer arguments.
+
+### Not changed
+
+The LSP was checked and deliberately left alone: its `Analyzer` uses its VM only
+for `getParser` and never loads a code unit, and it already reports null-safety
+findings as diagnostics. An editor must report, not refuse to open a file.
+
 ## 2.22.0
 
 ### The null-safety analyzer had never seen a class method

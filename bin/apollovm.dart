@@ -40,7 +40,11 @@ void main(List<String> args) async {
     }
   }
 
-  await commandRunner.run(args);
+  // A command returns `false` only when it rejected the source (today: a
+  // `--null-safety` failure), which must be a non-zero exit so a build/CI step
+  // fails. `run` yields `null` when no command executed (`--help`, usage).
+  var ok = await commandRunner.run(args);
+  if (ok == false) exitCode = 1;
 }
 
 void showVersion() {
@@ -69,6 +73,14 @@ abstract class CommandSourceFileBase extends Command<bool> {
       valueHelp: 'dart|java|kotlin|go|javascript|typescript|lua|python',
     );
     argParser.addFlag(
+      'null-safety',
+      help:
+          'Reject source with null-safety errors while loading it, instead of\n'
+          'failing partway through the run.',
+      defaultsTo: false,
+      negatable: false,
+    );
+    argParser.addFlag(
       'pub',
       help:
           'Resolve Dart `package:` imports through the optional package '
@@ -95,6 +107,35 @@ abstract class CommandSourceFileBase extends Command<bool> {
   String? get pubHost => argResults!['pub-host'] as String?;
 
   String? get pubCache => argResults!['pub-cache'] as String?;
+
+  /// Whether `--null-safety` was passed: the VM then rejects a code unit whose
+  /// AST has null-safety errors while loading it.
+  bool get nullSafetyChecks => argResults!['null-safety'] as bool;
+
+  /// Set when [loadCodeUnitReporting] rejected the source for null-safety
+  /// errors, so the caller reports nothing further (it was already printed, and
+  /// it is not a parse failure).
+  bool nullSafetyRejected = false;
+
+  /// Loads [codeUnit] into [vm], reporting a [NullSafetyError] as a clean
+  /// message instead of letting it escape as an unhandled error with a stack
+  /// trace — `--null-safety` is user-facing, so its failure should read like a
+  /// diagnostic.
+  Future<bool> loadCodeUnitReporting<T extends Object>(
+    ApolloVM vm,
+    CodeUnit<T> codeUnit,
+  ) async {
+    try {
+      return await vm.loadCodeUnit(codeUnit);
+    } on NullSafetyError catch (e) {
+      nullSafetyRejected = true;
+      print('** NULL SAFETY: ${e.message}');
+      for (var f in e.findings) {
+        print('   - ${f.message}');
+      }
+      return false;
+    }
+  }
 
   /// Installs the optional Dart package importer on [vm] and pre-loads all
   /// reachable `package:` imports. No-op unless `--pub` is set (and Dart).
@@ -205,7 +246,7 @@ Examples:
       );
     }
 
-    var vm = ApolloVM();
+    var vm = ApolloVM(nullSafetyChecks: nullSafetyChecks);
 
     // A `.wasm` file is a binary module: load its bytes as a `BinaryCodeUnit`
     // (parsed by `ApolloParserWasm` into its exported functions) and run it
@@ -223,9 +264,12 @@ Examples:
       codeUnit = SourceCodeUnit(language, source, id: sourceFilePath);
     }
 
-    var loadOK = await vm.loadCodeUnit(codeUnit);
+    var loadOK = await loadCodeUnitReporting(vm, codeUnit);
 
     if (!loadOK) {
+      // A null-safety rejection was already reported in full; it is not a parse
+      // failure, so do not restate it as one.
+      if (nullSafetyRejected) return false;
       throw StateError(
         "Can't parse source! language: $language ; sourceFilePath: $sourceFilePath",
       );
@@ -322,13 +366,16 @@ Examples:
       );
     }
 
-    var vm = ApolloVM();
+    var vm = ApolloVM(nullSafetyChecks: nullSafetyChecks);
 
     var codeUnit = SourceCodeUnit(language, source, id: sourceFilePath);
 
-    var loadOK = await vm.loadCodeUnit(codeUnit);
+    var loadOK = await loadCodeUnitReporting(vm, codeUnit);
 
     if (!loadOK) {
+      // A null-safety rejection was already reported in full; it is not a parse
+      // failure, so do not restate it as one.
+      if (nullSafetyRejected) return false;
       throw StateError(
         "Can't parse source! language: $language ; sourceFilePath: $sourceFilePath",
       );
@@ -395,13 +442,16 @@ Examples:
       throw StateError('Unsupported compile target: $target');
     }
 
-    var vm = ApolloVM();
+    var vm = ApolloVM(nullSafetyChecks: nullSafetyChecks);
 
     var codeUnit = SourceCodeUnit(language, source, id: sourceFilePath);
 
-    var loadOK = await vm.loadCodeUnit(codeUnit);
+    var loadOK = await loadCodeUnitReporting(vm, codeUnit);
 
     if (!loadOK) {
+      // A null-safety rejection was already reported in full; it is not a parse
+      // failure, so do not restate it as one.
+      if (nullSafetyRejected) return false;
       throw StateError(
         "Can't parse source! language: $language ; sourceFilePath: $sourceFilePath",
       );

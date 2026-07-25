@@ -214,6 +214,22 @@ Off by default, so loading is unchanged unless you opt in. Only `error`-severity
 findings block; warnings and info stay diagnostic-only. The thrown error carries
 the offending `findings`.
 
+The same check is reachable without writing Dart:
+
+```shell
+# CLI — `run`, `translate` and `compile`; exits non-zero on a finding.
+apollovm run --null-safety script.dart
+
+# MCP — per call, or as the server default via `apollovm mcp --null-safety`.
+{"name": "apollovm.execute",
+ "arguments": {"language": "dart", "source": "...", "nullSafety": true}}
+```
+
+On the MCP tools that *load* code (`execute`, `translate`, `wasm`) a finding
+rejects the source; on the parse-based tools (`parse`, `ast`, `symbols`,
+`types`) nothing is loaded, so the findings are added to `diagnostics` instead.
+See [doc/MCP.md](doc/MCP.md).
+
 > The `⚠️` cells are targets whose language has no equivalent construct: the
 > access is emitted without its null check (`a?.x` becomes `a.x`, `a!` becomes
 > `a`). The generated source compiles, but a null receiver behaves differently
