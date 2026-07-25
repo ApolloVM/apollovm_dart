@@ -1698,6 +1698,8 @@ class ASTRoot extends ASTEntryPointBlock {
   }
 
   ASTClassNormal? getClass(String className, {bool caseInsensitive = false}) {
+    if (className.isEmpty) return null;
+
     var clazz = _classes[className];
 
     if (clazz != null) {

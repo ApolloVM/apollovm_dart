@@ -1,0 +1,16 @@
+# These files are fixtures for the ApolloVM language server, not real Dart
+# sources: they are written in ApolloVM's language subset, and `broken.dart`
+# is intentionally malformed so the server emits a parse diagnostic.
+#
+# The repository root already excludes `lsp/**`, but that exclusion does not
+# apply when the analyzer is pointed at this directory directly — which is what
+# an IDE does when one of these files is opened, and what
+# `dart analyze lsp/example_workspace` does. Silencing the diagnostics here
+# keeps the Dart analyzer quiet in both cases.
+analyzer:
+  errors:
+    # `.broken.dart`: the deliberately missing `)` in `int sum(int a, int b {`.
+    expected_token: ignore
+    # `models.dart` / `orders.dart`: ApolloVM's subset has no constructors, so
+    # the fields read as uninitialized non-nullable instance fields.
+    not_initialized_non_nullable_instance_field: ignore

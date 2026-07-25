@@ -61,7 +61,7 @@ import 'resolution/symbol_table.dart';
 /// The Apollo VM.
 class ApolloVM implements VMTypeResolver {
   // ignore: non_constant_identifier_names
-  static final String VERSION = '2.23.0';
+  static final String VERSION = '2.23.1';
 
   static int _idCount = 0;
 
@@ -637,6 +637,8 @@ class LanguageNamespaces {
     String? namespace,
     bool caseInsensitive = false,
   }) {
+    if (className.isEmpty) return null;
+
     if (namespace != null) {
       var ns = _namespaces[namespace];
       return ns?.getClass(className, caseInsensitive: caseInsensitive);
@@ -741,6 +743,8 @@ class CodeNamespace {
 
   /// Returns an [ASTClassNormal] for [className].
   ASTClassNormal? getClass(String className, {bool caseInsensitive = false}) {
+    if (className.isEmpty) return null;
+
     for (var cu in _codeUnits) {
       var clazz = cu.root!.getClass(
         className,
@@ -753,6 +757,8 @@ class CodeNamespace {
 
   /// Returns `true` if contains class with [className].
   bool containsClass(String className, {bool caseInsensitive = false}) {
+    if (className.isEmpty) return false;
+
     for (var cu in _codeUnits) {
       if (cu.root!.containsClass(className, caseInsensitive: caseInsensitive)) {
         return true;

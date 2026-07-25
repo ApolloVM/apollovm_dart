@@ -23,8 +23,9 @@ jobs:
       - name: dart format
         # Scope to the package's real sources: the `lsp/` companion assets are a
         # nested benchmark package plus example-workspace fixtures written in
-        # ApolloVM's language subset (one intentionally malformed), which the
-        # Dart formatter cannot parse. They ship excluded via `.pubignore`.
+        # ApolloVM's language subset, and they ship excluded via `.pubignore`.
+        # (The intentionally malformed fixture is `.broken.dart` — dot-prefixed
+        # so that a bare `dart format .` skips it too.)
         run: dart format -o none --set-exit-if-changed lib bin test example
       - name: dart analyze
         run: dart analyze --fatal-infos --fatal-warnings .
