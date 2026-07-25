@@ -1,3 +1,34 @@
+## 2.21.0
+
+### Two invalid-output fixes found while documenting null safety
+
+Writing the README's null-safety matrix meant generating every construct into
+every target and reading the result. Two cells were emitting source that is not
+valid in the target language:
+
+- **Kotlin's null-aware index was `xs?[0]`.** Kotlin has no `?[` operator — its
+  null-aware element access is the call `xs?.get(0)`. The shared
+  `nullAwareIndexOpen` hook gained a matching `nullAwareIndexClose`, so a target
+  can close with `)` instead of `]`.
+- **Lua's null literal was `null`.** Lua's is `nil`, so the generated code
+  referenced an undefined global: `a == null` was always false rather than a nil
+  test. Both null-rendering hooks are now overridden for Lua.
+
+### README: the null-safety surface is documented
+
+The feature tables covered control flow, operators and OOP, but nothing of the
+null-safety work from 2.16.0 onwards. A new **Null safety** section carries a
+per-language table for nullable types, `??` / `??=`, `?.` / `?[`, `!`, cascades,
+`== null` and the static analyzer — each cell verified by generating the
+construct and reading the output, not from memory.
+
+It adds a **⚠️ lossy** marker for targets that emit a form which compiles but
+drops the null check (`a?.x` → `a.x`), distinguishing those from a faithful
+idiom (`🧩`) such as Java's ternary for `??` or Go's pointer dereference for `!`.
+A **Member-access chains** section covers the 2.17.0 chain support, the `null`
+row in the operators table now points at the Wasm limits, and the Wasm status
+paragraph mentions the boxed-`null` domain.
+
 ## 2.20.0
 
 ### Go: a nullable `T?` is generated as a pointer `*T`

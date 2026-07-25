@@ -63,6 +63,10 @@ Kotlin → JavaScript, Go → Dart), and code can be regenerated back to its ori
   Asyncify), classes (fields, constructors, instance & `static` methods,
   `toString()` dispatch, `Object`/`dynamic` boxing), exceptions, closures,
   lists/maps and GC types.
+- **Null safety**: nullable types (`T?`), `??` / `??=`, `?.` / `?[`, `!` and
+  cascades — parsed from Dart, interpreted, compiled to Wasm and translated to
+  every target, plus a flow-aware static analyzer surfaced through the LSP.
+  See [Null safety](#null-safety).
 
 ### Control flow & operators
 
@@ -96,7 +100,7 @@ The **Wasm** column shows what the on-the-fly WebAssembly compiler currently sup
 | String interpolation / concat    | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | List & map / dict literals       | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Index access (`a[i]`, nested `m[i][j]`)¹² | ✅ | 🧩 | 🧩 | 🧩 | 🧩 | 🧩 | 🧩 | 🧩 | 🧩 | ✅ |
-| `null` / `None` / `nil`          | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `null` / `None` / `nil`¹³        | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 🧩¹³ |
 
 ¹ Lua numeric-for (`for i = a, b do`). &nbsp; ² Lua `repeat … until`. &nbsp;
 ³ Kotlin `when`. &nbsp; ⁴ Python `match` / `case`. &nbsp;
@@ -116,7 +120,98 @@ The **Wasm** column shows what the on-the-fly WebAssembly compiler currently sup
 compound assignment (`a[i] += 1`). **Chained/nested** access and assignment
 (`m[0][1]`, `m['a']['b'] = v`) run on the shared interpreter and are parsed from
 **Dart** source; the other languages currently parse a single `[...]` only (`🧩`),
-with nested-index parsing being extended per grammar.
+with nested-index parsing being extended per grammar. &nbsp;
+¹³ The null *literal* and its per-language spelling (`null` / `nil` / `None`).
+Wasm has no null value of its own and represents it as a boxed pointer, so it is
+`🧩` — see [Null safety](#null-safety) for the operators (`??`, `?.`, `!`, …) and
+the Wasm limits.
+
+### Null safety
+
+Dart's null-safety surface — nullable types (`T?`), the null-coalescing operators
+`??` / `??=`, null-aware access `?.` / `?[`, the null assertion `!`, and cascades
+`..` / `?..` — is **parsed from Dart source** (the other grammars do not accept
+this syntax yet), runs on the interpreter, compiles to Wasm within the limits
+below, and is **translated to every target**.
+
+Same legend as above, plus **⚠️** *lossy*: the construct is emitted in a form that
+compiles but drops its null semantics (the null check is not performed).
+
+| Feature | Dart | Java | Kotlin | Go | C# | JS | TS | Lua | Python | Wasm |
+|---|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|
+| Nullable type `T?`               | ✅ | 🚫 | ✅¹ | 🧩² | 🚫 | 🚫 | 🧩³ | 🚫 | 🚫 | 🧩⁴ |
+| `??` (null-coalescing)           | ✅ | 🧩⁵ | ✅⁶ | 🧩⁷ | ✅ | ✅ | ✅ | 🧩⁸ | 🧩⁹ | 🧩⁴ |
+| `??=` (null-coalescing assign)   | ✅ | 🧩⁵ | 🧩⁶ | 🚧¹⁰ | ✅ | ✅ | ✅ | 🧩⁸ | 🧩⁹ | 🧩⁴ |
+| `?.` (null-aware access)         | ✅ | ⚠️ | ✅ | 🚧¹¹ | ⚠️ | ⚠️ | ✅ | ⚠️ | ⚠️ | 🧩⁴ |
+| `?[` (null-aware index)          | ✅ | ⚠️ | ✅¹² | ⚠️ | ⚠️ | ⚠️ | ✅¹³ | ⚠️ | ⚠️ | 🧩⁴ |
+| `!` (null assertion)             | ✅ | ⚠️ | ✅¹⁴ | 🧩¹⁵ | ⚠️ | ⚠️ | ✅ | ⚠️ | ⚠️ | 🧩⁴ |
+| Cascades `..` / `?..`            | ✅ | 🧩 | 🧩 | 🧩 | 🧩 | 🧩 | 🧩 | 🧩 | 🧩 | 🚧 |
+| `x == null` / `x != null`        | ✅ | ✅ | ✅ | ✅¹⁶ | ✅ | ✅ | ✅ | ✅¹⁷ | ✅¹⁸ | ✅ |
+| Static null-safety analysis¹⁹    | ✅ | 🚫 | 🚫 | 🚫 | 🚫 | 🚫 | 🚫 | 🚫 | 🚫 | 🚫 |
+
+¹ Kotlin renders the suffix natively (`Int?`). &nbsp;
+² Go has no nullable value types: a `T?` is generated as a pointer `*T` — reads
+deref (`(*a)`), `x == null` compares the pointer (`x == nil`), and a non-null
+value takes its address through a generated `func goPtr[T any](v T) *T` helper
+(Go cannot write `&5`). Types already nilable in Go are left alone, so a
+`List<int>?` stays `[]int`, not `*[]int`. &nbsp;
+³ TypeScript renders nullable *types* without the suffix — `T?` on a member is
+not valid TS — while the null-aware *operators* are native. &nbsp;
+⁴ Wasm has no null value of its own, so `null` is the boxed-`Object` pointer `0`.
+That covers everything that stays boxed: a `var` / `Object?` local, a ternary
+arm, a `List<Object>` element, `??`, `== null`, and string interpolation (which
+prints `null`). A slot with a concrete Wasm type has no encoding for it — an
+`int` is an i64 — and is reported as an `UnsupportedSyntaxError` naming the type
+rather than compiled into a module that fails to validate. &nbsp;
+⁵ Java has no null-coalescing operator; emitted as the ternary
+`(a != null ? a : b)`, and `a ??= b` as `a = (a != null ? a : b)`. &nbsp;
+⁶ Kotlin's null-coalescing is the Elvis operator `a ?: b`. It has no `??=`, so
+that becomes `a = a ?: b`. &nbsp;
+⁷ Go has no conditional *expression*, so `a ?? b` is an inline function that
+nil-checks the pointer: `func() int { if a != nil { return *a }; return b }()`.
+&nbsp;
+⁸ Lua has no null-coalescing operator, and neither `a or b` nor the common
+`a ~= nil and a or b` idiom is correct — Lua treats `false` as falsy, so a
+non-nil `false` would wrongly fall through. It is emitted as an
+immediately-invoked function with an explicit `nil` test, which also evaluates
+the left operand only once. &nbsp;
+⁹ Python uses a conditional expression testing `is not None`, so `0` / `''` /
+`False` are preserved (an `or` shortcut would not). &nbsp;
+¹⁰ Go's `??=` lowering (`t = t ?? v`) needs the target's element type to build
+the inline function's return type, which the text-level assignment hook does not
+have; it is reported as unsupported. Plain `??` is unaffected. &nbsp;
+¹¹ In Go, degrading `?.` to `.` would both skip the nil check *and* yield a value
+where a `*T` is expected, so it is reported rather than mis-emitted. &nbsp;
+¹² Kotlin has no `?[` operator: null-aware element access is the call
+`a?.get(i)`. &nbsp;
+¹³ TypeScript's null-aware element access is `a?.[i]`, not `a?[i]`. &nbsp;
+¹⁴ Kotlin's null assertion is `!!`. &nbsp;
+¹⁵ Go's `a!` is the pointer dereference `(*a)`, which panics on `nil` — the same
+shape as the assertion's throw. &nbsp;
+¹⁶ Go compares the pointer directly (`a != nil`), without dereferencing. &nbsp;
+¹⁷ Lua's null literal is `nil`. &nbsp; ¹⁸ Python's is `None`. &nbsp;
+¹⁹ A pragmatic, flow-aware analyzer reports assigning `null` (or a nullable
+value) to a non-nullable slot, and unconditional member/method/index access or
+operator use on a nullable — with promotion for `if (x != null) { … }` /
+`if (x == null) … else { … }`, and suppression via `?.` / `!` / `??`. Its
+diagnostics are surfaced through the [LSP](#language-server-lsp) for Dart
+documents.
+
+> The `⚠️` cells are targets whose language has no equivalent construct: the
+> access is emitted without its null check (`a?.x` becomes `a.x`, `a!` becomes
+> `a`). The generated source compiles, but a null receiver behaves differently
+> than in the source language. `??` / `??=` are never lossy — every target either
+> has the operator or gets a faithful desugaring.
+
+### Member-access chains
+
+A chain of field/method accesses of any depth, in any mix of `.`, `?.` and `!`
+(`a.b.c`, `a.b?.c`, `a.b!.c`, `a.b.m()`, `a.b?.m(x)`), plus chained writes
+(`a.b.c = v`), a field read off a parenthesized receiver (`(a).v`, `(a)?.v`) and
+a call followed by a field access (`(expr).m().field`), are parsed from **Dart**
+source. Each segment folds onto the previous one and reuses the same
+object-access nodes, so the runtime, null-aware and code-generation behaviour is
+shared. The other grammars parse a single access segment only.
 
 ### Classes, types & OOP
 
@@ -674,9 +769,11 @@ on the fly, without the need for any third-party tools.
 - **Status:** *Wasm support is under active development. It already compiles a broad subset of
 the AST — functions, full control flow (`if`/`for`/`for-each`/`while`/`do-while`/`switch`/
 `break`/`continue`/ternary), arithmetic/comparison/logical/bitwise operators, `try`/`catch`/`throw`,
-classes, closures, lists/maps, and `async`/`await` (via Asyncify); see the
-[feature table](#supported-features). Constructs not yet compiled to Wasm are limited to a few
-higher-level features (e.g. non-integer `switch`).*
+classes, closures, lists/maps, `async`/`await` (via Asyncify), and `null` within
+its boxed-`Object` domain; see the [feature table](#supported-features). Constructs not yet
+compiled to Wasm are limited to a few higher-level features (e.g. non-integer `switch`),
+and a `null` in a slot with a concrete Wasm type (an `int` is an i64) is reported as an
+unsupported construct rather than mis-compiled — see [Null safety](#null-safety).*
 
 Example compiling Dart code to WebAssembly (Wasm):
 ```dart

@@ -701,6 +701,35 @@ class ApolloCodeGeneratorLua extends ApolloCodeGenerator {
     }
   }
 
+  // Lua's null literal is `nil`, not `null`. Without these a `null` in the
+  // source was emitted verbatim, producing Lua that references an undefined
+  // global (`a == null` is always false, rather than a nil test).
+  @override
+  StringBuffer generateASTExpressionNullValue(
+    ASTExpressionNullValue expression, {
+    StringBuffer? out,
+    String indent = '',
+    bool headIndented = true,
+  }) {
+    out ??= newOutput();
+    if (headIndented) out.write(indent);
+    out.write('nil');
+    return out;
+  }
+
+  @override
+  StringBuffer generateASTValueNull(
+    ASTValueNull value, {
+    StringBuffer? out,
+    String indent = '',
+    bool headIndented = true,
+  }) {
+    out ??= newOutput();
+    if (headIndented) out.write(indent);
+    out.write('nil');
+    return out;
+  }
+
   /// Lua has no null-coalescing operator, and neither `a or b` nor the
   /// `a ~= nil and a or b` idiom is correct: Lua treats `false` as falsy, so a
   /// non-nil `false` on the left would wrongly fall through to `b`.

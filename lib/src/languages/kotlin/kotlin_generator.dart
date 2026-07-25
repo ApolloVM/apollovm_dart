@@ -91,6 +91,14 @@ class ApolloCodeGeneratorKotlin extends ApolloCodeGenerator {
   @override
   bool get supportsNullAwareOperators => true;
 
+  // Kotlin has no `?[` operator: null-aware element access is the call
+  // `a?.get(i)`.
+  @override
+  String get nullAwareIndexOpen => '?.get(';
+
+  @override
+  String get nullAwareIndexClose => ')';
+
   @override
   String get nullAssertionSuffix => '!!';
 

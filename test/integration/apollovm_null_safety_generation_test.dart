@@ -226,6 +226,27 @@ void main() {
       expect(() => _generate(vm, 'go'), throwsA(isA<UnsupportedSyntaxError>()));
     });
 
+    test('Kotlin null-aware index is `?.get(i)`, not `?[i]`', () async {
+      // Kotlin has no `?[` operator; the default `?[` spelling is invalid there.
+      var vm = await _load(
+        'class K { int? f(List<int>? xs) { return xs?[0]; } }',
+      );
+      var kotlin = await _generate(vm, 'kotlin');
+      expect(kotlin, contains('xs?.get(0)'));
+      expect(kotlin, isNot(contains('xs?[0]')));
+    });
+
+    test('Lua renders the null literal as `nil`', () async {
+      // `null` is not a Lua value: emitting it verbatim referenced an undefined
+      // global, so `a == null` was always false instead of a nil test.
+      var vm = await _load(
+        'class K { int f(int? a) { if (a == null) { return -1; } return 1; } }',
+      );
+      var lua = await _generate(vm, 'lua');
+      expect(lua, contains('nil'));
+      expect(lua, isNot(contains('null')));
+    });
+
     test('Java desugars `??` and `??=` into ternaries', () async {
       var vm = await _load(_source);
       var java = await _generate(vm, 'java11');
