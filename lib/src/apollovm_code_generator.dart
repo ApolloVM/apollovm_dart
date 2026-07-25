@@ -1998,8 +1998,13 @@ abstract class ApolloCodeGenerator
   String get nullAssertionSuffix => '!';
 
   /// The opening token for a null-aware index access (`?[` for Dart, `?.[` for
-  /// TypeScript). Only used when [supportsNullAwareOperators] is true.
+  /// TypeScript, `?.get(` for Kotlin). Only used when
+  /// [supportsNullAwareOperators] is true.
   String get nullAwareIndexOpen => '?[';
+
+  /// The closing token that matches [nullAwareIndexOpen]. Kotlin's null-aware
+  /// index is the call `a?.get(i)`, so it closes with `)` rather than `]`.
+  String get nullAwareIndexClose => ']';
 
   StringBuffer generateASTExpressionNullAssertion(
     ASTExpressionNullAssertion expression, {
@@ -2493,18 +2498,15 @@ abstract class ApolloCodeGenerator
     if (expression.assertReceiver && supportsNullAwareOperators) {
       out.write(nullAssertionSuffix);
     }
-    out.write(
-      expression.isNullAware && supportsNullAwareOperators
-          ? nullAwareIndexOpen
-          : '[',
-    );
+    var nullAwareIndex = expression.isNullAware && supportsNullAwareOperators;
+    out.write(nullAwareIndex ? nullAwareIndexOpen : '[');
     generateASTExpression(
       expression.expression,
       out: out,
       indent: indent,
       headIndented: false,
     );
-    out.write(']');
+    out.write(nullAwareIndex ? nullAwareIndexClose : ']');
     // Chained indices for nested access (`m[0][1]`).
     for (var extra in expression.extraIndices) {
       out.write('[');
