@@ -81,6 +81,54 @@ void main() {
     });
   });
 
+  group('class members are analyzed', () {
+    // `ASTRoot` keeps classes outside `children`, so `root.descendantChildren`
+    // never entered a class body: every method, getter and constructor went
+    // unanalyzed. The rules below are already covered for top-level functions;
+    // these assert they also fire inside a class.
+    test('a static method body is analyzed', () async {
+      var f = await _analyze(
+        'class Foo { static void main(int a, int? b) { var c = a + b; } }',
+      );
+      expect(_codes(f), contains('unchecked-nullable-operand'));
+    });
+
+    test('an instance method body is analyzed', () async {
+      var f = await _analyze('class Foo { void run() { int x = null; } }');
+      expect(_codes(f), contains('null-to-non-nullable'));
+    });
+
+    test('a getter body is analyzed', () async {
+      var f = await _analyze(
+        'class Foo { int get value { int x = null; return x; } }',
+      );
+      expect(_codes(f), contains('null-to-non-nullable'));
+    });
+
+    test('a constructor body is analyzed', () async {
+      var f = await _analyze('class Foo { Foo() { int x = null; } }');
+      expect(_codes(f), contains('null-to-non-nullable'));
+    });
+
+    test('a clean class produces no findings', () async {
+      var f = await _analyze(
+        'class Foo { static int run(int? a, int b) { return (a ?? 0) + b; } }',
+      );
+      expect(f, isEmpty);
+    });
+
+    test('a top-level function is still analyzed', () async {
+      var f = await _analyze('void run() { int x = null; }');
+      expect(_codes(f), contains('null-to-non-nullable'));
+    });
+
+    test('a finding is not duplicated by the extra traversal', () async {
+      // `analyze` walks root *and* each class; the dedup must keep one finding.
+      var f = await _analyze('class Foo { void run() { int x = null; } }');
+      expect(f.where((d) => d.code == 'null-to-non-nullable').length, 1);
+    });
+  });
+
   group('nullable-to-non-nullable', () {
     test(
       'flags a nullable variable assigned to a non-nullable local',

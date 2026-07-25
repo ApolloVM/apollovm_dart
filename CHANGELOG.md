@@ -1,3 +1,56 @@
+## 2.22.0
+
+### The null-safety analyzer had never seen a class method
+
+`NullSafetyAnalyzer.analyze` walked `root.descendantChildren` looking for
+invocables. But `ASTBlock.children` is only `[functions, statements]`, and
+`ASTRoot` keeps its classes in a separate map — so the traversal never entered a
+class body. `ASTClass` compounds it by keeping constructors and getters outside
+`children` too.
+
+The effect: **every method, constructor and getter of every class went
+unanalyzed**, including in the LSP/Problems panel. Only top-level functions were
+ever checked, which is also why the existing tests — all written against
+top-level functions — never caught it.
+
+```dart
+class Foo {
+  static void main(int a, int? b) {
+    var c = a + b;   // reported no diagnostic at all
+  }
+}
+```
+
+`analyze` now walks each class and extension explicitly, plus their constructors
+and getters. The reported case produces `unchecked-nullable-operand` with no rule
+changes — the rules were fine, nothing was reaching them.
+
+### Opt-in: fail the load instead of failing mid-run
+
+`ApolloVM(nullSafetyChecks: true)` makes `loadCodeUnit` throw the new
+`NullSafetyError` when the AST has null-safety **errors**, before the unit is
+registered:
+
+```dart
+var vm = ApolloVM(nullSafetyChecks: true);
+await vm.loadCodeUnit(unit); // throws — nothing printed, nothing executed
+```
+
+Without it, the snippet above prints `5` and `null` and *then* throws
+`ApolloVMNullPointerException` from the `+`, having already produced output.
+
+- **Off by default**, so existing behaviour is unchanged unless you opt in.
+- Only `NullSafetySeverity.error` blocks; warnings (e.g. `null!`) and info stay
+  diagnostic-only, exactly as in the LSP.
+- A `BinaryCodeUnit` (Wasm) carries no AST and is skipped.
+- The analysis is best-effort: an internal analyzer failure never becomes a load
+  failure.
+- The thrown `NullSafetyError` carries the offending `findings`.
+
+No language gate is needed — only the Dart grammar parses `?`, so every other
+language's types are non-nullable and produce no findings. There is a test
+asserting that rather than assuming it.
+
 ## 2.21.0
 
 ### Two invalid-output fixes found while documenting null safety
