@@ -1,3 +1,45 @@
+## 2.20.0
+
+### Go: a nullable `T?` is generated as a pointer `*T`
+
+Go had no representation for nullability at all. A nullable local was emitted as
+`var s string = nil` — source that does not compile — and `??` was reported as
+unsupported because a plain Go value type cannot be compared to `nil`. 2.19.0
+turned the broken output into an explicit error; this release implements the
+representation.
+
+A nullable `T?` now becomes a Go pointer `*T`, which is the one Go form that can
+hold `nil`:
+
+- **Declarations and parameters** carry the pointer type — `int? a` is `a *int`,
+  a `String? name` field is `name *string`.
+- **Reads deref** (`(*a)`), including a bare `return x`, which takes its own
+  generation path.
+- **Null checks compare the pointer** — `x == null` is `x == nil`, not a deref.
+- **A non-null value takes its address** through a generated
+  `func goPtr[T any](v T) *T` helper, since Go cannot write `&5`. The helper is
+  emitted only in modules that need it.
+- **`a ?? b`** lowers to an inline function that nil-checks the pointer:
+  `func() int { if a != nil { return *a }; return b }()`. Go has no conditional
+  *expression*, so this is the only correct form.
+- **Types already nilable in Go are left alone** — a `List<int>?` stays `[]int`,
+  not `*[]int`, and likewise for maps and interfaces.
+
+Every shape above is verified by compiling the generated source with a real Go
+toolchain (`go build`), not by asserting on text — which is what let
+`var s string = nil` ship in the first place.
+
+Two constructs remain unsupported in Go, and both now *report* rather than emit
+something wrong:
+
+- **`?.`** — the shared fallback degrades it to `.`, which was merely lossy when
+  a nullable was a plain `T`. Against a `*T` it would skip the nil check *and*
+  yield a value where a pointer is expected. Lowering it needs the accessed
+  member's type at generation time, which the generator does not resolve yet.
+- **`??=`** — lowering it to `t = t ?? v` needs the target's element type to
+  build the inline function's return type, and the text-level assignment hook
+  does not have it. Plain `??` is unaffected.
+
 ## 2.19.0
 
 ### `x == null` no longer throws

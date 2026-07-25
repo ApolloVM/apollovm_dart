@@ -18,11 +18,9 @@ const _languages = [
   'lua',
 ];
 
-/// Languages that can express `??` — every target except Go, which has neither
-/// a null-coalescing operator nor a conditional expression, and which maps a
-/// nullable `T?` onto a non-nullable Go `T` that cannot be compared to `nil`.
-/// Go reports `??` as an [UnsupportedSyntaxError] rather than emitting Go that
-/// does not compile.
+/// Languages that can generate [_source] in full. Go is excluded because the
+/// source uses `??=` and `?.`, which it reports as unsupported — it does
+/// support plain `??` and nullable `T?` (as `*T`); see its own tests below.
 final _languagesWithNullCoalesce = _languages.where((l) => l != 'go').toList();
 
 /// A Dart program exercising the full null-safety surface: nullable types,
@@ -86,19 +84,23 @@ void main() {
       },
     );
 
-    test(
-      'Go reports `??` as unsupported instead of emitting broken Go',
-      () async {
-        var vm = await _load(_source);
-        expect(
-          () => _generate(vm, 'go'),
-          throwsA(isA<UnsupportedSyntaxError>()),
-          reason:
-              'Go cannot express `??`, so it must fail loudly rather than emit '
-              'source that does not compile',
-        );
-      },
-    );
+    test('Go supports `??` but not `??=`', () async {
+      // `a ?? b` lowers to a nil-checking inline function over the `*T`.
+      // `a ??= b` would need the target's element type to build that function's
+      // return type, which is not available at the text-level assignment hook.
+      var ok = await _load(
+        'class K { int f(int? a, int b) { return a ?? b; } }',
+      );
+      expect(await _generate(ok, 'go'), contains('a != nil'));
+
+      var bad = await _load(
+        'class K { int f(int? a, int b) { a ??= b; return a; } }',
+      );
+      expect(
+        () => _generate(bad, 'go'),
+        throwsA(isA<UnsupportedSyntaxError>()),
+      );
+    });
 
     test('Go still generates a program with no null-coalescing', () async {
       var vm = await _load(
@@ -179,22 +181,49 @@ void main() {
       }
     });
 
-    test('Go refuses `nil` into a non-pointer slot', () async {
-      // This generator maps `T?` onto a plain Go `T`, which for a value type
-      // cannot hold `nil` — `var s string = nil` does not compile. Reported
-      // rather than emitted, like `??`.
+    test('Go emits a nullable `T?` as a pointer `*T`', () async {
       var vm = await _load(
-        'class K { int f() { String? s = null; return 0; } }',
-      );
-      expect(() => _generate(vm, 'go'), throwsA(isA<UnsupportedSyntaxError>()));
-    });
-
-    test('Go still allows `nil` into a slice/map (they are nilable)', () async {
-      var vm = await _load(
-        'class K { int f() { List<int>? xs = null; return 0; } }',
+        'class K { int f() { int? x = null; if (x == null) { return 1; } return 0; } }',
       );
       var go = await _generate(vm, 'go');
+      expect(go, contains('*int'));
       expect(go, contains('nil'));
+    });
+
+    test('Go derefs a nullable read and nil-checks `??`', () async {
+      var vm = await _load(
+        'class K { int f(int? a, int b) { return a ?? b; } }',
+      );
+      var go = await _generate(vm, 'go');
+      expect(go, contains('a *int')); // pointer parameter
+      expect(go, contains('a != nil')); // nil check, not a bare deref
+      expect(go, contains('*a')); // deref on the non-nil path
+    });
+
+    test('Go takes the address of a non-null value via `goPtr`', () async {
+      var vm = await _load('class K { int f() { int? x = 5; return x + 1; } }');
+      var go = await _generate(vm, 'go');
+      // Go cannot write `&5`, so the helper is emitted and used.
+      expect(go, contains('func goPtr[T any](v T) *T'));
+      expect(go, contains('goPtr(5)'));
+    });
+
+    test('Go leaves a nilable List/Map as a slice/map', () async {
+      var vm = await _load(
+        'class K { int f() { List<int>? xs = null; if (xs == null) { return 1; } return 0; } }',
+      );
+      var go = await _generate(vm, 'go');
+      expect(go, contains('[]int'));
+      expect(go, isNot(contains('*[]int')));
+    });
+
+    test('Go reports null-aware access (`?.`) as unsupported', () async {
+      // Degrading `?.` to `.` would skip the nil check *and* yield a value
+      // where a `*T` is expected, so it must not be emitted.
+      var vm = await _load(
+        'class A { int x = 1; int? f(A? a) { return a?.x; } }',
+      );
+      expect(() => _generate(vm, 'go'), throwsA(isA<UnsupportedSyntaxError>()));
     });
 
     test('Java desugars `??` and `??=` into ternaries', () async {
