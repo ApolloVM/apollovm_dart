@@ -130,8 +130,19 @@ mixin _WorkspaceOptions on Command<bool> {
         'require-line-match',
         help: 'Require every fs.edit to pin its expected line via `atLine`.',
         negatable: false,
+      )
+      ..addFlag(
+        'null-safety',
+        help:
+            'Default the tools\' `nullSafety` argument to true: loading tools\n'
+            'reject source with null-safety errors, and the parse-based tools\n'
+            'report the findings. A per-call argument still overrides it.',
+        negatable: false,
       );
   }
+
+  /// Server-wide default for the tools' `nullSafety` argument.
+  bool get nullSafetyChecks => argResults!['null-safety'] as bool;
 
   RepoConfig get repoConfig => RepoConfig(
     allowWrite: argResults!['allow-write'] as bool,
@@ -201,6 +212,7 @@ Examples:
 
       final transport = HttpSseTransport(
         limits: limits,
+        nullSafetyChecks: nullSafetyChecks,
         repository: repository,
         repoConfig: repoConfig,
       );
@@ -214,6 +226,7 @@ Examples:
 
     final server = serveStdio(
       limits: limits,
+      nullSafetyChecks: nullSafetyChecks,
       repository: repository,
       repoConfig: repoConfig,
     );
@@ -537,6 +550,10 @@ Examples:
             int.tryParse(argResults!['character'] as String? ?? '') ?? 0;
       }
     }
+
+    // `--null-safety` is the same default the server applies at dispatch: set
+    // it unless the invocation already carried an explicit value.
+    if (nullSafetyChecks) args.putIfAbsent('nullSafety', () => true);
 
     final limits = this.limits;
     final result = limits.runsInIsolate(toolName)

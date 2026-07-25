@@ -57,6 +57,17 @@ Schema get _languageSchema =>
 Schema get _sourceSchema =>
     Schema.string(description: 'The source code to process.');
 
+/// Shared `nullSafety` input. On the tools that *load* code it rejects the
+/// source outright; on the parse-based tools it adds the findings to
+/// `diagnostics`. Defaults to the server's `--null-safety` setting.
+Schema get _nullSafetySchema => Schema.bool(
+  description:
+      'Apply null-safety checks. On tools that load code (execute, translate, '
+      'wasm) a null-safety error rejects the source; on the parse-based tools '
+      'the findings are added to `diagnostics`. '
+      'Defaults to the server `--null-safety` setting.',
+);
+
 /// The [Tool] definitions (name, description, JSON input schema) for all seven
 /// ApolloVM tools. These schemas are the single source of truth advertised via
 /// `tools/list`.
@@ -67,7 +78,11 @@ List<Tool> buildTools() => [
         'Parse source code and return parse diagnostics plus a summary of the '
         'top-level classes, functions and imports.',
     inputSchema: ObjectSchema(
-      properties: {'language': _languageSchema, 'source': _sourceSchema},
+      properties: {
+        'language': _languageSchema,
+        'source': _sourceSchema,
+        'nullSafety': _nullSafetySchema,
+      },
       required: ['language', 'source'],
     ),
   ),
@@ -92,6 +107,7 @@ List<Tool> buildTools() => [
         'timeoutMs': Schema.int(
           description: 'Execution timeout override, in milliseconds.',
         ),
+        'nullSafety': _nullSafetySchema,
       },
       required: ['language', 'source'],
     ),
@@ -108,6 +124,7 @@ List<Tool> buildTools() => [
         ),
         'to': Schema.string(description: 'Target language ($_languageValues).'),
         'source': _sourceSchema,
+        'nullSafety': _nullSafetySchema,
       },
       required: ['from', 'to', 'source'],
     ),
@@ -122,6 +139,7 @@ List<Tool> buildTools() => [
         'maxDepth': Schema.int(
           description: 'Maximum AST tree depth to serialize.',
         ),
+        'nullSafety': _nullSafetySchema,
       },
       required: ['language', 'source'],
     ),
@@ -132,7 +150,11 @@ List<Tool> buildTools() => [
         'Parse source code and return its symbol graph: top-level functions '
         'and classes with their fields, methods and constructors.',
     inputSchema: ObjectSchema(
-      properties: {'language': _languageSchema, 'source': _sourceSchema},
+      properties: {
+        'language': _languageSchema,
+        'source': _sourceSchema,
+        'nullSafety': _nullSafetySchema,
+      },
       required: ['language', 'source'],
     ),
   ),
@@ -142,7 +164,11 @@ List<Tool> buildTools() => [
         'Parse source code and return the deduplicated table of types it '
         'references (classified as class/builtin/unknown).',
     inputSchema: ObjectSchema(
-      properties: {'language': _languageSchema, 'source': _sourceSchema},
+      properties: {
+        'language': _languageSchema,
+        'source': _sourceSchema,
+        'nullSafety': _nullSafetySchema,
+      },
       required: ['language', 'source'],
     ),
   ),
@@ -152,7 +178,11 @@ List<Tool> buildTools() => [
         'Compile source code to WebAssembly and return each produced module '
         'as base64-encoded bytes.',
     inputSchema: ObjectSchema(
-      properties: {'language': _languageSchema, 'source': _sourceSchema},
+      properties: {
+        'language': _languageSchema,
+        'source': _sourceSchema,
+        'nullSafety': _nullSafetySchema,
+      },
       required: ['language', 'source'],
     ),
   ),
@@ -190,6 +220,29 @@ int? mcpCoerceInt(Object? value) {
   return null;
 }
 
+/// Nullable bool, coerced the same defensive way as [_intOrNull].
+bool _boolOr(Map<String, Object?> args, String key, bool defaultValue) =>
+    mcpCoerceBool(args[key]) ?? defaultValue;
+
+/// Coerces an arbitrary decoded-JSON [value] to `bool?` without throwing a
+/// `TypeError`. Some clients send booleans as strings (`"true"`) or as `0`/`1`,
+/// so those are accepted; anything else (or `null`) yields `null`.
+bool? mcpCoerceBool(Object? value) {
+  if (value is bool) return value;
+  if (value is num) return value != 0;
+  if (value is String) {
+    switch (value.trim().toLowerCase()) {
+      case 'true':
+      case '1':
+        return true;
+      case 'false':
+      case '0':
+        return false;
+    }
+  }
+  return null;
+}
+
 /// A list of arbitrary elements; a non-list (or missing) value yields `const []`.
 List<Object?> _listOrEmpty(Map<String, Object?> args, String key) {
   final v = args[key];
@@ -210,9 +263,18 @@ Future<Map<String, Object?>> computeTool(
 
   final rt = ApolloRuntime(limits: limits);
 
+  // The server merges its `--null-safety` default into `args` before dispatch
+  // (see `ApolloMcpServer._handle`), so a per-call value always wins here and
+  // the same read works in-process and inside an isolate.
+  final nullSafety = _boolOr(args, 'nullSafety', false);
+
   switch (name) {
     case parseToolName:
-      final o = await rt.parse(_str(args, 'language'), _str(args, 'source'));
+      final o = await rt.parse(
+        _str(args, 'language'),
+        _str(args, 'source'),
+        nullSafety: nullSafety,
+      );
       final root = o.root;
       return <String, Object?>{
         'ok': root != null,
@@ -228,7 +290,11 @@ Future<Map<String, Object?>> computeTool(
       };
 
     case astToolName:
-      final o = await rt.parse(_str(args, 'language'), _str(args, 'source'));
+      final o = await rt.parse(
+        _str(args, 'language'),
+        _str(args, 'source'),
+        nullSafety: nullSafety,
+      );
       if (o.root == null) {
         return <String, Object?>{'diagnostics': o.diagnostics, 'isError': true};
       }
@@ -236,25 +302,39 @@ Future<Map<String, Object?>> computeTool(
       final depth = math.min(requested, limits.maxAstDepth);
       return <String, Object?>{
         'ast': astNodeToJson(o.root!, maxDepth: depth),
+        if (o.diagnostics.isNotEmpty) 'diagnostics': o.diagnostics,
         'isError': false,
       };
 
     case symbolsToolName:
-      final o = await rt.parse(_str(args, 'language'), _str(args, 'source'));
+      final o = await rt.parse(
+        _str(args, 'language'),
+        _str(args, 'source'),
+        nullSafety: nullSafety,
+      );
       if (o.root == null) {
         return <String, Object?>{'diagnostics': o.diagnostics, 'isError': true};
       }
       return <String, Object?>{
         'symbols': symbolsToJson(o.root!),
+        if (o.diagnostics.isNotEmpty) 'diagnostics': o.diagnostics,
         'isError': false,
       };
 
     case typesToolName:
-      final o = await rt.parse(_str(args, 'language'), _str(args, 'source'));
+      final o = await rt.parse(
+        _str(args, 'language'),
+        _str(args, 'source'),
+        nullSafety: nullSafety,
+      );
       if (o.root == null) {
         return <String, Object?>{'diagnostics': o.diagnostics, 'isError': true};
       }
-      return <String, Object?>{...typesToJson(o.root!), 'isError': false};
+      return <String, Object?>{
+        ...typesToJson(o.root!),
+        if (o.diagnostics.isNotEmpty) 'diagnostics': o.diagnostics,
+        'isError': false,
+      };
 
     case executeToolName:
       final rawArgs = _listOrEmpty(args, 'args');
@@ -265,6 +345,7 @@ Future<Map<String, Object?>> computeTool(
         className: _strOrNull(args, 'className'),
         args: rawArgs,
         timeoutMs: _intOrNull(args, 'timeoutMs'),
+        nullSafety: nullSafety,
       );
       return <String, Object?>{
         'result': o.result,
@@ -280,6 +361,7 @@ Future<Map<String, Object?>> computeTool(
         _str(args, 'from'),
         _str(args, 'to'),
         _str(args, 'source'),
+        nullSafety: nullSafety,
       );
       return <String, Object?>{
         'generated': o.generated,
@@ -291,6 +373,7 @@ Future<Map<String, Object?>> computeTool(
       final o = await rt.compileWasm(
         _str(args, 'language'),
         _str(args, 'source'),
+        nullSafety: nullSafety,
       );
       return <String, Object?>{
         'modules': o.modules,

@@ -88,7 +88,10 @@ apollovm mcp doctor               # environment & capability checks
 import 'package:apollovm/apollovm_mcp.dart';
 
 // stdio
-final server = serveStdio(limits: const McpLimits(timeoutMs: 3000));
+final server = serveStdio(
+  limits: const McpLimits(timeoutMs: 3000),
+  nullSafetyChecks: true, // default for the tools' `nullSafety` argument
+);
 await server.done;
 
 // HTTP/SSE
@@ -112,7 +115,7 @@ Supported `language` values: `dart`, `java` (`java11`), `kotlin`, `go` (`golang`
 
 ### apollovm.parse
 
-Input: `{ language, source }`
+Input: `{ language, source, nullSafety? }`
 
 Output:
 ```json
@@ -123,9 +126,24 @@ Output:
 }
 ```
 
+### `nullSafety`
+
+Every source tool accepts an optional `nullSafety` boolean.
+
+- On the tools that **load** code (`apollovm.execute`, `apollovm.translate`,
+  `apollovm.wasm`) a null-safety **error** rejects the source before anything
+  runs, and is returned as a diagnostic (never a throw).
+- On the **parse-based** tools (`apollovm.parse`, `apollovm.ast`,
+  `apollovm.symbols`, `apollovm.types`) nothing is loaded, so the findings are
+  simply added to `diagnostics` — the call still succeeds.
+
+`apollovm mcp --null-safety` sets the server-wide default; a per-call
+`nullSafety` always overrides it. Only error-severity findings reject; warnings
+and info are reported but never fatal.
+
 ### apollovm.execute
 
-Input: `{ language, source, function?, className?, args?, timeoutMs? }`
+Input: `{ language, source, function?, className?, args?, timeoutMs?, nullSafety? }`
 (`function` defaults to `main`; `args` is a positional argument list.)
 
 Output:
@@ -144,13 +162,13 @@ Output:
 
 ### apollovm.translate
 
-Input: `{ from, to, source }`
+Input: `{ from, to, source, nullSafety? }`
 
 Output: `{ "generated": "<source in the target language>", "diagnostics": [] }`
 
 ### apollovm.ast
 
-Input: `{ language, source, maxDepth? }`
+Input: `{ language, source, maxDepth?, nullSafety? }`
 
 Output: `{ "ast": <node> }` where each node is
 `{ "node": "<runtimeType>", ...node-specific fields, "children": [...] }`.
@@ -163,7 +181,7 @@ literal `value`s.
 
 ### apollovm.symbols
 
-Input: `{ language, source }`
+Input: `{ language, source, nullSafety? }`
 
 Output:
 ```json
@@ -179,7 +197,7 @@ Output:
 
 ### apollovm.types
 
-Input: `{ language, source }`
+Input: `{ language, source, nullSafety? }`
 
 Output:
 ```json
@@ -190,7 +208,7 @@ Output:
 
 ### apollovm.wasm
 
-Input: `{ language, source }`
+Input: `{ language, source, nullSafety? }`
 
 Output: `{ "modules": [ { "name": "mcp", "base64": "<wasm bytes>" } ] }`.
 Each module's bytes are base64-encoded and begin with the `\0asm` magic

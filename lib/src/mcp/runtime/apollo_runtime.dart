@@ -65,7 +65,11 @@ class ApolloRuntime {
   ///
   /// Uses the parser directly (not `loadCodeUnit`) so a parse failure yields
   /// structured line/column diagnostics instead of a thrown [SyntaxError].
-  Future<ParseOutcome> parse(String language, String source) async {
+  Future<ParseOutcome> parse(
+    String language,
+    String source, {
+    bool nullSafety = false,
+  }) async {
     final tooLarge = _checkSource(source);
     if (tooLarge != null) return (root: null, diagnostics: tooLarge);
 
@@ -81,18 +85,48 @@ class ApolloRuntime {
     final codeUnit = SourceCodeUnit(language, source, id: 'mcp');
     final result = await parser.parse(codeUnit);
     if (result.isOK) {
-      return (root: result.root, diagnostics: const <Diagnostic>[]);
+      // This path never loads, so a null-safety problem cannot *reject* the
+      // source here — it is reported instead, which is the useful form for the
+      // inspection tools (`parse`/`ast`/`symbols`/`types`).
+      return (
+        root: result.root,
+        diagnostics: nullSafety
+            ? _nullSafetyDiagnostics(result.root!)
+            : const <Diagnostic>[],
+      );
     }
     return (root: null, diagnostics: [diagnosticFromParseResult(result)]);
+  }
+
+  /// Null-safety findings for [root] as MCP diagnostics.
+  ///
+  /// Best-effort, like the LSP path: an internal analyzer failure must not turn
+  /// a successful parse into a tool error.
+  List<Diagnostic> _nullSafetyDiagnostics(ASTRoot root) {
+    List<NullSafetyDiagnostic> findings;
+    try {
+      findings = NullSafetyAnalyzer().analyze(root);
+    } catch (_) {
+      return const <Diagnostic>[];
+    }
+    return [
+      for (final f in findings)
+        <String, Object?>{
+          'severity': f.severity.name,
+          'message': f.message,
+          'code': f.code,
+        },
+    ];
   }
 
   /// Loads [source] into a fresh [ApolloVM], returning `(vm, null)` on success
   /// or `(null, diagnostics)` on failure.
   Future<(ApolloVM?, List<Diagnostic>?)> _load(
     String language,
-    String source,
-  ) async {
-    final vm = ApolloVM();
+    String source, {
+    bool nullSafety = false,
+  }) async {
+    final vm = ApolloVM(nullSafetyChecks: nullSafety);
     // Reject unknown languages up front: `loadCodeUnit` throws a `StateError`
     // (rather than returning false) when there is no parser for the language.
     if (vm.getParser<String>(language) == null) {
@@ -105,6 +139,19 @@ class ApolloRuntime {
         return (null, [_err('Unsupported language: $language')]);
       }
       return (vm, null);
+    } on NullSafetyError catch (e) {
+      // A tool must return structured diagnostics, never throw.
+      return (
+        null,
+        [
+          for (final f in e.findings)
+            <String, Object?>{
+              'severity': f.severity.name,
+              'message': f.message,
+              'code': f.code,
+            },
+        ],
+      );
     } on SyntaxError catch (e) {
       return (null, [diagnosticFromError(e)]);
     }
@@ -121,6 +168,7 @@ class ApolloRuntime {
     String? className,
     List<Object?> args = const [],
     int? timeoutMs,
+    bool nullSafety = false,
   }) async {
     final tooLarge = _checkSource(source);
     if (tooLarge != null) {
@@ -133,7 +181,11 @@ class ApolloRuntime {
       );
     }
 
-    final (vm, loadDiagnostics) = await _load(language, source);
+    final (vm, loadDiagnostics) = await _load(
+      language,
+      source,
+      nullSafety: nullSafety,
+    );
     if (vm == null) {
       return (
         result: null,
@@ -310,12 +362,17 @@ class ApolloRuntime {
   Future<TranslateOutcome> translate(
     String from,
     String to,
-    String source,
-  ) async {
+    String source, {
+    bool nullSafety = false,
+  }) async {
     final tooLarge = _checkSource(source);
     if (tooLarge != null) return (generated: null, diagnostics: tooLarge);
 
-    final (vm, loadDiagnostics) = await _load(from, source);
+    final (vm, loadDiagnostics) = await _load(
+      from,
+      source,
+      nullSafety: nullSafety,
+    );
     if (vm == null) return (generated: null, diagnostics: loadDiagnostics!);
 
     try {
@@ -335,11 +392,19 @@ class ApolloRuntime {
 
   /// Compiles [source] to WebAssembly, returning each produced module as
   /// `{name, base64}` (the module bytes, base64-encoded for JSON transport).
-  Future<WasmOutcome> compileWasm(String language, String source) async {
+  Future<WasmOutcome> compileWasm(
+    String language,
+    String source, {
+    bool nullSafety = false,
+  }) async {
     final tooLarge = _checkSource(source);
     if (tooLarge != null) return (modules: null, diagnostics: tooLarge);
 
-    final (vm, loadDiagnostics) = await _load(language, source);
+    final (vm, loadDiagnostics) = await _load(
+      language,
+      source,
+      nullSafety: nullSafety,
+    );
     if (vm == null) return (modules: null, diagnostics: loadDiagnostics!);
 
     try {
