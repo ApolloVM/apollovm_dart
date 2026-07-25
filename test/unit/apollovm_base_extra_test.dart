@@ -271,6 +271,27 @@ void main() {
       expect(a, isNot(equals(c)));
     });
 
+    test('a blank class name never resolves a class', () async {
+      var vm = ApolloVM();
+      await vm.loadCodeUnit(SourceCodeUnit('dart', _dartSource, id: 'a'));
+
+      var langNs = vm.getLanguageNamespaces('dart');
+      expect(langNs.getClass(''), isNull);
+      expect(langNs.getClass('', namespace: ''), isNull);
+      expect(langNs.getClass('', caseInsensitive: true), isNull);
+
+      var ns = vm.getNamespace('dart', '')!;
+      expect(ns.getClass(''), isNull);
+      expect(ns.getClass('', caseInsensitive: true), isNull);
+      expect(ns.containsClass(''), isFalse);
+      expect(ns.containsClass('', caseInsensitive: true), isFalse);
+
+      expect(ns.codeUnits.first.root!.getClass(''), isNull);
+
+      expect(vm.getNamespaceWithClass(''), isEmpty);
+      expect(vm.getNamespaceWithNameAndClass('', ''), isEmpty);
+    });
+
     test('resolveType resolves loaded class', () async {
       var vm = ApolloVM();
       await vm.loadCodeUnit(SourceCodeUnit('dart', _dartSource, id: 'a'));
@@ -344,6 +365,17 @@ void main() {
       expect(clazz, isNotNull);
       expect(clazz!.name, equals('Foo'));
       expect(await runner.getClass('Nope'), isNull);
+    });
+
+    test('runner rejects a blank class name', () async {
+      var vm = ApolloVM();
+      await vm.loadCodeUnit(SourceCodeUnit('dart', _dartSource, id: 'a'));
+      var runner = vm.createRunner('dart')!;
+      expect(await runner.getClass(''), isNull);
+      // Blank (including whitespace-only) names must not reach the lookup as
+      // a real class name.
+      expect(await runner.getClassMethod('', '', 'sum', [1, 2]), isNull);
+      expect(await runner.getClassMethod('', '   ', 'sum', [1, 2]), isNull);
     });
 
     test('runner.getClassMethod resolves method', () async {

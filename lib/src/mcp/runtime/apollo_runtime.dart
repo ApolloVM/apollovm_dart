@@ -170,6 +170,9 @@ class ApolloRuntime {
     int? timeoutMs,
     bool nullSafety = false,
   }) async {
+    function = _normalizeEntryName(function) ?? 'main';
+    className = _normalizeEntryName(className);
+
     final tooLarge = _checkSource(source);
     if (tooLarge != null) {
       return (
@@ -275,6 +278,17 @@ class ApolloRuntime {
         diagnostics: [diagnosticFromError(e)],
       );
     }
+  }
+
+  /// Normalize class/function name.
+  String? _normalizeEntryName(String? entryName) {
+    if (entryName != null) {
+      entryName = entryName.trim();
+      if (entryName.isEmpty) {
+        entryName = null;
+      }
+    }
+    return entryName;
   }
 
   /// Finds and runs the entry point, mirroring the CLI's discovery order:

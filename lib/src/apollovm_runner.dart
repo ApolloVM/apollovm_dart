@@ -218,6 +218,8 @@ abstract class ApolloRunner implements VMTypeResolver {
     dynamic positionalParameters,
     dynamic namedParameters,
   ]) async {
+    if (className.trim().isEmpty) return null;
+
     var clazz = await getClass(className, namespace: namespace);
     if (clazz == null) return null;
 

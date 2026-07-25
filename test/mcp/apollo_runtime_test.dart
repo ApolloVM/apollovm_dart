@@ -165,6 +165,87 @@ void main() {
     });
   });
 
+  group('blank entry names', () {
+    // A client that always fills every field sends `""` (or a padded name)
+    // rather than omitting it. A blank name must mean "not specified", not a
+    // lookup for a class/function whose name is empty.
+    const limits = McpLimits(isolateTools: {});
+    const topLevel = 'int main(List a){ return 7; }';
+    const classOnly = 'class Foo { int run(List a){ return 7; } }';
+
+    test('a blank className is treated as absent', () async {
+      for (final className in ['', '   ']) {
+        final r = await computeTool('apollovm.execute', {
+          'language': 'dart',
+          'source': topLevel,
+          'className': className,
+        }, limits);
+        expect(
+          r['isError'],
+          isFalse,
+          reason: 'className "$className" should not scope the lookup',
+        );
+        expect(r['result'], 7);
+      }
+    });
+
+    test('a blank className still reaches a class method', () async {
+      final r = await computeTool('apollovm.execute', {
+        'language': 'dart',
+        'source': classOnly,
+        'function': 'run',
+        'className': '',
+      }, limits);
+      expect(r['isError'], isFalse);
+      expect(r['result'], 7);
+    });
+
+    test('a blank function name falls back to main', () async {
+      final r = await computeTool('apollovm.execute', {
+        'language': 'dart',
+        'source': topLevel,
+        'function': '',
+      }, limits);
+      expect(r['isError'], isFalse);
+      expect(r['result'], 7);
+    });
+
+    test('a padded function name is trimmed', () async {
+      final r = await computeTool('apollovm.execute', {
+        'language': 'dart',
+        'source': topLevel,
+        'function': '  main  ',
+      }, limits);
+      expect(r['isError'], isFalse);
+      expect(r['result'], 7);
+    });
+
+    test('a padded className and function resolve the class method', () async {
+      final r = await computeTool('apollovm.execute', {
+        'language': 'dart',
+        'source': classOnly,
+        'function': ' run ',
+        'className': ' Foo ',
+      }, limits);
+      expect(r['isError'], isFalse);
+      expect(r['result'], 7);
+    });
+
+    test('a genuinely missing entry is still reported', () async {
+      final r = await computeTool('apollovm.execute', {
+        'language': 'dart',
+        'source': topLevel,
+        'function': '  nope  ',
+        'className': '  ',
+      }, limits);
+      expect(r['isError'], isTrue);
+      expect(
+        '${(r['diagnostics'] as List).first}',
+        contains('Entry function not found: nope'),
+      );
+    });
+  });
+
   group('McpLimits', () {
     test('defaults, runsInIsolate, copyWith and toString', () {
       const limits = McpLimits();

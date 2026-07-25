@@ -1,3 +1,49 @@
+## 2.23.1
+
+### A blank `className`/`function` no longer breaks execution
+
+A client that fills in every field rather than omitting the optional ones sends
+`""` — and `""` was taken as a real name to look up, so nothing matched:
+
+```shell
+$ apollovm mcp call apollovm.execute --language dart --class-name "" \
+    --source 'int main(List a){ return 7; }'
+{
+  "result": null,
+  ...
+  "diagnostics": [
+    { "severity": "error", "message": "Entry function not found: .main" }
+  ],
+  "isError": true
+}
+```
+
+`ApolloRuntime.execute` now normalizes both entry names: they are trimmed, and a
+name that is empty after trimming means "not specified" — `className` falls back
+to the full discovery order (top-level function, then any class method) and
+`function` falls back to `main`. Trimming also makes `" main "` resolve, which
+previously did not. A name that is genuinely absent from the source still
+reports `Entry function not found`, now with the trimmed name in the message.
+
+Class lookup is guarded at the source as well, so an empty name can never match
+an entry regardless of the caller: `LanguageNamespaces.getClass`,
+`CodeNamespace.getClass`/`containsClass`, `ASTRoot.getClass` and
+`ApolloRunner.getClassMethod` return early for a blank class name.
+
+### Dart tooling ignores the LSP fixtures
+
+`lsp/example_workspace/broken.dart` is intentionally unparseable (it is what
+makes the language server emit a parse diagnostic), which made `dart format .`
+fail with exit 65 and made the analyzer report it whenever it was opened in an
+editor. The root `analyzer: exclude:` did not cover either case, and the
+formatter has no exclude option at all.
+
+The fixture is now `lsp/example_workspace/.broken.dart`: both `dart format` and
+`dart analyze` skip dot-prefixed paths during a directory walk, while the editor
+still sees a `.dart` file and hands it to the ApolloVM language server, so the
+demo is unchanged. A local `analysis_options.yaml` silences the remaining
+fixture diagnostics. No published code is affected — `lsp/` is `.pubignore`d.
+
 ## 2.23.0
 
 ### `nullSafetyChecks` is reachable from the CLI and MCP
