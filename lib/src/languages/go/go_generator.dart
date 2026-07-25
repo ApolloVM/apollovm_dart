@@ -76,6 +76,26 @@ class ApolloCodeGeneratorGo extends ApolloCodeGenerator {
   /// Method names of the struct currently being generated (for `o.method()`).
   Set<String> _currentClassMethods = const {};
 
+  /// Names currently in scope whose Go type is a pointer standing in for a
+  /// nullable `T?` (see [generateASTType]). A *read* of one of these derefs
+  /// (`(*x)`); an assignment target does not, since the pointer itself is what
+  /// is being rebound.
+  final Map<String, ASTType> _nullablePtrVars = {};
+
+  /// Whether this module needs the `goPtr` helper, which takes the address of
+  /// an arbitrary value. Go cannot write `&5`, so a non-null value flowing into
+  /// a `*T` slot goes through it.
+  bool _needsGoPtrHelper = false;
+
+  /// Registers [name] as a nullable pointer when [type] is one.
+  void _trackNullablePtr(String name, ASTType type) {
+    if (type.nullable && _goNeedsPointerForNull(type)) {
+      _nullablePtrVars[_goIdent(name)] = type.withoutNullability();
+    } else {
+      _nullablePtrVars.remove(_goIdent(name));
+    }
+  }
+
   /// Names of every struct (class) in the program being generated. Go has no
   /// `new`, so instantiating `Point(...)` is emitted as its factory
   /// `NewPoint(...)`.
@@ -87,15 +107,28 @@ class ApolloCodeGeneratorGo extends ApolloCodeGenerator {
   Set<String> _currentMemberParameters = const {};
 
   /// Generates [f]'s body with its parameters registered as shadowing names.
+  ///
+  /// The body is generated *before* the parameter list is written, so a nullable
+  /// parameter must be registered here — registering it while writing the
+  /// signature would be too late for the body's reads to deref.
   StringBuffer _generateMemberBlock(ASTInvocableDeclaration f, String indent) {
     var previous = _currentMemberParameters;
+    var previousPtrs = Map<String, ASTType>.from(_nullablePtrVars);
+
     _currentMemberParameters = f.parameters.allParameters
         .map((p) => p.name)
         .toSet();
+    for (var p in f.parameters.allParameters) {
+      _trackNullablePtr(p.name, p.type);
+    }
+
     try {
       return generateASTBlock(f, indent: indent, withBrackets: false);
     } finally {
       _currentMemberParameters = previous;
+      _nullablePtrVars
+        ..clear()
+        ..addAll(previousPtrs);
     }
   }
 
@@ -147,6 +180,23 @@ class ApolloCodeGeneratorGo extends ApolloCodeGenerator {
     out ??= newOutput();
 
     _programStructNames = root.classes.map((c) => c.name).toSet();
+    _nullablePtrVars.clear();
+    _needsGoPtrHelper = false;
+
+    // Body-first: the declarations below are what discover whether `goPtr` is
+    // needed, so they are generated into a buffer and appended after the
+    // header/helper.
+    var body = newOutput();
+
+    for (var clazz in root.classes) {
+      generateASTClass(clazz, out: body);
+    }
+
+    for (var extension in root.extensions) {
+      generateASTExtension(extension, out: body);
+    }
+
+    generateASTBlock(root, out: body, withBrackets: false);
 
     out.write('package main\n\n');
 
@@ -163,19 +213,18 @@ class ApolloCodeGeneratorGo extends ApolloCodeGenerator {
       out.write('\n');
     }
 
-    // Structs (and their factories) are emitted before the top-level functions
-    // that call them. Go itself is order-independent, but ApolloVM's Go parser
-    // resolves a `NewPoint(...)` call against the declarations it has seen so
-    // far, so a caller emitted first could not resolve the struct.
-    for (var clazz in root.classes) {
-      generateASTClass(clazz, out: out);
+    // `goPtr` takes the address of an arbitrary value, which Go cannot express
+    // inline (`&5` is not valid). A nullable `T?` is a `*T`, so assigning a
+    // non-null value into one goes through this helper.
+    if (_needsGoPtrHelper) {
+      out.write('func goPtr[T any](v T) *T { return &v }\n\n');
     }
 
-    for (var extension in root.extensions) {
-      generateASTExtension(extension, out: out);
-    }
-
-    generateASTBlock(root, out: out, withBrackets: false);
+    // Structs (and their factories) precede the top-level functions that call
+    // them. Go itself is order-independent, but ApolloVM's Go parser resolves a
+    // `NewPoint(...)` call against the declarations it has seen so far, so a
+    // caller emitted first could not resolve the struct.
+    out.write(body);
 
     return out;
   }
@@ -482,6 +531,9 @@ class ApolloCodeGeneratorGo extends ApolloCodeGenerator {
     out.write(' ');
     generateASTType(parameter.type, out: out);
 
+    // A `T?` parameter arrives as a `*T`, so reads of it deref.
+    _trackNullablePtr(parameter.name, parameter.type);
+
     return out;
   }
 
@@ -512,20 +564,28 @@ class ApolloCodeGeneratorGo extends ApolloCodeGenerator {
     final type = statement.type;
     final value = statement.value;
 
-    // This generator maps a nullable `T?` onto a plain Go `T`, and a Go value
-    // type (`int`, `string`, a struct) cannot hold `nil` — `var s string = nil`
-    // does not compile. Report it rather than emit source that does not build.
-    //
-    // Supporting it means representing `T?` as `*T` throughout: declarations,
-    // zero values, every dereference, and parameter/return types. That is
-    // separate work; until then this is an explicit gap, like `??` (see
-    // `renderNullCoalesce`).
-    if (value is ASTExpressionNullValue && !_goAcceptsNil(type)) {
-      throw UnsupportedSyntaxError(
-        "Go can't assign `nil` to `${_goTypeName(type)}`: this generator maps a "
-        "nullable `$type` onto a non-pointer Go type, which has no `nil`. "
-        "Representing `T?` as `*T` is not implemented yet.",
+    // A `T?` local is a `*T`; register it before the initializer is generated
+    // so a self-reference reads correctly, and so later statements deref it.
+    _trackNullablePtr(statement.name, type);
+    var isPtr = _nullablePtrVars.containsKey(_goIdent(statement.name));
+
+    // `T? x = <non-null>` needs the address of the value, and Go cannot write
+    // `&5`; route it through the `goPtr` helper.
+    if (isPtr && value != null && value is! ASTExpressionNullValue) {
+      _needsGoPtrHelper = true;
+      out.write('var ');
+      out.write(_goIdent(statement.name));
+      out.write(' ');
+      generateASTType(type, out: out);
+      out.write(' = goPtr(');
+      generateASTExpression(
+        value,
+        out: out,
+        indent: indent,
+        headIndented: false,
       );
+      out.write(')');
+      return out;
     }
 
     if (value != null && type is ASTTypeVar) {
@@ -656,12 +716,27 @@ class ApolloCodeGeneratorGo extends ApolloCodeGenerator {
     out ??= newOutput();
     if (headIndented) out.write(indent);
     out.write('return ');
-    generateASTVariable(
-      statement.variable,
-      out: out,
-      indent: indent,
-      headIndented: false,
-    );
+
+    // A `return x` of a nullable is a *read*, so it derefs — this path writes
+    // the variable directly rather than going through
+    // `generateASTExpressionVariableAccess`.
+    var variable = statement.variable;
+    var ptr = variable is ASTScopeVariable
+        ? (_nullablePtrVars.containsKey(_goIdent(variable.name))
+              ? _goIdent(variable.name)
+              : null)
+        : null;
+
+    if (ptr != null) {
+      out.write('(*$ptr)');
+    } else {
+      generateASTVariable(
+        statement.variable,
+        out: out,
+        indent: indent,
+        headIndented: false,
+      );
+    }
     return out;
   }
 
@@ -1256,22 +1331,6 @@ class ApolloCodeGeneratorGo extends ApolloCodeGenerator {
     return getASTExpressionOperatorText(operator);
   }
 
-  /// Whether a Go slot of type [t] can hold `nil`.
-  ///
-  /// `var` is inferred (`x := nil` is still refused separately by the compiler,
-  /// but the declaration itself is not the problem), and a List/Map become a Go
-  /// slice/map, which are nilable. Value types — `int`, `string`, `bool`, a
-  /// struct — are not.
-  bool _goAcceptsNil(ASTType t) =>
-      t is ASTTypeVar ||
-      t is ASTTypeDynamic ||
-      t is ASTTypeObject ||
-      t is ASTTypeArray ||
-      t is ASTTypeMap;
-
-  /// A short, readable name for [t] in a diagnostic.
-  String _goTypeName(ASTType t) => t.name;
-
   /// Go has neither a null-coalescing operator nor a conditional *expression*,
   /// and this generator maps a nullable `T?` onto a plain Go `T` — which for a
   /// value type (`int`, `string`, …) cannot be compared to `nil` at all. Any
@@ -1283,10 +1342,15 @@ class ApolloCodeGeneratorGo extends ApolloCodeGenerator {
   /// separate piece of work.
   @override
   String renderNullCoalesce(String a, String b) {
+    // Plain `a ?? b` no longer reaches here — `generateASTExpressionNullCoalesce`
+    // lowers it to a nil-checking inline function over the `*T`. This text-level
+    // hook is left only for `??=`, whose lowering (`t = t ?? v`) would need the
+    // target's element type to write the inline function's return type, which
+    // is not available at this point.
     throw UnsupportedSyntaxError(
-      'Go has no null-coalescing operator (`??`) and no conditional '
-      'expression, and a nullable `T?` is generated as a non-nullable Go `T`, '
-      'which cannot be tested against `nil`.',
+      'Go has no `??=`, and lowering it to `t = t ?? v` needs the target\'s '
+      'element type to build the nil-checking inline function. Use an explicit '
+      '`if (t == null) { t = v; }` instead.',
     );
   }
 
@@ -1388,6 +1452,17 @@ class ApolloCodeGeneratorGo extends ApolloCodeGenerator {
     StringBuffer? out,
     String indent = '',
   }) {
+    // A nullable `T?` becomes a Go pointer `*T`, which is the only Go form that
+    // can hold `nil` for a value type. Types that are *already* nilable in Go —
+    // a slice, a map, an interface — stay as they are.
+    if (type.nullable && _goNeedsPointerForNull(type)) {
+      out ??= newOutput();
+      out.write(indent);
+      out.write('*');
+      generateASTType(type.withoutNullability(), out: out);
+      return out;
+    }
+
     if (type is ASTTypeMap) {
       out ??= newOutput();
       out.write(indent);
@@ -1399,6 +1474,160 @@ class ApolloCodeGeneratorGo extends ApolloCodeGenerator {
     }
     return super.generateASTType(type, out: out, indent: indent);
   }
+
+  /// Null-aware *access* (`a?.x`) has no Go form.
+  ///
+  /// The shared fallback degrades `?.` to `.`, which was merely lossy while a
+  /// nullable was a plain `T`. Now that it is a `*T`, that fallback would emit
+  /// a bare `a.x` — no nil check, and a value where a `*T` is expected. Both
+  /// are wrong, so it is reported instead.
+  ///
+  /// Lowering it properly means an inline `func() *T { if a != nil { return
+  /// goPtr(a.x) }; return nil }()`, which needs the accessed member's type at
+  /// generation time — the generator does not resolve that yet.
+  Never _unsupportedNullAware(String form) {
+    throw UnsupportedSyntaxError(
+      "Go has no null-aware access operator, and this generator now represents "
+      "a nullable `T?` as `*T`, so `$form` cannot be degraded to a plain "
+      "access: it would skip the nil check and yield the wrong type.",
+    );
+  }
+
+  @override
+  StringBuffer generateASTExpressionObjectGetterAccess(
+    ASTExpressionObjectGetterAccess expression, {
+    StringBuffer? out,
+    String indent = '',
+    bool headIndented = true,
+  }) {
+    if (expression.isNullAware) _unsupportedNullAware('?.${expression.name}');
+    return super.generateASTExpressionObjectGetterAccess(
+      expression,
+      out: out,
+      indent: indent,
+      headIndented: headIndented,
+    );
+  }
+
+  /// The pointer name for a nullable variable read, or `null` when [expression]
+  /// is not one. Used where the *pointer* is wanted rather than its value.
+  String? _nullablePtrName(ASTExpression expression) {
+    if (expression is! ASTExpressionVariableAccess) return null;
+    var v = expression.variable;
+    if (v is! ASTScopeVariable) return null;
+    var name = _goIdent(v.name);
+    return _nullablePtrVars.containsKey(name) ? name : null;
+  }
+
+  /// `x == null` / `x != null` compare the *pointer*, so they must not deref.
+  @override
+  StringBuffer generateASTExpressionOperation(
+    ASTExpressionOperation expression, {
+    StringBuffer? out,
+    String indent = '',
+    bool headIndented = true,
+  }) {
+    var op = expression.operator;
+    if (op == ASTExpressionOperator.equals ||
+        op == ASTExpressionOperator.notEquals) {
+      var e1 = expression.expression1;
+      var e2 = expression.expression2;
+      var ptr = e2 is ASTExpressionNullValue
+          ? _nullablePtrName(e1)
+          : (e1 is ASTExpressionNullValue ? _nullablePtrName(e2) : null);
+
+      if (ptr != null) {
+        out ??= newOutput();
+        if (headIndented) out.write(indent);
+        out.write(ptr);
+        out.write(op == ASTExpressionOperator.equals ? ' == nil' : ' != nil');
+        return out;
+      }
+    }
+    return super.generateASTExpressionOperation(
+      expression,
+      out: out,
+      indent: indent,
+      headIndented: headIndented,
+    );
+  }
+
+  /// `a ?? b` on a nullable pointer: Go has no conditional *expression*, so this
+  /// is an immediately-invoked function that nil-checks the pointer. When the
+  /// left side is not a nullable pointer it cannot be nil, so it wins outright.
+  @override
+  StringBuffer generateASTExpressionNullCoalesce(
+    ASTExpression expression1,
+    ASTExpression expression2, {
+    StringBuffer? out,
+    String indent = '',
+  }) {
+    out ??= newOutput();
+
+    var ptr = _nullablePtrName(expression1);
+    if (ptr == null) {
+      return generateASTExpression(
+        expression1,
+        out: out,
+        indent: indent,
+        headIndented: false,
+      );
+    }
+
+    var fallback = generateASTExpression(
+      expression2,
+      indent: indent,
+      headIndented: false,
+    ).toString();
+
+    out.write('func() ');
+    generateASTType(_nullablePtrVars[ptr] ?? ASTTypeDynamic.instance, out: out);
+    out.write(' { if $ptr != nil { return *$ptr }; return $fallback }()');
+
+    return out;
+  }
+
+  /// Reading a `T?` local/parameter derefs its pointer.
+  ///
+  /// This is the *read* path only — an assignment writes through
+  /// `generateASTVariable`, where the pointer itself is the target and must not
+  /// be deref'd. A comparison against `null` is handled before this, by
+  /// [generateASTExpressionOperation], so `x == nil` keeps testing the pointer.
+  @override
+  StringBuffer generateASTExpressionVariableAccess(
+    ASTExpressionVariableAccess expression, {
+    StringBuffer? out,
+    String indent = '',
+    bool headIndented = true,
+  }) {
+    var variable = expression.variable;
+    if (variable is ASTScopeVariable &&
+        _nullablePtrVars.containsKey(_goIdent(variable.name))) {
+      out ??= newOutput();
+      if (headIndented) out.write(indent);
+      out.write('(*');
+      out.write(_goIdent(variable.name));
+      out.write(')');
+      return out;
+    }
+    return super.generateASTExpressionVariableAccess(
+      expression,
+      out: out,
+      indent: indent,
+      headIndented: headIndented,
+    );
+  }
+
+  /// Whether a nullable [type] needs a Go pointer to represent `nil`.
+  ///
+  /// Go slices, maps and interfaces are already nilable, so `List<int>?` stays
+  /// `[]int`. Value types (`int`, `string`, `bool`, a struct) are not, so they
+  /// become `*int`, `*string`, ….
+  static bool _goNeedsPointerForNull(ASTType type) =>
+      !(type is ASTTypeArray ||
+          type is ASTTypeMap ||
+          type is ASTTypeDynamic ||
+          type is ASTTypeObject);
 
   @override
   StringBuffer generateASTTypeArray(
