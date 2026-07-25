@@ -1311,6 +1311,9 @@ class DartGrammarDefinition extends DartGrammarLexer {
               expressionNegate() |
               expressionBitwiseNot() |
               expressionLiteral() |
+              // `(expr).m().field` — needs at least one trailing segment, so it
+              // cannot shadow the plain group-invocation rule below.
+              expressionGroupInvocationChain() |
               expressionGroupFunctionInvocation() |
               // `(expr).field`, `(expr)?.field`, `(expr).a.b` — a member chain
               // on a parenthesized receiver.
@@ -1405,6 +1408,59 @@ class DartGrammarDefinition extends DartGrammarLexer {
               args,
               chainFunctions,
             )..namedArguments = named;
+          });
+
+  /// `(expr).m().field` — a group *invocation* followed by further member
+  /// access, which [expressionGroupFunctionInvocation] cannot express (it
+  /// chains only further invocations).
+  ///
+  /// Reuses that rule for the head and folds the trailing segments the same way
+  /// as [expressionMemberChain]. It requires **at least one** trailing segment,
+  /// so `(expr).m()` keeps its own rule and parenthesized arithmetic is
+  /// untouched — the reason this is a separate rule rather than a reordering.
+  Parser<ASTExpression> expressionGroupInvocationChain() =>
+      (ref0(expressionGroupFunctionInvocation) &
+              ref0(memberChainSegment).plus())
+          .map((v) {
+            var current = v[0] as ASTExpression;
+            var segments = (v[1] as List)
+                .cast<
+                  ({
+                    bool assertReceiver,
+                    bool isNullAware,
+                    String name,
+                    ({
+                      List<ASTExpression> positional,
+                      Map<String, ASTExpression>? named,
+                    })?
+                    args,
+                  })
+                >();
+
+            for (var seg in segments) {
+              var variable = ASTExpressionVariable(current);
+              var args = seg.args;
+              if (args != null) {
+                current = ASTExpressionObjectFunctionInvocation(
+                  variable,
+                  seg.name,
+                  args.positional,
+                  null,
+                  seg.isNullAware,
+                  seg.assertReceiver,
+                )..namedArguments = args.named;
+              } else {
+                current = ASTExpressionObjectGetterAccess(
+                  variable,
+                  seg.name,
+                  null,
+                  seg.isNullAware,
+                  seg.assertReceiver,
+                );
+              }
+            }
+
+            return current;
           });
 
   Parser<ASTExpressionFunctionInvocation> expressionFunctionInvocation() =>

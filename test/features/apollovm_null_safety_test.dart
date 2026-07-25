@@ -495,12 +495,84 @@ void main() {
         ),
         -1,
       );
+      // A call followed by a field access — the group-invocation rule chains
+      // only further calls, so this needs its own rule.
+      expect(
+        await _run('${cls}int run() { var a = C(); return (a).mk().v; }'),
+        9,
+      );
       // The existing group-invocation path still works.
       expect(
         await _run(
           '${cls}int run() { var a = C(); var m = (a).mk(); return m.v; }',
         ),
         9,
+      );
+    });
+  });
+
+  group('`== null` / `!= null` against a typed operand', () {
+    // `ASTValue.equals` used to read the other operand through `_getValue`,
+    // which casts it to *this* value's `T` — so `x == null` evaluated
+    // `null as FutureOr<int>` and threw instead of returning false. Only the
+    // reversed `null == x` worked, because `ASTValueNull.equals` type-tests.
+    test('a non-null typed local compares false against null', () async {
+      expect(
+        await _run(
+          'int run() { int? a = 1; if (a == null) { return -1; } return 1; }',
+        ),
+        1,
+      );
+      expect(
+        await _run(
+          'int run() { Object? a = 1; if (a == null) { return -1; } return 1; }',
+        ),
+        1,
+      );
+      expect(
+        await _run(
+          "int run() { String s = 'x'; if (s == null) { return -1; } return 1; }",
+        ),
+        1,
+      );
+    });
+
+    test('a null local compares true against null', () async {
+      expect(
+        await _run(
+          'int run() { Object? a = null; if (a == null) { return -1; } return 1; }',
+        ),
+        -1,
+      );
+    });
+
+    test('a nullable parameter compares both ways', () async {
+      const src = 'int run(int? a) { if (a == null) { return -1; } return 1; }';
+      expect(await _run(src, args: [1]), 1);
+      expect(await _run(src, args: [null]), -1);
+    });
+
+    test('`!=` mirrors `==`', () async {
+      const src = 'int run(int? a) { if (a != null) { return 1; } return -1; }';
+      expect(await _run(src, args: [1]), 1);
+      expect(await _run(src, args: [null]), -1);
+    });
+
+    test('the reversed form still works', () async {
+      expect(
+        await _run(
+          'int run() { int? a = 1; if (null == a) { return -1; } return 1; }',
+        ),
+        1,
+      );
+    });
+
+    test('comparing different types is false, not an error', () async {
+      expect(
+        await _run(
+          "int run() { int a = 1; if (a == 'x') { return -1; } return 1; }",
+        ),
+        1,
       );
     });
   });

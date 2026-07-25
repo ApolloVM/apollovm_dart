@@ -179,6 +179,24 @@ void main() {
       }
     });
 
+    test('Go refuses `nil` into a non-pointer slot', () async {
+      // This generator maps `T?` onto a plain Go `T`, which for a value type
+      // cannot hold `nil` — `var s string = nil` does not compile. Reported
+      // rather than emitted, like `??`.
+      var vm = await _load(
+        'class K { int f() { String? s = null; return 0; } }',
+      );
+      expect(() => _generate(vm, 'go'), throwsA(isA<UnsupportedSyntaxError>()));
+    });
+
+    test('Go still allows `nil` into a slice/map (they are nilable)', () async {
+      var vm = await _load(
+        'class K { int f() { List<int>? xs = null; return 0; } }',
+      );
+      var go = await _generate(vm, 'go');
+      expect(go, contains('nil'));
+    });
+
     test('Java desugars `??` and `??=` into ternaries', () async {
       var vm = await _load(_source);
       var java = await _generate(vm, 'java11');

@@ -512,6 +512,22 @@ class ApolloCodeGeneratorGo extends ApolloCodeGenerator {
     final type = statement.type;
     final value = statement.value;
 
+    // This generator maps a nullable `T?` onto a plain Go `T`, and a Go value
+    // type (`int`, `string`, a struct) cannot hold `nil` — `var s string = nil`
+    // does not compile. Report it rather than emit source that does not build.
+    //
+    // Supporting it means representing `T?` as `*T` throughout: declarations,
+    // zero values, every dereference, and parameter/return types. That is
+    // separate work; until then this is an explicit gap, like `??` (see
+    // `renderNullCoalesce`).
+    if (value is ASTExpressionNullValue && !_goAcceptsNil(type)) {
+      throw UnsupportedSyntaxError(
+        "Go can't assign `nil` to `${_goTypeName(type)}`: this generator maps a "
+        "nullable `$type` onto a non-pointer Go type, which has no `nil`. "
+        "Representing `T?` as `*T` is not implemented yet.",
+      );
+    }
+
     if (value != null && type is ASTTypeVar) {
       // Inferred + value: `x := expr`.
       out.write(_goIdent(statement.name));
@@ -1239,6 +1255,22 @@ class ApolloCodeGeneratorGo extends ApolloCodeGenerator {
     }
     return getASTExpressionOperatorText(operator);
   }
+
+  /// Whether a Go slot of type [t] can hold `nil`.
+  ///
+  /// `var` is inferred (`x := nil` is still refused separately by the compiler,
+  /// but the declaration itself is not the problem), and a List/Map become a Go
+  /// slice/map, which are nilable. Value types — `int`, `string`, `bool`, a
+  /// struct — are not.
+  bool _goAcceptsNil(ASTType t) =>
+      t is ASTTypeVar ||
+      t is ASTTypeDynamic ||
+      t is ASTTypeObject ||
+      t is ASTTypeArray ||
+      t is ASTTypeMap;
+
+  /// A short, readable name for [t] in a diagnostic.
+  String _goTypeName(ASTType t) => t.name;
 
   /// Go has neither a null-coalescing operator nor a conditional *expression*,
   /// and this generator maps a nullable `T?` onto a plain Go `T` — which for a

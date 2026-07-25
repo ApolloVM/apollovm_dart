@@ -3873,6 +3873,52 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       return out;
     }
 
+    // `x == null` / `x != null`. Checked before the String and numeric paths:
+    // `null` is the boxed-`Object` pointer 0, so neither of those is right —
+    // `__streq` would compare *contents* against address 0, and the numeric
+    // path would push two i32 handles into an `i64.eq` (an invalid module).
+    var isNull1 = expression1 is ASTExpressionNullValue;
+    var isNull2 = expression2 is ASTExpressionNullValue;
+    if ((expression.operator == ASTExpressionOperator.equals ||
+            expression.operator == ASTExpressionOperator.notEquals) &&
+        (isNull1 || isNull2)) {
+      var wantEquals = expression.operator == ASTExpressionOperator.equals;
+      var otherOut = isNull1 ? exp2Out : exp1Out;
+      var otherType = isNull1 ? stackType2 : stackType1;
+
+      context.stackDrop(); // operand 2
+      context.stackDrop(); // operand 1
+
+      if (_isObjectType(otherType)) {
+        // A boxed value: compare the pointer against the null box.
+        out.writeBytes(otherOut);
+        out.write(Wasm32.i32Const(_boxPtrNull));
+        out.writeByte(
+          wantEquals ? Wasm32.i32Equals : Wasm32.i32NotEquals,
+          description: "[OP] boxed `${wantEquals ? '==' : '!='} null`",
+        );
+      } else {
+        // A concrete slot (`int`, `double`, `String`, an instance) has no null
+        // representation in Wasm, so the answer is constant. The operand is
+        // still emitted and dropped, to keep its side effects.
+        out.writeBytes(otherOut);
+        out.writeByte(
+          Wasm.drop,
+          description: "[OP] drop non-null operand of `== null`",
+        );
+        out.write(
+          Wasm32.i32Const(wantEquals ? 0 : 1),
+          description:
+              "[OP] `${wantEquals ? '==' : '!='} null` on a non-nullable "
+              "$otherType is constant",
+        );
+      }
+
+      context.stackPush(_astTypeInt32, "`== null` result");
+      context.assertStackLength(stackLng0 + 1, "After `== null`");
+      return out;
+    }
+
     // String `==` / `!=` -> content equality via the `__streq` helper. Both
     // operands are String handles (i32 pointers); a numeric comparison would
     // test pointer identity (and emit invalid Wasm when the pointers reach an
