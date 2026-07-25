@@ -226,25 +226,81 @@ void main() {
       expect(() => _generate(vm, 'go'), throwsA(isA<UnsupportedSyntaxError>()));
     });
 
-    test('Kotlin null-aware index is `?.get(i)`, not `?[i]`', () async {
-      // Kotlin has no `?[` operator; the default `?[` spelling is invalid there.
-      var vm = await _load(
-        'class K { int? f(List<int>? xs) { return xs?[0]; } }',
-      );
-      var kotlin = await _generate(vm, 'kotlin');
-      expect(kotlin, contains('xs?.get(0)'));
-      expect(kotlin, isNot(contains('xs?[0]')));
+    group('Kotlin null-aware index', () {
+      // Kotlin has no `?[` operator; the shared default spelling is invalid
+      // there. Null-aware element access is the call `a?.get(i)`.
+      test('a list index becomes `?.get(i)`', () async {
+        var vm = await _load(
+          'class K { int? f(List<int>? xs) { return xs?[0]; } }',
+        );
+        var kotlin = await _generate(vm, 'kotlin');
+        expect(kotlin, contains('xs?.get(0)'));
+        expect(kotlin, isNot(contains('?[')));
+      });
+
+      test('a map key becomes `?.get(k)`', () async {
+        var vm = await _load(
+          "class K { int? f(Map<String,int>? m) { return m?['a']; } }",
+        );
+        var kotlin = await _generate(vm, 'kotlin');
+        expect(kotlin, contains('?.get('));
+        expect(kotlin, isNot(contains('?[')));
+      });
+
+      test('a non-null index keeps `[i]`', () async {
+        var vm = await _load(
+          'class K { int f(List<int> xs) { return xs[0]; } }',
+        );
+        var kotlin = await _generate(vm, 'kotlin');
+        expect(kotlin, contains('xs[0]'));
+        expect(kotlin, isNot(contains('.get(')));
+      });
+
+      test('other targets keep their own spelling', () async {
+        var vm = await _load(
+          'class K { int? f(List<int>? xs) { return xs?[0]; } }',
+        );
+        // The close token is per-target: Dart `?[i]`, TypeScript `?.[i]`.
+        expect(await _generate(vm, 'dart'), contains('xs?[0]'));
+        expect(await _generate(vm, 'typescript'), contains('xs?.[0]'));
+      });
     });
 
-    test('Lua renders the null literal as `nil`', () async {
-      // `null` is not a Lua value: emitting it verbatim referenced an undefined
-      // global, so `a == null` was always false instead of a nil test.
-      var vm = await _load(
-        'class K { int f(int? a) { if (a == null) { return -1; } return 1; } }',
-      );
-      var lua = await _generate(vm, 'lua');
-      expect(lua, contains('nil'));
-      expect(lua, isNot(contains('null')));
+    group('Lua null literal', () {
+      // `null` is not a Lua value. Emitting it verbatim referenced an undefined
+      // global, so `a == null` was always false rather than a nil test.
+      test('a null comparison uses `nil`', () async {
+        var vm = await _load(
+          'class K { int f(int? a) { if (a == null) { return -1; } return 1; } }',
+        );
+        var lua = await _generate(vm, 'lua');
+        expect(lua, contains('== nil'));
+        expect(lua, isNot(contains('null')));
+      });
+
+      test('a null initializer uses `nil`', () async {
+        var vm = await _load(
+          'class K { int f() { int? a = null; if (a == null) { return -1; } '
+          'return 1; } }',
+        );
+        var lua = await _generate(vm, 'lua');
+        expect(lua, contains('nil'));
+        expect(lua, isNot(contains('null')));
+      });
+
+      test('a returned null uses `nil`', () async {
+        var vm = await _load('class K { int? f() { return null; } }');
+        var lua = await _generate(vm, 'lua');
+        expect(lua, contains('return nil'));
+        expect(lua, isNot(contains('null')));
+      });
+
+      test('other targets keep their own null spelling', () async {
+        var vm = await _load('class K { int? f() { return null; } }');
+        expect(await _generate(vm, 'dart'), contains('return null'));
+        expect(await _generate(vm, 'python'), contains('return None'));
+        expect(await _generate(vm, 'go'), contains('return nil'));
+      });
     });
 
     test('Java desugars `??` and `??=` into ternaries', () async {
