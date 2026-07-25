@@ -295,6 +295,33 @@ void main() {
         expect(lua, isNot(contains('null')));
       });
 
+      test('a null inside a list/map literal uses `nil`', () async {
+        // Collection elements are resolved AST *values*, so these reach the
+        // `ASTValueNull` hook rather than the null-*expression* one.
+        var list = await _load(
+          'class K { int f() { var xs = [1, null, 3]; return 0; } }',
+        );
+        var luaList = await _generate(list, 'lua');
+        expect(luaList, contains('{1, nil, 3}'));
+        expect(luaList, isNot(contains('null')));
+
+        var map = await _load(
+          "class K { int f() { var m = {'a': null}; return 0; } }",
+        );
+        var luaMap = await _generate(map, 'lua');
+        expect(luaMap, contains('nil'));
+        expect(luaMap, isNot(contains('null')));
+      });
+
+      test('a null field initializer uses `nil`', () async {
+        var vm = await _load(
+          'class K { String? name = null; int f() { return 0; } }',
+        );
+        var lua = await _generate(vm, 'lua');
+        expect(lua, contains('name = nil'));
+        expect(lua, isNot(contains('null')));
+      });
+
       test('other targets keep their own null spelling', () async {
         var vm = await _load('class K { int? f() { return null; } }');
         expect(await _generate(vm, 'dart'), contains('return null'));
