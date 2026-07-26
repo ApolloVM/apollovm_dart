@@ -20,10 +20,15 @@ The Wasm backend lives almost entirely in:
 ## How to run / verify
 
 ```bash
-dart run wasm_run:setup            # one-time: install the native wasm_run lib
+# The native `wasm_run` lib needs no install step: its build hook downloads it
+# into `.dart_tool/lib/` when `dart test`/`dart run` executes.
 dart test -t wasm -x wasm-gc -x wasm-chrome    # all Wasm backend tests, native runtime
 dart test test/wasm/apollovm_wasm_maps_test.dart -x wasm-gc   # one file
 ```
+
+- On **macOS arm64** the `wasm_run` 0.2 prebuilt library is SIGKILLed (*Code Signature
+  Invalid*) as soon as wasmtime runs JIT-compiled Wasm under the JIT VM. Use
+  `--compiler exe` there: `dart test --compiler exe -t wasm -x wasm-gc -x wasm-chrome`.
 
 - `wasm-gc` / `wasm-chrome` tags need a browser (WasmGC engine); the native
   `wasm_run` runtime (wasmtime/wasmi) has **no GC**, so exclude those tags when

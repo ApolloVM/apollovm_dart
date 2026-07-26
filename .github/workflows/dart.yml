@@ -49,8 +49,6 @@ jobs:
         run: dart pub get
       - name: Upgrade dependencies
         run: dart pub upgrade
-      - name: wasm_run:setup (install dynamic library)
-        run: dart run wasm_run:setup
       - name: Run tests (VM)
         # Exclude `wasm-gc` tests: this job uses `wasm_run` (wasmtime 14 /
         # wasmi 0.31), which does not support the WebAssembly GC proposal.
@@ -84,8 +82,6 @@ jobs:
         run: dart pub get
       - name: Upgrade dependencies
         run: dart pub upgrade
-      - name: wasm_run:setup (install dynamic library)
-        run: dart run wasm_run:setup
       - name: Run tests (exe)
         # `wasm_run` backend has no WebAssembly GC support; skip `wasm-gc` tests.
         run: dart test --compiler exe --exclude-tags wasm-gc
@@ -135,9 +131,10 @@ jobs:
         run: dart analyze --fatal-infos --fatal-warnings .
       - name: dart doc
         run: dart doc --dry-run
-      - name: wasm_run:setup (install dynamic library)
-        run: dart run wasm_run:setup
       - name: Run tests (VM)
+        # No `wasm_run:setup` step: since `wasm_run` 0.2 that command is gone and
+        # the SDK's build hooks download the native library (into `.dart_tool/lib/`)
+        # as part of `dart test`.
         # `wasm_run` (wasmtime 14 / wasmi 0.31) has no WebAssembly GC support.
         run: dart test --platform vm --exclude-tags wasm-gc
       - name: dart pub publish --dry-run

@@ -1,3 +1,18 @@
+## 2.23.2
+
+### The native Wasm runtime no longer has an install step
+
+`apollovm_wasm` 1.1.0 moves to `wasm_run` 0.2, which dropped `dart run wasm_run:setup` in favor
+of the SDK's build hooks: the native library is downloaded automatically by `dart run`,
+`dart test` and `dart compile`. `mcp doctor` and the Wasm test suite said otherwise, so they now
+just point at `package:apollovm_wasm`.
+
+Nothing changes for `package:apollovm` itself — it still compiles Wasm everywhere and pulls in no
+native toolchain. See the [`apollovm_wasm` changelog][apollovm_wasm_changelog] for the details,
+including a macOS/Apple-Silicon issue in the upstream 0.2.0 binary.
+
+[apollovm_wasm_changelog]: https://pub.dev/packages/apollovm_wasm/changelog
+
 ## 2.23.1
 
 ### A blank `className`/`function` no longer breaks execution

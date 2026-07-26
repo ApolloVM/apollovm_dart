@@ -71,7 +71,7 @@ Future<void> _runWasmAndExpect(
 
   var rt = WasmRuntime()..ensureBooted();
   if (!rt.isSupported) {
-    fail('Wasm runtime not supported (run `dart run wasm_run:setup`).');
+    fail('Wasm runtime not supported (`wasm_run` native library unavailable).');
   }
 
   var vmWasm = ApolloVM();

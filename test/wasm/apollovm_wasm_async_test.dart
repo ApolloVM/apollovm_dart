@@ -56,7 +56,7 @@ Future<void> _testWasm(
   if (!rt.isSupported) {
     fail(
       'Wasm runtime not supported — cannot validate compiled bytes '
-      '(run `dart run wasm_run:setup`).',
+      '(`wasm_run` native library unavailable).',
     );
   }
 

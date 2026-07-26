@@ -46,14 +46,15 @@ Add both packages:
 ```yaml
 dependencies:
   apollovm: ^2.0.0
-  apollovm_wasm: ^1.0.0
+  apollovm_wasm: ^1.1.0
 ```
 
-Install the native library once (it is downloaded, not built):
+The native library is downloaded (never built) by the `wasm_run` build hook, which the SDK runs
+for you on `dart run`, `dart test` and `dart compile` — no install step. It lands in
+`.dart_tool/lib/`, and `WASM_RUN_DART_DYNAMIC_LIBRARY` overrides that path if you ship your own.
 
-```shell
-dart run wasm_run:setup
-```
+> **Requires Dart >= 3.10** (build hooks). Earlier `apollovm_wasm` releases used `wasm_run` 0.1,
+> whose `dart run wasm_run:setup` command no longer exists.
 
 Register the runtime, and `WasmRuntime()` returns an engine that executes:
 
@@ -118,6 +119,20 @@ void main() async {
 
 The `wasm_run` backend (wasmtime 14 / wasmi 0.31) does **not** implement the WebAssembly GC
 proposal. Modules that rely on it run in the browser (Chrome 119+), not on this runtime.
+
+## Known issue: macOS on Apple Silicon, JIT mode
+
+The `wasm_run` 0.2.0 prebuilt `aarch64-apple-darwin` library is killed by macOS
+(`SIGKILL`, *Code Signature Invalid*) the moment wasmtime executes JIT-compiled Wasm inside the
+**JIT** Dart VM — i.e. under `dart run` and `dart test`. Compiling and instantiating modules is
+fine; only the call into generated code trips it.
+
+Ahead-of-time compilation is unaffected (its binaries are not hardened-runtime signed), so on
+macOS arm64 run Wasm through `dart test --compiler exe` / `dart compile exe`. The check is a macOS
+code-signing enforcement, so other platforms are not expected to hit it — Linux is verified in CI.
+Tracked upstream at [wasm_run][wasm_run_issues].
+
+[wasm_run_issues]: https://github.com/juancastillo0/wasm_run/issues
 
 ## See Also
 

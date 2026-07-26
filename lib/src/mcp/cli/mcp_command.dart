@@ -645,8 +645,7 @@ Examples:
             ? 'native Wasm runtime available (apollovm.wasm modules are runnable)'
             : 'native Wasm runtime missing — apollovm.wasm still COMPILES; '
                   'running compiled modules needs `package:apollovm_wasm` '
-                  '(call `registerApolloVMWasmRuntime()`) and '
-                  '`dart run wasm_run:setup`',
+                  '(call `registerApolloVMWasmRuntime()`)',
         warnOnly: !runtime,
       );
     } catch (_) {
