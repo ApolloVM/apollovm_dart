@@ -57,7 +57,9 @@ void main() {
         }
       ''');
         if (runner == null) {
-          fail('Wasm runtime not supported (run `dart run wasm_run:setup`).');
+          fail(
+            'Wasm runtime not supported (`wasm_run` native library unavailable).',
+          );
         }
 
         var awaited = false;

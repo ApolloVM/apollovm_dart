@@ -33,8 +33,10 @@ void main() {
         runtime.isSupported,
         isTrue,
         reason:
-            'The `wasm_run` dynamic library must be installed: '
-            'run `dart run wasm_run:setup`. Boot error: ${runtime.lastBootError}',
+            'The `wasm_run` dynamic library must be present — it is downloaded '
+            'by the `wasm_run` build hook (`.dart_tool/lib/`), or pointed at by '
+            '`WASM_RUN_DART_DYNAMIC_LIBRARY`. '
+            'Boot error: ${runtime.lastBootError}',
       );
     });
 
