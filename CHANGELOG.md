@@ -1,3 +1,37 @@
+## 2.23.3
+
+### A signature mismatch is no longer reported as a missing entry function
+
+Calling `apollovm.execute` with arguments that no declaration of the entry name
+accepts reported the same thing as a typo in the name — `Entry function not
+found: main` — leaving the caller with nothing to correct:
+
+```shell
+$ apollovm mcp call apollovm.execute --language dart --args '[1,2,3]' \
+    --source 'int main(int a, String b){ return 1; }'
+{
+  "diagnostics": [
+    { "severity": "error", "message": "Entry function not found: main" }
+  ],
+  "isError": true
+}
+```
+
+`ApolloRuntime.execute` now separates the two causes. When the name exists but
+no overload matches, the diagnostic shows the call that was attempted and every
+declared signature of that name (qualified with the class when it is a method,
+including one reached by the auto-discovery order):
+
+```
+No entry function matching the passed arguments: `main(int, int, int)`.
+A function named `main` exists, but with a different signature:
+`int main(int a, String b)`. Adjust the arguments to match a declared signature.
+```
+
+An explicit `className` that does not exist now reports `Entry class not found:
+Bar (looking for the method `run`)` instead of blaming the method. A name that
+is genuinely absent from the source still reports `Entry function not found`.
+
 ## 2.23.2
 
 ### The native Wasm runtime no longer has an install step

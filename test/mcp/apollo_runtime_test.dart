@@ -246,6 +246,83 @@ void main() {
     });
   });
 
+  group('entry signature mismatch', () {
+    // A name that exists but rejects the passed arguments must not be reported
+    // as a missing entry: the message has to show what was passed and what is
+    // declared, otherwise the caller has no way to fix the call.
+    const limits = McpLimits(isolateTools: {});
+
+    Future<String> messageOf(Map<String, Object?> input) async {
+      final r = await computeTool('apollovm.execute', input, limits);
+      expect(r['isError'], isTrue);
+      final diag = (r['diagnostics'] as List).first as Map;
+      return '${diag['message']}';
+    }
+
+    test(
+      'a top-level function with a different signature is described',
+      () async {
+        final message = await messageOf({
+          'language': 'dart',
+          'source': 'int main(int a, String b){ return 1; }',
+          'args': [1, 2, 3],
+        });
+        expect(message, contains('No entry function matching'));
+        expect(message, contains('`main(int, int, int)`'));
+        expect(message, contains('`int main(int a, String b)`'));
+        expect(message, isNot(contains('Entry function not found')));
+      },
+    );
+
+    test('a class method mismatch is qualified with the class', () async {
+      final message = await messageOf({
+        'language': 'dart',
+        'source': 'class Foo { int run(int a){ return 7; } }',
+        'function': 'run',
+        'className': 'Foo',
+        'args': ['x', 'y'],
+      });
+      expect(message, contains('`Foo.run(String, String)`'));
+      expect(message, contains('`int Foo.run(int a)`'));
+    });
+
+    test('a method reached by auto-discovery names its class', () async {
+      final message = await messageOf({
+        'language': 'dart',
+        'source': 'class Foo { int run(int a, int b){ return 7; } }',
+        'function': 'run',
+        'args': ['x'],
+      });
+      expect(message, contains('`int Foo.run(int a, int b)`'));
+    });
+
+    test('every declaration of the name is listed', () async {
+      final message = await messageOf({
+        'language': 'dart',
+        'source':
+            'class A { int run(int a){ return 1; } } '
+            'class B { int run(bool x, bool y){ return 2; } }',
+        'function': 'run',
+        'args': [1.5, 2.5, 3.5],
+      });
+      expect(message, contains('2 functions named `run` exist'));
+      expect(message, contains('different signatures'));
+      expect(message, contains('`int A.run(int a)`'));
+      expect(message, contains('`int B.run(bool x, bool y)`'));
+    });
+
+    test('an unknown className is reported as a missing class', () async {
+      final message = await messageOf({
+        'language': 'dart',
+        'source': 'class Foo { int run(int a){ return 7; } }',
+        'function': 'run',
+        'className': 'Bar',
+      });
+      expect(message, contains('Entry class not found: Bar'));
+      expect(message, contains('`run`'));
+    });
+  });
+
   group('McpLimits', () {
     test('defaults, runsInIsolate, copyWith and toString', () {
       const limits = McpLimits();
