@@ -61,7 +61,7 @@ import 'resolution/symbol_table.dart';
 /// The Apollo VM.
 class ApolloVM implements VMTypeResolver {
   // ignore: non_constant_identifier_names
-  static final String VERSION = '2.23.2';
+  static final String VERSION = '2.23.3';
 
   static int _idCount = 0;
 

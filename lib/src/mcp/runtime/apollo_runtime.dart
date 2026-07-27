@@ -245,10 +245,7 @@ class ApolloRuntime {
       final diagnostics = <Diagnostic>[];
       if (!hasResult) {
         diagnostics.add(
-          _err(
-            "Entry function not found: ${className != null ? '$className.' : ''}"
-            '$function',
-          ),
+          _entryNotFound(vm, language, function, className, args),
         );
       }
 
@@ -279,6 +276,130 @@ class ApolloRuntime {
       );
     }
   }
+
+  /// Builds the diagnostic for an entry point that could not be invoked.
+  ///
+  /// A failed lookup has two very different causes, and the message must say
+  /// which one: there is no declaration with that *name* at all, or one (or
+  /// more) exist but none accepts the passed arguments. The latter is the
+  /// common case for a caller that guessed the parameters, so the declared
+  /// signatures are listed to show what to pass instead.
+  Diagnostic _entryNotFound(
+    ApolloVM vm,
+    String language,
+    String function,
+    String? className,
+    List<Object?> args,
+  ) {
+    final entryName = className != null ? '$className.$function' : function;
+    final namespaces = vm.getLanguageNamespaces(language).namespaces;
+    if (!namespaces.contains('')) namespaces.insert(0, '');
+
+    final signatures = <String>[];
+
+    if (className != null) {
+      var classFound = false;
+      for (var ns in namespaces) {
+        final clazz = vm
+            .getLanguageNamespaces(language)
+            .get(ns)
+            .getClass(className);
+        if (clazz == null) continue;
+        classFound = true;
+        _collectSignatures(
+          clazz.getFunctionWithName(function),
+          signatures,
+          className: className,
+        );
+      }
+
+      if (!classFound) {
+        return _err(
+          'Entry class not found: $className '
+          "(looking for the method `$function`)",
+        );
+      }
+    } else {
+      for (var ns in namespaces) {
+        for (var codeUnit
+            in vm.getLanguageNamespaces(language).get(ns).codeUnits) {
+          final root = codeUnit.root;
+          if (root == null) continue;
+
+          _collectSignatures(root.getFunctionWithName(function), signatures);
+
+          for (var clazz in root.classes) {
+            _collectSignatures(
+              clazz.getFunctionWithName(function),
+              signatures,
+              className: clazz.name,
+            );
+          }
+        }
+      }
+    }
+
+    if (signatures.isEmpty) {
+      return _err('Entry function not found: $entryName');
+    }
+
+    final declared = signatures.map((s) => '`$s`').join(', ');
+
+    final found = signatures.length > 1
+        ? '${signatures.length} functions named `$function` exist, but with '
+              'different signatures'
+        : 'A function named `$function` exists, but with a different signature';
+
+    return _err(
+      'No entry function matching the passed arguments: '
+      '`$entryName(${_argsSignature(args)})`. '
+      '$found: $declared. '
+      'Adjust the arguments to match a declared signature.',
+    );
+  }
+
+  /// Adds the formatted signature of every declaration in [set] to [out].
+  void _collectSignatures(
+    ASTFunctionSet? set,
+    List<String> out, {
+    String? className,
+  }) {
+    if (set == null) return;
+    for (var f in set.functions) {
+      final signature = _signature(f, className: className);
+      if (!out.contains(signature)) out.add(signature);
+    }
+  }
+
+  /// Formats a declaration as `Ret name(T1 a, T2 b)`, qualified with
+  /// [className] when it is a class method.
+  String _signature(ASTInvocableDeclaration f, {String? className}) {
+    final params = [
+      for (var p in f.parameters.allParameters)
+        '${_typeName(p.type)} ${p.name}',
+    ].join(', ');
+
+    final name = className != null ? '$className.${f.name}' : f.name;
+    final returnType = _typeName(f.returnType);
+    final prefix = returnType.isEmpty ? '' : '$returnType ';
+
+    return '$prefix$name($params)';
+  }
+
+  /// The argument types as passed by the caller, e.g. `int, String`.
+  String _argsSignature(List<Object?> args) =>
+      args.map(_argTypeName).join(', ');
+
+  String _argTypeName(Object? arg) {
+    if (arg == null) return 'null';
+    // Generic collections stringify with their (always dynamic, since these
+    // come from JSON) type arguments: not useful noise in the message.
+    if (arg is List) return 'List';
+    if (arg is Map) return 'Map';
+    return arg.runtimeType.toString();
+  }
+
+  String _typeName(ASTType? type) => type?.name ?? '';
 
   /// Normalize class/function name.
   String? _normalizeEntryName(String? entryName) {
