@@ -374,10 +374,20 @@ abstract class ApolloCodeGenerator
   /// (Java, Go, …) leave this `false` and drop the suffix (best-effort).
   bool get supportsNullableTypeSuffix => false;
 
-  /// Whether this target has native null-aware operators (`?.`, `?[`) that can
-  /// be emitted directly (Dart, Kotlin, TypeScript). Targets without them leave
-  /// this `false` and emit the plain `.`/`[` form (best-effort).
+  /// Whether this target has native null-aware access operators (`?.`, `?[`)
+  /// that can be emitted directly — Dart, Kotlin, TypeScript, C# and
+  /// JavaScript. Targets without them lower the access through
+  /// [renderNullAwareAccess] instead.
   bool get supportsNullAwareOperators => false;
+
+  /// Whether this target has a postfix *null-assertion* operator (Dart/C#/TS
+  /// `!`, Kotlin `!!`).
+  ///
+  /// Separate from [supportsNullAwareOperators] because the two do not always
+  /// come together: JavaScript has `?.` but no null assertion, and emitting a
+  /// postfix `!` there would be the logical-NOT operator — a silent change of
+  /// meaning rather than a dropped check.
+  bool get supportsNullAssertionOperator => supportsNullAwareOperators;
 
   StringBuffer generateASTType(
     ASTType type, {
@@ -2125,17 +2135,123 @@ abstract class ApolloCodeGenerator
   }
 
   /// The postfix null-assertion token for this target (`!` for Dart/TypeScript,
-  /// `!!` for Kotlin). Only emitted when [supportsNullAwareOperators] is true.
+  /// `!!` for Kotlin). Only emitted when [supportsNullAssertionOperator] is
+  /// true.
   String get nullAssertionSuffix => '!';
 
-  /// The opening token for a null-aware index access (`?[` for Dart, `?.[` for
-  /// TypeScript, `?.get(` for Kotlin). Only used when
+  /// The opening token for a null-aware index access (`?[` for Dart/C#, `?.[`
+  /// for TypeScript/JavaScript, `?.get(` for Kotlin). Only used when
   /// [supportsNullAwareOperators] is true.
   String get nullAwareIndexOpen => '?[';
 
   /// The closing token that matches [nullAwareIndexOpen]. Kotlin's null-aware
   /// index is the call `a?.get(i)`, so it closes with `)` rather than `]`.
   String get nullAwareIndexClose => ']';
+
+  /// Guards [guarded] on [receiver] being non-null, yielding null instead —
+  /// the lowering of `?.` / `?[` for a target with no native operator.
+  ///
+  /// [receiver] is the *root* of the access chain and [guarded] is the whole
+  /// chain applied to it, so `a?.m().toInt()` arrives as
+  /// `renderNullAwareGuard('a', 'a.m().toInt()')` and the trailing `.toInt()`
+  /// stays inside the guard. Guarding only the first link would still
+  /// dereference null on the rest of the chain.
+  ///
+  /// Only called when [supportsNullAwareOperators] is false. The default is the
+  /// best-effort unguarded form, which drops the check; Java, Lua and Python
+  /// override it, and Go reports the construct as unsupported.
+  ///
+  /// Like [renderNullCoalesce], an override repeats [receiver] in its output,
+  /// so it is only valid for receivers that can be evaluated twice — variables,
+  /// fields and index reads, which is what these are in practice.
+  String renderNullAwareGuard(String receiver, String guarded) => guarded;
+
+  /// Set while generating the inside of a hoisted null-aware guard, so the
+  /// nested access nodes emit their plain form instead of each re-guarding.
+  bool _inNullAwareChain = false;
+
+  /// Joins a receiver and the member text following it. The null-aware form is
+  /// only emitted here for targets with the native operator — targets without
+  /// one are handled by [generateNullAwareChain], which hoists a single guard
+  /// around the whole chain.
+  String _composeMemberAccess(
+    String receiver,
+    String member, {
+    required bool nullAware,
+  }) => (nullAware && supportsNullAwareOperators)
+      ? '$receiver?.$member'
+      : '$receiver.$member';
+
+  /// The root receiver of [node]'s access chain when some link in it is
+  /// null-aware, or `null` when none is.
+  ///
+  /// `a?.m().toInt()` nests as an invocation of `toInt` whose receiver is the
+  /// null-aware invocation of `m` on `a`, so this walks down through
+  /// [ASTExpressionVariable] wrappers and returns `a`.
+  ASTVariable? _nullAwareChainRoot(ASTExpression node) {
+    ASTVariable? variable;
+    bool nullAware;
+
+    switch (node) {
+      case ASTExpressionObjectFunctionInvocation():
+        variable = node.variable;
+        nullAware = node.isNullAware;
+      case ASTExpressionObjectGetterAccess():
+        variable = node.variable;
+        nullAware = node.isNullAware;
+      case ASTExpressionVariableEntryAccess():
+        variable = node.variable;
+        nullAware = node.isNullAware;
+      default:
+        return null;
+    }
+
+    if (nullAware) return variable;
+
+    // Not null-aware itself — look further down the receiver chain.
+    if (variable is ASTExpressionVariable) {
+      return _nullAwareChainRoot(variable.expression);
+    }
+
+    return null;
+  }
+
+  /// Emits [node] wrapped in a single null guard when this target has no native
+  /// `?.` and [node]'s chain contains a null-aware link. Returns `null` when no
+  /// hoisting applies and the caller should generate normally.
+  StringBuffer? generateNullAwareChain(
+    ASTExpression node, {
+    required StringBuffer out,
+    required String indent,
+  }) {
+    if (supportsNullAwareOperators || _inNullAwareChain) return null;
+
+    var root = _nullAwareChainRoot(node);
+    if (root == null) return null;
+
+    var receiver = generateASTVariable(
+      root,
+      indent: indent,
+      headIndented: false,
+    ).toString();
+
+    // Re-enter generation with the guard suppressed, so the chain renders in
+    // its plain form and every link ends up inside this one guard.
+    _inNullAwareChain = true;
+    String guarded;
+    try {
+      guarded = generateASTExpression(
+        node,
+        indent: indent,
+        headIndented: false,
+      ).toString();
+    } finally {
+      _inNullAwareChain = false;
+    }
+
+    out.write(renderNullAwareGuard(receiver, guarded));
+    return out;
+  }
 
   StringBuffer generateASTExpressionNullAssertion(
     ASTExpressionNullAssertion expression, {
@@ -2155,7 +2271,7 @@ abstract class ApolloCodeGenerator
     if (group) out.write(')');
 
     // Best-effort: targets without a null-assertion operator drop it.
-    if (supportsNullAwareOperators) {
+    if (supportsNullAssertionOperator) {
       out.write(nullAssertionSuffix);
     }
 
@@ -2309,6 +2425,9 @@ abstract class ApolloCodeGenerator
 
     if (headIndented) out.write(indent);
 
+    var hoisted = generateNullAwareChain(expression, out: out, indent: indent);
+    if (hoisted != null) return hoisted;
+
     var functionName = expression.name;
 
     if (expression.variable.isTypeIdentifier) {
@@ -2318,31 +2437,39 @@ abstract class ApolloCodeGenerator
       functionName = normalizeIdentifier(functionName);
     }
 
-    generateASTVariable(
+    var receiver = generateASTVariable(
       expression.variable,
       callingFunction: functionName,
-      out: out,
       indent: indent,
       headIndented: false,
-    );
-    if (expression.assertReceiver && supportsNullAwareOperators) {
-      out.write(nullAssertionSuffix);
-    }
-    out.write(
-      expression.isNullAware && supportsNullAwareOperators ? '?.' : '.',
-    );
+    ).toString();
 
-    final arguments = expression.arguments;
+    if (expression.assertReceiver && supportsNullAssertionOperator) {
+      receiver += nullAssertionSuffix;
+    }
+
+    // The call and any trailing chain form the member text, so a lowering that
+    // guards the access covers `a?.b().c()` whole rather than only its first
+    // link.
+    var member = newOutput();
 
     _generateFunctionInvocation(
       functionName,
-      arguments,
-      out,
+      expression.arguments,
+      member,
       indent,
       namedArguments: expression.namedArguments,
     );
 
-    _generateChainFunctionInvocation(expression, out, indent);
+    _generateChainFunctionInvocation(expression, member, indent);
+
+    out.write(
+      _composeMemberAccess(
+        receiver,
+        member.toString(),
+        nullAware: expression.isNullAware,
+      ),
+    );
 
     return out;
   }
@@ -2493,6 +2620,9 @@ abstract class ApolloCodeGenerator
 
     if (headIndented) out.write(indent);
 
+    var hoisted = generateNullAwareChain(expression, out: out, indent: indent);
+    if (hoisted != null) return hoisted;
+
     var getterName = expression.name;
 
     if (expression.variable.isTypeIdentifier) {
@@ -2502,23 +2632,28 @@ abstract class ApolloCodeGenerator
       getterName = normalizeIdentifier(getterName);
     }
 
-    generateASTVariable(
+    var receiver = generateASTVariable(
       expression.variable,
       callingFunction: getterName,
-      out: out,
       indent: indent,
       headIndented: false,
-    );
-    if (expression.assertReceiver && supportsNullAwareOperators) {
-      out.write(nullAssertionSuffix);
+    ).toString();
+
+    if (expression.assertReceiver && supportsNullAssertionOperator) {
+      receiver += nullAssertionSuffix;
     }
+
+    var member = newOutput()..write(getterName);
+
+    _generateChainFunctionInvocation(expression, member, indent);
+
     out.write(
-      expression.isNullAware && supportsNullAwareOperators ? '?.' : '.',
+      _composeMemberAccess(
+        receiver,
+        member.toString(),
+        nullAware: expression.isNullAware,
+      ),
     );
-
-    out.write(getterName);
-
-    _generateChainFunctionInvocation(expression, out, indent);
 
     return out;
   }
@@ -2620,35 +2755,49 @@ abstract class ApolloCodeGenerator
 
     if (headIndented) out.write(indent);
 
-    generateASTVariable(
+    var hoisted = generateNullAwareChain(expression, out: out, indent: indent);
+    if (hoisted != null) return hoisted;
+
+    var receiver = generateASTVariable(
       expression.variable,
-      out: out,
       indent: indent,
       headIndented: headIndented,
-    );
-    if (expression.assertReceiver && supportsNullAwareOperators) {
-      out.write(nullAssertionSuffix);
+    ).toString();
+
+    if (expression.assertReceiver && supportsNullAssertionOperator) {
+      receiver += nullAssertionSuffix;
     }
-    var nullAwareIndex = expression.isNullAware && supportsNullAwareOperators;
-    out.write(nullAwareIndex ? nullAwareIndexOpen : '[');
-    generateASTExpression(
+
+    var index = generateASTExpression(
       expression.expression,
-      out: out,
       indent: indent,
       headIndented: false,
-    );
-    out.write(nullAwareIndex ? nullAwareIndexClose : ']');
-    // Chained indices for nested access (`m[0][1]`).
+    ).toString();
+
+    // Chained indices for nested access (`m[0][1]`). They belong inside the
+    // null guard: `a?[0][1]` short-circuits the whole postfix chain.
+    var extras = newOutput();
     for (var extra in expression.extraIndices) {
-      out.write('[');
+      extras.write('[');
       generateASTExpression(
         extra,
-        out: out,
+        out: extras,
         indent: indent,
         headIndented: false,
       );
-      out.write(']');
+      extras.write(']');
     }
+
+    // A null-aware index on a target without `?[` is handled by the hoisted
+    // guard above, which re-enters here with the plain form.
+    if (expression.isNullAware && supportsNullAwareOperators) {
+      out.write(
+        '$receiver$nullAwareIndexOpen$index$nullAwareIndexClose$extras',
+      );
+    } else {
+      out.write('$receiver[$index]$extras');
+    }
+
     return out;
   }
 

@@ -20,6 +20,20 @@ class ApolloCodeGeneratorJavaScript extends ApolloCodeGenerator {
   ApolloCodeGeneratorJavaScript(ApolloSourceCodeStorage codeStorage)
     : super('javascript', codeStorage);
 
+  /// Optional chaining (`a?.b`, `a?.[i]`) is ES2020.
+  @override
+  bool get supportsNullAwareOperators => true;
+
+  /// JavaScript has no null-assertion operator: a postfix `!` is logical NOT,
+  /// so emitting it would change the meaning rather than drop a check. `x!` is
+  /// emitted as plain `x` (the assertion is a no-op at runtime in JS anyway).
+  @override
+  bool get supportsNullAssertionOperator => false;
+
+  /// JavaScript's null-aware element access is `a?.[i]`, not `a?[i]`.
+  @override
+  String get nullAwareIndexOpen => '?.[';
+
   @override
   String normalizeTypeName(String typeName, [String? callingFunction]) {
     switch (typeName) {

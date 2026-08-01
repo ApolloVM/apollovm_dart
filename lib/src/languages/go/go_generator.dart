@@ -1359,6 +1359,19 @@ class ApolloCodeGeneratorGo extends ApolloCodeGenerator {
   @override
   bool get supportsNullCoalesceAssignment => false;
 
+  /// Go has no null-aware access. Degrading `a?.b` to `a.b` would both skip the
+  /// nil check *and* read through a `*T` where the field is expected, so it is
+  /// reported rather than mis-emitted.
+  @override
+  String renderNullAwareGuard(String receiver, String guarded) {
+    throw UnsupportedSyntaxError(
+      'Go has no null-aware access (`?.` / `?[`), and this generator represents '
+      'a nullable `T?` as `*T`, so guarding it needs the receiver\'s pointer '
+      'type to both nil-check and dereference. Use an explicit '
+      '`if ($receiver != nil) { … }` instead.',
+    );
+  }
+
   /// Go writes bitwise NOT as a prefix `^`.
   @override
   StringBuffer generateASTExpressionBitwiseNot(

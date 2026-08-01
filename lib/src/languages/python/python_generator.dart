@@ -1029,6 +1029,13 @@ class ApolloCodeGeneratorPython extends ApolloCodeGenerator {
   @override
   String get nullValueLiteral => 'None';
 
+  /// Python has no `?.` or `?[`, so a null-aware access becomes a conditional
+  /// expression guarded by an `is not None` test. Without this the access would
+  /// degrade to a plain `.` and raise `AttributeError` on `None`.
+  @override
+  String renderNullAwareGuard(String receiver, String guarded) =>
+      '($guarded if $receiver is not None else None)';
+
   /// Python compares against `None` by *identity*, not equality: `==` dispatches
   /// through `__eq__`, which a class can redefine to return `True` for `None`.
   /// `is None` / `is not None` is the form PEP 8 mandates.
