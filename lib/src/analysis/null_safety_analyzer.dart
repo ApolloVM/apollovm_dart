@@ -411,8 +411,7 @@ class NullSafetyAnalyzer {
             whenFalse.add(name);
           }
         }
-      } else if (e is ASTExpressionOperation &&
-          e.operator == ASTExpressionOperator.and) {
+      } else if (e is ASTExpressionLogicalAnd) {
         // `x != null && …`: both sides promote when true.
         handle(e.expression1);
         handle(e.expression2);

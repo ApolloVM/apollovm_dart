@@ -1141,6 +1141,14 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     if (expr is ASTExpressionVariableAccess) {
       return scope[expr.variable.name];
     }
+    if (expr is ASTExpressionLogical || expr is ASTExpressionNullCheck) {
+      return ASTTypeBool.instance;
+    }
+    if (expr is ASTExpressionNullCoalesce) {
+      // `a ?? b` yields whichever operand survives; `b` is the one that always
+      // can, so it is the better single guess.
+      return _inferStaticExpressionType(expr.expression2, scope);
+    }
     if (expr is ASTExpressionOperation) {
       switch (expr.operator) {
         case ASTExpressionOperator.equals:
@@ -3466,15 +3474,16 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
   /// yields an i32 boolean, so the right operand is only evaluated when needed:
   /// - `a && b`  ->  `a ? b : false`
   /// - `a || b`  ->  `a ? true : b`
-  BytesOutput generateASTExpressionLogicalShortCircuit(
-    ASTExpressionOperation expression, {
+  @override
+  BytesOutput generateASTExpressionLogical(
+    ASTExpressionLogical expression, {
     BytesOutput? out,
     WasmContext? context,
   }) {
     out ??= newOutput();
     context ??= WasmContext();
 
-    final isAnd = expression.operator == ASTExpressionOperator.and;
+    final isAnd = expression is ASTExpressionLogicalAnd;
     final stackLng0 = context.stackLength;
 
     // Left operand (i32 boolean).
@@ -3873,17 +3882,6 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
           context: context,
         );
       }
-    }
-
-    // Short-circuit logical operators must NOT eagerly evaluate the right
-    // operand, so they are handled before the generic operand evaluation below.
-    if (expression.operator == ASTExpressionOperator.and ||
-        expression.operator == ASTExpressionOperator.or) {
-      return generateASTExpressionLogicalShortCircuit(
-        expression,
-        out: out,
-        context: context,
-      );
     }
 
     final stackLng0 = context.stackLength;
@@ -9482,6 +9480,13 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     }
     if (expression is ASTExpressionNullCheck) {
       return generateASTExpressionNullCheck(
+        expression,
+        out: out,
+        context: context,
+      );
+    }
+    if (expression is ASTExpressionLogical) {
+      return generateASTExpressionLogical(
         expression,
         out: out,
         context: context,

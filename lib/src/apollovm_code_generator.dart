@@ -1458,6 +1458,13 @@ abstract class ApolloCodeGenerator
         indent: indent,
         headIndented: headIndented,
       );
+    } else if (expression is ASTExpressionLogical) {
+      return generateASTExpressionLogical(
+        expression,
+        out: out,
+        indent: indent,
+        headIndented: headIndented,
+      );
     } else if (expression is ASTExpressionVariableAccess) {
       return generateASTExpressionVariableAccess(
         expression,
@@ -1683,6 +1690,60 @@ abstract class ApolloCodeGenerator
 
     var group1 = groupComplexExpressions && expression1.isComplex;
     var group2 = groupComplexExpressions && expression2.isComplex;
+
+    if (group1) out.write('(');
+    out.write(exp1);
+    if (group1) out.write(')');
+
+    out.write(' ');
+    out.write(op);
+    out.write(' ');
+
+    if (group2) out.write('(');
+    out.write(exp2);
+    if (group2) out.write(')');
+
+    return out;
+  }
+
+  /// Generates a short-circuiting logical expression — `a && b` / `a || b`.
+  ///
+  /// The operator token comes from [resolveASTExpressionOperatorText], so a
+  /// target with its own spelling is honoured (Python and Lua write `and`/`or`).
+  @override
+  StringBuffer generateASTExpressionLogical(
+    ASTExpressionLogical expression, {
+    StringBuffer? out,
+    String indent = '',
+    bool headIndented = true,
+  }) {
+    out ??= newOutput();
+
+    if (headIndented) out.write(indent);
+
+    final expression1 = expression.expression1;
+    final expression2 = expression.expression2;
+
+    var op = resolveASTExpressionOperatorText(
+      expression.operator,
+      ASTNumType.nan,
+      ASTNumType.nan,
+    );
+
+    var exp1 = generateASTExpression(
+      expression1,
+      indent: '$indent  ',
+      headIndented: false,
+    );
+
+    var exp2 = generateASTExpression(
+      expression2,
+      indent: '$indent  ',
+      headIndented: false,
+    );
+
+    var group1 = expression1.isComplex;
+    var group2 = expression2.isComplex;
 
     if (group1) out.write('(');
     out.write(exp1);
