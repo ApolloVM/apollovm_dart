@@ -1359,6 +1359,19 @@ class ApolloCodeGeneratorGo extends ApolloCodeGenerator {
   @override
   bool get supportsNullCoalesceAssignment => false;
 
+  /// Go has no null-aware access. Degrading `a?.b` to `a.b` would both skip the
+  /// nil check *and* read through a `*T` where the field is expected, so it is
+  /// reported rather than mis-emitted.
+  @override
+  String renderNullAwareGuard(String receiver, String guarded) {
+    throw UnsupportedSyntaxError(
+      'Go has no null-aware access (`?.` / `?[`), and this generator represents '
+      'a nullable `T?` as `*T`, so guarding it needs the receiver\'s pointer '
+      'type to both nil-check and dereference. Use an explicit '
+      '`if ($receiver != nil) { … }` instead.',
+    );
+  }
+
   /// Go writes bitwise NOT as a prefix `^`.
   @override
   StringBuffer generateASTExpressionBitwiseNot(
@@ -1520,31 +1533,27 @@ class ApolloCodeGeneratorGo extends ApolloCodeGenerator {
   }
 
   /// `x == null` / `x != null` compare the *pointer*, so they must not deref.
+  ///
+  /// A non-pointer operand cannot be nil in Go, so it falls through to the
+  /// default rendering (which spells the literal `nil` via [nullValueLiteral]).
   @override
-  StringBuffer generateASTExpressionOperation(
-    ASTExpressionOperation expression, {
+  StringBuffer generateASTExpressionNullCheck(
+    ASTExpressionNullCheck expression, {
     StringBuffer? out,
     String indent = '',
     bool headIndented = true,
   }) {
-    var op = expression.operator;
-    if (op == ASTExpressionOperator.equals ||
-        op == ASTExpressionOperator.notEquals) {
-      var e1 = expression.expression1;
-      var e2 = expression.expression2;
-      var ptr = e2 is ASTExpressionNullValue
-          ? _nullablePtrName(e1)
-          : (e1 is ASTExpressionNullValue ? _nullablePtrName(e2) : null);
+    var ptr = _nullablePtrName(expression.expression);
 
-      if (ptr != null) {
-        out ??= newOutput();
-        if (headIndented) out.write(indent);
-        out.write(ptr);
-        out.write(op == ASTExpressionOperator.equals ? ' == nil' : ' != nil');
-        return out;
-      }
+    if (ptr != null) {
+      out ??= newOutput();
+      if (headIndented) out.write(indent);
+      var op = expression.negated ? '!=' : '==';
+      out.write(expression.nullFirst ? 'nil $op $ptr' : '$ptr $op nil');
+      return out;
     }
-    return super.generateASTExpressionOperation(
+
+    return super.generateASTExpressionNullCheck(
       expression,
       out: out,
       indent: indent,
@@ -1552,22 +1561,27 @@ class ApolloCodeGeneratorGo extends ApolloCodeGenerator {
     );
   }
 
+  @override
+  String get nullValueLiteral => 'nil';
+
   /// `a ?? b` on a nullable pointer: Go has no conditional *expression*, so this
   /// is an immediately-invoked function that nil-checks the pointer. When the
   /// left side is not a nullable pointer it cannot be nil, so it wins outright.
   @override
   StringBuffer generateASTExpressionNullCoalesce(
-    ASTExpression expression1,
-    ASTExpression expression2, {
+    ASTExpressionNullCoalesce expression, {
     StringBuffer? out,
     String indent = '',
+    bool headIndented = true,
   }) {
     out ??= newOutput();
 
-    var ptr = _nullablePtrName(expression1);
+    if (headIndented) out.write(indent);
+
+    var ptr = _nullablePtrName(expression.expression1);
     if (ptr == null) {
       return generateASTExpression(
-        expression1,
+        expression.expression1,
         out: out,
         indent: indent,
         headIndented: false,
@@ -1575,7 +1589,7 @@ class ApolloCodeGeneratorGo extends ApolloCodeGenerator {
     }
 
     var fallback = generateASTExpression(
-      expression2,
+      expression.expression2,
       indent: indent,
       headIndented: false,
     ).toString();
@@ -1592,7 +1606,7 @@ class ApolloCodeGeneratorGo extends ApolloCodeGenerator {
   /// This is the *read* path only — an assignment writes through
   /// `generateASTVariable`, where the pointer itself is the target and must not
   /// be deref'd. A comparison against `null` is handled before this, by
-  /// [generateASTExpressionOperation], so `x == nil` keeps testing the pointer.
+  /// [generateASTExpressionNullCheck], so `x == nil` keeps testing the pointer.
   @override
   StringBuffer generateASTExpressionVariableAccess(
     ASTExpressionVariableAccess expression, {

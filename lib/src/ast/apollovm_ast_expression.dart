@@ -1034,6 +1034,71 @@ String getASTExpressionOperatorText(ASTExpressionOperator op) {
   }
 }
 
+/// Raised when an [ASTExpressionOperation] is reached holding
+/// [ASTExpressionOperator.nullCoalesce]. The enum member is kept — `??=` bridges
+/// through it via [ASTAssignmentOperator.asASTExpressionOperator], and the
+/// generators use it to look up each target's spelling — but the *expression*
+/// form is always an [ASTExpressionNullCoalesce].
+const _nullCoalesceIsItsOwnNode =
+    "'??' is an ASTExpressionNullCoalesce, not an ASTExpressionOperation. "
+    'Build binary operations with astExpressionOperation().';
+
+/// Raised when an [ASTExpressionOperation] holding [ASTExpressionOperator.and]
+/// or [ASTExpressionOperator.or] is evaluated. Like `??`, the enum members stay
+/// (the generators use them to resolve each target's spelling), but the
+/// *expression* form is an [ASTExpressionLogicalAnd] / [ASTExpressionLogicalOr],
+/// which is what makes them short-circuit.
+const _logicalIsItsOwnNode =
+    "'&&'/'||' are ASTExpressionLogicalAnd/Or, not an ASTExpressionOperation. "
+    'Build binary operations with astExpressionOperation().';
+
+/// Builds the [ASTExpression] for the binary operation `e1 <op> e2`,
+/// specializing the shapes that have a dedicated node:
+///
+/// - `??` becomes an [ASTExpressionNullCoalesce];
+/// - `x == null` / `x != null` (either operand order) becomes an
+///   [ASTExpressionNullCheck].
+///
+/// Everything else becomes a plain [ASTExpressionOperation].
+///
+/// Grammars should always reduce binary operations through this function.
+/// Constructing [ASTExpressionOperation] directly is still valid — the Wasm
+/// backend synthesizes arithmetic operations that way — but it bypasses the
+/// specialization, leaving the short-circuiting forms on the generic
+/// operator-dispatch path.
+ASTExpression astExpressionOperation(
+  ASTExpression e1,
+  ASTExpressionOperator op,
+  ASTExpression e2,
+) {
+  if (op == ASTExpressionOperator.nullCoalesce) {
+    return ASTExpressionNullCoalesce(e1, e2);
+  }
+
+  if (op == ASTExpressionOperator.and) {
+    return ASTExpressionLogicalAnd(e1, e2);
+  }
+
+  if (op == ASTExpressionOperator.or) {
+    return ASTExpressionLogicalOr(e1, e2);
+  }
+
+  if (op == ASTExpressionOperator.equals ||
+      op == ASTExpressionOperator.notEquals) {
+    final negated = op == ASTExpressionOperator.notEquals;
+
+    // `null == null` matches the first branch, which is correct: the retained
+    // literal becomes the operand and the check still evaluates to `true`.
+    if (e2 is ASTExpressionNullValue) {
+      return ASTExpressionNullCheck(e1, e2, negated: negated);
+    } else if (e1 is ASTExpressionNullValue) {
+      return ASTExpressionNullCheck(e2, e1, negated: negated, nullFirst: true);
+    }
+  }
+
+  return ASTExpressionOperation(e1, op, e2);
+}
+
 /// [ASTExpression] that negates another [expression].
 class ASTExpressionNegation extends ASTExpression {
   ASTExpression expression;
@@ -1134,6 +1199,255 @@ class ASTExpressionNullAssertion extends ASTExpression {
     var s = '$expression!';
     return asGroup ? '($s)' : s;
   }
+}
+
+/// [ASTExpression] for the null-coalescing operation `a ?? b`.
+///
+/// [expression2] is evaluated only when [expression1] resolves to `null`, so
+/// `a ?? sideEffect()` does not call `sideEffect` when `a` is non-null.
+///
+/// This is a dedicated node rather than an [ASTExpressionOperation] with
+/// [ASTExpressionOperator.nullCoalesce]: it short-circuits, so it never reaches
+/// the binary-operator dispatch, and every backend needs its own lowering
+/// (Kotlin's Elvis `?:`, Java's ternary, Go's nil-checking closure). Build it
+/// through [astExpressionOperation] rather than directly, so a grammar reducing
+/// a `??` token gets the specialization for free.
+class ASTExpressionNullCoalesce extends ASTExpression {
+  ASTExpression expression1;
+  ASTExpression expression2;
+
+  ASTExpressionNullCoalesce(this.expression1, this.expression2);
+
+  @override
+  bool get isComplex => true;
+
+  @override
+  Iterable<ASTNode> get children => [expression1, expression2];
+
+  @override
+  void resolveNode(ASTNode? parentNode) {
+    super.resolveNode(parentNode);
+
+    expression1.resolveNode(this);
+    expression2.resolveNode(this);
+  }
+
+  /// The result is [expression1]'s type minus its nullability (it only reaches
+  /// the result when non-null), unified with [expression2]'s type.
+  @override
+  FutureOr<ASTType> resolveType(VMContext? context) {
+    var retT1 = expression1.resolveType(context);
+    var retT2 = expression2.resolveType(context);
+    return retT1.resolveBoth(retT2, _commonType);
+  }
+
+  @override
+  FutureOr<ASTType> resolveRuntimeType(VMContext context, ASTNode? node) {
+    var retT1 = expression1.resolveRuntimeType(context, null);
+    var retT2 = expression2.resolveRuntimeType(context, null);
+    return retT1.resolveBoth(retT2, _commonType);
+  }
+
+  static ASTType _commonType(ASTType t1, ASTType t2) {
+    var nn = t1.withoutNullability();
+    return nn.commonType(t2) ?? t2;
+  }
+
+  @override
+  FutureOr<ASTValue> run(VMContext parentContext, ASTRunStatus runStatus) {
+    var context = defineRunContext(parentContext);
+
+    return expression1.run(context, runStatus).resolveMapped((val1) {
+      return _astValueIsNull(context, val1).resolveMapped((isNull) {
+        if (!isNull) return val1;
+        return expression2.run(context, runStatus);
+      });
+    });
+  }
+
+  @override
+  String toString({bool asGroup = false}) {
+    var s = '$expression1 ?? $expression2';
+    return asGroup ? '($s)' : s;
+  }
+}
+
+/// [ASTExpression] for a comparison against the `null` literal — `x == null`
+/// and, when [negated], `x != null`.
+///
+/// A dedicated node because this shape drives behaviour well beyond equality:
+/// [NullSafetyAnalyzer] reads it to promote a nullable variable inside
+/// `if (x != null) { … }`, Go compares the *pointer* (`p == nil`) instead of
+/// dereferencing it, and Python spells it `is None`. Every one of those
+/// consumers used to re-detect the shape by inspecting an
+/// [ASTExpressionOperation]'s operands.
+///
+/// Evaluating it tests [expression] directly, skipping the operand
+/// concretization and `operatorEquals` dispatch a generic operation would do.
+class ASTExpressionNullCheck extends ASTExpression {
+  /// The operand being compared against `null`.
+  ASTExpression expression;
+
+  /// The `null` literal operand. Retained as a real child so generic AST walks
+  /// still see it — the Wasm backend scans for [ASTExpressionNullValue] to
+  /// decide whether a module needs its null-box machinery.
+  ASTExpressionNullValue nullValue;
+
+  /// `true` for `!=`, `false` for `==`.
+  bool negated;
+
+  /// `true` when the source wrote the literal first (`null == x`), so
+  /// regeneration preserves the original operand order.
+  bool nullFirst;
+
+  ASTExpressionNullCheck(
+    this.expression,
+    this.nullValue, {
+    this.negated = false,
+    this.nullFirst = false,
+  });
+
+  @override
+  bool get isComplex => true;
+
+  @override
+  Iterable<ASTNode> get children =>
+      nullFirst ? [nullValue, expression] : [expression, nullValue];
+
+  @override
+  void resolveNode(ASTNode? parentNode) {
+    super.resolveNode(parentNode);
+
+    expression.resolveNode(this);
+    nullValue.resolveNode(this);
+  }
+
+  @override
+  FutureOr<ASTType> resolveType(VMContext? context) => ASTTypeBool.instance;
+
+  @override
+  FutureOr<ASTType> resolveRuntimeType(VMContext context, ASTNode? node) =>
+      ASTTypeBool.instance;
+
+  @override
+  FutureOr<ASTValue> run(VMContext parentContext, ASTRunStatus runStatus) {
+    var context = defineRunContext(parentContext);
+
+    return expression.run(context, runStatus).resolveMapped((val) {
+      return _astValueIsNull(context, val).resolveMapped((isNull) {
+        return ASTValueBool(isNull != negated);
+      });
+    });
+  }
+
+  @override
+  String toString({bool asGroup = false}) {
+    var op = negated ? '!=' : '==';
+    var s = nullFirst ? 'null $op $expression' : '$expression $op null';
+    return asGroup ? '($s)' : s;
+  }
+}
+
+/// Base for the short-circuiting logical operators `&&` and `||`.
+///
+/// These are dedicated nodes for the same reason [ASTExpressionNullCoalesce]
+/// is: [expression2] must not be evaluated when [expression1] already decides
+/// the result, so they never reach the binary-operator dispatch. Lifting them
+/// out leaves [ASTExpressionOperation.run] a single uniform path.
+///
+/// Both operands are coerced to booleans, and the result is always an
+/// [ASTValueBool].
+abstract class ASTExpressionLogical extends ASTExpression {
+  ASTExpression expression1;
+  ASTExpression expression2;
+
+  ASTExpressionLogical(this.expression1, this.expression2);
+
+  /// The operator this node applies — [ASTExpressionOperator.and] or
+  /// [ASTExpressionOperator.or]. Generators read it to resolve each target's
+  /// spelling (Python and Lua write `and`/`or`).
+  ASTExpressionOperator get operator;
+
+  /// Whether a left operand of [left] already determines the result, making
+  /// [expression2] dead.
+  bool shortCircuitsOn(bool left);
+
+  /// The result when [shortCircuitsOn] holds.
+  ASTValueBool get shortCircuitValue;
+
+  @override
+  bool get isComplex => true;
+
+  @override
+  Iterable<ASTNode> get children => [expression1, expression2];
+
+  @override
+  void resolveNode(ASTNode? parentNode) {
+    super.resolveNode(parentNode);
+
+    expression1.resolveNode(this);
+    expression2.resolveNode(this);
+  }
+
+  @override
+  FutureOr<ASTType> resolveType(VMContext? context) => ASTTypeBool.instance;
+
+  @override
+  FutureOr<ASTType> resolveRuntimeType(VMContext context, ASTNode? node) =>
+      ASTTypeBool.instance;
+
+  @override
+  FutureOr<ASTValue> run(VMContext parentContext, ASTRunStatus runStatus) {
+    var context = defineRunContext(parentContext);
+
+    return expression1.run(context, runStatus).resolveMapped((val1) {
+      return _astValueToBoolean(val1, context).resolveMapped((b1) {
+        if (shortCircuitsOn(b1)) return shortCircuitValue;
+
+        return expression2.run(context, runStatus).resolveMapped((val2) {
+          return _astValueToBoolean(
+            val2,
+            context,
+          ).resolveMapped((b2) => ASTValueBool(b2));
+        });
+      });
+    });
+  }
+
+  @override
+  String toString({bool asGroup = false}) {
+    var op = getASTExpressionOperatorText(operator);
+    var s = '$expression1 $op $expression2';
+    return asGroup ? '($s)' : s;
+  }
+}
+
+/// [ASTExpression] for `a && b`: [expression2] runs only when `a` is true.
+class ASTExpressionLogicalAnd extends ASTExpressionLogical {
+  ASTExpressionLogicalAnd(super.expression1, super.expression2);
+
+  @override
+  ASTExpressionOperator get operator => ASTExpressionOperator.and;
+
+  @override
+  bool shortCircuitsOn(bool left) => !left;
+
+  @override
+  ASTValueBool get shortCircuitValue => ASTValueBool.FALSE;
+}
+
+/// [ASTExpression] for `a || b`: [expression2] runs only when `a` is false.
+class ASTExpressionLogicalOr extends ASTExpressionLogical {
+  ASTExpressionLogicalOr(super.expression1, super.expression2);
+
+  @override
+  ASTExpressionOperator get operator => ASTExpressionOperator.or;
+
+  @override
+  bool shortCircuitsOn(bool left) => left;
+
+  @override
+  ASTValueBool get shortCircuitValue => ASTValueBool.TRUE;
 }
 
 /// [ASTExpression] that makes another [expression] negative.
@@ -1398,7 +1712,6 @@ class ASTExpressionAwait extends ASTExpression {
   }
 }
 
-/// [ASTExpression] for an operation between 2 expressions.
 /// Returns whether [val] represents `null` (a `null` literal/value, or a
 /// dynamic/boxed operand whose resolved value is `null`).
 FutureOr<bool> _astValueIsNull(VMContext context, ASTValue val) {
@@ -1406,6 +1719,38 @@ FutureOr<bool> _astValueIsNull(VMContext context, ASTValue val) {
   return val.getValue(context).resolveMapped((v) => v == null);
 }
 
+/// Coerces [val] to a boolean using the truthiness rules shared by the logical
+/// operators: a number is true when positive, a String parses, a collection is
+/// true when non-empty, and `null` is false.
+FutureOr<bool> _astValueToBoolean(ASTValue val, VMContext context) {
+  if (val is ASTValueBool) {
+    return val.value;
+  }
+
+  return val.resolve(context).resolveMapped((val) {
+    if (val is ASTValueBool) {
+      return val.value;
+    } else if (val is ASTValueNum) {
+      return val.value > 0;
+    } else if (val is ASTValueString) {
+      return parseBool(val.value) ?? false;
+    } else if (val is ASTValueArray) {
+      return val.value.isNotEmpty;
+    } else if (val is ASTValueMap) {
+      return val.value.isNotEmpty;
+    } else if (val is ASTValueNull) {
+      return false;
+    } else {
+      return false;
+    }
+  });
+}
+
+/// [ASTExpression] for an operation between 2 expressions.
+///
+/// Note that `??` never reaches this node — [astExpressionOperation] builds an
+/// [ASTExpressionNullCoalesce] for it, since it short-circuits instead of
+/// dispatching through the binary-operator table.
 class ASTExpressionOperation extends ASTExpression {
   ASTExpression expression1;
   ASTExpressionOperator operator;
@@ -1463,14 +1808,7 @@ class ASTExpressionOperation extends ASTExpression {
       case ASTExpressionOperator.or:
         return ASTTypeBool.instance;
       case ASTExpressionOperator.nullCoalesce:
-        {
-          var retT1 = expression1.resolveType(context);
-          var retT2 = expression2.resolveType(context);
-          return retT1.resolveBoth(retT2, (t1, t2) {
-            var nn = t1.withoutNullability();
-            return nn.commonType(t2) ?? t2;
-          });
-        }
+        throw StateError(_nullCoalesceIsItsOwnNode);
     }
   }
 
@@ -1510,14 +1848,7 @@ class ASTExpressionOperation extends ASTExpression {
       case ASTExpressionOperator.or:
         return ASTTypeBool.instance;
       case ASTExpressionOperator.nullCoalesce:
-        {
-          var retT1 = expression1.resolveRuntimeType(context, null);
-          var retT2 = expression2.resolveRuntimeType(context, null);
-          return retT1.resolveBoth(retT2, (t1, t2) {
-            var nn = t1.withoutNullability();
-            return nn.commonType(t2) ?? t2;
-          });
-        }
+        throw StateError(_nullCoalesceIsItsOwnNode);
     }
   }
 
@@ -1602,40 +1933,6 @@ class ASTExpressionOperation extends ASTExpression {
 
     final operator = this.operator;
 
-    // Null-coalescing (`??`): evaluate the left operand; only evaluate the
-    // right operand when the left is `null`. Result is the left value when
-    // non-null, otherwise the right value.
-    if (operator == ASTExpressionOperator.nullCoalesce) {
-      return expression1.run(context, runStatus).resolveMapped((val1) {
-        return _astValueIsNull(context, val1).resolveMapped((isNull) {
-          if (!isNull) return val1;
-          return expression2.run(context, runStatus);
-        });
-      });
-    }
-
-    // Short-circuit logical operators: only evaluate the right operand when the
-    // left does not already determine the result. This matches Dart semantics
-    // and keeps the interpreter consistent with the Wasm compiler.
-    if (operator == ASTExpressionOperator.and ||
-        operator == ASTExpressionOperator.or) {
-      return expression1.run(context, runStatus).resolveMapped((val1) {
-        return _toBoolean(val1, context).resolveMapped((b1) {
-          if (operator == ASTExpressionOperator.and) {
-            if (!b1) return ASTValueBool.FALSE;
-          } else {
-            if (b1) return ASTValueBool.TRUE;
-          }
-          return expression2.run(context, runStatus).resolveMapped((val2) {
-            return _toBoolean(
-              val2,
-              context,
-            ).resolveMapped((b2) => ASTValueBool(b2));
-          });
-        });
-      });
-    }
-
     var retVal2 = expression2.run(context, runStatus);
     var retVal1 = expression1.run(context, runStatus);
 
@@ -1672,10 +1969,14 @@ class ASTExpressionOperation extends ASTExpression {
               return operatorLowerOrEq(parentContext, c1, c2);
             case ASTExpressionOperator.remainder:
               return operatorRemainder(parentContext, c1, c2);
+            // Reaching here would evaluate both operands eagerly (they are run
+            // above), which is not `&&`/`||`. The short-circuiting nodes are the
+            // only correct form, so this is an error rather than a silent
+            // change of semantics. `operatorAnd`/`operatorOr` remain available
+            // for a deliberate non-short-circuit combination.
             case ASTExpressionOperator.and:
-              return operatorAnd(parentContext, c1, c2);
             case ASTExpressionOperator.or:
-              return operatorOr(parentContext, c1, c2);
+              throw StateError(_logicalIsItsOwnNode);
             case ASTExpressionOperator.bitwiseAnd:
               return operatorBitwiseAnd(parentContext, c1, c2);
             case ASTExpressionOperator.bitwiseOr:
@@ -1687,8 +1988,7 @@ class ASTExpressionOperation extends ASTExpression {
             case ASTExpressionOperator.shiftRight:
               return operatorShiftRight(parentContext, c1, c2);
             case ASTExpressionOperator.nullCoalesce:
-              // Handled by the short-circuit branch above.
-              throw StateError('unreachable: nullCoalesce');
+              throw StateError(_nullCoalesceIsItsOwnNode);
           }
         });
       });
@@ -2082,29 +2382,8 @@ class ASTExpressionOperation extends ASTExpression {
     return ASTValueInt(v1 >> v2);
   }
 
-  FutureOr<bool> _toBoolean(ASTValue val, VMContext context) {
-    if (val is ASTValueBool) {
-      return val.value;
-    }
-
-    return val.resolve(context).resolveMapped((val) {
-      if (val is ASTValueBool) {
-        return val.value;
-      } else if (val is ASTValueNum) {
-        return val.value > 0;
-      } else if (val is ASTValueString) {
-        return parseBool(val.value) ?? false;
-      } else if (val is ASTValueArray) {
-        return val.value.isNotEmpty;
-      } else if (val is ASTValueMap) {
-        return val.value.isNotEmpty;
-      } else if (val is ASTValueNull) {
-        return false;
-      } else {
-        return false;
-      }
-    });
-  }
+  FutureOr<bool> _toBoolean(ASTValue val, VMContext context) =>
+      _astValueToBoolean(val, context);
 
   @override
   String toString({bool asGroup = false}) {

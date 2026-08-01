@@ -1027,6 +1027,31 @@ class ApolloCodeGeneratorPython extends ApolloCodeGenerator {
   bool get supportsNullCoalesceAssignment => false;
 
   @override
+  String get nullValueLiteral => 'None';
+
+  /// Python has no `?.` or `?[`, so a null-aware access becomes a conditional
+  /// expression guarded by an `is not None` test. Without this the access would
+  /// degrade to a plain `.` and raise `AttributeError` on `None`.
+  @override
+  String renderNullAwareGuard(String receiver, String guarded) =>
+      '($guarded if $receiver is not None else None)';
+
+  /// Python compares against `None` by *identity*, not equality: `==` dispatches
+  /// through `__eq__`, which a class can redefine to return `True` for `None`.
+  /// `is None` / `is not None` is the form PEP 8 mandates.
+  @override
+  String renderNullCheck(
+    String operand, {
+    required bool negated,
+    required bool nullFirst,
+  }) {
+    var op = negated ? 'is not' : 'is';
+    // `None is x` is legal but jarring; Python always reads `x is None`, so the
+    // operand order is normalized here even when the source wrote it reversed.
+    return '$operand $op None';
+  }
+
+  @override
   StringBuffer generateASTExpressionLiteralFunction(
     ASTExpressionLiteralFunction expression, {
     StringBuffer? out,

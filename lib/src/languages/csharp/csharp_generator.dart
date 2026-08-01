@@ -17,6 +17,11 @@ class ApolloCodeGeneratorCSharp extends ApolloCodeGenerator {
   ApolloCodeGeneratorCSharp(ApolloSourceCodeStorage codeStorage)
     : super('csharp', codeStorage);
 
+  /// C# has had null-conditional access (`a?.b`, `a?[i]`) since C# 6 and the
+  /// null-forgiving `!` since C# 8, so all three are emitted natively.
+  @override
+  bool get supportsNullAwareOperators => true;
+
   @override
   StringBuffer generateASTExpressionLiteralFunction(
     ASTExpressionLiteralFunction expression, {

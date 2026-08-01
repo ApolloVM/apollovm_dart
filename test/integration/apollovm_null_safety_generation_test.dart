@@ -362,5 +362,177 @@ void main() {
       var kotlin = await _generate(vm, 'kotlin');
       expect(kotlin, contains('a = a ?: b'));
     });
+
+    group('`x == null` / `x != null`', () {
+      const src =
+          'class K { int f(int? a) { if (a == null) { return -1; } '
+          'if (a != null) { return 1; } return 0; } }';
+
+      test('Python compares by identity, not equality', () async {
+        // `==` dispatches through `__eq__`, which a class can redefine to
+        // return True for None; `is` cannot be intercepted.
+        var python = await _generate(await _load(src), 'python');
+        expect(python, contains('a is None'));
+        expect(python, contains('a is not None'));
+        expect(python, isNot(contains('== None')));
+      });
+
+      test('JavaScript/TypeScript keep strict equality', () async {
+        for (var lang in ['javascript', 'typescript']) {
+          var code = await _generate(await _load(src), lang);
+          expect(code, contains('a === null'), reason: lang);
+          expect(code, contains('a !== null'), reason: lang);
+        }
+      });
+
+      test('Lua uses `nil` and `~=`', () async {
+        var lua = await _generate(await _load(src), 'lua');
+        expect(lua, contains('a == nil'));
+        expect(lua, contains('a ~= nil'));
+      });
+
+      test('Go compares the pointer without dereferencing it', () async {
+        var go = await _generate(await _load(src), 'go');
+        expect(go, contains('a == nil'));
+        expect(go, contains('a != nil'));
+        // A deref would read the value, defeating the nil test.
+        expect(go, isNot(contains('(*a) == nil')));
+      });
+    });
+
+    group('null-aware access is lowered, not dropped', () {
+      const src =
+          'class A { int x = 1; int m() { return 2; } }\n'
+          'class K {\n'
+          '  int getter(A? a) { return a?.x; }\n'
+          '  int chain(A? a) { return a?.m().toInt(); }\n'
+          '  int index(List<int>? xs) { return xs?[0]; }\n'
+          '}';
+
+      test('Java guards the access with a ternary', () async {
+        var java = await _generate(await _load(src), 'java11');
+        expect(java, contains('(a != null ? a.x : null)'));
+        expect(java, contains('(xs != null ? xs[0] : null)'));
+      });
+
+      test('Python guards the access with `is not None`', () async {
+        var python = await _generate(await _load(src), 'python');
+        expect(python, contains('(a.x if a is not None else None)'));
+        expect(python, contains('(xs[0] if xs is not None else None)'));
+      });
+
+      test('Lua guards the access with an explicit nil test', () async {
+        var lua = await _generate(await _load(src), 'lua');
+        expect(lua, contains('if a ~= nil then return a.x end'));
+      });
+
+      test('Lua guards a null-aware index, keeping the 1-based shift', () async {
+        // Lua tables are 1-indexed, so `xs?[0]` is both guarded *and* shifted.
+        // The shift has to stay inside the guard.
+        var lua = await _generate(await _load(src), 'lua');
+        expect(lua, contains('if xs ~= nil then return xs[1] end'));
+      });
+
+      test('the whole chain stays inside the guard', () async {
+        // `a?.m().toInt()` nests as an invocation of `toInt` whose receiver is
+        // the null-aware call to `m`. Guarding only the null-aware link would
+        // leave `.toInt()` outside it, still dereferencing null.
+        expect(
+          await _generate(await _load(src), 'java11'),
+          contains('(a != null ? a.m().toInt() : null)'),
+        );
+        expect(
+          await _generate(await _load(src), 'python'),
+          contains('(a.m().toInt() if a is not None else None)'),
+        );
+      });
+
+      test('C# and JavaScript use their native operators', () async {
+        var csharp = await _generate(await _load(src), 'csharp');
+        expect(csharp, contains('a?.x'));
+        expect(csharp, contains('xs?[0]'));
+
+        var js = await _generate(await _load(src), 'javascript');
+        expect(js, contains('a?.x'));
+        // JS spells null-aware element access `?.[`, not `?[`.
+        expect(js, contains('xs?.[0]'));
+      });
+
+      test('JavaScript never emits a postfix `!`', () async {
+        // JS has no null-assertion operator; a postfix `!` would be logical NOT.
+        var js = await _generate(
+          await _load('class K { int f(int? a) { return a!; } }'),
+          'javascript',
+        );
+        expect(js, contains('return a;'));
+        expect(js, isNot(contains('a!')));
+      });
+
+      test(
+        'Go reports null-aware access rather than mis-emitting it',
+        () async {
+          var vm = await _load(
+            'class A { int x = 1; }\n'
+            'class K { int f(A? a) { return a?.x; } }',
+          );
+          expect(
+            () => _generate(vm, 'go'),
+            throwsA(isA<UnsupportedSyntaxError>()),
+          );
+        },
+      );
+
+      test('Go reports a null-aware index too', () async {
+        var vm = await _load(
+          'class K { int? f(List<int>? xs) { return xs?[0]; } }',
+        );
+        expect(
+          () => _generate(vm, 'go'),
+          throwsA(isA<UnsupportedSyntaxError>()),
+        );
+      });
+
+      test('C# emits the null-forgiving `!` natively', () async {
+        var vm = await _load(
+          'class A { int x = 1; }\n'
+          'class K { int f(A? a) { return a!.x; } }',
+        );
+        expect(await _generate(vm, 'csharp'), contains('a!.x'));
+      });
+
+      test('a nested chain nests the guards soundly', () async {
+        // `a?.next?.v` has two null-aware links: the outer guard tests the
+        // inner guard's *result*, so a null at either link yields null rather
+        // than dereferencing.
+        const nested =
+            'class C { int v = 5; C? next; }\n'
+            'class K { int? f(C? a) { return a?.next?.v; } }';
+
+        expect(
+          await _generate(await _load(nested), 'java11'),
+          contains('((a != null ? a.next : null) != null ? a.next.v : null)'),
+        );
+        expect(
+          await _generate(await _load(nested), 'python'),
+          contains(
+            '(a.next.v if (a.next if a is not None else None) '
+            'is not None else None)',
+          ),
+        );
+      });
+
+      test('a non-nullable receiver takes a single guard', () async {
+        // `c.next?.v` has one null-aware link on a non-nullable receiver, so
+        // one guard on `c.next` is all that is needed.
+        var vm = await _load(
+          'class C { int v = 5; C? next; }\n'
+          'class K { int? f(C c) { return c.next?.v; } }',
+        );
+        expect(
+          await _generate(vm, 'java11'),
+          contains('(c.next != null ? c.next.v : null)'),
+        );
+      });
+    });
   });
 }

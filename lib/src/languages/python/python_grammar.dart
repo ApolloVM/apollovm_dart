@@ -712,8 +712,28 @@ class PythonGrammarDefinition extends PythonGrammarLexer {
                         return getASTExpressionOperator(v);
                     }
                   }) |
+              ref0(expressionOperatorIsNone) |
               andToken().map((_) => ASTExpressionOperator.and) |
               orToken().map((_) => ASTExpressionOperator.or))
+          .cast<ASTExpressionOperator>();
+
+  /// `is None` / `is not None` — Python's identity test against `None`, which
+  /// is what the generator emits for a null check.
+  ///
+  /// Deliberately restricted to the `None` comparison by a lookahead: general
+  /// `is` is identity, and mapping `a is b` to `==` would silently turn it into
+  /// equality. `a is b` therefore stays unparsed, as it was before.
+  ///
+  /// The `None` itself is left for the operand parser, so the reduction sees
+  /// `[a, equals, None]` and `astExpressionOperation` folds it into an
+  /// [ASTExpressionNullCheck].
+  Parser<ASTExpressionOperator> expressionOperatorIsNone() =>
+      (isToken() & notToken().optional() & noneToken().and())
+          .map(
+            (v) => v[1] != null
+                ? ASTExpressionOperator.notEquals
+                : ASTExpressionOperator.equals,
+          )
           .cast<ASTExpressionOperator>();
 
   Parser<ASTExpression> expressionNoOperation() =>

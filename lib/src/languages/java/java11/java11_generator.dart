@@ -407,6 +407,13 @@ class ApolloCodeGeneratorJava11 extends ApolloCodeGenerator {
   @override
   String renderNullCoalesce(String a, String b) => '($a != null ? $a : $b)';
 
+  /// Java has no `?.` or `?[`, so a null-aware access becomes an explicit
+  /// guard. Without this the access would degrade to a plain `.` and throw a
+  /// `NullPointerException` on exactly the input `?.` exists to handle.
+  @override
+  String renderNullAwareGuard(String receiver, String guarded) =>
+      '($receiver != null ? $guarded : null)';
+
   /// Java has no `??=`; a null-coalescing assignment becomes `t = (t != null ? t : v)`.
   @override
   bool get supportsNullCoalesceAssignment => false;

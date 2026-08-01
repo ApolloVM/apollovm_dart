@@ -158,6 +158,15 @@ abstract class ApolloGenerator<
 
   O generateASTExpressionOperation(ASTExpressionOperation expression, {O? out});
 
+  O generateASTExpressionNullCoalesce(
+    ASTExpressionNullCoalesce expression, {
+    O? out,
+  });
+
+  O generateASTExpressionNullCheck(ASTExpressionNullCheck expression, {O? out});
+
+  O generateASTExpressionLogical(ASTExpressionLogical expression, {O? out});
+
   O generateASTExpressionConditional(
     ASTExpressionConditional expression, {
     O? out,

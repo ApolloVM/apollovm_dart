@@ -134,21 +134,31 @@ Dart's null-safety surface — nullable types (`T?`), the null-coalescing operat
 this syntax yet), runs on the interpreter, compiles to Wasm within the limits
 below, and is **translated to every target**.
 
+Comparison against null is the exception: every grammar parses its own spelling,
+including Python's `is None` / `is not None`, so a null check written in any
+supported language round-trips.
+
 Same legend as above, plus **⚠️** *lossy*: the construct is emitted in a form that
 compiles but drops its null semantics (the null check is not performed).
+
+The null-aware *accesses* (`?.`, `?[`) are never lossy: a target without the
+native operator lowers them to an explicit guard that yields null, so the check
+is really performed — see footnote ¹¹. Only the null *assertion* `!` is still
+dropped where the target has no equivalent, and that diverges from Dart solely
+in the error path (a value that should have thrown is used instead).
 
 | Feature | Dart | Java | Kotlin | Go | C# | JS | TS | Lua | Python | Wasm |
 |---|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|
 | Nullable type `T?`               | ✅ | 🚫 | ✅¹ | 🧩² | 🚫 | 🚫 | 🧩³ | 🚫 | 🚫 | 🧩⁴ |
 | `??` (null-coalescing)           | ✅ | 🧩⁵ | ✅⁶ | 🧩⁷ | ✅ | ✅ | ✅ | 🧩⁸ | 🧩⁹ | 🧩⁴ |
 | `??=` (null-coalescing assign)   | ✅ | 🧩⁵ | 🧩⁶ | 🚧¹⁰ | ✅ | ✅ | ✅ | 🧩⁸ | 🧩⁹ | 🧩⁴ |
-| `?.` (null-aware access)         | ✅ | ⚠️ | ✅ | 🚧¹¹ | ⚠️ | ⚠️ | ✅ | ⚠️ | ⚠️ | 🧩⁴ |
-| `?[` (null-aware index)          | ✅ | ⚠️ | ✅¹² | ⚠️ | ⚠️ | ⚠️ | ✅¹³ | ⚠️ | ⚠️ | 🧩⁴ |
-| `!` (null assertion)             | ✅ | ⚠️ | ✅¹⁴ | 🧩¹⁵ | ⚠️ | ⚠️ | ✅ | ⚠️ | ⚠️ | 🧩⁴ |
+| `?.` (null-aware access)         | ✅ | 🧩¹¹ | ✅ | 🚧¹² | ✅ | ✅ | ✅ | 🧩¹¹ | 🧩¹¹ | 🧩⁴ |
+| `?[` (null-aware index)          | ✅ | 🧩¹¹ | ✅¹³ | 🚧¹² | ✅ | ✅¹⁴ | ✅¹⁴ | 🧩¹¹ | 🧩¹¹ | 🧩⁴ |
+| `!` (null assertion)             | ✅ | ⚠️ | ✅¹⁵ | 🧩¹⁶ | ✅ | 🚫¹⁷ | ✅ | ⚠️ | ⚠️ | 🧩⁴ |
 | Cascades `..` / `?..`            | ✅ | 🧩 | 🧩 | 🧩 | 🧩 | 🧩 | 🧩 | 🧩 | 🧩 | 🚧 |
-| `x == null` / `x != null`        | ✅ | ✅ | ✅ | ✅¹⁶ | ✅ | ✅ | ✅ | ✅¹⁷ | ✅¹⁸ | ✅ |
-| Static null-safety analysis¹⁹    | ✅ | 🚫 | 🚫 | 🚫 | 🚫 | 🚫 | 🚫 | 🚫 | 🚫 | 🚫 |
-| Enforce analysis at load²⁰       | ✅ | 🚫 | 🚫 | 🚫 | 🚫 | 🚫 | 🚫 | 🚫 | 🚫 | 🚫 |
+| `x == null` / `x != null`        | ✅ | ✅ | ✅ | ✅¹⁸ | ✅ | ✅ | ✅ | ✅¹⁹ | ✅²⁰ | ✅ |
+| Static null-safety analysis²¹    | ✅ | 🚫 | 🚫 | 🚫 | 🚫 | 🚫 | 🚫 | 🚫 | 🚫 | 🚫 |
+| Enforce analysis at load²²       | ✅ | 🚫 | 🚫 | 🚫 | 🚫 | 🚫 | 🚫 | 🚫 | 🚫 | 🚫 |
 
 ¹ Kotlin renders the suffix natively (`Int?`). &nbsp;
 ² Go has no nullable value types: a `T?` is generated as a pointer `*T` — reads
@@ -181,24 +191,40 @@ the left operand only once. &nbsp;
 ¹⁰ Go's `??=` lowering (`t = t ?? v`) needs the target's element type to build
 the inline function's return type, which the text-level assignment hook does not
 have; it is reported as unsupported. Plain `??` is unaffected. &nbsp;
-¹¹ In Go, degrading `?.` to `.` would both skip the nil check *and* yield a value
-where a `*T` is expected, so it is reported rather than mis-emitted. &nbsp;
-¹² Kotlin has no `?[` operator: null-aware element access is the call
+¹¹ Java, Lua and Python have no null-aware access operator, so the access is
+lowered to an explicit guard that yields null — a ternary in Java
+(`(a != null ? a.x : null)`), a conditional expression testing `is not None` in
+Python, and an immediately-invoked function with a `nil` test in Lua. The guard
+wraps the **whole** chain, so `a?.m().toInt()` becomes
+`(a != null ? a.m().toInt() : null)` rather than leaving the trailing call
+outside it. Like the `??` desugaring, the guard repeats the receiver, so it is
+only used for receivers that are safe to evaluate twice (variables, fields and
+index reads). &nbsp;
+¹² In Go, degrading `?.` / `?[` to a plain access would both skip the nil check
+*and* yield a value where a `*T` is expected, so it is reported rather than
+mis-emitted. &nbsp;
+¹³ Kotlin has no `?[` operator: null-aware element access is the call
 `a?.get(i)`. &nbsp;
-¹³ TypeScript's null-aware element access is `a?.[i]`, not `a?[i]`. &nbsp;
-¹⁴ Kotlin's null assertion is `!!`. &nbsp;
-¹⁵ Go's `a!` is the pointer dereference `(*a)`, which panics on `nil` — the same
+¹⁴ TypeScript's and JavaScript's null-aware element access is `a?.[i]`, not
+`a?[i]`. &nbsp;
+¹⁵ Kotlin's null assertion is `!!`. &nbsp;
+¹⁶ Go's `a!` is the pointer dereference `(*a)`, which panics on `nil` — the same
 shape as the assertion's throw. &nbsp;
-¹⁶ Go compares the pointer directly (`a != nil`), without dereferencing. &nbsp;
-¹⁷ Lua's null literal is `nil`. &nbsp; ¹⁸ Python's is `None`. &nbsp;
-¹⁹ A pragmatic, flow-aware analyzer reports assigning `null` (or a nullable
+¹⁷ JavaScript has no null-assertion operator — a postfix `!` there is logical
+NOT — so `a!` is emitted as plain `a`. Dropping the token is the only
+meaning-preserving option; emitting it would negate the value. &nbsp;
+¹⁸ Go compares the pointer directly (`a != nil`), without dereferencing. &nbsp;
+¹⁹ Lua's null literal is `nil`. &nbsp; ²⁰ Python compares against `None` by
+identity (`x is None` / `x is not None`), not `==`: equality dispatches through
+`__eq__`, which a class can redefine to return `True` for `None`. &nbsp;
+²¹ A pragmatic, flow-aware analyzer reports assigning `null` (or a nullable
 value) to a non-nullable slot, and unconditional member/method/index access or
 operator use on a nullable — with promotion for `if (x != null) { … }` /
 `if (x == null) … else { … }`, and suppression via `?.` / `!` / `??`. Its
 diagnostics are surfaced through the [LSP](#language-server-lsp) for Dart
 documents. It analyzes top-level functions **and** class methods, constructors
 and getters. &nbsp;
-²⁰ `ApolloVM(nullSafetyChecks: true)` makes `loadCodeUnit` throw
+²² `ApolloVM(nullSafetyChecks: true)` makes `loadCodeUnit` throw
 `NullSafetyError` when the AST has null-safety **errors**, so a mistake fails at
 resolution time instead of partway through a run:
 

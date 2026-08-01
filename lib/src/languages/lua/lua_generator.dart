@@ -746,6 +746,23 @@ class ApolloCodeGeneratorLua extends ApolloCodeGenerator {
   @override
   bool get supportsNullCoalesceAssignment => false;
 
+  /// Lua's null literal is `nil`. The `~=` inequality spelling comes from
+  /// [resolveASTExpressionOperatorText], which `renderNullCheck` already uses.
+  @override
+  String get nullValueLiteral => 'nil';
+
+  /// Lua has no `?.` or `?[`, so a null-aware access becomes an
+  /// immediately-invoked function with an explicit `nil` test.
+  ///
+  /// Unlike [renderNullCoalesce], the receiver cannot be bound to a local here:
+  /// [guarded] is the whole chain already rendered against the receiver's own
+  /// text, so the receiver appears in both the test and the body — the same
+  /// evaluate-twice caveat the ternary-based targets carry.
+  @override
+  String renderNullAwareGuard(String receiver, String guarded) =>
+      '(function() if $receiver ~= nil then return $guarded end '
+      'return nil end)()';
+
   @override
   StringBuffer generateASTExpressionLiteralFunction(
     ASTExpressionLiteralFunction expression, {
@@ -875,6 +892,11 @@ class ApolloCodeGeneratorLua extends ApolloCodeGenerator {
   }) {
     out ??= newOutput();
     if (headIndented) out.write(indent);
+
+    // A null-aware index (`a?[i]`) is wrapped in a `nil` guard by the base
+    // generator, which re-enters here with the guard suppressed.
+    var hoisted = generateNullAwareChain(expression, out: out, indent: indent);
+    if (hoisted != null) return hoisted;
 
     generateASTVariable(
       expression.variable,
