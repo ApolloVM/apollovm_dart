@@ -1,3 +1,78 @@
+## 2.24.0
+
+### Null-aware access is now really checked on every target, not dropped
+
+`a?.b` was emitted as a plain `a.b` on Java, C#, JavaScript, Lua and Python: the
+generated code compiled, but the null check was gone — it threw on exactly the
+input `?.` exists to handle. The README's null-safety matrix marked those cells
+⚠️ *lossy*.
+
+Java, Lua and Python now lower the access to an explicit guard, and the guard
+wraps the **whole** chain rather than the null-aware link alone:
+
+```dart
+// Dart source
+int chain(A? a) { return a?.m().toInt(); }
+```
+
+```java
+// Java, before: threw when `a` was null
+return a.m().toInt();
+// Java, now
+return (a != null ? a.m().toInt() : null);
+```
+
+```python
+# Python
+return (a.m().toInt() if a is not None else None)
+```
+
+C# and JavaScript were lossy for a simpler reason — both have had the operator
+all along (C# 6, ES2020) and merely never declared it — so they now emit `a?.b`
+natively. JavaScript uses `?.[i]` for element access, and its postfix `!` is
+handled separately: JavaScript has no null-assertion operator (a postfix `!` is
+logical NOT), so `a!` is emitted as plain `a` rather than negating the value.
+
+Go continues to report `?.` / `?[` as unsupported: it represents a nullable `T?`
+as `*T`, so a degraded access would both skip the nil check and yield the wrong
+type.
+
+### `??`, `&&`, `||` and `x == null` are AST nodes of their own
+
+These four were shapes encoded on the generic binary-operation node and
+special-cased ahead of its operator switch, because each of them short-circuits.
+Every consumer had to re-detect them by inspecting operands — the null-safety
+analyzer reconstructed `x != null` to promote a variable, the Go backend probed
+for a null literal to compare the pointer instead of dereferencing it, and the
+Wasm backend re-tested the operator — and the enum's exhaustiveness forced
+`throw StateError('unreachable')` arms in three places.
+
+`ASTExpressionNullCoalesce`, `ASTExpressionLogicalAnd`, `ASTExpressionLogicalOr`
+and `ASTExpressionNullCheck` now carry those shapes, built by the new
+`astExpressionOperation()` factory that the shared grammar reduction uses, so
+all nine front-ends get them. Consumers dispatch on the node type instead of
+pattern-matching, and evaluating `x == null` no longer concretizes both operands
+and runs them through equality dispatch.
+
+This is internal structure — the generated source is unchanged, except where a
+target has a better idiom that the dedicated node makes reachable. Python is the
+one such case:
+
+```python
+# before
+if a == None:
+# now
+if a is None:
+```
+
+`==` dispatches through `__eq__`, which a class can redefine to return `True`
+for `None`; `is` cannot be intercepted, and is the form PEP 8 mandates.
+
+Building a binary operation directly with `ASTExpressionOperation` still works
+for the ordinary operators. Constructing one with `??`, `&&` or `||` now throws
+rather than silently evaluating both operands, which would no longer be a
+short-circuit.
+
 ## 2.23.3
 
 ### A signature mismatch is no longer reported as a missing entry function
