@@ -346,12 +346,13 @@ class NullSafetyAnalyzer {
 
   /// Reports a nullable operand used in an operation that would dereference it.
   ///
-  /// `??`, `==` and `!=` are exempt: a nullable operand is exactly what they
-  /// exist to handle.
+  /// `==` and `!=` are exempt: a nullable operand is exactly what they exist to
+  /// handle. `??` and the `x == null` / `x != null` forms are exempt
+  /// structurally — they are [ASTExpressionNullCoalesce] and
+  /// [ASTExpressionNullCheck], so they never reach this check.
   void _checkOperationOperands(ASTExpressionOperation expr, _Scope scope) {
     final op = expr.operator;
-    if (op == ASTExpressionOperator.nullCoalesce ||
-        op == ASTExpressionOperator.equals ||
+    if (op == ASTExpressionOperator.equals ||
         op == ASTExpressionOperator.notEquals) {
       return;
     }
@@ -401,23 +402,20 @@ class NullSafetyAnalyzer {
     final whenFalse = <String>{};
 
     void handle(ASTExpression e) {
-      if (e is ASTExpressionOperation) {
-        final op = e.operator;
-        if (op == ASTExpressionOperator.notEquals ||
-            op == ASTExpressionOperator.equals) {
-          final name = _nullComparisonVariable(e.expression1, e.expression2);
-          if (name != null) {
-            if (op == ASTExpressionOperator.notEquals) {
-              whenTrue.add(name);
-            } else {
-              whenFalse.add(name);
-            }
+      if (e is ASTExpressionNullCheck) {
+        final name = _scopeVariableName(e.expression);
+        if (name != null) {
+          if (e.negated) {
+            whenTrue.add(name);
+          } else {
+            whenFalse.add(name);
           }
-        } else if (op == ASTExpressionOperator.and) {
-          // `x != null && …`: both sides promote when true.
-          handle(e.expression1);
-          handle(e.expression2);
         }
+      } else if (e is ASTExpressionOperation &&
+          e.operator == ASTExpressionOperator.and) {
+        // `x != null && …`: both sides promote when true.
+        handle(e.expression1);
+        handle(e.expression2);
       }
     }
 
@@ -425,18 +423,13 @@ class NullSafetyAnalyzer {
     return _Promotions(whenTrue, whenFalse);
   }
 
-  /// If [a]/[b] is a `variable <op> null` comparison, returns the variable name.
-  String? _nullComparisonVariable(ASTExpression a, ASTExpression b) {
-    String? nameOf(ASTExpression e) {
-      if (e is ASTExpressionVariableAccess) {
-        final v = e.variable;
-        if (v is ASTScopeVariable) return v.name;
-      }
-      return null;
+  /// The name of the scope variable [e] reads, or `null` if it is not a plain
+  /// variable read.
+  String? _scopeVariableName(ASTExpression e) {
+    if (e is ASTExpressionVariableAccess) {
+      final v = e.variable;
+      if (v is ASTScopeVariable) return v.name;
     }
-
-    if (b is ASTExpressionNullValue) return nameOf(a);
-    if (a is ASTExpressionNullValue) return nameOf(b);
     return null;
   }
 

@@ -746,6 +746,11 @@ class ApolloCodeGeneratorLua extends ApolloCodeGenerator {
   @override
   bool get supportsNullCoalesceAssignment => false;
 
+  /// Lua's null literal is `nil`. The `~=` inequality spelling comes from
+  /// [resolveASTExpressionOperatorText], which `renderNullCheck` already uses.
+  @override
+  String get nullValueLiteral => 'nil';
+
   @override
   StringBuffer generateASTExpressionLiteralFunction(
     ASTExpressionLiteralFunction expression, {

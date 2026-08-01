@@ -3742,6 +3742,113 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
   }
 
   @override
+  BytesOutput generateASTExpressionNullCoalesce(
+    ASTExpressionNullCoalesce expression, {
+    BytesOutput? out,
+    WasmContext? context,
+  }) {
+    out ??= newOutput();
+    context ??= WasmContext();
+
+    generateASTExpression(expression.expression1, out: out, context: context);
+    var leftType = context.stackGet(0)!.type;
+
+    // In the numeric domain a value can never be null, so the left operand
+    // always determines the result and the right one is dropped.
+    if (!_isObjectType(leftType)) return out;
+
+    // A boxed value *can* be the null pointer, so test it and fall back to
+    // the right operand. The result is boxed either way.
+    var leftTmp = context.scratchLocal(_astTypeString, 78); // i32 box ptr
+    out.write(
+      Wasm.localSet(leftTmp),
+      description: "[OP] `??`: stash left operand",
+    );
+    context.stackDrop();
+
+    out.write(Wasm.localGet(leftTmp));
+    out.write(Wasm32.i32Const(_boxPtrNull));
+    out.writeByte(Wasm32.i32Equals, description: "[OP] `??`: left is null?");
+    out.write(Wasm.ifInstruction(WasmType.i32Type));
+
+    // then: the left operand is null — evaluate the right one, boxed.
+    generateASTExpression(expression.expression2, out: out, context: context);
+    _autoConvertStackTypes(
+      context.stackGet(0)!.type,
+      ASTTypeObject.instance,
+      out: out,
+      context: context,
+    );
+    context.stackDrop();
+
+    out.writeByte(Wasm.elseInstruction);
+    out.write(
+      Wasm.localGet(leftTmp),
+      description: "[OP] `??`: left operand (non-null)",
+    );
+    out.writeByte(Wasm.end);
+
+    context.stackPush(ASTTypeObject.instance, "`??` result");
+    return out;
+  }
+
+  /// `x == null` / `x != null`.
+  ///
+  /// Wasm has no null of its own: `null` is the boxed-`Object` pointer
+  /// [_boxPtrNull], so this is an `i32` comparison against that pointer. It must
+  /// not go through the String or numeric equality paths — `__streq` would
+  /// compare *contents* against address 0, and the numeric path would push two
+  /// i32 handles into an `i64.eq` (an invalid module).
+  ///
+  /// The result is tracked on the virtual stack as an i32, which is how every
+  /// other comparison reports a boolean here.
+  @override
+  BytesOutput generateASTExpressionNullCheck(
+    ASTExpressionNullCheck expression, {
+    BytesOutput? out,
+    WasmContext? context,
+  }) {
+    out ??= newOutput();
+    context ??= WasmContext();
+
+    final stackLng0 = context.stackLength;
+
+    generateASTExpression(expression.expression, out: out, context: context);
+    var type = context.stackGet(0)!.type;
+    context.stackDrop();
+
+    var wantEquals = !expression.negated;
+
+    if (_isObjectType(type)) {
+      // A boxed value: compare the pointer against the null box.
+      out.write(Wasm32.i32Const(_boxPtrNull));
+      out.writeByte(
+        wantEquals ? Wasm32.i32Equals : Wasm32.i32NotEquals,
+        description: "[OP] boxed `${wantEquals ? '==' : '!='} null`",
+      );
+    } else {
+      // A concrete slot (`int`, `double`, `String`, an instance) has no null
+      // representation in Wasm, so the answer is constant. The operand is
+      // still emitted and dropped, to keep its side effects.
+      out.writeByte(
+        Wasm.drop,
+        description: "[OP] drop non-null operand of `== null`",
+      );
+      out.write(
+        Wasm32.i32Const(wantEquals ? 0 : 1),
+        description:
+            "[OP] `${wantEquals ? '==' : '!='} null` on a non-nullable "
+            "$type is constant",
+      );
+    }
+
+    context.stackPush(_astTypeInt32, "`== null` result");
+    context.assertStackLength(stackLng0 + 1, "After `== null`");
+
+    return out;
+  }
+
+  @override
   BytesOutput generateASTExpressionOperation(
     ASTExpressionOperation expression, {
     BytesOutput? out,
@@ -3777,50 +3884,6 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
         out: out,
         context: context,
       );
-    }
-
-    // Null-coalescing (`a ?? b`).
-    if (expression.operator == ASTExpressionOperator.nullCoalesce) {
-      generateASTExpression(expression1, out: out, context: context);
-      var leftType = context.stackGet(0)!.type;
-
-      // In the numeric domain a value can never be null, so the left operand
-      // always determines the result and the right one is dropped.
-      if (!_isObjectType(leftType)) return out;
-
-      // A boxed value *can* be the null pointer, so test it and fall back to
-      // the right operand. The result is boxed either way.
-      var leftTmp = context.scratchLocal(_astTypeString, 78); // i32 box ptr
-      out.write(
-        Wasm.localSet(leftTmp),
-        description: "[OP] `??`: stash left operand",
-      );
-      context.stackDrop();
-
-      out.write(Wasm.localGet(leftTmp));
-      out.write(Wasm32.i32Const(_boxPtrNull));
-      out.writeByte(Wasm32.i32Equals, description: "[OP] `??`: left is null?");
-      out.write(Wasm.ifInstruction(WasmType.i32Type));
-
-      // then: the left operand is null — evaluate the right one, boxed.
-      generateASTExpression(expression2, out: out, context: context);
-      _autoConvertStackTypes(
-        context.stackGet(0)!.type,
-        ASTTypeObject.instance,
-        out: out,
-        context: context,
-      );
-      context.stackDrop();
-
-      out.writeByte(Wasm.elseInstruction);
-      out.write(
-        Wasm.localGet(leftTmp),
-        description: "[OP] `??`: left operand (non-null)",
-      );
-      out.writeByte(Wasm.end);
-
-      context.stackPush(ASTTypeObject.instance, "`??` result");
-      return out;
     }
 
     final stackLng0 = context.stackLength;
@@ -3870,52 +3933,6 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       context.assertStackLength(stackLng2, "After push string operands");
       _emitStringConcat2(out, context);
       context.assertStackLength(stackLng0 + 1, "After string concat");
-      return out;
-    }
-
-    // `x == null` / `x != null`. Checked before the String and numeric paths:
-    // `null` is the boxed-`Object` pointer 0, so neither of those is right —
-    // `__streq` would compare *contents* against address 0, and the numeric
-    // path would push two i32 handles into an `i64.eq` (an invalid module).
-    var isNull1 = expression1 is ASTExpressionNullValue;
-    var isNull2 = expression2 is ASTExpressionNullValue;
-    if ((expression.operator == ASTExpressionOperator.equals ||
-            expression.operator == ASTExpressionOperator.notEquals) &&
-        (isNull1 || isNull2)) {
-      var wantEquals = expression.operator == ASTExpressionOperator.equals;
-      var otherOut = isNull1 ? exp2Out : exp1Out;
-      var otherType = isNull1 ? stackType2 : stackType1;
-
-      context.stackDrop(); // operand 2
-      context.stackDrop(); // operand 1
-
-      if (_isObjectType(otherType)) {
-        // A boxed value: compare the pointer against the null box.
-        out.writeBytes(otherOut);
-        out.write(Wasm32.i32Const(_boxPtrNull));
-        out.writeByte(
-          wantEquals ? Wasm32.i32Equals : Wasm32.i32NotEquals,
-          description: "[OP] boxed `${wantEquals ? '==' : '!='} null`",
-        );
-      } else {
-        // A concrete slot (`int`, `double`, `String`, an instance) has no null
-        // representation in Wasm, so the answer is constant. The operand is
-        // still emitted and dropped, to keep its side effects.
-        out.writeBytes(otherOut);
-        out.writeByte(
-          Wasm.drop,
-          description: "[OP] drop non-null operand of `== null`",
-        );
-        out.write(
-          Wasm32.i32Const(wantEquals ? 0 : 1),
-          description:
-              "[OP] `${wantEquals ? '==' : '!='} null` on a non-nullable "
-              "$otherType is constant",
-        );
-      }
-
-      context.stackPush(_astTypeInt32, "`== null` result");
-      context.assertStackLength(stackLng0 + 1, "After `== null`");
       return out;
     }
 
@@ -9451,6 +9468,20 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
   }) {
     if (expression is ASTExpressionNullValue) {
       return generateASTExpressionNullValue(
+        expression,
+        out: out,
+        context: context,
+      );
+    }
+    if (expression is ASTExpressionNullCoalesce) {
+      return generateASTExpressionNullCoalesce(
+        expression,
+        out: out,
+        context: context,
+      );
+    }
+    if (expression is ASTExpressionNullCheck) {
+      return generateASTExpressionNullCheck(
         expression,
         out: out,
         context: context,

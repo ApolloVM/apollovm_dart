@@ -159,7 +159,7 @@ abstract class BaseGrammarLexer extends GrammarDefinition {
           throw StateError('Missing logical operator between blocks');
         }
 
-        finalExpressionOp = ASTExpressionOperation(
+        finalExpressionOp = astExpressionOperation(
           finalExpressionOp,
           blockOp,
           expressionOp,
@@ -219,7 +219,7 @@ abstract class BaseGrammarLexer extends GrammarDefinition {
       var e1 = block.removeAt(0);
       var op = block.removeAt(0);
       var e2 = block.removeAt(0);
-      block.insert(0, ASTExpressionOperation(e1, op, e2));
+      block.insert(0, astExpressionOperation(e1, op, e2));
     }
 
     return block.single as ASTExpression;
@@ -240,7 +240,7 @@ abstract class BaseGrammarLexer extends GrammarDefinition {
       // If the operator matches the current precedence group
       // (e.g. *, /, % OR +, -), we reduce this triplet
       if (op != null && ops.contains(op)) {
-        var exp = ASTExpressionOperation(e1, op, e2);
+        var exp = astExpressionOperation(e1, op, e2);
 
         // Replace [e1, op, e2] with the resulting expression
         // Important: always remove at the same index (i),

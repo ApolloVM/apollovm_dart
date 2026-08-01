@@ -1444,6 +1444,20 @@ abstract class ApolloCodeGenerator
         indent: indent,
         headIndented: headIndented,
       );
+    } else if (expression is ASTExpressionNullCoalesce) {
+      return generateASTExpressionNullCoalesce(
+        expression,
+        out: out,
+        indent: indent,
+        headIndented: headIndented,
+      );
+    } else if (expression is ASTExpressionNullCheck) {
+      return generateASTExpressionNullCheck(
+        expression,
+        out: out,
+        indent: indent,
+        headIndented: headIndented,
+      );
     } else if (expression is ASTExpressionVariableAccess) {
       return generateASTExpressionVariableAccess(
         expression,
@@ -1632,17 +1646,6 @@ abstract class ApolloCodeGenerator
     final expression2 = expression.expression2;
     final operator = expression.operator;
 
-    // `a ?? b` has no operator form in several targets, so it goes through a
-    // dedicated hook that can desugar it into a conditional expression.
-    if (operator == ASTExpressionOperator.nullCoalesce) {
-      return generateASTExpressionNullCoalesce(
-        expression1,
-        expression2,
-        out: out,
-        indent: indent,
-      );
-    }
-
     var groupComplexExpressions = true;
 
     if (operator == ASTExpressionOperator.add) {
@@ -1726,27 +1729,94 @@ abstract class ApolloCodeGenerator
   bool get supportsNullCoalesceAssignment => true;
 
   /// Generates the null-coalescing expression `a ?? b`.
+  @override
   StringBuffer generateASTExpressionNullCoalesce(
-    ASTExpression expression1,
-    ASTExpression expression2, {
+    ASTExpressionNullCoalesce expression, {
     StringBuffer? out,
     String indent = '',
+    bool headIndented = true,
   }) {
     out ??= newOutput();
 
+    if (headIndented) out.write(indent);
+
     var a = generateASTExpression(
-      expression1,
+      expression.expression1,
       indent: '$indent  ',
       headIndented: false,
     ).toString();
 
     var b = generateASTExpression(
-      expression2,
+      expression.expression2,
       indent: '$indent  ',
       headIndented: false,
     ).toString();
 
     out.write(renderNullCoalesce(a, b));
+
+    return out;
+  }
+
+  /// Renders a comparison against `null` from the already-generated operand
+  /// text: `x == null` / `x != null`.
+  ///
+  /// The equality token is resolved through [resolveASTExpressionOperatorText]
+  /// so a target's own spelling is honoured — JavaScript and TypeScript use
+  /// strict equality (`=== null`), Lua writes `~=` for inequality — and the
+  /// literal through [nullValueLiteral] (Lua/Go `nil`).
+  ///
+  /// Python overrides this outright: it compares against `None` by identity.
+  ///
+  /// [nullFirst] preserves the operand order the source used, so `null == x`
+  /// does not silently become `x == null`.
+  String renderNullCheck(
+    String operand, {
+    required bool negated,
+    required bool nullFirst,
+  }) {
+    var op = resolveASTExpressionOperatorText(
+      negated ? ASTExpressionOperator.notEquals : ASTExpressionOperator.equals,
+      ASTNumType.nan,
+      ASTNumType.nan,
+    );
+    var nullLiteral = nullValueLiteral;
+    return nullFirst
+        ? '$nullLiteral $op $operand'
+        : '$operand $op $nullLiteral';
+  }
+
+  /// How this target spells the `null` literal, used by [renderNullCheck].
+  String get nullValueLiteral => 'null';
+
+  /// Generates a comparison against `null` — `x == null` / `x != null`.
+  @override
+  StringBuffer generateASTExpressionNullCheck(
+    ASTExpressionNullCheck expression, {
+    StringBuffer? out,
+    String indent = '',
+    bool headIndented = true,
+  }) {
+    out ??= newOutput();
+
+    if (headIndented) out.write(indent);
+
+    final inner = expression.expression;
+
+    var operand = generateASTExpression(
+      inner,
+      indent: '$indent  ',
+      headIndented: false,
+    ).toString();
+
+    if (inner.isComplex) operand = '($operand)';
+
+    out.write(
+      renderNullCheck(
+        operand,
+        negated: expression.negated,
+        nullFirst: expression.nullFirst,
+      ),
+    );
 
     return out;
   }
