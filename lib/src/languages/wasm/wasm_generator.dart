@@ -2205,6 +2205,14 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
   /// for a `null`-bearing expression resolves to a boxed `Object`.
   bool _acceptsWasmNull(ASTType t) => _isObjectType(t) || t is ASTTypeVar;
 
+  /// Whether a slot of type [t] holds a boxed-`Object` pointer at runtime — the
+  /// only representation that can *be* Wasm's `null`.
+  ///
+  /// `Null` counts: `var x = null` infers the slot as `Null`, and it is stored
+  /// as the null box pointer, which is why [_typeTag] already groups it with
+  /// `Object`/`dynamic`.
+  bool _isBoxedSlot(ASTType t) => _isObjectType(t) || t is ASTTypeNull;
+
   // Boxed-`Object` tags (must match `wasm_runner.dart`'s `_boxTag*`).
   static const int _boxTagInt = 1;
   static const int _boxTagDouble = 2;
@@ -5495,6 +5503,144 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     return out;
   }
 
+  /// `.length` / `.isEmpty` / `.isNotEmpty` on a boxed-`Object` receiver
+  /// (`var` / `Object?` / `dynamic`), dispatching on the box tag at runtime.
+  ///
+  /// Only a boxed **String** carries these members: `List`/`Map` have no boxed
+  /// form at all ([_emitBoxValue] rejects them), and the int/double/bool/
+  /// instance tags have no length. Any other tag traps rather than reading a
+  /// length word out of a payload that isn't a string pointer.
+  ///
+  /// The null handling is the reason this exists. A boxed slot is the only one
+  /// that can hold Wasm's `null` ([_boxPtrNull]), so:
+  ///
+  /// - `a?.length` yields `null` when `a` is null, which means the result is
+  ///   nullable and therefore itself boxed;
+  /// - `a.length` on a null box traps, matching the interpreter's
+  ///   `ApolloVMNullPointerException`.
+  ///
+  /// That asymmetry is why the null-aware form pushes an `Object` and the plain
+  /// form pushes an `int`/`bool` — a nullable result has no unboxed encoding.
+  BytesOutput _generateBoxedGetterAccess(
+    ASTExpressionObjectGetterAccess expression,
+    int localIndex,
+    String varName,
+    String name, {
+    required BytesOutput out,
+    required WasmContext context,
+  }) {
+    final module = context.module;
+    if (module == null) {
+      throw StateError("Can't lower a boxed getter without a module.");
+    }
+    module.requiresMemory = true;
+
+    final s0 = context.stackLength;
+    final nullAware = expression.isNullAware;
+    final isLength = name == 'length';
+
+    // The box pointer, and the length read out of it, both need to outlive the
+    // branches below.
+    final boxLocal = context.scratchLocal(_astTypeString, 44); // i32 box ptr
+    final tagLocal = context.scratchLocal(_astTypeString, 45); // i32 tag
+
+    _localVariableGet(out, context, localIndex, varName);
+    out.write(
+      Wasm.localSet(boxLocal),
+      description: "[OP] `$varName.$name`: stash box ptr",
+    );
+
+    // The result type: a null-aware access can produce `null`, so it stays
+    // boxed; otherwise it is the concrete i64 length / i32 bool.
+    final resultWasmType = nullAware
+        ? WasmType
+              .i32Type // box ptr
+        : (isLength ? WasmType.i64Type : WasmType.i32Type);
+
+    // if (box == null)
+    out.write(Wasm.localGet(boxLocal));
+    out.write(Wasm32.i32Const(_boxPtrNull));
+    out.writeByte(Wasm32.i32Equals, description: "[OP] `$varName` is null?");
+    out.write(Wasm.ifInstruction(resultWasmType));
+
+    if (nullAware) {
+      // `a?.length` on null short-circuits to null — the whole point of `?.`.
+      out.write(
+        Wasm32.i32Const(_boxPtrNull),
+        description: "[OP] `$varName?.$name`: null receiver -> null",
+      );
+    } else {
+      // `a.length` on null is a null dereference.
+      out.writeByte(
+        Wasm.unreachable,
+        description: "[OP] `$varName.$name`: null dereference",
+      );
+    }
+
+    out.writeByte(Wasm.elseInstruction);
+
+    // else: read the tag and require a String box.
+    out.write(Wasm.localGet(boxLocal));
+    out.write(Wasm32.i32Load(2, _boxTagOffset));
+    out.write(Wasm.localSet(tagLocal), description: "[OP] load box tag");
+
+    out.write(Wasm.localGet(tagLocal));
+    out.write(Wasm32.i32Const(_boxTagString));
+    out.writeByte(Wasm32.i32Equals, description: "[OP] box is a String?");
+    out.write(Wasm.ifInstruction(resultWasmType));
+
+    // The payload is the string pointer; its header[0] is the UTF-8 length,
+    // the same word a bare String slot reads.
+    out.write(Wasm.localGet(boxLocal));
+    out.write(Wasm32.i32Load(2, _boxPayloadOffset));
+    out.write(Wasm32.i32Load(2, 0), description: "[OP] boxed String length");
+
+    if (isLength) {
+      out.writeByte(Wasm32.i32ExtendToI64Signed); // -> i64 (int)
+      if (nullAware) {
+        // Re-box: the result is `int?`, which has no unboxed encoding.
+        context.stackPush(_astTypeInt64, "boxed `.length`");
+        _emitBoxValue(out, context);
+        context.stackDrop();
+      }
+    } else {
+      if (name == 'isEmpty') {
+        out.writeByte(Wasm32.i32EqualsToZero); // length == 0
+      } else {
+        out.write(Wasm32.i32Const(0));
+        out.writeByte(Wasm32.i32NotEquals); // length != 0 (normalized 0/1)
+      }
+      if (nullAware) {
+        // Box as a *bool*, not as the i32 it is represented by: `_emitBoxValue`
+        // picks its scratch local from the declared type, and an int-looking
+        // type would reserve an i64 one and then store this i32 into it.
+        context.stackPush(ASTTypeBool.instance, "boxed `.$name`");
+        _emitBoxValue(out, context);
+        context.stackDrop();
+      }
+    }
+
+    out.writeByte(Wasm.elseInstruction);
+    // A non-String box has no `.$name`.
+    out.writeByte(
+      Wasm.unreachable,
+      description: "[OP] `.$name` on a non-String box",
+    );
+    out.writeByte(Wasm.end);
+
+    out.writeByte(Wasm.end);
+
+    context.stackPush(
+      nullAware
+          ? ASTTypeObject.instance
+          : (isLength ? _astTypeInt64 : _astTypeInt32),
+      "$varName${nullAware ? '?' : ''}.$name",
+    );
+    context.assertStackLength(s0 + 1, "After boxed getter .$name");
+
+    return out;
+  }
+
   /// Lowers a getter access (`a.length`). Slice 1 supports `List.length`.
   BytesOutput _generateWasmGetterAccess(
     ASTExpressionObjectGetterAccess expression, {
@@ -5549,6 +5695,22 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
         receiverDesc: varName,
         methodName: name,
         arguments: const [],
+        out: out,
+        context: context,
+      );
+    }
+
+    // A boxed-`Object` receiver (`var` / `Object?` / `dynamic`). This is the
+    // only slot that can hold `null`, so it is also the only place `?.` has to
+    // do anything — on a concrete slot the receiver cannot be null and the
+    // null-awareness is vacuous.
+    if (_isBoxedSlot(listType) &&
+        const {'length', 'isEmpty', 'isNotEmpty'}.contains(name)) {
+      return _generateBoxedGetterAccess(
+        expression,
+        localVar.index,
+        varName,
+        name,
         out: out,
         context: context,
       );

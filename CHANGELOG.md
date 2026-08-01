@@ -1,3 +1,44 @@
+## 2.25.0
+
+### Wasm: `?.` on a boxed slot no longer refuses to compile
+
+`var x = null; x?.length` was an `UnimplementedError` — *"Wasm getter `.length`
+on Null is not supported yet"*. That was reachable from ordinary code, and the
+advice the neighbouring error gives ("declare the variable as `var` / `Object?`
+/ `dynamic`") led straight into it.
+
+A boxed slot is the only Wasm representation that can hold `null`, so it is also
+the only place `?.` has anything to do — on a concrete slot the receiver cannot
+be null and the null-awareness is vacuous. `.length` / `.isEmpty` / `.isNotEmpty`
+on a boxed receiver now dispatch on the box tag at runtime:
+
+```dart
+var missing = null;
+var n = missing?.length;   // -> null
+return n ?? -1;            // -> -1
+```
+
+Only a boxed **String** carries these members — `List`/`Map` have no boxed form
+at all, and the int/double/bool/instance tags have no length — so any other tag
+traps rather than reading a length word out of a payload that is not a string
+pointer. A *plain* `.` on a null box traps too, matching the interpreter's
+`ApolloVMNullPointerException`.
+
+The null-aware result is itself boxed, because it can be `null` and a nullable
+value has no unboxed encoding. That is what lets it flow into `??` and
+`== null`, which already understand boxes. The plain form still yields an
+unboxed `int`/`bool`.
+
+### Known gap this exposed
+
+An explicitly-declared `Object?` local initialized from a *concrete* value keeps
+the initializer's type instead of being boxed, so `Object? s = ''` makes `s` a
+String slot. `s?.isEmpty` then takes the concrete-String path and stores its i32
+boolean into a slot sized i64, producing a module that compiles but fails Wasm
+validation. That reproduces byte-identically on 2.24.0, so it is a separate
+defect in the declaration path rather than a consequence of this change; it is
+pinned as a skipped test in `test/wasm/apollovm_wasm_boxed_member_test.dart`.
+
 ## 2.24.0
 
 ### Null-aware access is now really checked on every target, not dropped
