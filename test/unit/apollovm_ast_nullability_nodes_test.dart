@@ -200,5 +200,14 @@ void main() {
       );
       expect(() => e.resolveType(null), throwsA(isA<StateError>()));
     });
+
+    test('`&&` / `||` still type as bool but must not be evaluated', () {
+      // `resolveType` is fine — the result really is a bool. It is `run` that
+      // would evaluate both operands eagerly, which is why it throws instead.
+      for (var op in [ASTExpressionOperator.and, ASTExpressionOperator.or]) {
+        var e = ASTExpressionOperation(_lit(true), op, _lit(true));
+        expect(e.resolveType(null), same(ASTTypeBool.instance));
+      }
+    });
   });
 }

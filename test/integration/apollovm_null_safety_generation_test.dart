@@ -426,6 +426,13 @@ void main() {
         expect(lua, contains('if a ~= nil then return a.x end'));
       });
 
+      test('Lua guards a null-aware index, keeping the 1-based shift', () async {
+        // Lua tables are 1-indexed, so `xs?[0]` is both guarded *and* shifted.
+        // The shift has to stay inside the guard.
+        var lua = await _generate(await _load(src), 'lua');
+        expect(lua, contains('if xs ~= nil then return xs[1] end'));
+      });
+
       test('the whole chain stays inside the guard', () async {
         // `a?.m().toInt()` nests as an invocation of `toInt` whose receiver is
         // the null-aware call to `m`. Guarding only the null-aware link would
@@ -474,6 +481,58 @@ void main() {
           );
         },
       );
+
+      test('Go reports a null-aware index too', () async {
+        var vm = await _load(
+          'class K { int? f(List<int>? xs) { return xs?[0]; } }',
+        );
+        expect(
+          () => _generate(vm, 'go'),
+          throwsA(isA<UnsupportedSyntaxError>()),
+        );
+      });
+
+      test('C# emits the null-forgiving `!` natively', () async {
+        var vm = await _load(
+          'class A { int x = 1; }\n'
+          'class K { int f(A? a) { return a!.x; } }',
+        );
+        expect(await _generate(vm, 'csharp'), contains('a!.x'));
+      });
+
+      test('a nested chain nests the guards soundly', () async {
+        // `a?.next?.v` has two null-aware links: the outer guard tests the
+        // inner guard's *result*, so a null at either link yields null rather
+        // than dereferencing.
+        const nested =
+            'class C { int v = 5; C? next; }\n'
+            'class K { int? f(C? a) { return a?.next?.v; } }';
+
+        expect(
+          await _generate(await _load(nested), 'java11'),
+          contains('((a != null ? a.next : null) != null ? a.next.v : null)'),
+        );
+        expect(
+          await _generate(await _load(nested), 'python'),
+          contains(
+            '(a.next.v if (a.next if a is not None else None) '
+            'is not None else None)',
+          ),
+        );
+      });
+
+      test('a non-nullable receiver takes a single guard', () async {
+        // `c.next?.v` has one null-aware link on a non-nullable receiver, so
+        // one guard on `c.next` is all that is needed.
+        var vm = await _load(
+          'class C { int v = 5; C? next; }\n'
+          'class K { int? f(C c) { return c.next?.v; } }',
+        );
+        expect(
+          await _generate(vm, 'java11'),
+          contains('(c.next != null ? c.next.v : null)'),
+        );
+      });
     });
   });
 }

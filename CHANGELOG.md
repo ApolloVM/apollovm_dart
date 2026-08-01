@@ -68,6 +68,12 @@ if a is None:
 `==` dispatches through `__eq__`, which a class can redefine to return `True`
 for `None`; `is` cannot be intercepted, and is the form PEP 8 mandates.
 
+The Python **grammar** learned `is None` / `is not None` to match, so the
+generated source still round-trips — ApolloVM can now read back what it writes.
+This is deliberately limited to the `None` comparison: general `a is b` is
+identity, and mapping it to `==` would silently turn it into equality, so it
+stays unparsed as before.
+
 Building a binary operation directly with `ASTExpressionOperation` still works
 for the ordinary operators. Constructing one with `??`, `&&` or `||` now throws
 rather than silently evaluating both operands, which would no longer be a

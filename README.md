@@ -134,6 +134,10 @@ Dart's null-safety surface — nullable types (`T?`), the null-coalescing operat
 this syntax yet), runs on the interpreter, compiles to Wasm within the limits
 below, and is **translated to every target**.
 
+Comparison against null is the exception: every grammar parses its own spelling,
+including Python's `is None` / `is not None`, so a null check written in any
+supported language round-trips.
+
 Same legend as above, plus **⚠️** *lossy*: the construct is emitted in a form that
 compiles but drops its null semantics (the null check is not performed).
 

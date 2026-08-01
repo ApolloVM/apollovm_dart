@@ -65,6 +65,50 @@ void main() {
       expect(_codes(f), isNot(contains('unchecked-nullable-access')));
     });
 
+    test('a `&&` null-check promotes for the then-block', () async {
+      // `x != null && …` promotes `x` inside the block. The analyzer reads this
+      // off `ASTExpressionLogicalAnd`.
+      var f = await _analyze(
+        '${cls}void run(A? a) { if (a != null && 1 > 0) { a.x; } }',
+      );
+      expect(_codes(f), isNot(contains('unchecked-nullable-access')));
+    });
+
+    test('promotes every variable a `&&` chain null-checks', () async {
+      var f = await _analyze(
+        '${cls}void run(A? a, A? b) { if (a != null && b != null) { a.x; b.x; } }',
+      );
+      expect(_codes(f), isNot(contains('unchecked-nullable-access')));
+    });
+
+    test('known limitation: promotion does not reach later operands of the '
+        'condition itself', () async {
+      // `a` is promoted for the *block*, but the condition is analyzed in the
+      // enclosing scope, so the `a.x` sitting to the right of the `&&` is
+      // still reported. Dart itself would accept this. Pinned so that
+      // teaching the analyzer condition-order flow shows up as a change here.
+      var f = await _analyze(
+        '${cls}void run(A? a) { if (a != null && a.x > 0) { } }',
+      );
+      expect(_codes(f), contains('unchecked-nullable-access'));
+    });
+
+    test('`||` does not promote (either side may be the false one)', () async {
+      // Only `&&` guarantees both operands held; `a != null || …` says nothing
+      // about `a` inside the block.
+      var f = await _analyze(
+        '${cls}void run(A? a) { if (a != null || a.x > 0) { } }',
+      );
+      expect(_codes(f), contains('unchecked-nullable-access'));
+    });
+
+    test('`x == null &&` does not promote for the then-block', () async {
+      var f = await _analyze(
+        '${cls}void run(A? a) { if (a == null && a.x > 0) { } }',
+      );
+      expect(_codes(f), contains('unchecked-nullable-access'));
+    });
+
     test('?. suppresses the diagnostic', () async {
       var f = await _analyze('${cls}void run(A? a) { a?.x; }');
       expect(_codes(f), isNot(contains('unchecked-nullable-access')));

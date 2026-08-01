@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="Python `is None` / `is not None` identity check against None">
+    <source language="python">
+        <![CDATA[
+class Calc:
+    def classify(self, a):
+        if a is None:
+            return -1
+        if a is not None:
+            return 1
+        return 0
+        ]]>
+    </source>
+    <call class="Calc" function="classify" return="1">
+        [5]
+    </call>
+    <output>
+        []
+    </output>
+    <call class="Calc" function="classify" return="-1">
+        [null]
+    </call>
+    <output>
+        []
+    </output>
+
+    <source-generated language="python"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+class Calc:
+    def classify(self, a):
+        if a is None:
+            return -1
+        if a is not None:
+            return 1
+        return 0
+
+
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+
+    <source-generated language="dart"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+class Calc {
+
+  dynamic classify(dynamic a) {
+    if (a == null) {
+        return -1;
+    }
+
+    if (a != null) {
+        return 1;
+    }
+
+    return 0;
+  }
+
+}
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+</test>
