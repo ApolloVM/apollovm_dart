@@ -3,7 +3,7 @@ description: >-
   Portable multi-language VM: parse, run and translate Dart, Java, Kotlin, Go,
   C#, JavaScript, TypeScript, Lua and Python — with on-the-fly Wasm compilation
   and MCP/LSP servers.
-version: 2.25.0
+version: 2.25.1
 repository: https://github.com/ApolloVM/apollovm_dart
 issue_tracker: https://github.com/ApolloVM/apollovm_dart/issues
 
@@ -42,9 +42,9 @@ dependencies:
 
 dev_dependencies:
   # The native (VM) Wasm engine lives outside this package (see `apollovm_wasm`),
-  # so the Wasm execution tests pull it back in here.
-  apollovm_wasm:
-    path: apollovm_wasm
+  # so the Wasm execution tests pull it back in here. Taken from pub.dev rather
+  # than by path, so the tests run against the engine users actually get.
+  apollovm_wasm: ^1.1.0
   lints: ^6.1.0
   dependency_validator: ^5.0.5
   test: ^1.31.1

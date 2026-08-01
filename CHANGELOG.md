@@ -1,3 +1,29 @@
+## 2.25.1
+
+### The Wasm tests run against the published `apollovm_wasm`
+
+The native (VM) Wasm engine lives in `apollovm_wasm`, which this package pulls
+back in as a dev-dependency so `test/wasm/**` can execute the modules it
+compiles. That dependency was taken **by path** from the sibling directory:
+
+```yaml
+apollovm_wasm:
+  path: apollovm_wasm
+```
+
+so the tests exercised the working copy rather than the engine users install.
+The two can drift — the runner decodes boxed values using `_boxTag*` constants
+that must match `wasm_generator.dart`, and a path dependency hides a mismatch
+between a released engine and a changed generator until someone else hits it.
+
+It is now the hosted `apollovm_wasm: ^1.1.0`. No library code changed, and this
+is a dev-dependency, so nothing changes for anyone depending on `apollovm`.
+
+Note for contributors: changes to `apollovm_wasm/` are no longer picked up by
+the root package's tests automatically. To test the two together, add a
+temporary `dependency_overrides: {apollovm_wasm: {path: apollovm_wasm}}`, or run
+the sub-package's own suite from `apollovm_wasm/`.
+
 ## 2.25.0
 
 ### Wasm: `?.` on a boxed slot no longer refuses to compile
