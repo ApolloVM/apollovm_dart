@@ -1,3 +1,22 @@
+## 2.25.1
+
+### apollovm_wasm 1.2.0: the runtime now tracks the core it decodes
+
+No change to this package's code — this release exists to carry the
+`apollovm_wasm` bump, the way `2.23.2` carried `apollovm_wasm 1.1.0`.
+
+`apollovm_wasm` declared `apollovm: ^2.0.0`, but it is not a loosely-coupled
+consumer: it *decodes* what this package's Wasm generator encodes. The
+boxed-`Object` cell layout and its `_boxTag*` values are a contract, and both
+`wasm_runner.dart` and `wasm_generator.dart` carry a comment saying the
+constants must match.
+
+That constraint let pub pair the runtime with any 2.x, including releases whose
+box encoding it was never built against — a mismatch that shows up as a wrong
+value or a trap at run time, not as a resolution failure. It is now
+`apollovm: ^2.25.0`, widened deliberately rather than by default. Its `wasm_run`
+also moves to `^0.2.0+2` (patch, no API change).
+
 ## 2.25.0
 
 ### Wasm: `?.` on a boxed slot no longer refuses to compile

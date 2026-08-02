@@ -1,3 +1,20 @@
+## 1.2.0
+
+- `apollovm: ^2.25.0` (was `^2.0.0`) — this runtime decodes what the `apollovm` Wasm generator
+  encodes, and the boxed-`Object` cell layout (`[tag@0][typeId@4][payload@8]`) with its
+  `_boxTag*` values is a contract between the two: `wasm_runner.dart` and `wasm_generator.dart`
+  each carry a comment saying the constants must match.
+
+  `^2.0.0` let pub pair this runtime with any `apollovm` 2.x, including releases whose box
+  encoding it was never built or tested against — a mismatch that surfaces as a wrong value or
+  a trap at run time, not as a resolution error. The constraint now tracks the release the
+  runtime is cut against; it is widened deliberately, not by default.
+
+  apollovm 2.25.0 is a case in point: it added `?.` on a boxed slot, which emits box reads this
+  runtime has to agree with.
+
+- `wasm_run: ^0.2.0+2` (was `^0.2.0+1`) — patch upgrade, no API change.
+
 ## 1.1.0
 
 - `wasm_run: ^0.2.0+1` (was `^0.1.0+2`) — a breaking upgrade, absorbed here so that consumers
