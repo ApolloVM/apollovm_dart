@@ -283,7 +283,7 @@ class JavaScriptGrammarDefinition extends JavaScriptGrammarLexer {
           .map((v) => ASTStatementContinue());
 
   Parser<ASTStatementDoWhileLoop> statementDoWhileLoop() =>
-      (string('do').trimHidden() &
+      (keywordToken('do') &
               codeBlock() &
               string('while').trimHidden() &
               char('(').trimHidden() &
@@ -622,7 +622,7 @@ class JavaScriptGrammarDefinition extends JavaScriptGrammarLexer {
               ref0(expression) &
               char(')').trimHidden() &
               codeBlock() &
-              elseToken().trimHidden() &
+              keywordToken('else') &
               codeBlock())
           .map((v) {
             return ASTBranchIfElseBlock(v[2], v[4], v[6]);
@@ -635,7 +635,7 @@ class JavaScriptGrammarDefinition extends JavaScriptGrammarLexer {
               char(')').trimHidden() &
               codeBlock() &
               ref0(branchElseIfs).plus() &
-              (elseToken().trimHidden() & codeBlock()).optional())
+              (keywordToken('else') & codeBlock()).optional())
           .map((v) {
             var condition = v[2];
             var blockIf = v[4];
@@ -651,8 +651,8 @@ class JavaScriptGrammarDefinition extends JavaScriptGrammarLexer {
           });
 
   Parser<ASTBranchIfBlock> branchElseIfs() =>
-      (elseToken().trimHidden() &
-              ifToken().trimHidden() &
+      (keywordToken('else') &
+              keywordToken('if') &
               char('(').trimHidden() &
               ref0(expression) &
               char(')').trimHidden() &

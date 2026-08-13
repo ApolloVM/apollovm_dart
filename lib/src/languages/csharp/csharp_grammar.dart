@@ -531,7 +531,7 @@ class CSharpGrammarDefinition extends CSharpGrammarLexer {
           .map((v) => ASTStatementContinue());
 
   Parser<ASTStatementDoWhileLoop> statementDoWhileLoop() =>
-      (string('do').trimHidden() &
+      (keywordToken('do') &
               codeBlock() &
               string('while').trimHidden() &
               char('(').trimHidden() &
@@ -740,7 +740,7 @@ class CSharpGrammarDefinition extends CSharpGrammarLexer {
               ref0(expression) &
               char(')').trimHidden() &
               codeBlock() &
-              string('else').trimHidden() &
+              keywordToken('else') &
               codeBlock())
           .map((v) {
             var condition = v[2];
@@ -756,13 +756,12 @@ class CSharpGrammarDefinition extends CSharpGrammarLexer {
               char(')').trimHidden() &
               codeBlock() &
               ref0(branchElseIfs).plus() &
-              string('else').trimHidden() &
-              codeBlock())
+              (keywordToken('else') & codeBlock()).optional())
           .map((v) {
             var condition = v[2];
             var blockIf = v[4];
             var blockElseIfs = v[5] as List;
-            var blockElse = v[7];
+            var blockElse = v[6]?[1];
 
             return ASTBranchIfElseIfsElseBlock(
               condition,
@@ -773,8 +772,8 @@ class CSharpGrammarDefinition extends CSharpGrammarLexer {
           });
 
   Parser<ASTBranchIfBlock> branchElseIfs() =>
-      (string('else').trimHidden() &
-              string('if').trimHidden() &
+      (keywordToken('else') &
+              keywordToken('if') &
               char('(').trimHidden() &
               ref0(expression) &
               char(')').trimHidden() &

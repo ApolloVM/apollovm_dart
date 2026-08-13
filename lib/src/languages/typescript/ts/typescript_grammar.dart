@@ -624,7 +624,7 @@ class TypeScriptGrammarDefinition extends TypeScriptGrammarLexer {
           .map((v) => ASTStatementContinue());
 
   Parser<ASTStatementDoWhileLoop> statementDoWhileLoop() =>
-      (string('do').trimHidden() &
+      (keywordToken('do') &
               codeBlock() &
               string('while').trimHidden() &
               char('(').trimHidden() &
@@ -978,7 +978,7 @@ class TypeScriptGrammarDefinition extends TypeScriptGrammarLexer {
               ref0(expression) &
               char(')').trimHidden() &
               codeBlock() &
-              elseToken().trimHidden() &
+              keywordToken('else') &
               codeBlock())
           .map((v) {
             return ASTBranchIfElseBlock(v[2], v[4], v[6]);
@@ -991,7 +991,7 @@ class TypeScriptGrammarDefinition extends TypeScriptGrammarLexer {
               char(')').trimHidden() &
               codeBlock() &
               ref0(branchElseIfs).plus() &
-              (elseToken().trimHidden() & codeBlock()).optional())
+              (keywordToken('else') & codeBlock()).optional())
           .map((v) {
             var condition = v[2];
             var blockIf = v[4];
@@ -1007,8 +1007,8 @@ class TypeScriptGrammarDefinition extends TypeScriptGrammarLexer {
           });
 
   Parser<ASTBranchIfBlock> branchElseIfs() =>
-      (elseToken().trimHidden() &
-              ifToken().trimHidden() &
+      (keywordToken('else') &
+              keywordToken('if') &
               char('(').trimHidden() &
               ref0(expression) &
               char(')').trimHidden() &

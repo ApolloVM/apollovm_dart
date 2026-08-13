@@ -719,7 +719,7 @@ class DartGrammarDefinition extends DartGrammarLexer {
           .map((v) => ASTStatementContinue());
 
   Parser<ASTStatementDoWhileLoop> statementDoWhileLoop() =>
-      (string('do').trimHidden() &
+      (keywordToken('do') &
               codeBlock() &
               string('while').trimHidden() &
               char('(').trimHidden() &
@@ -1095,7 +1095,7 @@ class DartGrammarDefinition extends DartGrammarLexer {
               ref0(expression) &
               char(')').trimHidden() &
               codeBlock() &
-              string('else').trimHidden() &
+              keywordToken('else') &
               codeBlock())
           .map((v) {
             var condition = v[2];
@@ -1111,7 +1111,7 @@ class DartGrammarDefinition extends DartGrammarLexer {
               char(')').trimHidden() &
               codeBlock() &
               ref0(branchElseIfs).plus() &
-              (string('else').trimHidden() & codeBlock()).optional())
+              (keywordToken('else') & codeBlock()).optional())
           .map((v) {
             var condition = v[2];
             var blockIf = v[4];
@@ -1127,8 +1127,8 @@ class DartGrammarDefinition extends DartGrammarLexer {
           });
 
   Parser<ASTBranchIfBlock> branchElseIfs() =>
-      (string('else').trimHidden() &
-              string('if').trimHidden() &
+      (keywordToken('else') &
+              keywordToken('if') &
               char('(').trimHidden() &
               ref0(expression) &
               char(')').trimHidden() &

@@ -420,7 +420,7 @@ class Java11GrammarDefinition extends Java11GrammarLexer {
           .map((v) => ASTStatementContinue());
 
   Parser<ASTStatementDoWhileLoop> statementDoWhileLoop() =>
-      (string('do').trimHidden() &
+      (keywordToken('do') &
               codeBlock() &
               string('while').trimHidden() &
               char('(').trimHidden() &
@@ -628,7 +628,7 @@ class Java11GrammarDefinition extends Java11GrammarLexer {
               ref0(expression) &
               char(')').trimHidden() &
               codeBlock() &
-              string('else').trimHidden() &
+              keywordToken('else') &
               codeBlock())
           .map((v) {
             var condition = v[2];
@@ -644,13 +644,12 @@ class Java11GrammarDefinition extends Java11GrammarLexer {
               char(')').trimHidden() &
               codeBlock() &
               ref0(branchElseIfs).plus() &
-              string('else').trimHidden() &
-              codeBlock())
+              (keywordToken('else') & codeBlock()).optional())
           .map((v) {
             var condition = v[2];
             var blockIf = v[4];
             var blockElseIfs = v[5] as List;
-            var blockElse = v[7];
+            var blockElse = v[6]?[1];
 
             return ASTBranchIfElseIfsElseBlock(
               condition,
@@ -661,8 +660,8 @@ class Java11GrammarDefinition extends Java11GrammarLexer {
           });
 
   Parser<ASTBranchIfBlock> branchElseIfs() =>
-      (string('else').trimHidden() &
-              string('if').trimHidden() &
+      (keywordToken('else') &
+              keywordToken('if') &
               char('(').trimHidden() &
               ref0(expression) &
               char(')').trimHidden() &

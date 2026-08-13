@@ -658,7 +658,7 @@ class KotlinGrammarDefinition extends KotlinGrammarLexer {
           });
 
   Parser<ASTExpression?> whenEntryLabel() =>
-      ((elseToken().trimHidden()).map((v) => null) |
+      ((keywordToken('else')).map((v) => null) |
               ref0(expression).map((v) => v as ASTExpression?))
           .cast<ASTExpression?>();
 
@@ -817,7 +817,7 @@ class KotlinGrammarDefinition extends KotlinGrammarLexer {
               ref0(expression) &
               char(')').trimHidden() &
               codeBlock() &
-              elseToken().trimHidden() &
+              keywordToken('else') &
               codeBlock())
           .map((v) {
             var condition = v[2];
@@ -833,7 +833,7 @@ class KotlinGrammarDefinition extends KotlinGrammarLexer {
               char(')').trimHidden() &
               codeBlock() &
               ref0(branchElseIfs).plus() &
-              (elseToken().trimHidden() & codeBlock()).optional())
+              (keywordToken('else') & codeBlock()).optional())
           .map((v) {
             var condition = v[2];
             var blockIf = v[4];
@@ -849,8 +849,8 @@ class KotlinGrammarDefinition extends KotlinGrammarLexer {
           });
 
   Parser<ASTBranchIfBlock> branchElseIfs() =>
-      (elseToken().trimHidden() &
-              ifToken().trimHidden() &
+      (keywordToken('else') &
+              keywordToken('if') &
               char('(').trimHidden() &
               ref0(expression) &
               char(')').trimHidden() &
@@ -879,7 +879,7 @@ class KotlinGrammarDefinition extends KotlinGrammarLexer {
               ref0(expression) &
               char(')').trimHidden() &
               ref0(expressionOperationChain) &
-              elseToken().trimHidden() &
+              keywordToken('else') &
               ref0(expression))
           .map(
             (v) => ASTExpressionConditional(
