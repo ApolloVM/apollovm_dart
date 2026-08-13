@@ -251,6 +251,66 @@ abstract class ApolloCodeGenerator
     return out;
   }
 
+  /// Writes a branch (`if`/`else`/`else if`) body, starting at the `)` or
+  /// `else` the caller has just written.
+  ///
+  /// Returns `true` when the body was emitted as a braced block, leaving the
+  /// closing `}` for the caller (which may need to continue it with ` else`)
+  /// and the cursor at [indent]. Returns `false` when the body was a single
+  /// statement emitted unbraced (`if (c) return 0;`), in which case the line
+  /// is already terminated and a following `else` must start a fresh one.
+  bool writeASTBranchBody(
+    ASTBlock block, {
+    required StringBuffer out,
+    required String indent,
+  }) {
+    if (block is ASTSingleLineStatementBlock) {
+      out.write(' ');
+      generateASTStatement(
+        block.statements.single,
+        out: out,
+        indent: indent,
+        headIndented: false,
+      );
+      out.write('\n');
+      return false;
+    }
+
+    out.write(' {\n');
+    generateASTBlock(block, out: out, indent: '$indent  ', withBrackets: false);
+    out.write(indent);
+    return true;
+  }
+
+  /// Writes a loop body, starting at the `)` (or `do`) the caller has just
+  /// written. Returns `true` when it was emitted as a braced block, leaving
+  /// the closing `}` for the caller.
+  ///
+  /// Loops differ from branches in two ways that must be preserved: the block
+  /// is passed [indent] unchanged ([generateASTBlock] adds the inner level),
+  /// and no trailing newline is written — the enclosing block adds it.
+  bool writeASTLoopBody(
+    ASTBlock block, {
+    required StringBuffer out,
+    required String indent,
+  }) {
+    if (block is ASTSingleLineStatementBlock) {
+      out.write(' ');
+      generateASTStatement(
+        block.statements.single,
+        out: out,
+        indent: indent,
+        headIndented: false,
+      );
+      return false;
+    }
+
+    out.write(' {\n');
+    out.write(generateASTBlock(block, indent: indent, withBrackets: false));
+    out.write(indent);
+    return true;
+  }
+
   @override
   StringBuffer generateASTStatementImport(
     ASTStatementImport import, {
@@ -705,17 +765,11 @@ abstract class ApolloCodeGenerator
       headIndented: false,
     );
 
-    out.write(') {\n');
+    out.write(')');
 
-    var blockCode = generateASTBlock(
-      forLoop.loopBlock,
-      indent: indent,
-      withBrackets: false,
-    );
-
-    out.write(blockCode);
-    out.write(indent);
-    out.write('}');
+    if (writeASTLoopBody(forLoop.loopBlock, out: out, indent: indent)) {
+      out.write('}');
+    }
 
     return out;
   }
@@ -746,17 +800,11 @@ abstract class ApolloCodeGenerator
       headIndented: false,
     );
 
-    out.write(') {\n');
+    out.write(')');
 
-    var blockCode = generateASTBlock(
-      forEach.loopBlock,
-      indent: indent,
-      withBrackets: false,
-    );
-
-    out.write(blockCode);
-    out.write(indent);
-    out.write('}');
+    if (writeASTLoopBody(forEach.loopBlock, out: out, indent: indent)) {
+      out.write('}');
+    }
 
     return out;
   }
@@ -781,17 +829,11 @@ abstract class ApolloCodeGenerator
       headIndented: false,
     );
 
-    out.write(' ) {\n');
+    out.write(' )');
 
-    var blockCode = generateASTBlock(
-      whileLoop.loopBlock,
-      indent: indent,
-      withBrackets: false,
-    );
-
-    out.write(blockCode);
-    out.write(indent);
-    out.write('}');
+    if (writeASTLoopBody(whileLoop.loopBlock, out: out, indent: indent)) {
+      out.write('}');
+    }
 
     return out;
   }
@@ -806,17 +848,13 @@ abstract class ApolloCodeGenerator
 
     if (headIndented) out.write(indent);
 
-    out.write('do {\n');
+    out.write('do');
 
-    var blockCode = generateASTBlock(
-      doWhileLoop.loopBlock,
-      indent: indent,
-      withBrackets: false,
-    );
-
-    out.write(blockCode);
-    out.write(indent);
-    out.write('} while (');
+    if (writeASTLoopBody(doWhileLoop.loopBlock, out: out, indent: indent)) {
+      out.write('} while (');
+    } else {
+      out.write(' while (');
+    }
 
     generateASTExpression(
       doWhileLoop.conditionExpression,
@@ -998,21 +1036,9 @@ abstract class ApolloCodeGenerator
       indent: indent,
       headIndented: false,
     );
-    out.write(') ');
+    out.write(')');
 
-    final block = branch.block;
-
-    if (block is ASTSingleLineStatementBlock) {
-      generateASTSingleLineStatementBlock(block, out: out);
-    } else {
-      out.write('{\n');
-      generateASTBlock(
-        block,
-        out: out,
-        indent: '$indent  ',
-        withBrackets: false,
-      );
-      out.write(indent);
+    if (writeASTBranchBody(branch.block, out: out, indent: indent)) {
       out.write('}\n');
     }
 
@@ -1037,28 +1063,21 @@ abstract class ApolloCodeGenerator
       indent: indent,
       headIndented: false,
     );
-    out.write(') {\n');
-    generateASTBlock(
-      branch.blockIf,
-      out: out,
-      indent: '$indent  ',
-      withBrackets: false,
-    );
-    out.write(indent);
+    out.write(')');
+
+    var braced = writeASTBranchBody(branch.blockIf, out: out, indent: indent);
 
     var blockElse = branch.blockElse;
 
     if (blockElse != null) {
-      out.write('} else {\n');
-      generateASTBlock(
-        blockElse,
-        out: out,
-        indent: '$indent  ',
-        withBrackets: false,
-      );
-      out.write(indent);
-      out.write('}\n');
-    } else {
+      // An unbraced `if` arm has already ended its line, so `else` starts a
+      // fresh one instead of continuing a `}`.
+      out.write(braced ? '} else' : '${indent}else');
+
+      if (writeASTBranchBody(blockElse, out: out, indent: indent)) {
+        out.write('}\n');
+      }
+    } else if (braced) {
       out.write('}\n');
     }
 
@@ -1083,47 +1102,37 @@ abstract class ApolloCodeGenerator
       indent: indent,
       headIndented: false,
     );
-    out.write(') {\n');
-    generateASTBlock(
-      branch.blockIf,
-      out: out,
-      indent: '$indent  ',
-      withBrackets: false,
-    );
+    out.write(')');
+
+    var braced = writeASTBranchBody(branch.blockIf, out: out, indent: indent);
 
     for (var branchElseIf in branch.blocksElseIf) {
-      out.write(indent);
-      out.write('} else if (');
+      // A braced arm left the cursor at `indent` with its `}` still pending;
+      // an unbraced one ended its line, so indent the `else if` here.
+      out.write(braced ? '} else if (' : '${indent}else if (');
       generateASTExpression(
         branchElseIf.condition,
         out: out,
         indent: indent,
         headIndented: false,
       );
-      out.write(') {\n');
-      generateASTBlock(
+      out.write(')');
+      braced = writeASTBranchBody(
         branchElseIf.block,
         out: out,
-        indent: '$indent  ',
-        withBrackets: false,
+        indent: indent,
       );
     }
-
-    out.write(indent);
 
     var blockElse = branch.blockElse;
 
     if (blockElse != null) {
-      out.write('} else {\n');
-      generateASTBlock(
-        blockElse,
-        out: out,
-        indent: '$indent  ',
-        withBrackets: false,
-      );
-      out.write(indent);
-      out.write('}\n');
-    } else {
+      out.write(braced ? '} else' : '${indent}else');
+
+      if (writeASTBranchBody(blockElse, out: out, indent: indent)) {
+        out.write('}\n');
+      }
+    } else if (braced) {
       out.write('}\n');
     }
 

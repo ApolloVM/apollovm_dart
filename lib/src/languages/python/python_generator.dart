@@ -956,6 +956,44 @@ class ApolloCodeGeneratorPython extends ApolloCodeGenerator {
     return out;
   }
 
+  /// Python has no `do`-`while`, so it becomes the standard idiom:
+  ///
+  ///     while True:
+  ///         <body>
+  ///         if not (<cond>):
+  ///             break
+  ///
+  /// Without this the base generator would emit C-style `do { ... } while (c);`,
+  /// which is not Python at all.
+  @override
+  StringBuffer generateASTStatementDoWhileLoop(
+    ASTStatementDoWhileLoop doWhileLoop, {
+    StringBuffer? out,
+    String indent = '',
+    bool headIndented = true,
+  }) {
+    out ??= newOutput();
+    if (headIndented) out.write(indent);
+
+    var bodyIndent = '$indent$_tab';
+
+    out.write('while True:\n');
+    _writeSuite(doWhileLoop.loopBlock, out, bodyIndent);
+
+    out.write(bodyIndent);
+    out.write('if not (');
+    generateASTExpression(
+      doWhileLoop.conditionExpression,
+      out: out,
+      headIndented: false,
+    );
+    out.write('):\n');
+    out.write('$bodyIndent$_tab');
+    out.write('break\n');
+
+    return out;
+  }
+
   /// A C-style `for (init; cond; cont)` (e.g. from another language) becomes a
   /// `while` loop, the faithful Python translation.
   @override

@@ -2,54 +2,325 @@
 <test title="Unbraced single-statement control-flow bodies">
     <source language="dart">
         <![CDATA[
-void run(bool a, bool b) {
-  var l = [1, 2, 3];
+class Flow {
+  static void run(bool a, bool b) {
+    var l = [1, 2, 3];
 
-  for (var e in l) print('- $e') ;
+    for (var e in l) print('- $e') ;
 
-  for (var i = 0; i < 3; ++i) print('i: $i');
+    for (var i = 0; i < 3; ++i) print('i: $i');
 
-  var i = 0;
-  while (i < 3) i = i + 1;
-  print('while: $i');
+    var i = 0;
+    while (i < 3) i = i + 1;
+    print('while: $i');
 
-  do i = i - 1; while (i > 0);
-  print('do: $i');
+    do i = i - 1; while (i > 0);
+    print('do: $i');
 
-  if (a) print('x'); else print('y');
+    if (a) print('x'); else print('y');
 
-  if (a) print('A'); else if (b) print('B'); else print('C');
+    if (a) print('A'); else if (b) print('B'); else print('C');
 
-  if (a) if (b) print('ab'); else print('a!b');
+    if (a) if (b) print('ab'); else print('a!b');
 
-  for (var e in l) if (e > 2) print('gt2: $e');
+    for (var e in l) if (e > 2) print('gt2: $e');
 
-  for (var e in l) { print('braced: $e'); }
+    for (var e in l) { print('braced: $e'); }
 
-  if (a) print('guard');
-  var elseCount = 1;
-  print('elseCount: $elseCount');
+    if (a) print('guard');
+    var elseCount = 1;
+    print('elseCount: $elseCount');
+  }
 }
         ]]>
     </source>
-    <call function="run">
+    <call class="Flow" function="run">
         [true, false]
     </call>
     <output>
         ["- 1", "- 2", "- 3", "i: 0", "i: 1", "i: 2", "while: 3", "do: 0", "x", "A", "a!b", "gt2: 3", "braced: 1", "braced: 2", "braced: 3", "guard", "elseCount: 1"]
     </output>
 
-    <call function="run">
+    <call class="Flow" function="run">
         [false, true]
     </call>
     <output>
         ["- 1", "- 2", "- 3", "i: 0", "i: 1", "i: 2", "while: 3", "do: 0", "y", "B", "gt2: 3", "braced: 1", "braced: 2", "braced: 3", "elseCount: 1"]
     </output>
 
-    <call function="run">
+    <call class="Flow" function="run">
         [false, false]
     </call>
     <output>
         ["- 1", "- 2", "- 3", "i: 0", "i: 1", "i: 2", "while: 3", "do: 0", "y", "C", "gt2: 3", "braced: 1", "braced: 2", "braced: 3", "elseCount: 1"]
     </output>
+
+    <source-generated language="dart"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+class Flow {
+
+  static void run(bool a, bool b) {
+    var l = <int>[1, 2, 3];
+    for (var e in l) print('- $e');
+    for (var i = 0; i < 3 ; ++i) print('i: $i');
+    var i = 0;
+    while( i < 3 ) i = i + 1;
+    print('while: $i');
+    do i = i - 1; while (i > 0);
+    print('do: $i');
+    if (a) print('x');
+    else print('y');
+
+    if (a) print('A');
+    else if (b) print('B');
+    else print('C');
+
+    if (a) if (b) print('ab');
+    else print('a!b');
+
+
+    for (var e in l) if (e > 2) print('gt2: $e');
+
+    for (var e in l) {
+      print('braced: $e');
+    }
+    if (a) print('guard');
+
+    var elseCount = 1;
+    print('elseCount: $elseCount');
+  }
+
+}
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+
+    <source-generated language="java11"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+class Flow {
+
+  static void run(bool a, bool b) {
+    var l = new ArrayList<int>(){{
+      add(1);
+      add(2);
+      add(3);
+    }};
+    for (var e : l) print("- " + e);
+    for (var i = 0; i < 3 ; ++i) print("i: " + i);
+    var i = 0;
+    while( i < 3 ) i = i + 1;
+    print("while: " + i);
+    do i = i - 1; while (i > 0);
+    print("do: " + i);
+    if (a) print("x");
+    else print("y");
+
+    if (a) print("A");
+    else if (b) print("B");
+    else print("C");
+
+    if (a) if (b) print("ab");
+    else print("a!b");
+
+
+    for (var e : l) if (e > 2) print("gt2: " + e);
+
+    for (var e : l) {
+      print("braced: " + e);
+    }
+    if (a) print("guard");
+
+    var elseCount = 1;
+    print("elseCount: " + elseCount);
+  }
+
+}
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+
+    <source-generated language="csharp"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+class Flow {
+
+  static void run(bool a, bool b) {
+    var l = new List<int>(){1, 2, 3};
+    foreach (var e in l) print("- " + e);
+    for (var i = 0; i < 3 ; ++i) print("i: " + i);
+    var i = 0;
+    while( i < 3 ) i = i + 1;
+    print("while: " + i);
+    do i = i - 1; while (i > 0);
+    print("do: " + i);
+    if (a) print("x");
+    else print("y");
+
+    if (a) print("A");
+    else if (b) print("B");
+    else print("C");
+
+    if (a) if (b) print("ab");
+    else print("a!b");
+
+
+    foreach (var e in l) if (e > 2) print("gt2: " + e);
+
+    foreach (var e in l) {
+      print("braced: " + e);
+    }
+    if (a) print("guard");
+
+    var elseCount = 1;
+    print("elseCount: " + elseCount);
+  }
+
+}
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+
+    <source-generated language="javascript"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+class Flow {
+
+  static run(a, b) {
+    let l = [1, 2, 3];
+    for (const e of l) print(`- ${e}`);
+    for (let i = 0; i < 3 ; ++i) print(`i: ${i}`);
+    let i = 0;
+    while( i < 3 ) i = i + 1;
+    print(`while: ${i}`);
+    do i = i - 1; while (i > 0);
+    print(`do: ${i}`);
+    if (a) print('x');
+    else print('y');
+
+    if (a) print('A');
+    else if (b) print('B');
+    else print('C');
+
+    if (a) if (b) print('ab');
+    else print('a!b');
+
+
+    for (const e of l) if (e > 2) print(`gt2: ${e}`);
+
+    for (const e of l) {
+      print(`braced: ${e}`);
+    }
+    if (a) print('guard');
+
+    let elseCount = 1;
+    print(`elseCount: ${elseCount}`);
+  }
+
+}
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+
+    <source-generated language="typescript"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+class Flow {
+
+  static run(a: boolean, b: boolean): void {
+    let l = [1, 2, 3];
+    for (const e of l) print(`- ${e}`);
+    for (let i = 0; i < 3 ; ++i) print(`i: ${i}`);
+    let i = 0;
+    while( i < 3 ) i = i + 1;
+    print(`while: ${i}`);
+    do i = i - 1; while (i > 0);
+    print(`do: ${i}`);
+    if (a) print('x');
+    else print('y');
+
+    if (a) print('A');
+    else if (b) print('B');
+    else print('C');
+
+    if (a) if (b) print('ab');
+    else print('a!b');
+
+
+    for (const e of l) if (e > 2) print(`gt2: ${e}`);
+
+    for (const e of l) {
+      print(`braced: ${e}`);
+    }
+    if (a) print('guard');
+
+    let elseCount = 1;
+    print(`elseCount: ${elseCount}`);
+  }
+
+}
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+
+    <!-- Python has no unbraced form: every single-statement body normalizes
+         back to a properly indented suite. -->
+    <source-generated language="python"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+class Flow:
+    def run(self, a: bool, b: bool) -> None:
+        l: List[int] = [1, 2, 3]
+        for e in l:
+            print(f'- {e}')
+        i: int = 0
+        while i < 3:
+            print(f'i: {i}')
+            i += 1
+        i: int = 0
+        while i < 3:
+            i = i + 1
+        print(f'while: {i}')
+        while True:
+            i = i - 1
+            if not (i > 0):
+                break
+        print(f'do: {i}')
+        if a:
+            print('x')
+        else:
+            print('y')
+        if a:
+            print('A')
+        elif b:
+            print('B')
+        else:
+            print('C')
+        if a:
+            if b:
+                print('ab')
+            else:
+                print('a!b')
+        for e in l:
+            if e > 2:
+                print(f'gt2: {e}')
+        for e in l:
+            print(f'braced: {e}')
+        if a:
+            print('guard')
+        elseCount: int = 1
+        print(f'elseCount: {elseCount}')
+
+
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+
+    <!-- Go and Kotlin are deliberately absent: the harness re-parses and
+         re-executes every generated source, and both hit pre-existing
+         generator gaps unrelated to unbraced bodies (Go emits `++i` in a
+         `for` header, which its own grammar rejects; Kotlin emits a C-style
+         `for`, which Kotlin has no syntax for). Both were checked by hand and
+         do emit braced bodies, which is the behaviour this test would pin. -->
 </test>
