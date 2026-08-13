@@ -240,16 +240,36 @@ class JavaScriptGrammarDefinition extends JavaScriptGrammarLexer {
             return ASTBlock(null)..addAllStatements(statements);
           });
 
+  /// A control-flow body: either a braced block or a single unbraced
+  /// statement (`for (var e of l) print(e);`). [codeBlock] is tried first, so
+  /// a body starting with `{` is always a block.
   Parser<ASTBlock> codeBlockOrSingleLineBlock() =>
-      ((codeBlock() | singleLineCodeBlock())).cast<ASTBlock>();
+      (ref0(codeBlock) | ref0(singleLineCodeBlock)).cast<ASTBlock>();
 
   Parser<ASTSingleLineStatementBlock> singleLineCodeBlock() =>
-      (singleLineStatement().trimHidden()).map((v) {
+      ref0(singleLineStatement).trimHidden().map((v) {
         return ASTSingleLineStatementBlock(null)..addStatement(v);
       });
 
+  /// The [statement] alternation minus declarations (illegal as an unbraced
+  /// body) and [statementBlock] (already covered by [codeBlock]). The relative
+  /// order must match [statement]. Every alternative must be a `ref0`,
+  /// otherwise the cycle back through [branch] recurses forever while
+  /// *building* the grammar.
   Parser<ASTStatement> singleLineStatement() =>
-      (statementReturn() | statementExpression()).cast<ASTStatement>();
+      (ref0(statementTryCatch) |
+              ref0(statementThrow) |
+              ref0(statementSwitch) |
+              ref0(branch) |
+              ref0(statementBreak) |
+              ref0(statementContinue) |
+              ref0(statementDoWhileLoop) |
+              ref0(statementForLoop) |
+              ref0(statementForEach) |
+              ref0(statementWhileLoop) |
+              ref0(statementReturn) |
+              ref0(statementExpression))
+          .cast<ASTStatement>();
 
   Parser<ASTStatement> statement() =>
       (statementTryCatch() |
