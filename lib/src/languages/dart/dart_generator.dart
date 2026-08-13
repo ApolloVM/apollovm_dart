@@ -433,6 +433,8 @@ class ApolloCodeGeneratorDart extends ApolloCodeGenerator {
     var f = expression.function;
     generateFunctionParametersNames(f, out: out);
 
+    if (f.modifiers.isAsync) out.write(' async');
+
     // Dart anonymous functions: `(params) => expr` or `(params) { body }`
     // (no `=>` before a block body, unlike JavaScript).
     var single = singleReturnExpression(f);

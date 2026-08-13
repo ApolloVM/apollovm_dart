@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="String interpolation inside triple-quoted strings">
+    <source language="dart">
+        <![CDATA[
+String run(String name, int a, int b) {
+  var s1 = '''Hello $name, ${a + b}!''';
+  var s2 = """Bye $name, ${a * b}.""";
+  var s3 = r'''Raw $name stays literal''';
+  return '$s1|$s2|$s3';
+}
+        ]]>
+    </source>
+    <call function="run" returnType="String" return="Hello Ana, 7!|Bye Ana, 12.|Raw $name stays literal">
+        ["Ana", 3, 4]
+    </call>
+    <output>
+        []
+    </output>
+</test>
