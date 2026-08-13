@@ -551,7 +551,7 @@ class CSharpGrammarDefinition extends CSharpGrammarLexer {
 
   Parser<ASTStatementDoWhileLoop> statementDoWhileLoop() =>
       (keywordToken('do') &
-              codeBlock() &
+              ref0(codeBlockOrSingleLineBlock) &
               string('while').trimHidden() &
               char('(').trimHidden() &
               ref0(expression) &
@@ -648,7 +648,7 @@ class CSharpGrammarDefinition extends CSharpGrammarLexer {
               char(';').trimHidden() &
               ref0(expression) &
               char(')').trimHidden() &
-              codeBlock())
+              ref0(codeBlockOrSingleLineBlock))
           .map((v) {
             var initExp = v[2];
             var condExp = v[3];
@@ -666,7 +666,7 @@ class CSharpGrammarDefinition extends CSharpGrammarLexer {
               inToken().trimHidden() &
               ref0(expression) &
               char(')').trimHidden() &
-              codeBlock())
+              ref0(codeBlockOrSingleLineBlock))
           .map((v) {
             var variableType = v[2];
             var variableName = v[3];
@@ -686,7 +686,7 @@ class CSharpGrammarDefinition extends CSharpGrammarLexer {
               char('(').trimHidden() &
               ref0(expression) &
               char(')').trimHidden() &
-              codeBlock())
+              ref0(codeBlockOrSingleLineBlock))
           .map((v) {
             var condExp = v[2];
             var block = v[4];
@@ -758,9 +758,9 @@ class CSharpGrammarDefinition extends CSharpGrammarLexer {
               char('(').trimHidden() &
               ref0(expression) &
               char(')').trimHidden() &
-              codeBlock() &
+              ref0(codeBlockOrSingleLineBlock) &
               keywordToken('else') &
-              codeBlock())
+              ref0(codeBlockOrSingleLineBlock))
           .map((v) {
             var condition = v[2];
             var blockIf = v[4];
@@ -773,9 +773,10 @@ class CSharpGrammarDefinition extends CSharpGrammarLexer {
               char('(').trimHidden() &
               ref0(expression) &
               char(')').trimHidden() &
-              codeBlock() &
+              ref0(codeBlockOrSingleLineBlock) &
               ref0(branchElseIfs).plus() &
-              (keywordToken('else') & codeBlock()).optional())
+              (keywordToken('else') & ref0(codeBlockOrSingleLineBlock))
+                  .optional())
           .map((v) {
             var condition = v[2];
             var blockIf = v[4];
@@ -796,7 +797,7 @@ class CSharpGrammarDefinition extends CSharpGrammarLexer {
               char('(').trimHidden() &
               ref0(expression) &
               char(')').trimHidden() &
-              codeBlock())
+              ref0(codeBlockOrSingleLineBlock))
           .map((v) {
             var condition = v[3];
             var blockIf = v[5];

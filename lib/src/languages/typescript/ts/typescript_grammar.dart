@@ -645,7 +645,7 @@ class TypeScriptGrammarDefinition extends TypeScriptGrammarLexer {
 
   Parser<ASTStatementDoWhileLoop> statementDoWhileLoop() =>
       (keywordToken('do') &
-              codeBlock() &
+              ref0(codeBlockOrSingleLineBlock) &
               string('while').trimHidden() &
               char('(').trimHidden() &
               ref0(expression) &
@@ -746,7 +746,7 @@ class TypeScriptGrammarDefinition extends TypeScriptGrammarLexer {
               char(';').trimHidden() &
               ref0(expression) &
               char(')').trimHidden() &
-              codeBlock())
+              ref0(codeBlockOrSingleLineBlock))
           .map((v) {
             return ASTStatementForLoop(v[2], v[3], v[5], v[7]);
           });
@@ -759,7 +759,7 @@ class TypeScriptGrammarDefinition extends TypeScriptGrammarLexer {
               ofToken().trimHidden() &
               ref0(expression) &
               char(')').trimHidden() &
-              codeBlock())
+              ref0(codeBlockOrSingleLineBlock))
           .map((v) {
             var variableName = v[3] as String;
             var iterableExp = v[5] as ASTExpression;
@@ -777,7 +777,7 @@ class TypeScriptGrammarDefinition extends TypeScriptGrammarLexer {
               char('(').trimHidden() &
               ref0(expression) &
               char(')').trimHidden() &
-              codeBlock())
+              ref0(codeBlockOrSingleLineBlock))
           .map((v) {
             return ASTStatementWhileLoop(v[2], v[4]);
           });
@@ -997,9 +997,9 @@ class TypeScriptGrammarDefinition extends TypeScriptGrammarLexer {
               char('(').trimHidden() &
               ref0(expression) &
               char(')').trimHidden() &
-              codeBlock() &
+              ref0(codeBlockOrSingleLineBlock) &
               keywordToken('else') &
-              codeBlock())
+              ref0(codeBlockOrSingleLineBlock))
           .map((v) {
             return ASTBranchIfElseBlock(v[2], v[4], v[6]);
           });
@@ -1009,9 +1009,10 @@ class TypeScriptGrammarDefinition extends TypeScriptGrammarLexer {
               char('(').trimHidden() &
               ref0(expression) &
               char(')').trimHidden() &
-              codeBlock() &
+              ref0(codeBlockOrSingleLineBlock) &
               ref0(branchElseIfs).plus() &
-              (keywordToken('else') & codeBlock()).optional())
+              (keywordToken('else') & ref0(codeBlockOrSingleLineBlock))
+                  .optional())
           .map((v) {
             var condition = v[2];
             var blockIf = v[4];
@@ -1032,7 +1033,7 @@ class TypeScriptGrammarDefinition extends TypeScriptGrammarLexer {
               char('(').trimHidden() &
               ref0(expression) &
               char(')').trimHidden() &
-              codeBlock())
+              ref0(codeBlockOrSingleLineBlock))
           .map((v) {
             return ASTBranchIfBlock(v[3], v[5]);
           });

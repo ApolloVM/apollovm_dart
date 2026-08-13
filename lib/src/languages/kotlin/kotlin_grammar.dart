@@ -637,7 +637,7 @@ class KotlinGrammarDefinition extends KotlinGrammarLexer {
   Parser<ASTStatementDoWhileLoop> statementDoWhileLoop() =>
       (string('do') &
               ref0(identifierPartLexicalToken).not() &
-              codeBlock().trimHidden() &
+              ref0(codeBlockOrSingleLineBlock).trimHidden() &
               whileToken().trimHidden() &
               char('(').trimHidden() &
               ref0(expression) &
@@ -724,7 +724,7 @@ class KotlinGrammarDefinition extends KotlinGrammarLexer {
               inToken().trimHidden() &
               ref0(expression) &
               char(')').trimHidden() &
-              codeBlock())
+              ref0(codeBlockOrSingleLineBlock))
           .map((v) {
             var variableName = v[2];
             var iterableExp = v[4];
@@ -743,7 +743,7 @@ class KotlinGrammarDefinition extends KotlinGrammarLexer {
               char('(').trimHidden() &
               ref0(expression) &
               char(')').trimHidden() &
-              codeBlock())
+              ref0(codeBlockOrSingleLineBlock))
           .map((v) {
             var condExp = v[2];
             var block = v[4];
@@ -834,9 +834,9 @@ class KotlinGrammarDefinition extends KotlinGrammarLexer {
               char('(').trimHidden() &
               ref0(expression) &
               char(')').trimHidden() &
-              codeBlock() &
+              ref0(codeBlockOrSingleLineBlock) &
               keywordToken('else') &
-              codeBlock())
+              ref0(codeBlockOrSingleLineBlock))
           .map((v) {
             var condition = v[2];
             var blockIf = v[4];
@@ -849,9 +849,10 @@ class KotlinGrammarDefinition extends KotlinGrammarLexer {
               char('(').trimHidden() &
               ref0(expression) &
               char(')').trimHidden() &
-              codeBlock() &
+              ref0(codeBlockOrSingleLineBlock) &
               ref0(branchElseIfs).plus() &
-              (keywordToken('else') & codeBlock()).optional())
+              (keywordToken('else') & ref0(codeBlockOrSingleLineBlock))
+                  .optional())
           .map((v) {
             var condition = v[2];
             var blockIf = v[4];
@@ -872,7 +873,7 @@ class KotlinGrammarDefinition extends KotlinGrammarLexer {
               char('(').trimHidden() &
               ref0(expression) &
               char(')').trimHidden() &
-              codeBlock())
+              ref0(codeBlockOrSingleLineBlock))
           .map((v) {
             var condition = v[3];
             var blockIf = v[5];
