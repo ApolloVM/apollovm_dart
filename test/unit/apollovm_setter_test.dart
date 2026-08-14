@@ -27,10 +27,12 @@ Future<Object?> _runStatic(String src, String clazz, String name) async {
   return r.getValueNoContext();
 }
 
+/// Setter-only on purpose. With a getter alongside, the *getter* refusal fires
+/// first for every non-Dart target and satisfies the expectation, so the setter
+/// path would never be reached and the assertion would prove nothing.
 const _classWithSetter = r'''
 class B {
   int _v = 0;
-  int get value => _v;
   set value(int x) { _v = x; }
 }
 ''';
@@ -103,6 +105,55 @@ class B extends A {
           'run',
         ),
         equals(103),
+      );
+    });
+
+    test(
+      'unqualified compound assignment goes through the accessors',
+      () async {
+        // `value += n` with no receiver: reads via the getter, writes via the
+        // setter — the unqualified mirror of `this.value += n`.
+        expect(
+          await _runStatic(
+            r'''
+class B {
+  int _v = 0;
+  int get value => _v;
+  set value(int x) { _v = x + 1; }
+
+  int bump() { value += 5; return this.value; }
+
+  static int run() { var b = B(); b._v = 10; return b.bump(); }
+}
+''',
+            'B',
+            'run',
+          ),
+          // getter -> 10, +5 = 15, setter -> 16.
+          equals(16),
+        );
+      },
+    );
+
+    test('unqualified `??=` short-circuits on a non-null value', () async {
+      expect(
+        await _runStatic(
+          r'''
+class B {
+  int _v = 0;
+  int get value => _v;
+  set value(int x) { _v = x + 1; }
+
+  int bump() { value ??= 9; return this.value; }
+
+  static int run() { var b = B(); b._v = 4; return b.bump(); }
+}
+''',
+          'B',
+          'run',
+        ),
+        // 4 is not null, so the setter never runs.
+        equals(4),
       );
     });
 
