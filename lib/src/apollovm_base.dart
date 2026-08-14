@@ -1181,8 +1181,7 @@ final class VMClassContext<T> extends VMContext {
   /// The class of this context.
   ASTClass<T> clazz;
 
-  VMClassContext(this.clazz, {VMContext? parent, VMTypeResolver? typeResolver})
-    : super(clazz, parent: parent, typeResolver: typeResolver);
+  VMClassContext(this.clazz, {super.parent, super.typeResolver}) : super(clazz);
 
   ASTValue<T>? _classInstance;
 

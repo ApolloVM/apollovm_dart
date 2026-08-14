@@ -12643,12 +12643,11 @@ class _WasmMethodFunction extends ASTFunctionDeclaration {
     String name,
     ASTFunctionParametersDeclaration parameters,
     ASTType returnType, {
-    ASTBlock? block,
+    super.block,
   }) : super(
          name,
          parameters,
          returnType,
-         block: block,
          modifiers: ASTModifiers(isPrivate: true),
        );
 }
@@ -12669,8 +12668,8 @@ class _WasmStaticMethodFunction extends ASTFunctionDeclaration {
     String name,
     ASTFunctionParametersDeclaration parameters,
     ASTType returnType, {
-    ASTBlock? block,
-  }) : super(name, parameters, returnType, block: block);
+    super.block,
+  }) : super(name, parameters, returnType);
 }
 
 /// Module-level Wasm codegen state shared across all functions: the function

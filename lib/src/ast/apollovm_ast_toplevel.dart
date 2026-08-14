@@ -2522,9 +2522,9 @@ class ASTClassFunctionDeclaration<T> extends ASTFunctionDeclaration<T> {
     String name,
     ASTFunctionParametersDeclaration parameters,
     ASTType<T> returnType, {
-    ASTBlock? block,
-    ASTModifiers? modifiers,
-  }) : super(name, parameters, returnType, block: block, modifiers: modifiers);
+    super.block,
+    super.modifiers,
+  }) : super(name, parameters, returnType);
 
   FutureOr<ASTValue<T>> objectCall(
     VMContext parent,
@@ -3303,9 +3303,9 @@ class ASTClassGetterDeclaration<T> extends ASTGetterDeclaration<T> {
     String name,
 
     ASTType<T> returnType, {
-    ASTBlock? block,
-    ASTModifiers? modifiers,
-  }) : super(name, returnType, block: block, modifiers: modifiers);
+    super.block,
+    super.modifiers,
+  }) : super(name, returnType);
 
   FutureOr<ASTValue<T>> objectCall(
     VMContext parent,
