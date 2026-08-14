@@ -2604,6 +2604,14 @@ class ASTExpressionVariableAssignment extends ASTExpression {
       var current = getter != null
           ? await _callScopeAccessor(context, getter)
           : await variable.getValue(context);
+
+      // `x ??= v` short-circuits: when the current value is not null the
+      // setter must not run at all, as in Dart.
+      if (operator == ASTAssignmentOperator.nullCoalesce &&
+          !await _astValueIsNull(context, current)) {
+        return current;
+      }
+
       resultValue = await applyASTAssignmentOperator(
         context,
         operator,
@@ -4266,6 +4274,14 @@ class ASTExpressionObjectSetterAssignment extends ASTExpression {
         // `obj.x += v` reads through the getter (or the field, when the
         // property is setter-only backed by a field) before writing back.
         var current = await _currentValue(classContext, obj);
+
+        // `obj.x ??= v` short-circuits: when the current value is not null the
+        // setter must not run at all, as in Dart.
+        if (operator == ASTAssignmentOperator.nullCoalesce &&
+            !await _astValueIsNull(classContext, current)) {
+          return current;
+        }
+
         resultValue = await _applyOperator(classContext, current, value);
       }
 

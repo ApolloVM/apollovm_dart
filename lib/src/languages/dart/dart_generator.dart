@@ -248,12 +248,6 @@ class ApolloCodeGeneratorDart extends ApolloCodeGenerator {
   }) {
     out ??= newOutput();
 
-    var blockCode = generateASTBlock(
-      setter,
-      indent: indent,
-      withBrackets: false,
-    );
-
     out.write(indent);
     out.write('set ');
     out.write(setter.name);
@@ -261,7 +255,29 @@ class ApolloCodeGeneratorDart extends ApolloCodeGenerator {
     out.write(generateASTType(setter.parameterType));
     out.write(' ');
     out.write(setter.parameterName);
-    out.write(') {\n');
+    out.write(')');
+
+    // An arrow-bodied setter parses into a single `return <expr>;`. Emitting
+    // that as a block body would produce `set x(v) { return …; }`, which Dart
+    // rejects — a setter returns void. Emit the arrow form back.
+    var statements = setter.statements;
+    if (statements.length == 1) {
+      var stm = statements.first;
+      if (stm is ASTStatementReturnWithExpression) {
+        out.write(' => ');
+        generateASTExpression(stm.expression, out: out, headIndented: false);
+        out.write(';\n\n');
+        return out;
+      }
+    }
+
+    var blockCode = generateASTBlock(
+      setter,
+      indent: indent,
+      withBrackets: false,
+    );
+
+    out.write(' {\n');
     out.write(blockCode);
     out.write(indent);
     out.write('}\n\n');

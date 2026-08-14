@@ -306,7 +306,7 @@ Same legend and **Wasm** column semantics as the table above.
 | Generics (generic classes + instantiation + type erasure)    | ✅ | ✅ | ✅ | 🚧 | ✅ | 🚫  | ✅ | 🚫  | 🚫  | 🚧 |
 | Type inference (`var` / `val` / `auto`)                       | ✅ | ✅ | ✅ | ✅ | ✅ | 🚫  | ✅ | 🚫  | 🚫  | ✅⁵ |
 | Extensions (methods + getters)¹¹                              | ✅ | 🚫  | ✅ | 🚫  | 🧩¹² | 🚫  | 🚫  | 🚫  | 🚫  | 🚧 |
-| Getters / setters¹⁴                                           | 🧩¹⁴ | 🚧 | 🧩¹⁴ | 🚫  | 🚧 | 🚧 | 🚧 | 🚫  | 🚧 | 🚧 |
+| Getters / setters¹⁴                                           | ✅¹⁴ | 🚧 | 🧩¹⁴ | 🚫  | 🚧 | 🚧 | 🚧 | 🚫  | 🚧 | 🚧 |
 | Annotations / metadata (`@…`)¹⁵                               | 🧩¹⁵ | 🚧 | 🚧 | 🚫  | 🚧 | 🚫  | 🚧 | 🚫  | 🚧 | 🚫  |
 | `required` named parameters                                   | ✅ | 🚫  | 🧩¹⁶ | 🚫  | 🧩¹⁶ | 🚫  | 🚫  | 🚫  | 🧩¹⁶ | ✅ |
 
@@ -352,11 +352,19 @@ Dart, Java (`extends`), C# / TS / JS (`: Base` / `extends`), Python. Kotlin's
 Wasm backend doesn't compile inheritance yet. Constructor initializer lists with
 an explicit `: super(v)` call are not parsed yet — set inherited fields from the
 constructor body or a `this.param`. &nbsp;
-¹⁴ **Getters** are parsed and executed (Dart `get name => …`, with or without an
-explicit return type) and are generated for Dart and Kotlin. **Setters
-(`set name(v)`) are not implemented** — `set` is rejected in a type position, so
-a setter declaration is a clear parse error rather than the silent misparse into
-a method named `name` that it used to produce. &nbsp;
+¹⁴ **Getters and setters** are parsed and executed on classes and extensions:
+`get name => …` / `get name { … }` (with or without an explicit return type) and
+`set name(T v) { … }` / `set name(v) => …` (typed or untyped parameter). A
+setter runs on `obj.x = v`, `this.x = v`, an unqualified `x = v` inside the
+class, and on compound forms (`+=`, `??=`, …), which read through the getter
+when there is one; `??=` short-circuits, so the setter does not run when the
+current value is non-null. Inherited and overridden accessors resolve through
+the superclass chain. **Only Dart generates them** — Kotlin emits getters
+(`val x: T get() { … }`) but not setters, and every other target refuses an
+accessor with `UnsupportedSyntaxError` rather than dropping it. Not yet
+supported, for getters and setters alike: `static` accessors, top-level
+accessors, and an *unqualified read* of a getter (`return value;` inside a
+method — use `this.value`). &nbsp;
 ¹⁵ Dart annotations (`@override`, `@Deprecated('x')`, `@pragma(...)`,
 `@a.B(1)`) are accepted wherever Dart allows them — top-level declarations,
 class and enum members, enum entries, extension members, parameters and local

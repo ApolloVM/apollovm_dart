@@ -1,3 +1,60 @@
+## 2.27.0
+
+### Dart setters
+
+`set name(T value) { … }` is implemented. It was the last accessor with no
+support at all — no grammar rule, no AST node, no dispatch. `2.26.0` made it a
+clean parse error instead of a silent misparse into a method named `name`
+returning a type named `set`; it now works.
+
+Parsed on classes and extensions, with a typed or untyped parameter and an
+arrow or block body:
+
+```dart
+class Box {
+  int _v = 0;
+  int get value => _v;
+  set value(int x) { _v = x; }
+  set scaled(v) => _v = v * 10;
+}
+```
+
+A setter runs on every write position: `obj.x = v`, `this.x = v`, and an
+unqualified `x = v` inside the class — the write-side mirror of an unqualified
+getter read. A real variable in scope still wins, so a setter's own parameter
+cannot re-enter it. Compound assignment (`obj.x += 1`) reads through the getter
+when there is one and falls back to the backing field; `??=` short-circuits, so
+the setter does not run when the current value is non-null. Inherited and
+overridden setters resolve through the superclass chain, and extension setters
+work like extension getters.
+
+Only Dart **generates** setters. Every other target refuses with
+`UnsupportedSyntaxError`, and Wasm refuses rather than letting an assignment
+silently write the backing field instead of running the setter body.
+
+An arrow-bodied setter regenerates as an arrow: emitting it as a block would
+produce `set x(v) { return …; }`, which Dart rejects because a setter returns
+void. The generated output is checked with the real `dart analyze`.
+
+### Fixed: getters silently dropped when translating to Python, Go and Lua
+
+Those three generators never iterated the class's accessors, so a class with a
+getter translated to any of them **lost the accessor entirely** while the method
+bodies kept referencing the property — broken code that looked fine, rather than
+the honest `UnsupportedSyntaxError` Java/C#/JS/TS already produced. They now
+refuse, like the others.
+
+### Fixed: `ASTBlock.set` dropped setters
+
+It copied functions, getters and statements, so every class member survived the
+temporary parse block except the new ones.
+
+### Still missing
+
+For getters and setters alike: `static` accessors, top-level accessors, and an
+*unqualified read* of a getter (`return value;` inside a method — `this.value`
+works). Kotlin generates getters but not setters.
+
 ## 2.26.0
 
 ### Control-flow bodies no longer require braces
