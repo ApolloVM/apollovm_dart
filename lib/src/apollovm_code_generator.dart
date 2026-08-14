@@ -696,6 +696,13 @@ abstract class ApolloCodeGenerator
         indent: indent,
         headIndented: headIndented,
       );
+    } else if (statement is ASTStatementAssert) {
+      return generateASTStatementAssert(
+        statement,
+        out: out,
+        indent: indent,
+        headIndented: headIndented,
+      );
     } else if (statement is ASTStatementTryCatch) {
       return generateASTStatementTryCatch(
         statement,
@@ -969,6 +976,47 @@ abstract class ApolloCodeGenerator
       headIndented: false,
     );
     out.write(';');
+
+    return out;
+  }
+
+  /// `assert(cond)` / `assert(cond, message)`.
+  ///
+  /// The default is Dart's call syntax, which is also Lua's built-in `assert`.
+  /// Targets that spell it differently override this: Java `assert c : m;`,
+  /// Python `assert c, m`, Kotlin `assert(c) { m }`, C# `Debug.Assert(...)`,
+  /// and JS/TS/Go — which have no throwing `assert` — lower it to an explicit
+  /// check.
+  StringBuffer generateASTStatementAssert(
+    ASTStatementAssert statement, {
+    StringBuffer? out,
+    String indent = '',
+    bool headIndented = true,
+  }) {
+    out ??= newOutput();
+
+    if (headIndented) out.write(indent);
+
+    out.write('assert(');
+    generateASTExpression(
+      statement.condition,
+      out: out,
+      indent: indent,
+      headIndented: false,
+    );
+
+    var message = statement.message;
+    if (message != null) {
+      out.write(', ');
+      generateASTExpression(
+        message,
+        out: out,
+        indent: indent,
+        headIndented: false,
+      );
+    }
+
+    out.write(');');
 
     return out;
   }

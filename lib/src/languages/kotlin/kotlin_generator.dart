@@ -611,6 +611,33 @@ class ApolloCodeGeneratorKotlin extends ApolloCodeGenerator {
   }
 
   @override
+  /// Kotlin's `assert` takes the message as a trailing lambda:
+  /// `assert(cond) { message }`.
+  @override
+  StringBuffer generateASTStatementAssert(
+    ASTStatementAssert statement, {
+    StringBuffer? out,
+    String indent = '',
+    bool headIndented = true,
+  }) {
+    out ??= newOutput();
+    if (headIndented) out.write(indent);
+
+    out.write('assert(');
+    generateASTExpression(statement.condition, out: out, headIndented: false);
+    out.write(')');
+
+    var message = statement.message;
+    if (message != null) {
+      out.write(' { ');
+      generateASTExpression(message, out: out, headIndented: false);
+      out.write(' }');
+    }
+
+    return out;
+  }
+
+  @override
   StringBuffer generateASTStatementForEach(
     ASTStatementForEach forEach, {
     StringBuffer? out,

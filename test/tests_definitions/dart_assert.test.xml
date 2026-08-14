@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="assert statement">
+    <source language="dart">
+        <![CDATA[
+class Checks {
+  static String run(int n) {
+    assert(n >= 0);
+
+    try {
+      assert(n < 10, 'too big: $n');
+    } catch (e) {
+      return 'caught: $e';
+    }
+
+    try {
+      assert(n != 5);
+    } catch (e) {
+      return 'bare: $e';
+    }
+
+    return 'ok: $n';
+  }
+}
+        ]]>
+    </source>
+    <call class="Checks" function="run" returnType="String" return="ok: 3">
+        [3]
+    </call>
+    <output>
+        []
+    </output>
+
+    <call class="Checks" function="run" returnType="String" return="caught: too big: 42">
+        [42]
+    </call>
+    <output>
+        []
+    </output>
+
+    <call class="Checks" function="run" returnType="String" return="bare: Assertion failed">
+        [5]
+    </call>
+    <output>
+        []
+    </output>
+
+    <source-generated language="dart"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+class Checks {
+
+  static String run(int n) {
+    assert(n >= 0);
+    try {
+      assert(n < 10, 'too big: $n');
+    } catch (e) {
+      return 'caught: $e';
+    }
+    try {
+      assert(n != 5);
+    } catch (e) {
+      return 'bare: $e';
+    }
+    return 'ok: $n';
+  }
+
+}
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+</test>

@@ -764,6 +764,7 @@ class DartGrammarDefinition extends DartGrammarLexer {
   Parser<ASTStatement> statement() =>
       (statementTryCatch() |
               statementThrow() |
+              statementAssert() |
               statementSwitch() |
               branch() |
               statementBreak() |
@@ -847,6 +848,25 @@ class DartGrammarDefinition extends DartGrammarLexer {
   Parser<ASTStatementThrow> statementThrow() =>
       (string('throw').trimHidden() & ref0(expression) & char(';').trimHidden())
           .map((v) => ASTStatementThrow(v[1] as ASTExpression));
+
+  /// `assert(cond)` / `assert(cond, message)`, with an optional trailing comma.
+  ///
+  /// Must precede [statementExpression] in [statement]: without this rule
+  /// `assert(x);` parses as a call to a user function named `assert` and fails
+  /// much later with a confusing "can't find function" error.
+  Parser<ASTStatementAssert> statementAssert() =>
+      (assertKeyword() &
+              char('(').trimHidden() &
+              ref0(expression) &
+              (char(',').trimHidden() & ref0(expression)).optional() &
+              char(',').trimHidden().optional() &
+              char(')').trimHidden() &
+              char(';').trimHidden())
+          .map((v) {
+            var condition = v[2] as ASTExpression;
+            var message = (v[3] as List?)?[1] as ASTExpression?;
+            return ASTStatementAssert(condition, message);
+          });
 
   Parser<ASTStatementTryCatch> statementTryCatch() =>
       (string('try').trimHidden() &

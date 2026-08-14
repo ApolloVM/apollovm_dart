@@ -8629,6 +8629,12 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       );
     } else if (statement is ASTStatementReturn) {
       return generateASTStatementReturn(statement, out: out, context: context);
+    } else if (statement is ASTStatementAssert) {
+      // Refuse rather than mis-compile: `assert` throws on failure, and the
+      // Wasm backend has no exception lowering for a bare throw.
+      throw UnsupportedSyntaxError(
+        'Wasm compilation of `assert` is not implemented: $statement',
+      );
     }
 
     throw UnsupportedError("Can't handle statement: $statement");
