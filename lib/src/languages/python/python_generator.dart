@@ -837,6 +837,14 @@ class ApolloCodeGeneratorPython extends ApolloCodeGenerator {
         }
       }
       out.write(':\n');
+
+      // Python's `except` header has no second variable, so a Dart
+      // `catch (e, s)` binds the stack trace as the handler's first statement.
+      var stackTraceName = catchClause.stackTraceName;
+      if (stackTraceName != null) {
+        out.write('$indent$_tab$stackTraceName = ""\n');
+      }
+
       _writeSuite(catchClause.block, out, '$indent$_tab');
     }
 

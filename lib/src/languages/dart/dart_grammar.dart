@@ -902,8 +902,14 @@ class DartGrammarDefinition extends DartGrammarLexer {
             var type = v[1] as ASTType;
             var catchPart = v[2] as List?;
             var varName = catchPart != null ? catchPart[2] as String : null;
+            var stackTraceName = (catchPart?[3] as List?)?[1] as String?;
             var block = v[3] as ASTBlock;
-            return ASTCatchClause(type, varName, block);
+            return ASTCatchClause(
+              type,
+              varName,
+              block,
+              stackTraceName: stackTraceName,
+            );
           });
 
   /// Dart `catch (e[, st]) { }` (untyped catch-all).
@@ -916,8 +922,14 @@ class DartGrammarDefinition extends DartGrammarLexer {
               codeBlock())
           .map((v) {
             var varName = v[2] as String;
+            var stackTraceName = (v[3] as List?)?[1] as String?;
             var block = v[5] as ASTBlock;
-            return ASTCatchClause(null, varName, block);
+            return ASTCatchClause(
+              null,
+              varName,
+              block,
+              stackTraceName: stackTraceName,
+            );
           });
 
   Parser<ASTStatement> statementSimple() =>

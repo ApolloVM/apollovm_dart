@@ -1872,12 +1872,24 @@ class ASTStatementAssert extends ASTStatement {
 ///
 /// [exceptionType] is the matched type (`null` = catch-all); [variableName] is
 /// the bound variable (`null` = no variable); [block] is the handler body.
+///
+/// [stackTraceName] is Dart's second catch variable (`catch (e, s)`). ApolloVM
+/// interprets the AST and has no stack traces of its own, so the variable is
+/// bound to an empty string — enough for a program that passes it around or
+/// prints it to run, without leaking VM internals or making output differ
+/// between targets.
 class ASTCatchClause {
   final ASTType? exceptionType;
   final String? variableName;
+  final String? stackTraceName;
   final ASTBlock block;
 
-  ASTCatchClause(this.exceptionType, this.variableName, this.block);
+  ASTCatchClause(
+    this.exceptionType,
+    this.variableName,
+    this.block, {
+    this.stackTraceName,
+  });
 
   void resolveNode(ASTNode? parentNode) {
     exceptionType?.resolveNode(parentNode);
@@ -1897,6 +1909,14 @@ class ASTCatchClause {
         exceptionType ?? ASTTypeDynamic.instance,
         name,
         caught,
+      );
+    }
+    var stackTraceName = this.stackTraceName;
+    if (stackTraceName != null) {
+      context.declareVariableWithValue(
+        ASTTypeString.instance,
+        stackTraceName,
+        ASTValueString(''),
       );
     }
     var prevContext = VMContext.setCurrent(context);

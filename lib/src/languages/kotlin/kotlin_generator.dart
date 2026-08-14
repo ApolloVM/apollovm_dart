@@ -133,6 +133,9 @@ class ApolloCodeGeneratorKotlin extends ApolloCodeGenerator {
   }
 
   @override
+  String? renderCatchStackTraceBinding(String name) => 'var $name = ""';
+
+  @override
   String normalizeTypeFunction(String typeName, String functionName) {
     switch (typeName) {
       case 'int':

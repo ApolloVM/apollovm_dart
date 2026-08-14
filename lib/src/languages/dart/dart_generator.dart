@@ -40,12 +40,19 @@ class ApolloCodeGeneratorDart extends ApolloCodeGenerator {
   @override
   String generateASTCatchClauseHeader(ASTCatchClause catchClause) {
     var name = catchClause.variableName ?? 'e';
+    var stackTrace = catchClause.stackTraceName;
+    var bind = stackTrace != null ? '$name, $stackTrace' : name;
     var type = catchClause.exceptionType;
     if (type != null) {
-      return 'on ${generateASTType(type)} catch ($name)';
+      return 'on ${generateASTType(type)} catch ($bind)';
     }
-    return 'catch ($name)';
+    return 'catch ($bind)';
   }
+
+  /// Dart declares the stack trace in the header (`catch (e, s)`), so there is
+  /// no separate binding statement.
+  @override
+  String? renderCatchStackTraceBinding(String name) => null;
 
   @override
   String normalizeTypeFunction(String typeName, String functionName) {

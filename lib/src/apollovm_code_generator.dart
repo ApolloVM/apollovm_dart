@@ -1042,6 +1042,18 @@ abstract class ApolloCodeGenerator
       out.write(' ');
       out.write(generateASTCatchClauseHeader(catchClause));
       out.write(' {\n');
+
+      // Targets whose `catch` header has no second variable declare it as the
+      // handler's first statement instead, so a body that reads it still
+      // compiles after translation.
+      var stackTraceName = catchClause.stackTraceName;
+      if (stackTraceName != null) {
+        var binding = renderCatchStackTraceBinding(stackTraceName);
+        if (binding != null) {
+          out.write('$indent  $binding\n');
+        }
+      }
+
       out.write(
         generateASTBlock(
           catchClause.block,
@@ -1074,6 +1086,15 @@ abstract class ApolloCodeGenerator
     var name = catchClause.variableName ?? 'e';
     return 'catch ($name)';
   }
+
+  /// A statement binding the catch stack-trace variable [name], for targets
+  /// whose `catch` header cannot declare a second variable. `null` means the
+  /// target binds it in the header itself (Dart's `catch (e, s)`).
+  ///
+  /// ApolloVM has no stack traces, so the value is the empty string — see
+  /// [ASTCatchClause.stackTraceName]. The base form suits JavaScript and
+  /// TypeScript.
+  String? renderCatchStackTraceBinding(String name) => "let $name = '';";
 
   @override
   StringBuffer generateASTBranchIfBlock(

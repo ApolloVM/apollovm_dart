@@ -67,6 +67,9 @@ class ApolloCodeGeneratorJava11 extends ApolloCodeGenerator {
   }
 
   @override
+  String? renderCatchStackTraceBinding(String name) => 'String $name = "";';
+
+  @override
   String normalizeTypeFunction(String typeName, String functionName) {
     switch (typeName) {
       case 'int':

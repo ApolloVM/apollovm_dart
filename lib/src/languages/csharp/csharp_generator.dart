@@ -70,6 +70,9 @@ class ApolloCodeGeneratorCSharp extends ApolloCodeGenerator {
   }
 
   @override
+  String? renderCatchStackTraceBinding(String name) => 'string $name = "";';
+
+  @override
   String normalizeTypeFunction(String typeName, String functionName) {
     switch (typeName) {
       case 'int':

@@ -7282,6 +7282,14 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       // inferred from the thrown values for an untyped `catch (e)`).
       final clauseVarTypes = <ASTType?>[];
       for (final c in s.catches) {
+        // A bound stack-trace variable (`catch (e, s)`) has no Wasm
+        // representation: refuse rather than silently dropping the binding and
+        // leaving the body referencing an undeclared name.
+        if (c.stackTraceName != null) {
+          ok = false;
+          return cur;
+        }
+
         var varType = c.exceptionType;
         // A declared catch-all type (`Exception`/`Throwable`/`Error`/`Object`/
         // `dynamic`, from Java/Kotlin/C# `catch (Exception e)` or Dart

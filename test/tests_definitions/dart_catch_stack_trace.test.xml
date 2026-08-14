@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="catch binds the stack-trace variable">
+    <source language="dart">
+        <![CDATA[
+class Traces {
+  static String typed(int n) {
+    try {
+      if (n > 0) { throw 'boom'; }
+      return 'none';
+    } on String catch (e, s) {
+      // `s` is bound but empty: ApolloVM has no stack traces. Reading it
+      // proves the binding exists without making output target-dependent.
+      return 'typed:$e:${s.isEmpty}';
+    }
+  }
+
+  static String bare(int n) {
+    try {
+      if (n > 0) { throw 'bang'; }
+      return 'none';
+    } catch (e, s) {
+      return 'bare:$e:${s.isEmpty}';
+    }
+  }
+}
+        ]]>
+    </source>
+    <call class="Traces" function="typed" returnType="String" return="typed:boom:true">
+        [1]
+    </call>
+    <output>
+        []
+    </output>
+
+    <call class="Traces" function="typed" returnType="String" return="none">
+        [0]
+    </call>
+    <output>
+        []
+    </output>
+
+    <call class="Traces" function="bare" returnType="String" return="bare:bang:true">
+        [1]
+    </call>
+    <output>
+        []
+    </output>
+</test>
