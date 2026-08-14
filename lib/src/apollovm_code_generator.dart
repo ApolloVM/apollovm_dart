@@ -1195,11 +1195,7 @@ abstract class ApolloCodeGenerator
         headIndented: false,
       );
       out.write(')');
-      braced = writeASTBranchBody(
-        branchElseIf.block,
-        out: out,
-        indent: indent,
-      );
+      braced = writeASTBranchBody(branchElseIf.block, out: out, indent: indent);
     }
 
     var blockElse = branch.blockElse;

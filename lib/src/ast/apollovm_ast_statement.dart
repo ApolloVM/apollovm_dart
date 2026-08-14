@@ -1881,8 +1881,9 @@ class ASTStatementAssert extends ASTStatement {
   ASTType resolveType(VMContext? context) => ASTTypeVoid.instance;
 
   @override
-  String toString() =>
-      message == null ? 'assert($condition) ;' : 'assert($condition, $message) ;';
+  String toString() => message == null
+      ? 'assert($condition) ;'
+      : 'assert($condition, $message) ;';
 }
 
 /// A single `catch` clause of an [ASTStatementTryCatch].
