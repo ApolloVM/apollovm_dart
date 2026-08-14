@@ -25,6 +25,9 @@ class ApolloCodeGeneratorDart extends ApolloCodeGenerator {
   bool get supportsNullAwareOperators => true;
 
   @override
+  bool get supportsRequiredParameters => true;
+
+  @override
   String normalizeTypeName(String typeName, [String? callingFunction]) {
     switch (typeName) {
       case 'Integer':

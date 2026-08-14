@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="`required` named parameters">
+    <source language="dart">
+        <![CDATA[
+class Point {
+  int x = 0;
+  int y = 0;
+  String tag = '';
+
+  Point({required this.x, required this.y, this.tag = 'p'});
+
+  String show() => '$tag($x,$y)';
+}
+
+String area({required int w, required int h, int scale = 1}) {
+  return 'a=${w * h * scale}';
+}
+
+String run() {
+  var p = Point(x: 3, y: 4);
+  var q = Point(y: 6, x: 5, tag: 'q');
+  return '${p.show()}|${q.show()}|${area(w: 2, h: 3)}|${area(h: 3, w: 2, scale: 10)}';
+}
+        ]]>
+    </source>
+    <call function="run" returnType="String" return="p(3,4)|q(5,6)|a=6|a=60">
+        []
+    </call>
+    <output>
+        []
+    </output>
+
+    <source-generated language="dart"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+  String area({required int w, required int h, int scale = 1}) {
+    return 'a=${(w * h) * scale}';
+  }
+
+  String run() {
+    var p = Point(x: 3, y: 4);
+    var q = Point(y: 6, x: 5, tag: 'q');
+    return '${p.show()}|${q.show()}|${area(w: 2, h: 3)}|${area(h: 3, w: 2, scale: 10)}';
+  }
+
+class Point {
+
+  int x = 0;
+  int y = 0;
+  String tag = '';
+
+  Point({required this.x, required this.y, this.tag = 'p'});
+
+  String show() {
+    return '$tag($x,$y)';
+  }
+
+}
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+</test>

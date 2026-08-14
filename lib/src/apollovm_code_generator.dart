@@ -390,6 +390,10 @@ abstract class ApolloCodeGenerator
   }) {
     out ??= newOutput();
 
+    if (parameter.isRequired && supportsRequiredParameters) {
+      out.write('required ');
+    }
+
     if (parameter is ASTConstructorParameterDeclaration &&
         parameter.thisParameter) {
       out.write('this.');
@@ -405,6 +409,11 @@ abstract class ApolloCodeGenerator
 
     return out;
   }
+
+  /// Whether this target spells a mandatory named parameter with a `required`
+  /// modifier. Only Dart does; the others express it by the absence of a
+  /// default value, so the modifier is dropped there.
+  bool get supportsRequiredParameters => false;
 
   /// The separator emitted between a parameter and its default value in a
   /// declaration (e.g. ` = ` in Dart/Kotlin/C#/Java, `=` in Python).

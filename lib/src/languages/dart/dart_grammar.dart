@@ -96,13 +96,43 @@ class DartGrammarDefinition extends DartGrammarLexer {
       (ref0(statementImport) | ref0(statementExport)).cast<ASTStatement>();
 
   Parser topLevelDefinition() =>
-      (typeAliasDeclaration() |
-              enumDeclaration() |
-              extensionDeclaration() |
-              classDeclaration() |
-              functionDeclaration() |
-              statementVariableDeclaration())
+      (ref0(metadata).star() &
+              (typeAliasDeclaration() |
+                  enumDeclaration() |
+                  extensionDeclaration() |
+                  classDeclaration() |
+                  functionDeclaration() |
+                  statementVariableDeclaration()))
+          // Unwrap: `compilationUnit` type-switches over the definitions, so a
+          // wrapper list here would make every top-level definition vanish.
+          .map((v) => v[1])
           .plus();
+
+  /// Metadata / annotation: `@override`, `@Deprecated('x')`,
+  /// `@pragma('vm:prefer-inline')`, `@foo.Bar(1, n: 2)`.
+  ///
+  /// Parsed and discarded. [ASTAnnotation] exists but is never populated, so
+  /// annotations do not survive a round-trip; preserving them is the natural
+  /// next step and needs no grammar change.
+  Parser metadata() =>
+      (char('@').trimHidden() &
+              identifier() &
+              (char('.').trimHidden() & identifier()).star() &
+              ref0(balancedParenGroup).optional())
+          .trimHidden();
+
+  /// A balanced `( … )` group, skipped without interpreting its contents.
+  ///
+  /// Annotation arguments are discarded anyway, and skipping them structurally
+  /// means an annotation using syntax ApolloVM does not model yet still never
+  /// breaks the declaration it precedes. (A parenthesis inside a string
+  /// literal in the arguments would confuse the balance count — rare enough to
+  /// accept.)
+  Parser balancedParenGroup() =>
+      (char('(') &
+              (ref0(balancedParenGroup) | pattern('^()')).star() &
+              char(')'))
+          .trimHidden();
 
   Parser<ASTFunctionDeclaration> functionDeclaration() =>
       (type().optional() &
@@ -214,7 +244,10 @@ class DartGrammarDefinition extends DartGrammarLexer {
               onToken().trimHidden() &
               type() &
               char('{').trimHidden() &
-              (ref0(classFunctionDeclaration) | ref0(getterDeclaration))
+              (ref0(metadata).star() &
+                      (ref0(classFunctionDeclaration) |
+                          ref0(getterDeclaration)))
+                  .map((v) => v[1])
                   .star() &
               char('}').trimHidden())
           .map((v) {
@@ -358,10 +391,12 @@ class DartGrammarDefinition extends DartGrammarLexer {
               // Enhanced/rich enum body: `;` then class members (fields, a
               // `const` constructor, methods) — reusing class-member parsing.
               (char(';').trimHidden() &
-                      (ref0(classConstructorDefaultDeclaration) |
-                              ref0(classFunctionDeclaration) |
-                              ref0(classFieldDeclaration) |
-                              ref0(classFieldDeclarationWithValue))
+                      (ref0(metadata).star() &
+                              (ref0(classConstructorDefaultDeclaration) |
+                                  ref0(classFunctionDeclaration) |
+                                  ref0(classFieldDeclaration) |
+                                  ref0(classFieldDeclarationWithValue)))
+                          .map((v) => v[1])
                           .star())
                   .optional() &
               char('}').trimHidden())
@@ -394,15 +429,16 @@ class DartGrammarDefinition extends DartGrammarLexer {
           });
 
   Parser<ASTEnumEntry> enumEntry() =>
-      (identifier().trimHidden() &
+      (ref0(metadata).star() &
+              identifier().trimHidden() &
               ((char('=').trimHidden() & ref0(expression)) |
                       (char('(').trimHidden() &
                           expressionSequence().optional() &
                           char(')').trimHidden()))
                   .optional())
           .map((v) {
-            var name = v[0] as String;
-            var suffix = v[1] as List?;
+            var name = v[1] as String;
+            var suffix = v[2] as List?;
             ASTExpression? value;
             List<ASTExpression>? arguments;
             if (suffix != null) {
@@ -421,11 +457,13 @@ class DartGrammarDefinition extends DartGrammarLexer {
 
   Parser<ASTBlock> classCodeBlock() =>
       (char('{').trimHidden() &
-              (ref0(classConstructorDefaultDeclaration) |
-                      ref0(classFunctionDeclaration) |
-                      ref0(getterDeclaration) |
-                      ref0(classFieldDeclaration) |
-                      ref0(classFieldDeclarationWithValue))
+              (ref0(metadata).star() &
+                      (ref0(classConstructorDefaultDeclaration) |
+                          ref0(classFunctionDeclaration) |
+                          ref0(getterDeclaration) |
+                          ref0(classFieldDeclaration) |
+                          ref0(classFieldDeclarationWithValue)))
+                  .map((v) => v[1])
                   .star() &
               char('}').trimHidden())
           .map((v) {
@@ -612,29 +650,39 @@ class DartGrammarDefinition extends DartGrammarLexer {
 
   Parser<ASTConstructorParameterDeclaration>
   constructorThisParameterDeclaration() =>
-      (thisToken().trim() &
+      (ref0(metadata).star() &
+              requiredKeyword().optional() &
+              thisToken().trim() &
               char('.') &
               identifier() &
               parameterDefaultValue().optional())
           .map((v) {
             return ASTConstructorParameterDeclaration(
               ASTTypeConstructorThis.instance,
-              v[2],
+              v[4],
               -1,
               false,
               thisParameter: true,
-            )..defaultValue = v[3] as ASTExpression?;
+              isRequired: v[1] != null,
+            )..defaultValue = v[5] as ASTExpression?;
           });
 
   Parser<ASTConstructorParameterDeclaration>
   constructorTypedParameterDeclaration() =>
-      ((finalToken() | constToken()).trim().optional() &
+      (ref0(metadata).star() &
+              requiredKeyword().optional() &
+              (finalToken() | constToken()).trim().optional() &
               type().trim() &
               identifier() &
               parameterDefaultValue().optional())
           .map((v) {
-            return ASTConstructorParameterDeclaration(v[1], v[2], -1, false)
-              ..defaultValue = v[3] as ASTExpression?;
+            return ASTConstructorParameterDeclaration(
+              v[3],
+              v[4],
+              -1,
+              false,
+              isRequired: v[1] != null,
+            )..defaultValue = v[5] as ASTExpression?;
           });
 
   Parser<ASTFunctionDeclaration> classFunctionDeclaration() =>
@@ -1049,9 +1097,15 @@ class DartGrammarDefinition extends DartGrammarLexer {
 
   Parser<ASTStatementVariableDeclaration> statementVariableDeclaration() =>
       (
-          // `late` is accepted and dropped: ApolloVM has no lazy-initialization
-          // semantics, and `late int x = 1;` runs the same as `int x = 1;`.
-          lateKeyword().optional() &
+          // Metadata attaches to the *declaration*, deliberately not to
+          // `statement()`: attempting a metadata parse at every statement
+          // position would move the farthest-failure offset that
+          // `apollovm_dart_parse_error_position_test` pins on a stray `@`.
+          ref0(metadata).star() &
+              // `late` is accepted and dropped: ApolloVM has no
+              // lazy-initialization semantics, and `late int x = 1;` runs the
+              // same as `int x = 1;`.
+              lateKeyword().optional() &
               // var definition:
               (
               // final Type name:
@@ -1067,7 +1121,7 @@ class DartGrammarDefinition extends DartGrammarLexer {
               (char('=').trimHidden() & ref0(expression)).optional() &
               char(';').trimHidden())
           .map((v) {
-            var varDef = v[1] as List;
+            var varDef = v[2] as List;
 
             bool unmodifiable;
             ASTType type;
@@ -1094,7 +1148,7 @@ class DartGrammarDefinition extends DartGrammarLexer {
               throw StateError("Invalid var definition: $varDef");
             }
 
-            var valueOpt = v[2];
+            var valueOpt = v[3];
             var value = valueOpt != null ? valueOpt[1] as ASTExpression : null;
             if (value != null) type.associateToType(value);
             return ASTStatementVariableDeclaration(
@@ -2205,18 +2259,21 @@ class DartGrammarDefinition extends DartGrammarLexer {
           });
 
   Parser<ASTFunctionParameterDeclaration> parameterDeclaration() =>
-      ((finalToken() | constToken()).trim().optional() &
+      (ref0(metadata).star() &
+              requiredKeyword().optional() &
+              (finalToken() | constToken()).trim().optional() &
               type().trim() &
               identifier() &
               parameterDefaultValue().optional())
           .map((v) {
             return ASTFunctionParameterDeclaration(
-              v[1],
-              v[2],
+              v[3],
+              v[4],
               -1,
               false,
-              unmodifiable: v[0] != null,
-            )..defaultValue = v[3] as ASTExpression?;
+              unmodifiable: v[2] != null,
+              isRequired: v[1] != null,
+            )..defaultValue = v[5] as ASTExpression?;
           });
 
   Parser<ASTType> type() =>
