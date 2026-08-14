@@ -311,6 +311,21 @@ class ApolloCodeGeneratorGo extends ApolloCodeGenerator {
       }
     }
 
+    // Go has no property accessors. Refuse rather than drop them silently:
+    // a dropped accessor leaves the method bodies referencing a property that
+    // no longer exists, which compiles as neither Go nor anything else.
+    for (var g in clazz.getter) {
+      if (g is ASTClassGetterDeclaration) {
+        generateASTClassGetterDeclaration(g, out: out, indent: indent);
+      }
+    }
+
+    for (var s in clazz.setter) {
+      if (s is ASTClassSetterDeclaration) {
+        generateASTClassSetterDeclaration(s, out: out, indent: indent);
+      }
+    }
+
     _currentClassName = null;
     _currentClassFields = const {};
     _currentClassMethods = const {};

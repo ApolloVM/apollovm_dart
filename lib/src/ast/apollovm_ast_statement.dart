@@ -321,6 +321,10 @@ class ASTBlock extends ASTStatement {
     for (var e in _getters.values) {
       e.resolveNode(this);
     }
+
+    for (var e in _setters.values) {
+      e.resolveNode(this);
+    }
   }
 
   @override
@@ -381,6 +385,50 @@ class ASTBlock extends ASTStatement {
 
     return gExternal;
   }
+
+  //// Setters:
+
+  final Map<String, ASTSetterDeclaration> _setters = {};
+
+  List<ASTSetterDeclaration> get setter => _setters.values.toList();
+
+  List<String> get setterNames => _setters.keys.toList();
+
+  void addSetter(ASTSetterDeclaration s) {
+    var name = s.name;
+    s.parentBlock = this;
+    _setters[name] = s;
+  }
+
+  void addAllSetters(Iterable<ASTSetterDeclaration> ss) {
+    for (var s in ss) {
+      addSetter(s);
+    }
+  }
+
+  ASTSetterDeclaration? getSetterWithName(
+    String name, {
+    bool caseInsensitive = false,
+  }) {
+    var s = _setters[name];
+
+    if (s == null && caseInsensitive) {
+      for (var entry in _setters.entries) {
+        if (equalsIgnoreAsciiCase(entry.key, name)) {
+          s = entry.value;
+          break;
+        }
+      }
+    }
+
+    return s;
+  }
+
+  ASTSetterDeclaration? getSetter(
+    String fName,
+    VMContext context, {
+    bool caseInsensitive = false,
+  }) => getSetterWithName(fName, caseInsensitive: caseInsensitive);
 
   //// Functions
 
@@ -479,6 +527,9 @@ class ASTBlock extends ASTStatement {
 
     _getters.clear();
     addAllGetters(other._getters.values);
+
+    _setters.clear();
+    addAllSetters(other._setters.values);
 
     _statements.clear();
     addAllStatements(other._statements);

@@ -1,0 +1,182 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="Setters: declaration, dispatch and inheritance">
+    <source language="dart">
+        <![CDATA[
+class Base {
+  int raw = 0;
+
+  // Setter-only property, backed by a plain field.
+  set doubled(int x) { raw = x * 2; }
+}
+
+class Box extends Base {
+  int _v = 0;
+
+  // A getter/setter pair over the same backing field.
+  int get value => _v;
+  set value(int x) { _v = x + 1; }
+
+  // Untyped parameter, arrow body, and a parameter named like the property
+  // (it must bind as a parameter, not re-enter the setter).
+  set scaled(v) => _v = v * 10;
+
+  // An unqualified write inside a method resolves to `this.value = ...`.
+  // (The read side is spelled `this.value`: an unqualified getter *read* is a
+  // separate, pre-existing gap — see `_v` reads elsewhere in this class.)
+  int viaUnqualified(int n) {
+    value = n;
+    return this.value;
+  }
+
+  int run(String mode, int n) {
+    if (mode == 'pair') { this.value = n; return this.value; }
+    if (mode == 'compound') { _v = 10; this.value += n; return this.value; }
+    if (mode == 'nullaware') { _v = 0; this.value ??= n; return this.value; }
+    if (mode == 'arrow') { scaled = n; return _v; }
+    if (mode == 'inherited') { doubled = n; return raw; }
+    if (mode == 'unqualified') { return viaUnqualified(n); }
+    if (mode == 'this') { this.value = n; return _v; }
+    return -1;
+  }
+}
+        ]]>
+    </source>
+
+    <!-- `value = 7` runs `set value` (+1), then reads back through `get value`. -->
+    <call class="Box" function="run" return="8">
+        ["pair", 7]
+    </call>
+    <output>
+        []
+    </output>
+
+    <!-- `value += 5` reads 10 through the getter, then writes 15 via the setter (+1). -->
+    <call class="Box" function="run" return="16">
+        ["compound", 5]
+    </call>
+    <output>
+        []
+    </output>
+
+    <!-- `value ??= 9`: the getter returns 0, not null, so the setter never runs. -->
+    <call class="Box" function="run" return="0">
+        ["nullaware", 9]
+    </call>
+    <output>
+        []
+    </output>
+
+    <!-- Untyped parameter + arrow body. -->
+    <call class="Box" function="run" return="30">
+        ["arrow", 3]
+    </call>
+    <output>
+        []
+    </output>
+
+    <!-- A setter inherited from the superclass. -->
+    <call class="Box" function="run" return="12">
+        ["inherited", 6]
+    </call>
+    <output>
+        []
+    </output>
+
+    <!-- Unqualified `value = n` inside a method. -->
+    <call class="Box" function="run" return="5">
+        ["unqualified", 4]
+    </call>
+    <output>
+        []
+    </output>
+
+    <!-- Explicit `this.value = n`. -->
+    <call class="Box" function="run" return="3">
+        ["this", 2]
+    </call>
+    <output>
+        []
+    </output>
+
+    <!-- Round-trip: setters survive generation, and an arrow-bodied setter is
+         emitted back as an arrow. Emitting it as a block would produce
+         `set x(v) { return …; }`, which Dart rejects (a setter returns void).
+         The generated source was checked with the real `dart analyze`: no
+         errors. Only Dart is pinned here — every other target refuses a setter
+         with `UnsupportedSyntaxError`. -->
+    <source-generated language="dart"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+class Base {
+
+  int raw = 0;
+
+  set doubled(int x) {
+    raw = x * 2;
+  }
+
+}
+class Box extends Base {
+
+  int _v = 0;
+
+  int viaUnqualified(int n) {
+    value = n;
+    return this.value;
+  }
+
+  int run(String mode, int n) {
+    if (mode == 'pair') {
+        this.value = n;
+        return this.value;
+    }
+
+    if (mode == 'compound') {
+        _v = 10;
+        this.value += n;
+        return this.value;
+    }
+
+    if (mode == 'nullaware') {
+        _v = 0;
+        this.value ??= n;
+        return this.value;
+    }
+
+    if (mode == 'arrow') {
+        scaled = n;
+        return _v;
+    }
+
+    if (mode == 'inherited') {
+        doubled = n;
+        return raw;
+    }
+
+    if (mode == 'unqualified') {
+        return viaUnqualified(n);
+    }
+
+    if (mode == 'this') {
+        this.value = n;
+        return _v;
+    }
+
+    return -1;
+  }
+
+  int get value {
+    return _v;
+  }
+
+  set value(int x) {
+    _v = x + 1;
+  }
+
+  set scaled(dynamic v) => _v = v * 10;
+
+}
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+</test>

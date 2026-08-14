@@ -190,6 +190,22 @@ class ApolloCodeGeneratorPython extends ApolloCodeGenerator {
       }
     }
 
+    // Python has no property accessors in this generator yet. Route them
+    // through the base declarations so an unsupported accessor is refused
+    // rather than silently dropped — dropping it emits a body that still
+    // references the property, which is broken code that looks fine.
+    for (var g in block.getter) {
+      if (g is ASTClassGetterDeclaration) {
+        generateASTClassGetterDeclaration(g, out: out, indent: indent);
+      }
+    }
+
+    for (var s in block.setter) {
+      if (s is ASTClassSetterDeclaration) {
+        generateASTClassSetterDeclaration(s, out: out, indent: indent);
+      }
+    }
+
     for (var stm in block.statements) {
       generateASTStatement(stm, out: out, indent: indent);
     }
@@ -359,6 +375,22 @@ class ApolloCodeGeneratorPython extends ApolloCodeGenerator {
     for (var set in clazz.functions) {
       for (var f in set.functions) {
         _generateFunction(f, out: out, indent: bodyIndent, isMethod: true);
+      }
+    }
+
+    // Property accessors are not emitted as Python `@property` yet. Route them
+    // through the base declarations so an unsupported accessor is refused
+    // rather than silently dropped — dropping it leaves the method bodies
+    // referencing a property that no longer exists.
+    for (var g in clazz.getter) {
+      if (g is ASTClassGetterDeclaration) {
+        generateASTClassGetterDeclaration(g, out: out, indent: bodyIndent);
+      }
+    }
+
+    for (var s in clazz.setter) {
+      if (s is ASTClassSetterDeclaration) {
+        generateASTClassSetterDeclaration(s, out: out, indent: bodyIndent);
       }
     }
 

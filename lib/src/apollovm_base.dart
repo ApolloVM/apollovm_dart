@@ -61,7 +61,7 @@ import 'resolution/symbol_table.dart';
 /// The Apollo VM.
 class ApolloVM implements VMTypeResolver {
   // ignore: non_constant_identifier_names
-  static final String VERSION = '2.26.0';
+  static final String VERSION = '2.27.0';
 
   static int _idCount = 0;
 
@@ -1384,6 +1384,15 @@ sealed class VMContext {
     var g = block.getGetter(name, this);
     if (g != null) return g;
     return parent?.getGetter(name);
+  }
+
+  /// Returns a setter of [name].
+  ///
+  /// If [parent] is defined, will also look in the parent context.
+  ASTSetterDeclaration? getSetter(String name) {
+    var s = block.getSetter(name, this);
+    if (s != null) return s;
+    return parent?.getSetter(name);
   }
 
   /// Returns a function of [name] and [parametersSignature]
