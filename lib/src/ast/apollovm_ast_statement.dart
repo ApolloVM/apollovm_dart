@@ -605,14 +605,23 @@ enum ASTAssignmentOperator {
   multiply('*'),
   divide('/'),
   divideAsInt('~/'),
+  remainder('%'),
   sum('+'),
   subtract('-'),
+  bitwiseAnd('&'),
+  bitwiseOr('|'),
+  bitwiseXor('^'),
+  shiftLeft('<<'),
+  shiftRight('>>'),
   nullCoalesce('??');
 
   final String symbol;
 
   const ASTAssignmentOperator(this.symbol);
 
+  /// The binary operator this compound assignment applies, or `null` for
+  /// [set]. Used to lower `x OP= y` to `x = x OP y` — both by the Wasm backend
+  /// and by text targets that lack the compound form.
   ASTExpressionOperator? get asASTExpressionOperator {
     switch (this) {
       case sum:
@@ -625,9 +634,21 @@ enum ASTAssignmentOperator {
         return ASTExpressionOperator.divide;
       case divideAsInt:
         return ASTExpressionOperator.divideAsInt;
+      case remainder:
+        return ASTExpressionOperator.remainder;
+      case bitwiseAnd:
+        return ASTExpressionOperator.bitwiseAnd;
+      case bitwiseOr:
+        return ASTExpressionOperator.bitwiseOr;
+      case bitwiseXor:
+        return ASTExpressionOperator.bitwiseXor;
+      case shiftLeft:
+        return ASTExpressionOperator.shiftLeft;
+      case shiftRight:
+        return ASTExpressionOperator.shiftRight;
       case nullCoalesce:
         return ASTExpressionOperator.nullCoalesce;
-      default:
+      case set:
         return null;
     }
   }
@@ -645,10 +666,22 @@ ASTAssignmentOperator getASTAssignmentOperator(String op) {
       return ASTAssignmentOperator.divide;
     case '~/=':
       return ASTAssignmentOperator.divideAsInt;
+    case '%=':
+      return ASTAssignmentOperator.remainder;
     case '+=':
       return ASTAssignmentOperator.sum;
     case '-=':
       return ASTAssignmentOperator.subtract;
+    case '&=':
+      return ASTAssignmentOperator.bitwiseAnd;
+    case '|=':
+      return ASTAssignmentOperator.bitwiseOr;
+    case '^=':
+      return ASTAssignmentOperator.bitwiseXor;
+    case '<<=':
+      return ASTAssignmentOperator.shiftLeft;
+    case '>>=':
+      return ASTAssignmentOperator.shiftRight;
     case '??=':
       return ASTAssignmentOperator.nullCoalesce;
     default:
@@ -656,24 +689,8 @@ ASTAssignmentOperator getASTAssignmentOperator(String op) {
   }
 }
 
-String getASTAssignmentOperatorText(ASTAssignmentOperator op) {
-  switch (op) {
-    case ASTAssignmentOperator.set:
-      return '=';
-    case ASTAssignmentOperator.multiply:
-      return '*=';
-    case ASTAssignmentOperator.divide:
-      return '/=';
-    case ASTAssignmentOperator.divideAsInt:
-      return '~/=';
-    case ASTAssignmentOperator.sum:
-      return '+=';
-    case ASTAssignmentOperator.subtract:
-      return '-=';
-    case ASTAssignmentOperator.nullCoalesce:
-      return '??=';
-  }
-}
+String getASTAssignmentOperatorText(ASTAssignmentOperator op) =>
+    op == ASTAssignmentOperator.set ? '=' : '${op.symbol}=';
 
 ASTAssignmentOperator getASTAssignmentDirectOperator(String op) {
   op = op.trim();

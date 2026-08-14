@@ -693,6 +693,12 @@ class ApolloCodeGeneratorLua extends ApolloCodeGenerator {
   // -----------------------------------------------------------------
   // Expressions and operators.
   // -----------------------------------------------------------------
+
+  /// Lua has no compound assignment at all: every `x OP= y` is lowered to
+  /// `x = x OP y`. (Before this, `a += 1` was emitted verbatim — invalid Lua.)
+  @override
+  bool supportsAssignmentOperator(ASTAssignmentOperator operator) => false;
+
   @override
   String resolveASTExpressionOperatorText(
     ASTExpressionOperator operator,

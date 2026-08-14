@@ -5144,24 +5144,19 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
   }
 
   /// Maps a compound-assignment operator (`+=`, …) to its binary operator.
+  ///
+  /// The mapping lives on the enum, so `%=` and the bitwise/shift forms come
+  /// for free — `ASTExpressionOperation` already compiles all of them.
   ASTExpressionOperator _compoundToOperator(ASTAssignmentOperator op) {
     switch (op) {
-      case ASTAssignmentOperator.sum:
-        return ASTExpressionOperator.add;
-      case ASTAssignmentOperator.subtract:
-        return ASTExpressionOperator.subtract;
-      case ASTAssignmentOperator.multiply:
-        return ASTExpressionOperator.multiply;
-      case ASTAssignmentOperator.divide:
-        return ASTExpressionOperator.divide;
-      case ASTAssignmentOperator.divideAsInt:
-        return ASTExpressionOperator.divideAsInt;
       case ASTAssignmentOperator.set:
         throw ArgumentError("`set` is not a compound operator");
       case ASTAssignmentOperator.nullCoalesce:
         throw UnimplementedError(
           "Wasm `??=` (null-coalescing assignment) is not supported yet.",
         );
+      default:
+        return op.asASTExpressionOperator!;
     }
   }
 

@@ -800,6 +800,21 @@ class ApolloCodeGeneratorKotlin extends ApolloCodeGenerator {
   }
 
   @override
+  /// Kotlin's bitwise/shift operators are infix functions (`and`, `or`, `xor`,
+  /// `shl`, `shr`) with no compound-assignment form, so `x &= y` is lowered to
+  /// `x = x and y`.
+  @override
+  bool supportsAssignmentOperator(ASTAssignmentOperator operator) =>
+      switch (operator) {
+        ASTAssignmentOperator.bitwiseAnd ||
+        ASTAssignmentOperator.bitwiseOr ||
+        ASTAssignmentOperator.bitwiseXor ||
+        ASTAssignmentOperator.shiftLeft ||
+        ASTAssignmentOperator.shiftRight => false,
+        _ => true,
+      };
+
+  @override
   String resolveASTExpressionOperatorText(
     ASTExpressionOperator operator,
     ASTNumType aNumType,

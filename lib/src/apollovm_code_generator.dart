@@ -1324,7 +1324,8 @@ abstract class ApolloCodeGenerator
   ///
   /// A `??=` against a target without that operator is lowered to
   /// `= target ?? value`, so only [renderNullCoalesce] has to be defined per
-  /// language.
+  /// language. Any other compound operator the target does not spell (see
+  /// [supportsAssignmentOperator]) is lowered to `= target OP value`.
   void _writeAssignment(
     StringBuffer out,
     ASTAssignmentOperator operator,
@@ -1338,11 +1339,41 @@ abstract class ApolloCodeGenerator
       return;
     }
 
+    if (operator != ASTAssignmentOperator.set &&
+        operator != ASTAssignmentOperator.nullCoalesce &&
+        !supportsAssignmentOperator(operator)) {
+      out.write(' = ');
+      out.write(target);
+      out.write(' ');
+      // The operand types are not available here (both sides are already
+      // rendered text). `num` is the neutral choice: it only matters for
+      // division, and `~/=` has an explicit spelling in every target that
+      // needs this lowering.
+      out.write(
+        resolveASTExpressionOperatorText(
+          operator.asASTExpressionOperator!,
+          ASTNumType.num,
+          ASTNumType.num,
+        ),
+      );
+      out.write(' ');
+      out.write(value);
+      return;
+    }
+
     out.write(' ');
     out.write(resolveASTAssignmentOperatorText(operator));
     out.write(' ');
     out.write(value);
   }
+
+  /// Whether this target spells [operator] as a compound assignment
+  /// (`x OP= y`). When false, it is lowered to `x = x OP y`.
+  ///
+  /// Kotlin has no `&=`/`|=`/`^=`/`<<=`/`>>=` — its bitwise operators are the
+  /// infix functions `and`/`or`/`shl`/`shr` — and Lua has no compound
+  /// assignment at all.
+  bool supportsAssignmentOperator(ASTAssignmentOperator operator) => true;
 
   @override
   StringBuffer generateASTExpressionVariableEntryAssignment(

@@ -2182,13 +2182,21 @@ class DartGrammarDefinition extends DartGrammarLexer {
             );
           });
 
+  /// Longest-first: `<<=` must be tried before `<`-anything, and every
+  /// two-character form before the bare `=`.
   Parser<ASTAssignmentOperator> assigmentOperator() =>
       (string('??=') |
+              string('~/=') |
+              string('<<=') |
+              string('>>=') |
               string('+=') |
               string('-=') |
               string('*=') |
               string('/=') |
-              string('~/=') |
+              string('%=') |
+              string('&=') |
+              string('|=') |
+              string('^=') |
               char('='))
           .trimHidden()
           .map((v) {

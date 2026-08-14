@@ -916,6 +916,81 @@ class ASTExpressionVariableEntryAccess extends ASTExpression {
   }
 }
 
+/// Reads [val] as an `int` for a bitwise/shift operation, or throws.
+int _assignmentBitwiseOperand(VMContext context, ASTValue val, String op) {
+  if (val.type is ASTTypeInt) {
+    return val.getValue(context) as int;
+  }
+
+  var message = "Can't perform '$op' operation with type: ${val.type}";
+  if (val.type is ASTTypeNull) {
+    throw ApolloVMNullPointerException(message);
+  }
+  throw UnsupportedError(message);
+}
+
+/// Applies a compound assignment operator: the `current OP value` half of
+/// `target OP= value`.
+///
+/// Shared by every assignment target — plain variables, container entries and
+/// object setters — so the operator set is defined once instead of in a switch
+/// per target. [ASTAssignmentOperator.set] and
+/// [ASTAssignmentOperator.nullCoalesce] are handled by their callers, which
+/// must short-circuit before reading [current].
+FutureOr<ASTValue> applyASTAssignmentOperator(
+  VMContext context,
+  ASTAssignmentOperator operator,
+  ASTValue current,
+  ASTValue value,
+) {
+  switch (operator) {
+    case ASTAssignmentOperator.sum:
+      return current + value;
+    case ASTAssignmentOperator.subtract:
+      return current - value;
+    case ASTAssignmentOperator.multiply:
+      return current * value;
+    case ASTAssignmentOperator.divide:
+      return current / value;
+    case ASTAssignmentOperator.divideAsInt:
+      return current ~/ value;
+    case ASTAssignmentOperator.remainder:
+      return current % value;
+    case ASTAssignmentOperator.bitwiseAnd:
+      return ASTValueInt(
+        _assignmentBitwiseOperand(context, current, '&') &
+            _assignmentBitwiseOperand(context, value, '&'),
+      );
+    case ASTAssignmentOperator.bitwiseOr:
+      return ASTValueInt(
+        _assignmentBitwiseOperand(context, current, '|') |
+            _assignmentBitwiseOperand(context, value, '|'),
+      );
+    case ASTAssignmentOperator.bitwiseXor:
+      return ASTValueInt(
+        _assignmentBitwiseOperand(context, current, '^') ^
+            _assignmentBitwiseOperand(context, value, '^'),
+      );
+    case ASTAssignmentOperator.shiftLeft:
+      return ASTValueInt(
+        _assignmentBitwiseOperand(context, current, '<<') <<
+            _assignmentBitwiseOperand(context, value, '<<'),
+      );
+    case ASTAssignmentOperator.shiftRight:
+      return ASTValueInt(
+        _assignmentBitwiseOperand(context, current, '>>') >>
+            _assignmentBitwiseOperand(context, value, '>>'),
+      );
+    case ASTAssignmentOperator.set:
+      return value;
+    case ASTAssignmentOperator.nullCoalesce:
+      throw StateError(
+        'nullCoalesce must be short-circuited by the caller: it must not '
+        'evaluate the right-hand side when the current value is non-null.',
+      );
+  }
+}
+
 enum ASTExpressionOperator {
   add,
   subtract,
@@ -2452,41 +2527,12 @@ class ASTExpressionVariableAssignment extends ASTExpression {
 
     FutureOr<ASTValue> result;
 
-    switch (operator) {
-      case ASTAssignmentOperator.set:
-        {
-          result = value;
-          break;
-        }
-      case ASTAssignmentOperator.sum:
-        {
-          result = variableValue + value;
-          break;
-        }
-      case ASTAssignmentOperator.subtract:
-        {
-          result = variableValue - value;
-          break;
-        }
-      case ASTAssignmentOperator.divide:
-        {
-          result = variableValue / value;
-          break;
-        }
-      case ASTAssignmentOperator.divideAsInt:
-        {
-          result = variableValue ~/ value;
-          break;
-        }
-      case ASTAssignmentOperator.multiply:
-        {
-          result = variableValue * value;
-          break;
-        }
-      case ASTAssignmentOperator.nullCoalesce:
-        // Handled by the short-circuit branch above.
-        throw StateError('unreachable: nullCoalesce');
-    }
+    result = applyASTAssignmentOperator(
+      context,
+      operator,
+      variableValue,
+      value,
+    );
 
     await variable.setValue(context, await result);
 
@@ -2494,38 +2540,8 @@ class ASTExpressionVariableAssignment extends ASTExpression {
   }
 
   @override
-  String toString({bool asGroup = false}) {
-    switch (operator) {
-      case ASTAssignmentOperator.set:
-        {
-          return '$variable = $expression';
-        }
-      case ASTAssignmentOperator.sum:
-        {
-          return '$variable += $expression';
-        }
-      case ASTAssignmentOperator.subtract:
-        {
-          return '$variable -= $expression';
-        }
-      case ASTAssignmentOperator.multiply:
-        {
-          return '$variable *= $expression';
-        }
-      case ASTAssignmentOperator.divide:
-        {
-          return '$variable /= $expression';
-        }
-      case ASTAssignmentOperator.divideAsInt:
-        {
-          return '$variable ~/= $expression';
-        }
-      case ASTAssignmentOperator.nullCoalesce:
-        {
-          return '$variable ??= $expression';
-        }
-    }
-  }
+  String toString({bool asGroup = false}) =>
+      '$variable ${getASTAssignmentOperatorText(operator)} $expression';
 }
 
 /// [ASTExpression] that assigns to a container entry: `m[k] = v` (map) or
@@ -2622,17 +2638,10 @@ class ASTExpressionVariableEntryAssignment extends ASTExpression {
           ? await container.readKey(context, key as Object)
           : await container.readIndex(context, (key as num).toInt());
       var current = ASTValue.fromValue(currentRaw);
-      result = await switch (operator) {
-        ASTAssignmentOperator.sum => current + value,
-        ASTAssignmentOperator.subtract => current - value,
-        ASTAssignmentOperator.divide => current / value,
-        ASTAssignmentOperator.divideAsInt => current ~/ value,
-        ASTAssignmentOperator.multiply => current * value,
-        ASTAssignmentOperator.set => value,
-        // `m[k] ??= v`: keep the current value unless it is null.
-        ASTAssignmentOperator.nullCoalesce =>
-          (await _astValueIsNull(context, current)) ? value : current,
-      };
+      // `m[k] ??= v`: keep the current value unless it is null.
+      result = operator == ASTAssignmentOperator.nullCoalesce
+          ? ((await _astValueIsNull(context, current)) ? value : current)
+          : await applyASTAssignmentOperator(context, operator, current, value);
     }
 
     var resultRaw = await result.getValue(context);
@@ -2650,15 +2659,7 @@ class ASTExpressionVariableEntryAssignment extends ASTExpression {
 
   @override
   String toString({bool asGroup = false}) {
-    var op = switch (operator) {
-      ASTAssignmentOperator.set => '=',
-      ASTAssignmentOperator.sum => '+=',
-      ASTAssignmentOperator.subtract => '-=',
-      ASTAssignmentOperator.multiply => '*=',
-      ASTAssignmentOperator.divide => '/=',
-      ASTAssignmentOperator.divideAsInt => '~/=',
-      ASTAssignmentOperator.nullCoalesce => '??=',
-    };
+    var op = getASTAssignmentOperatorText(operator);
     var keys = [keyExpression, ...extraKeys].map((k) => '[$k]').join();
     return '$variable$keys $op $expression';
   }
@@ -4108,26 +4109,15 @@ class ASTExpressionObjectSetterAssignment extends ASTExpression {
     ASTValue current,
     ASTValue value,
   ) {
-    switch (operator) {
-      case ASTAssignmentOperator.set:
-        return value;
-      case ASTAssignmentOperator.sum:
-        return current + value;
-      case ASTAssignmentOperator.subtract:
-        return current - value;
-      case ASTAssignmentOperator.multiply:
-        return current * value;
-      case ASTAssignmentOperator.divide:
-        return current / value;
-      case ASTAssignmentOperator.divideAsInt:
-        return current ~/ value;
-      case ASTAssignmentOperator.nullCoalesce:
-        // `obj.field ??= v`: keep the current value unless it is null.
-        return _astValueIsNull(
-          context,
-          current,
-        ).resolveMapped((isNull) => isNull ? value : current);
+    if (operator == ASTAssignmentOperator.nullCoalesce) {
+      // `obj.field ??= v`: keep the current value unless it is null.
+      return _astValueIsNull(
+        context,
+        current,
+      ).resolveMapped((isNull) => isNull ? value : current);
     }
+
+    return applyASTAssignmentOperator(context, operator, current, value);
   }
 
   @override
