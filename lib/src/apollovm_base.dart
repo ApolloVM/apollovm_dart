@@ -1386,6 +1386,15 @@ sealed class VMContext {
     return parent?.getGetter(name);
   }
 
+  /// Returns a setter of [name].
+  ///
+  /// If [parent] is defined, will also look in the parent context.
+  ASTSetterDeclaration? getSetter(String name) {
+    var s = block.getSetter(name, this);
+    if (s != null) return s;
+    return parent?.getSetter(name);
+  }
+
   /// Returns a function of [name] and [parametersSignature]
   ///
   /// If [parent] is defined, will also look in the parent context.

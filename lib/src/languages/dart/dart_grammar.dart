@@ -246,7 +246,8 @@ class DartGrammarDefinition extends DartGrammarLexer {
               char('{').trimHidden() &
               (ref0(metadata).star() &
                       (ref0(classFunctionDeclaration) |
-                          ref0(getterDeclaration)))
+                          ref0(getterDeclaration) |
+                          ref0(setterDeclaration)))
                   .map((v) => v[1])
                   .star() &
               char('}').trimHidden())
@@ -259,6 +260,8 @@ class DartGrammarDefinition extends DartGrammarLexer {
             for (var member in (v[5] as List)) {
               if (member is ASTClassGetterDeclaration) {
                 extension.addGetter(member);
+              } else if (member is ASTClassSetterDeclaration) {
+                extension.addSetter(member);
               } else if (member is ASTFunctionDeclaration) {
                 extension.addFunction(member);
               }
@@ -292,6 +295,49 @@ class DartGrammarDefinition extends DartGrammarLexer {
               block: block,
             );
           });
+
+  /// `set name(T value) { ... }` / `set name(T value) => ...`.
+  ///
+  /// A leading `void` is accepted and dropped: a setter has no return value.
+  /// The declared parameter is mandatory and single, as in Dart.
+  ///
+  /// [simpleType] rejects `set` in a type position, so this rule is reached
+  /// even though it is tried after [classFunctionDeclaration] — that rule
+  /// cannot consume `set` as a return type.
+  Parser<ASTClassSetterDeclaration> setterDeclaration() =>
+      (type().optional() &
+              setKeyword() &
+              identifier() &
+              char('(').trimHidden() &
+              ref0(setterParameter) &
+              char(')').trimHidden() &
+              (arrowBody() | codeBlock()))
+          .map((v) {
+            var name = v[2] as String;
+            var (parameterType, parameterName) = v[4] as (ASTType, String);
+            var block = v[6] as ASTBlock;
+            return ASTClassSetterDeclaration(
+              null,
+              name,
+              parameterType,
+              parameterName,
+              block: block,
+            );
+          });
+
+  /// The single parameter of a setter, typed (`int v`) or untyped (`v`).
+  ///
+  /// An ordered choice rather than `type().optional() & identifier()`: for an
+  /// untyped parameter `type()` would match the *name* and petitparser's
+  /// `optional()` cannot backtrack, so the rule would fail.
+  Parser<(ASTType, String)> setterParameter() =>
+      ((type().trimHidden() & identifier().trimHidden()).map(
+                (v) => (v[0] as ASTType, v[1] as String),
+              ) |
+              identifier().trimHidden().map(
+                (v) => (ASTTypeDynamic.instance as ASTType, v),
+              ))
+          .cast<(ASTType, String)>();
 
   /// Type-parameter names of the class currently being parsed (e.g. `T` in
   /// `class Wrapper<T>`). Used by [simpleType] to erase them to `dynamic`.
@@ -461,6 +507,7 @@ class DartGrammarDefinition extends DartGrammarLexer {
                       (ref0(classConstructorDefaultDeclaration) |
                           ref0(classFunctionDeclaration) |
                           ref0(getterDeclaration) |
+                          ref0(setterDeclaration) |
                           ref0(classFieldDeclaration) |
                           ref0(classFieldDeclarationWithValue)))
                   .map((v) => v[1])
@@ -473,6 +520,7 @@ class DartGrammarDefinition extends DartGrammarLexer {
                 .whereType<ASTClassConstructorDeclaration>()
                 .toList();
             var getters = list.whereType<ASTClassGetterDeclaration>().toList();
+            var setters = list.whereType<ASTClassSetterDeclaration>().toList();
             var functions = list.whereType<ASTFunctionDeclaration>().toList();
 
             var block = ASTClassNormal('?', ASTType<VMObject>('?'), null);
@@ -481,6 +529,7 @@ class DartGrammarDefinition extends DartGrammarLexer {
             block.addAllConstructors(constructors);
             block.addAllFunctions(functions);
             block.addAllGetters(getters);
+            block.addAllSetters(setters);
 
             return block;
           });

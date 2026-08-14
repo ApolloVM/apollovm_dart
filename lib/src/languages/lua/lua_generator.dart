@@ -117,6 +117,21 @@ class ApolloCodeGeneratorLua extends ApolloCodeGenerator {
       }
     }
 
+    // Lua tables have no property accessors. Refuse rather than drop them
+    // silently: a dropped accessor leaves method bodies referencing a property
+    // that no longer exists.
+    for (var g in clazz.getter) {
+      if (g is ASTClassGetterDeclaration) {
+        generateASTClassGetterDeclaration(g, out: out, indent: indent);
+      }
+    }
+
+    for (var s in clazz.setter) {
+      if (s is ASTClassSetterDeclaration) {
+        generateASTClassSetterDeclaration(s, out: out, indent: indent);
+      }
+    }
+
     _currentClassFields = const {};
     _currentClassMethods = const {};
 

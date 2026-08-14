@@ -109,6 +109,32 @@ ASTInvocableDeclaration? _resolveLocalFunctionOrExtension(
   return null;
 }
 
+/// Resolves the setter [name] on the receiver's class [clazz], falling back to
+/// an extension setter. The mirror of [_resolveGetterOrExtension].
+ASTSetterDeclaration? _resolveSetterOrExtension(
+  ASTNode node,
+  ASTClass clazz,
+  String name,
+  VMContext context,
+) {
+  ASTSetterDeclaration? s;
+  StateError? classLookupError;
+
+  try {
+    s = clazz.getSetter(name, context);
+  } on StateError catch (e) {
+    classLookupError = e;
+  }
+
+  if (s != null) return s;
+
+  var extensionSetter = _resolveASTRoot(node)?.getExtensionSetter(clazz, name);
+  if (extensionSetter != null) return extensionSetter;
+
+  if (classLookupError != null) throw classLookupError;
+  return null;
+}
+
 /// Resolves the getter [name] on the receiver's class [clazz], falling back to
 /// an extension getter. See [_resolveFunctionOrExtension].
 ASTGetterDeclaration? _resolveGetterOrExtension(
@@ -2510,6 +2536,15 @@ class ASTExpressionVariableAssignment extends ASTExpression {
   ) async {
     var context = defineRunContext(parentContext);
 
+    // An unqualified `x = v` inside a class body resolves to `this.x = v` when
+    // a setter named `x` is in scope — the write-side mirror of an unqualified
+    // getter read. Checked before the plain variable path so a declared setter
+    // is not shadowed by an implicitly-created scope variable.
+    var scopeSetter = _resolveScopeSetter(context);
+    if (scopeSetter != null) {
+      return _runScopeSetter(context, runStatus, scopeSetter);
+    }
+
     // Null-coalescing assignment (`??=`): only evaluate the right-hand side and
     // assign when the current value is `null`; otherwise leave it unchanged.
     if (operator == ASTAssignmentOperator.nullCoalesce) {
@@ -2537,6 +2572,67 @@ class ASTExpressionVariableAssignment extends ASTExpression {
     await variable.setValue(context, await result);
 
     return result;
+  }
+
+  /// A setter matching this unqualified assignment target, or `null`.
+  ///
+  /// Only a plain scope variable can name a setter; `this.x`, a static field
+  /// reference and any other target have their own resolution.
+  ASTSetterDeclaration? _resolveScopeSetter(VMContext context) {
+    var v = variable;
+    if (v is! ASTScopeVariable) return null;
+
+    // A real variable in scope (a local, or a parameter) always wins: inside
+    // `set x(v) { … }` the parameter must not re-enter the setter.
+    if (context.getVariable(v.name, true) != null) return null;
+
+    return context.getSetter(v.name);
+  }
+
+  FutureOr<ASTValue> _runScopeSetter(
+    VMContext context,
+    ASTRunStatus runStatus,
+    ASTSetterDeclaration setter,
+  ) async {
+    var value = await expression.run(context, runStatus);
+
+    ASTValue resultValue;
+    if (operator == ASTAssignmentOperator.set) {
+      resultValue = value;
+    } else {
+      var getter = context.getGetter((variable as ASTScopeVariable).name);
+      var current = getter != null
+          ? await _callScopeAccessor(context, getter)
+          : await variable.getValue(context);
+      resultValue = await applyASTAssignmentOperator(
+        context,
+        operator,
+        current,
+        value,
+      );
+    }
+
+    if (setter is ASTClassSetterDeclaration) {
+      var instance = context.getClassInstance();
+      if (instance != null) {
+        await setter.objectCall(context, instance, resultValue);
+        return resultValue;
+      }
+    }
+
+    await setter.call(context, resultValue);
+    return resultValue;
+  }
+
+  FutureOr<ASTValue> _callScopeAccessor(
+    VMContext context,
+    ASTGetterDeclaration getter,
+  ) {
+    if (getter is ASTClassGetterDeclaration) {
+      var instance = context.getClassInstance();
+      if (instance != null) return getter.objectCall(context, instance);
+    }
+    return getter.call(context);
   }
 
   @override
@@ -4158,16 +4254,51 @@ class ASTExpressionObjectSetterAssignment extends ASTExpression {
     var classContext = obj.createContext(context);
     var value = await expression.run(context, runStatus);
 
-    var current = await _currentField(classContext, obj);
+    // A declared setter wins over the raw field: `obj.x = v` must run
+    // `set x(v)` when the class (or an extension on it) declares one.
+    var setter = _resolveSetterOrExtension(this, obj.clazz, name, classContext);
+
+    if (setter != null) {
+      ASTValue resultValue;
+      if (operator == ASTAssignmentOperator.set) {
+        resultValue = value;
+      } else {
+        // `obj.x += v` reads through the getter (or the field, when the
+        // property is setter-only backed by a field) before writing back.
+        var current = await _currentValue(classContext, obj);
+        resultValue = await _applyOperator(classContext, current, value);
+      }
+
+      if (setter is ASTClassSetterDeclaration) {
+        await setter.objectCall(classContext, obj, resultValue);
+      } else {
+        await setter.call(classContext, resultValue);
+      }
+
+      return resultValue;
+    }
+
+    var current = await _currentValue(classContext, obj);
     var resultValue = await _applyOperator(classContext, current, value);
     await obj.setField(classContext, name, resultValue);
     return resultValue;
   }
 
-  FutureOr<ASTValue> _currentField(
+  /// The property's current value, for a compound assignment: a declared
+  /// getter if there is one, otherwise the raw field.
+  FutureOr<ASTValue> _currentValue(
     VMClassContext classContext,
     ASTClassInstance obj,
   ) {
+    var getter = _resolveGetterOrExtension(this, obj.clazz, name, classContext);
+
+    if (getter != null) {
+      if (getter is ASTClassGetterDeclaration) {
+        return getter.objectCall(classContext, obj);
+      }
+      return getter.call(classContext);
+    }
+
     return obj
         .getField(classContext, name)
         .resolveMapped((v) => v ?? ASTValueNull.instance);

@@ -160,6 +160,20 @@ abstract class ApolloCodeGenerator
     );
   }
 
+  /// Emits a setter declaration. Refused by default: most targets have no
+  /// property-setter syntax, and silently dropping one would emit code whose
+  /// assignments write a field the source never meant to write.
+  StringBuffer generateASTClassSetterDeclaration(
+    ASTClassSetterDeclaration setter, {
+    StringBuffer? out,
+    String indent = '',
+    String? receiver,
+  }) {
+    throw UnsupportedSyntaxError(
+      "Language '$language' has no setter declaration: ${setter.name}",
+    );
+  }
+
   @override
   StringBuffer generateASTBlock(
     ASTBlock block, {
@@ -223,6 +237,12 @@ abstract class ApolloCodeGenerator
     for (var g in block.getter) {
       if (g is ASTClassGetterDeclaration) {
         generateASTClassGetterDeclaration(g, out: out, indent: indent2);
+      }
+    }
+
+    for (var s in block.setter) {
+      if (s is ASTClassSetterDeclaration) {
+        generateASTClassSetterDeclaration(s, out: out, indent: indent2);
       }
     }
 

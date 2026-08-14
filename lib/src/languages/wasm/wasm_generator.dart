@@ -388,6 +388,16 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       }
     }
 
+    // Setters have no Wasm lowering yet: an assignment to the property would
+    // silently write the backing field instead of running the setter body.
+    // Refuse rather than mis-compile.
+    if (clazz.setter.isNotEmpty) {
+      throw UnsupportedSyntaxError(
+        'Wasm compilation of setters is not implemented: '
+        '${clazz.name}.${clazz.setter.map((s) => s.name).join(', ')}',
+      );
+    }
+
     // User-declared getters (`int get x { ... }`) compile to a zero-argument
     // instance method (`this` is param 0). A getter access then lowers to a
     // 0-arg method call, and an inherited getter resolves through the same
