@@ -379,6 +379,33 @@ class ApolloCodeGeneratorLua extends ApolloCodeGenerator {
   }
 
   @override
+  /// Lua's `assert(v, message)` is a built-in, so only the trailing `;` — which
+  /// Lua does not use — differs from the base form.
+  @override
+  StringBuffer generateASTStatementAssert(
+    ASTStatementAssert statement, {
+    StringBuffer? out,
+    String indent = '',
+    bool headIndented = true,
+  }) {
+    out ??= newOutput();
+    if (headIndented) out.write(indent);
+
+    out.write('assert(');
+    generateASTExpression(statement.condition, out: out, headIndented: false);
+
+    var message = statement.message;
+    if (message != null) {
+      out.write(', ');
+      generateASTExpression(message, out: out, headIndented: false);
+    }
+
+    out.write(')');
+
+    return out;
+  }
+
+  @override
   StringBuffer generateASTStatementForEach(
     ASTStatementForEach forEach, {
     StringBuffer? out,
@@ -666,6 +693,12 @@ class ApolloCodeGeneratorLua extends ApolloCodeGenerator {
   // -----------------------------------------------------------------
   // Expressions and operators.
   // -----------------------------------------------------------------
+
+  /// Lua has no compound assignment at all: every `x OP= y` is lowered to
+  /// `x = x OP y`. (Before this, `a += 1` was emitted verbatim — invalid Lua.)
+  @override
+  bool supportsAssignmentOperator(ASTAssignmentOperator operator) => false;
+
   @override
   String resolveASTExpressionOperatorText(
     ASTExpressionOperator operator,

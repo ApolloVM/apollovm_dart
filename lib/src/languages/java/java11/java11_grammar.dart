@@ -379,17 +379,36 @@ class Java11GrammarDefinition extends Java11GrammarLexer {
             return ASTBlock(null)..addAllStatements(statements);
           });
 
+  /// A control-flow body: either a braced block or a single unbraced
+  /// statement (`for (var e : l) print(e);`). [codeBlock] is tried first, so
+  /// a body starting with `{` is always a block.
   Parser<ASTBlock> codeBlockOrSingleLineBlock() =>
-      ((codeBlock() | singleLineCodeBlock())).cast<ASTBlock>();
+      (ref0(codeBlock) | ref0(singleLineCodeBlock)).cast<ASTBlock>();
 
   Parser<ASTSingleLineStatementBlock> singleLineCodeBlock() =>
-      (singleLineStatement().trimHidden()).map((v) {
+      ref0(singleLineStatement).trimHidden().map((v) {
         var statements = v;
         return ASTSingleLineStatementBlock(null)..addStatement(statements);
       });
 
+  /// The [statement] alternation minus [statementVariableDeclaration], which
+  /// is illegal as an unbraced body. The relative order must match
+  /// [statement]. Every alternative must be a `ref0`, otherwise the cycle back
+  /// through [branch] recurses forever while *building* the grammar.
   Parser<ASTStatement> singleLineStatement() =>
-      (statementReturn() | statementExpression()).cast<ASTStatement>();
+      (ref0(statementTryCatch) |
+              ref0(statementThrow) |
+              ref0(statementSwitch) |
+              ref0(branch) |
+              ref0(statementBreak) |
+              ref0(statementContinue) |
+              ref0(statementReturn) |
+              ref0(statementDoWhileLoop) |
+              ref0(statementForLoop) |
+              ref0(statementForEach) |
+              ref0(statementWhileLoop) |
+              ref0(statementExpression))
+          .cast<ASTStatement>();
 
   Parser<ASTStatement> statement() =>
       (statementTryCatch() |
@@ -420,8 +439,8 @@ class Java11GrammarDefinition extends Java11GrammarLexer {
           .map((v) => ASTStatementContinue());
 
   Parser<ASTStatementDoWhileLoop> statementDoWhileLoop() =>
-      (string('do').trimHidden() &
-              codeBlock() &
+      (keywordToken('do') &
+              ref0(codeBlockOrSingleLineBlock) &
               string('while').trimHidden() &
               char('(').trimHidden() &
               ref0(expression) &
@@ -518,7 +537,7 @@ class Java11GrammarDefinition extends Java11GrammarLexer {
               char(';').trimHidden() &
               ref0(expression) &
               char(')').trimHidden() &
-              codeBlock())
+              ref0(codeBlockOrSingleLineBlock))
           .map((v) {
             var initExp = v[2];
             var condExp = v[3];
@@ -535,7 +554,7 @@ class Java11GrammarDefinition extends Java11GrammarLexer {
               char(':').trimHidden() &
               ref0(expression) &
               char(')').trimHidden() &
-              codeBlock())
+              ref0(codeBlockOrSingleLineBlock))
           .map((v) {
             var variableType = v[2];
             var variableName = v[3];
@@ -555,7 +574,7 @@ class Java11GrammarDefinition extends Java11GrammarLexer {
               char('(').trimHidden() &
               ref0(expression) &
               char(')').trimHidden() &
-              codeBlock())
+              ref0(codeBlockOrSingleLineBlock))
           .map((v) {
             var condExp = v[2];
             var block = v[4];
@@ -627,9 +646,9 @@ class Java11GrammarDefinition extends Java11GrammarLexer {
               char('(').trimHidden() &
               ref0(expression) &
               char(')').trimHidden() &
-              codeBlock() &
-              string('else').trimHidden() &
-              codeBlock())
+              ref0(codeBlockOrSingleLineBlock) &
+              keywordToken('else') &
+              ref0(codeBlockOrSingleLineBlock))
           .map((v) {
             var condition = v[2];
             var blockIf = v[4];
@@ -642,15 +661,15 @@ class Java11GrammarDefinition extends Java11GrammarLexer {
               char('(').trimHidden() &
               ref0(expression) &
               char(')').trimHidden() &
-              codeBlock() &
+              ref0(codeBlockOrSingleLineBlock) &
               ref0(branchElseIfs).plus() &
-              string('else').trimHidden() &
-              codeBlock())
+              (keywordToken('else') & ref0(codeBlockOrSingleLineBlock))
+                  .optional())
           .map((v) {
             var condition = v[2];
             var blockIf = v[4];
             var blockElseIfs = v[5] as List;
-            var blockElse = v[7];
+            var blockElse = v[6]?[1];
 
             return ASTBranchIfElseIfsElseBlock(
               condition,
@@ -661,12 +680,12 @@ class Java11GrammarDefinition extends Java11GrammarLexer {
           });
 
   Parser<ASTBranchIfBlock> branchElseIfs() =>
-      (string('else').trimHidden() &
-              string('if').trimHidden() &
+      (keywordToken('else') &
+              keywordToken('if') &
               char('(').trimHidden() &
               ref0(expression) &
               char(')').trimHidden() &
-              codeBlock())
+              ref0(codeBlockOrSingleLineBlock))
           .map((v) {
             var condition = v[3];
             var blockIf = v[5];

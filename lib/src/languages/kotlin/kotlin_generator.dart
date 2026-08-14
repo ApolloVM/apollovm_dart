@@ -133,6 +133,9 @@ class ApolloCodeGeneratorKotlin extends ApolloCodeGenerator {
   }
 
   @override
+  String? renderCatchStackTraceBinding(String name) => 'var $name = ""';
+
+  @override
   String normalizeTypeFunction(String typeName, String functionName) {
     switch (typeName) {
       case 'int':
@@ -611,6 +614,33 @@ class ApolloCodeGeneratorKotlin extends ApolloCodeGenerator {
   }
 
   @override
+  /// Kotlin's `assert` takes the message as a trailing lambda:
+  /// `assert(cond) { message }`.
+  @override
+  StringBuffer generateASTStatementAssert(
+    ASTStatementAssert statement, {
+    StringBuffer? out,
+    String indent = '',
+    bool headIndented = true,
+  }) {
+    out ??= newOutput();
+    if (headIndented) out.write(indent);
+
+    out.write('assert(');
+    generateASTExpression(statement.condition, out: out, headIndented: false);
+    out.write(')');
+
+    var message = statement.message;
+    if (message != null) {
+      out.write(' { ');
+      generateASTExpression(message, out: out, headIndented: false);
+      out.write(' }');
+    }
+
+    return out;
+  }
+
+  @override
   StringBuffer generateASTStatementForEach(
     ASTStatementForEach forEach, {
     StringBuffer? out,
@@ -632,17 +662,11 @@ class ApolloCodeGeneratorKotlin extends ApolloCodeGenerator {
       headIndented: false,
     );
 
-    out.write(') {\n');
+    out.write(')');
 
-    var blockCode = generateASTBlock(
-      forEach.loopBlock,
-      indent: indent,
-      withBrackets: false,
-    );
-
-    out.write(blockCode);
-    out.write(indent);
-    out.write('}');
+    if (writeASTLoopBody(forEach.loopBlock, out: out, indent: indent)) {
+      out.write('}');
+    }
 
     return out;
   }
@@ -774,6 +798,21 @@ class ApolloCodeGeneratorKotlin extends ApolloCodeGenerator {
     );
     return out;
   }
+
+  @override
+  /// Kotlin's bitwise/shift operators are infix functions (`and`, `or`, `xor`,
+  /// `shl`, `shr`) with no compound-assignment form, so `x &= y` is lowered to
+  /// `x = x and y`.
+  @override
+  bool supportsAssignmentOperator(ASTAssignmentOperator operator) =>
+      switch (operator) {
+        ASTAssignmentOperator.bitwiseAnd ||
+        ASTAssignmentOperator.bitwiseOr ||
+        ASTAssignmentOperator.bitwiseXor ||
+        ASTAssignmentOperator.shiftLeft ||
+        ASTAssignmentOperator.shiftRight => false,
+        _ => true,
+      };
 
   @override
   String resolveASTExpressionOperatorText(

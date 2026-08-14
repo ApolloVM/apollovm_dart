@@ -50,20 +50,16 @@ void main() {
   });
 
   group('--null-safety', () {
-    test(
-      'is advertised by the source-file commands',
-      () async {
-        for (final command in const ['run', 'translate', 'compile']) {
-          final r = await _apollovm([command, '--help']);
-          expect(
-            r.stdout.toString(),
-            contains('--null-safety'),
-            reason: '`$command --help` should list the flag',
-          );
-        }
-      },
-      timeout: const Timeout(Duration(minutes: 2)),
-    );
+    test('is advertised by the source-file commands', () async {
+      for (final command in const ['run', 'translate', 'compile']) {
+        final r = await _apollovm([command, '--help']);
+        expect(
+          r.stdout.toString(),
+          contains('--null-safety'),
+          reason: '`$command --help` should list the flag',
+        );
+      }
+    }, timeout: const Timeout(Duration(minutes: 2)));
 
     test(
       'rejects a null-safety error with a clean report and exit 1',
@@ -83,45 +79,33 @@ void main() {
       timeout: const Timeout(Duration(minutes: 2)),
     );
 
-    test(
-      'without the flag, the same source is not rejected',
-      () async {
-        final file = _write('bad2.dart', _bad);
-        final r = await _apollovm(['run', file.path]);
+    test('without the flag, the same source is not rejected', () async {
+      final file = _write('bad2.dart', _bad);
+      final r = await _apollovm(['run', file.path]);
 
-        expect(r.exitCode, isNot(1));
-        expect('${r.stdout}${r.stderr}', isNot(contains('NULL SAFETY')));
-      },
-      timeout: const Timeout(Duration(minutes: 2)),
-    );
+      expect(r.exitCode, isNot(1));
+      expect('${r.stdout}${r.stderr}', isNot(contains('NULL SAFETY')));
+    }, timeout: const Timeout(Duration(minutes: 2)));
 
-    test(
-      'a clean program still runs with the flag on',
-      () async {
-        final file = _write('good.dart', _clean);
-        final r = await _apollovm(['run', '--null-safety', file.path]);
+    test('a clean program still runs with the flag on', () async {
+      final file = _write('good.dart', _clean);
+      final r = await _apollovm(['run', '--null-safety', file.path]);
 
-        expect(r.exitCode, 0);
-        expect(r.stdout.toString().trim(), '7');
-      },
-      timeout: const Timeout(Duration(minutes: 2)),
-    );
+      expect(r.exitCode, 0);
+      expect(r.stdout.toString().trim(), '7');
+    }, timeout: const Timeout(Duration(minutes: 2)));
 
-    test(
-      'translate rejects the source too',
-      () async {
-        final file = _write('bad3.dart', _bad);
-        final r = await _apollovm([
-          'translate',
-          '--null-safety',
-          '--target=java',
-          file.path,
-        ]);
+    test('translate rejects the source too', () async {
+      final file = _write('bad3.dart', _bad);
+      final r = await _apollovm([
+        'translate',
+        '--null-safety',
+        '--target=java',
+        file.path,
+      ]);
 
-        expect(r.exitCode, 1);
-        expect('${r.stdout}${r.stderr}', contains('NULL SAFETY'));
-      },
-      timeout: const Timeout(Duration(minutes: 2)),
-    );
+      expect(r.exitCode, 1);
+      expect('${r.stdout}${r.stderr}', contains('NULL SAFETY'));
+    }, timeout: const Timeout(Duration(minutes: 2)));
   });
 }

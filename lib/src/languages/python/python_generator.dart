@@ -770,6 +770,31 @@ class ApolloCodeGeneratorPython extends ApolloCodeGenerator {
     return out;
   }
 
+  /// Python spells it `assert cond, message` — a statement, not a call.
+  @override
+  StringBuffer generateASTStatementAssert(
+    ASTStatementAssert statement, {
+    StringBuffer? out,
+    String indent = '',
+    bool headIndented = true,
+  }) {
+    out ??= newOutput();
+    if (headIndented) out.write(indent);
+
+    out.write('assert ');
+    generateASTExpression(statement.condition, out: out, headIndented: false);
+
+    var message = statement.message;
+    if (message != null) {
+      out.write(', ');
+      generateASTExpression(message, out: out, headIndented: false);
+    }
+
+    out.write('\n');
+
+    return out;
+  }
+
   @override
   StringBuffer generateASTStatementThrow(
     ASTStatementThrow statement, {
@@ -812,6 +837,14 @@ class ApolloCodeGeneratorPython extends ApolloCodeGenerator {
         }
       }
       out.write(':\n');
+
+      // Python's `except` header has no second variable, so a Dart
+      // `catch (e, s)` binds the stack trace as the handler's first statement.
+      var stackTraceName = catchClause.stackTraceName;
+      if (stackTraceName != null) {
+        out.write('$indent$_tab$stackTraceName = ""\n');
+      }
+
       _writeSuite(catchClause.block, out, '$indent$_tab');
     }
 
@@ -952,6 +985,44 @@ class ApolloCodeGeneratorPython extends ApolloCodeGenerator {
     );
     out.write(':\n');
     _writeSuite(whileLoop.loopBlock, out, '$indent$_tab');
+
+    return out;
+  }
+
+  /// Python has no `do`-`while`, so it becomes the standard idiom:
+  ///
+  ///     while True:
+  ///         <body>
+  ///         if not (<cond>):
+  ///             break
+  ///
+  /// Without this the base generator would emit C-style `do { ... } while (c);`,
+  /// which is not Python at all.
+  @override
+  StringBuffer generateASTStatementDoWhileLoop(
+    ASTStatementDoWhileLoop doWhileLoop, {
+    StringBuffer? out,
+    String indent = '',
+    bool headIndented = true,
+  }) {
+    out ??= newOutput();
+    if (headIndented) out.write(indent);
+
+    var bodyIndent = '$indent$_tab';
+
+    out.write('while True:\n');
+    _writeSuite(doWhileLoop.loopBlock, out, bodyIndent);
+
+    out.write(bodyIndent);
+    out.write('if not (');
+    generateASTExpression(
+      doWhileLoop.conditionExpression,
+      out: out,
+      headIndented: false,
+    );
+    out.write('):\n');
+    out.write('$bodyIndent$_tab');
+    out.write('break\n');
 
     return out;
   }

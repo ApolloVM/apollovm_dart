@@ -79,6 +79,7 @@ The **Wasm** column shows what the on-the-fly WebAssembly compiler currently sup
 | Feature | Dart | Java | Kotlin | Go | C# | JS | TS | Lua | Python | Wasm |
 |---|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|
 | `if` / `else if` / `else`        | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Unbraced single-statement body¹⁴ | ✅ | ✅ | ✅ | 🚫 | ✅ | ✅ | ✅ | 🚫  | ✅ | ✅ |
 | `for` (C-style)                  | ✅ | ✅ | 🚫  | ✅ | ✅ | ✅ | ✅ | 🧩¹ | 🚫 | ✅ |
 | `for-each` / `for-in`            | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | `while`                          | ✅ | ✅ | ✅ | 🧩⁸ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
@@ -93,7 +94,8 @@ The **Wasm** column shows what the on-the-fly WebAssembly compiler currently sup
 | Arithmetic (`+ - * / %`)         | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Comparison / logical             | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Bitwise (`& \| ^ << >> ~`)       | ✅ | ✅ | 🧩⁵ | 🧩¹¹ | ✅ | ✅ | ✅ | 🧩⁶ | ✅ | ✅ |
-| `++` / `--`, compound assign     | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `++` / `--`, compound assign¹⁵   | ✅ | ✅ | 🧩¹⁵ | ✅ | ✅ | ✅ | ✅ | 🧩¹⁵ | ✅ | ✅ |
+| `assert`¹⁶                       | ✅ | ✅ | ✅ | 🧩¹⁶ | ✅ | 🧩¹⁶ | 🧩¹⁶ | ✅ | ✅ | 🚧 |
 | Lambdas / closures               | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Named / keyword arguments        | ✅ | 🚫  | ✅ | 🚫 | ✅ | 🚫  | 🚫  | 🚫  | ✅ | ✅ |
 | Parameter default values         | ✅ | 🚫  | ✅ | 🚫 | ✅ | 🚫  | 🚫  | 🚫  | ✅ | ✅ |
@@ -124,7 +126,23 @@ with nested-index parsing being extended per grammar. &nbsp;
 ¹³ The null *literal* and its per-language spelling (`null` / `nil` / `None`).
 Wasm has no null value of its own and represents it as a boxed pointer, so it is
 `🧩` — see [Null safety](#null-safety) for the operators (`??`, `?.`, `!`, …) and
-the Wasm limits.
+the Wasm limits. &nbsp;
+¹⁴ A control-flow body may be a single statement without braces
+(`for (var e in l) print(e);`), on `if`/`else`/`else if` and on every loop. A
+dangling `else` binds to the nearest `if`, as in each target language. Python's
+equivalent is the inline suite (`if x: return 1`), including the `;`-joined form.
+Go is `🚫` by its own spec (`Block = "{" StatementList "}"`) and Lua has no such
+form; a single-statement body translated to either is emitted braced /
+`do`…`end`. The *empty* statement as a body (`while (c) ;`) is not supported. &nbsp;
+¹⁵ Compound assignment covers `= += -= *= /= ~/= %= &= |= ^= <<= >>= ??=`.
+Kotlin has no compound form for the bitwise/shift operators and Lua has none at
+all, so those are lowered to `x = x OP y` (`🧩`). &nbsp;
+¹⁶ Each target uses its own idiom: Dart `assert(c, m);`, Java `assert c : m;`,
+Python `assert c, m`, Kotlin `assert(c) { m }`, C# `Debug.Assert(c, m)`, Lua's
+built-in `assert(c, m)`. JS/TS have no throwing `assert` and Go has none at all,
+so they are lowered to an explicit check (`if (!(c)) throw m;` /
+`if !(c) { panic(m) }`) — `🧩`. A failed assertion throws and is catchable like
+any other exception. Wasm refuses to compile `assert` rather than mis-compile it.
 
 ### Null safety
 
@@ -288,6 +306,9 @@ Same legend and **Wasm** column semantics as the table above.
 | Generics (generic classes + instantiation + type erasure)    | ✅ | ✅ | ✅ | 🚧 | ✅ | 🚫  | ✅ | 🚫  | 🚫  | 🚧 |
 | Type inference (`var` / `val` / `auto`)                       | ✅ | ✅ | ✅ | ✅ | ✅ | 🚫  | ✅ | 🚫  | 🚫  | ✅⁵ |
 | Extensions (methods + getters)¹¹                              | ✅ | 🚫  | ✅ | 🚫  | 🧩¹² | 🚫  | 🚫  | 🚫  | 🚫  | 🚧 |
+| Getters / setters¹⁴                                           | 🧩¹⁴ | 🚧 | 🧩¹⁴ | 🚫  | 🚧 | 🚧 | 🚧 | 🚫  | 🚧 | 🚧 |
+| Annotations / metadata (`@…`)¹⁵                               | 🧩¹⁵ | 🚧 | 🚧 | 🚫  | 🚧 | 🚫  | 🚧 | 🚫  | 🚧 | 🚫  |
+| `required` named parameters                                   | ✅ | 🚫  | 🧩¹⁶ | 🚫  | 🧩¹⁶ | 🚫  | 🚫  | 🚫  | 🧩¹⁶ | ✅ |
 
 ¹ Lua is table-based: "fields" are table entries (`obj.x`), "constructors" are factory/`setmetatable`
 idioms, methods are `function Obj:method`. &nbsp;
@@ -330,7 +351,22 @@ Dart, Java (`extends`), C# / TS / JS (`: Base` / `extends`), Python. Kotlin's
 `class B : A()` base clause and Go embedding aren't parsed yet (`🚧`), and the
 Wasm backend doesn't compile inheritance yet. Constructor initializer lists with
 an explicit `: super(v)` call are not parsed yet — set inherited fields from the
-constructor body or a `this.param`.
+constructor body or a `this.param`. &nbsp;
+¹⁴ **Getters** are parsed and executed (Dart `get name => …`, with or without an
+explicit return type) and are generated for Dart and Kotlin. **Setters
+(`set name(v)`) are not implemented** — `set` is rejected in a type position, so
+a setter declaration is a clear parse error rather than the silent misparse into
+a method named `name` that it used to produce. &nbsp;
+¹⁵ Dart annotations (`@override`, `@Deprecated('x')`, `@pragma(...)`,
+`@a.B(1)`) are accepted wherever Dart allows them — top-level declarations,
+class and enum members, enum entries, extension members, parameters and local
+variable declarations — and are then **discarded**, so they do not survive a
+round-trip. Their arguments are skipped as a balanced parenthesis group, so an
+annotation using syntax ApolloVM does not model yet still cannot break the
+declaration it precedes. &nbsp;
+¹⁶ Only Dart spells a mandatory named parameter with a `required` modifier. The
+other targets that have named parameters express it by the absence of a default
+value, so the modifier is dropped when generating for them.
 
 > Per-language behavior is normalized to a shared AST, so types and constructs map
 > cleanly when translating between languages (e.g. C# `string` ⇄ Dart `String`,

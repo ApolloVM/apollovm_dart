@@ -240,16 +240,36 @@ class JavaScriptGrammarDefinition extends JavaScriptGrammarLexer {
             return ASTBlock(null)..addAllStatements(statements);
           });
 
+  /// A control-flow body: either a braced block or a single unbraced
+  /// statement (`for (var e of l) print(e);`). [codeBlock] is tried first, so
+  /// a body starting with `{` is always a block.
   Parser<ASTBlock> codeBlockOrSingleLineBlock() =>
-      ((codeBlock() | singleLineCodeBlock())).cast<ASTBlock>();
+      (ref0(codeBlock) | ref0(singleLineCodeBlock)).cast<ASTBlock>();
 
   Parser<ASTSingleLineStatementBlock> singleLineCodeBlock() =>
-      (singleLineStatement().trimHidden()).map((v) {
+      ref0(singleLineStatement).trimHidden().map((v) {
         return ASTSingleLineStatementBlock(null)..addStatement(v);
       });
 
+  /// The [statement] alternation minus declarations (illegal as an unbraced
+  /// body) and [statementBlock] (already covered by [codeBlock]). The relative
+  /// order must match [statement]. Every alternative must be a `ref0`,
+  /// otherwise the cycle back through [branch] recurses forever while
+  /// *building* the grammar.
   Parser<ASTStatement> singleLineStatement() =>
-      (statementReturn() | statementExpression()).cast<ASTStatement>();
+      (ref0(statementTryCatch) |
+              ref0(statementThrow) |
+              ref0(statementSwitch) |
+              ref0(branch) |
+              ref0(statementBreak) |
+              ref0(statementContinue) |
+              ref0(statementDoWhileLoop) |
+              ref0(statementForLoop) |
+              ref0(statementForEach) |
+              ref0(statementWhileLoop) |
+              ref0(statementReturn) |
+              ref0(statementExpression))
+          .cast<ASTStatement>();
 
   Parser<ASTStatement> statement() =>
       (statementTryCatch() |
@@ -283,8 +303,8 @@ class JavaScriptGrammarDefinition extends JavaScriptGrammarLexer {
           .map((v) => ASTStatementContinue());
 
   Parser<ASTStatementDoWhileLoop> statementDoWhileLoop() =>
-      (string('do').trimHidden() &
-              codeBlock() &
+      (keywordToken('do') &
+              ref0(codeBlockOrSingleLineBlock) &
               string('while').trimHidden() &
               char('(').trimHidden() &
               ref0(expression) &
@@ -383,7 +403,7 @@ class JavaScriptGrammarDefinition extends JavaScriptGrammarLexer {
               char(';').trimHidden() &
               ref0(expression) &
               char(')').trimHidden() &
-              codeBlock())
+              ref0(codeBlockOrSingleLineBlock))
           .map((v) {
             return ASTStatementForLoop(v[2], v[3], v[5], v[7]);
           });
@@ -396,7 +416,7 @@ class JavaScriptGrammarDefinition extends JavaScriptGrammarLexer {
               ofToken().trimHidden() &
               ref0(expression) &
               char(')').trimHidden() &
-              codeBlock())
+              ref0(codeBlockOrSingleLineBlock))
           .map((v) {
             var variableName = v[3] as String;
             var iterableExp = v[5] as ASTExpression;
@@ -414,7 +434,7 @@ class JavaScriptGrammarDefinition extends JavaScriptGrammarLexer {
               char('(').trimHidden() &
               ref0(expression) &
               char(')').trimHidden() &
-              codeBlock())
+              ref0(codeBlockOrSingleLineBlock))
           .map((v) {
             return ASTStatementWhileLoop(v[2], v[4]);
           });
@@ -621,9 +641,9 @@ class JavaScriptGrammarDefinition extends JavaScriptGrammarLexer {
               char('(').trimHidden() &
               ref0(expression) &
               char(')').trimHidden() &
-              codeBlock() &
-              elseToken().trimHidden() &
-              codeBlock())
+              ref0(codeBlockOrSingleLineBlock) &
+              keywordToken('else') &
+              ref0(codeBlockOrSingleLineBlock))
           .map((v) {
             return ASTBranchIfElseBlock(v[2], v[4], v[6]);
           });
@@ -633,9 +653,10 @@ class JavaScriptGrammarDefinition extends JavaScriptGrammarLexer {
               char('(').trimHidden() &
               ref0(expression) &
               char(')').trimHidden() &
-              codeBlock() &
+              ref0(codeBlockOrSingleLineBlock) &
               ref0(branchElseIfs).plus() &
-              (elseToken().trimHidden() & codeBlock()).optional())
+              (keywordToken('else') & ref0(codeBlockOrSingleLineBlock))
+                  .optional())
           .map((v) {
             var condition = v[2];
             var blockIf = v[4];
@@ -651,12 +672,12 @@ class JavaScriptGrammarDefinition extends JavaScriptGrammarLexer {
           });
 
   Parser<ASTBranchIfBlock> branchElseIfs() =>
-      (elseToken().trimHidden() &
-              ifToken().trimHidden() &
+      (keywordToken('else') &
+              keywordToken('if') &
               char('(').trimHidden() &
               ref0(expression) &
               char(')').trimHidden() &
-              codeBlock())
+              ref0(codeBlockOrSingleLineBlock))
           .map((v) {
             return ASTBranchIfBlock(v[3], v[5]);
           });

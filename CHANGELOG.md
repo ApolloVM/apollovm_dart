@@ -1,3 +1,107 @@
+## 2.26.0
+
+### Control-flow bodies no longer require braces
+
+`for (var e in l) print('- $e');` is ordinary Dart, and it did not parse. Only
+the plain `if` accepted an unbraced single-statement body — every loop, every
+`if`/`else` and every `else if` demanded `{ }`.
+
+All seven remaining rules now accept either form, in **Dart, Java 11, Kotlin,
+C#, JavaScript and TypeScript**: `for`, `for-in`/`for-each`, `while`,
+`do`/`while`, `if`/`else`, the `else if` chain, and the final `else`. A braced
+body is still tried first, so nothing about existing sources changes.
+
+`singleLineStatement` was also far too narrow — `return …;` or an expression
+statement, nothing else — so even the `if` that already supported it rejected
+`if (x) break;`, `if (x) throw e;` and a nested `if`. It is now the language's
+full statement set minus declarations and bare blocks.
+
+A dangling `else` binds to the **nearest** `if`, matching every target
+language. Python gets the equivalent construct, the **inline suite**
+(`if x: return 1`, `def f(): pass`, `while c: i += 1; j += 1`), for every
+`suite()` position: `if`/`elif`/`else`, `for`, `while`, `try`, `def`, `class`
+and `case`.
+
+**Go is deliberately excluded** — its spec defines `Block = "{" StatementList "}"`
+and every control-flow statement takes a `Block` — and Lua has no such form. A
+single-statement body translated to either is emitted braced / `do`…`end`.
+
+Not supported, on purpose: the *empty* statement as a body (`while (c) ;`),
+`for (;;)`, and `;`-separated statements on an ordinary (non-suite) Python line.
+
+### Fixed: a `else`-prefix miscompile, latent until now
+
+`BaseGrammarLexer.token()` is a prefix matcher with no word-boundary guard, so
+`string('else')` matches the start of an identifier such as `elseCount`. That
+was unreachable while every `else` arm was preceded by a mandatory braced
+block, and would have become a **silent miscompile** the moment bodies could be
+unbraced:
+
+```dart
+if (a) x();
+elseCount = 1;   // `else` matches; `Count = 1;` becomes the else arm
+```
+
+The branch and loop rules of all six C-style grammars now use whole-word
+keyword tokens. Also covers Kotlin's `when` entry labels and `if` expression.
+
+### Other grammar fixes
+
+- **Java and C#**: `if (a) {} else if (b) {}` with no trailing `else` failed to
+  parse — both made the final `else` non-optional, unlike every other language.
+- **Python**: a `do`/`while` translated to Python emitted literal
+  `do { … } while (c);`. It now lowers to `while True: … if not (c): break`.
+- **Lua**: compound assignment was emitted verbatim (`a += 1`), which is not
+  valid Lua. It now lowers to `a = a + 1`.
+- **Go**: removed a dead `codeBlockOrSingleLineBlock` cluster that was defined
+  but never referenced.
+
+### New Dart syntax
+
+- **Interpolation inside triple-quoted strings**. `'''Hello $name'''` yielded
+  the *literal* text `$name` — wrong output, not an error. Raw `r'''…'''` is
+  unaffected.
+- **`assert(c)` / `assert(c, m)`** as a real statement. It previously parsed as
+  a call to a user function named `assert` and failed later with a confusing
+  message. A failed assertion throws and is catchable. Every target emits its
+  own idiom (Java `assert c : m;`, Python `assert c, m`, Kotlin
+  `assert(c) { m }`, C# `Debug.Assert`, Lua's built-in, JS/TS/Go lowered to an
+  explicit check). Wasm refuses to compile it rather than mis-compile it.
+- **`required` named parameters** on plain, constructor-typed and `this.`
+  forms. `({required int a})` was a hard parse failure. Dart output keeps the
+  modifier; other targets express required-ness by the absence of a default.
+- **Annotations** — `@override`, `@Deprecated('x')`, `@pragma(...)`, `@a.B(1)`
+  — at every position Dart allows. There was no `@` in any grammar in the repo,
+  so one `@override` broke the whole class body; this matters beyond
+  hand-written sources, since `lib/src/pub` loads real pub packages. Parsed and
+  discarded for now.
+- **`late`** on locals and fields (accepted and dropped).
+- **`const` at use sites**: `const Foo()`, `const []`, `const {}`. `const [1]`
+  used to *silently misparse* as an index read on a variable named `const`.
+- **Arrow and `async` bodies on local and anonymous functions**:
+  `int f(int x) => x * 2;` inside a function, and `(x) async => …`.
+- **`catch (e, s)`** now binds the stack trace. It was parsed and thrown away,
+  so any handler that referenced `s` failed. ApolloVM has no stack traces, so
+  it binds to an empty string; targets whose `catch` header has no second
+  variable declare it as the handler's first statement.
+- **Compound assignment `%= &= |= ^= <<= >>=`**. In JS/TS `%=` was already in
+  the grammar but missing from the shared operator enum, so it surfaced as a
+  `SyntaxError`.
+- **Untyped getters** (`get twice => …`) now parse. They failed because
+  `type().optional()` greedily ate `get` and petitparser's `optional()` cannot
+  backtrack.
+
+### Fixed: `set` no longer misparses into a method
+
+`simpleType()` accepted any identifier, so `set value(int v) {}` silently became
+a **method** named `value` returning a type named `set`, failing much later with
+a confusing error. `get`/`set` are now rejected in a type position, turning that
+into a parse error at the `set`.
+
+Full setter support remains unimplemented: it would mirror the entire getter
+subsystem plus assignment dispatch, and getters are generated for only 2 of 9
+targets. This change converts a silent misparse into a clear error.
+
 ## 2.25.1
 
 ### apollovm_wasm 1.2.0: the runtime now tracks the core it decodes

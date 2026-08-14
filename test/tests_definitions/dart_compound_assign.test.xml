@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="Compound assignment operators">
+    <source language="dart">
+        <![CDATA[
+class Acc {
+  int v = 0;
+
+  static int run(int n) {
+    // Locals.
+    var a = n;
+    a %= 7;
+    a &= 12;
+    a |= 1;
+    a ^= 2;
+    a <<= 3;
+    a >>= 1;
+
+    // A field target.
+    var acc = Acc();
+    acc.v = n;
+    acc.v %= 5;
+    acc.v <<= 2;
+
+    // A map entry target.
+    var m = {'k': n};
+    m['k'] %= 6;
+    m['k'] &= 14;
+
+    return a + acc.v + m['k'];
+  }
+}
+        ]]>
+    </source>
+    <!-- Verified against real Dart: a=12, acc.v=12, m['k']=4. -->
+    <call class="Acc" function="run" return="28">
+        [23]
+    </call>
+    <output>
+        []
+    </output>
+</test>

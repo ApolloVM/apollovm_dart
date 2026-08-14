@@ -943,6 +943,37 @@ class ApolloCodeGeneratorGo extends ApolloCodeGenerator {
   }
 
   @override
+  /// Go has no `assert`; the idiom is an explicit check plus `panic`.
+  @override
+  StringBuffer generateASTStatementAssert(
+    ASTStatementAssert statement, {
+    StringBuffer? out,
+    String indent = '',
+    bool headIndented = true,
+  }) {
+    out ??= newOutput();
+    if (headIndented) out.write(indent);
+
+    out.write('if !(');
+    generateASTExpression(statement.condition, out: out, headIndented: false);
+    out.write(') {\n');
+    out.write('$indent  panic(');
+
+    var message = statement.message;
+    if (message != null) {
+      generateASTExpression(message, out: out, headIndented: false);
+    } else {
+      out.write('"Assertion failed"');
+    }
+
+    out.write(')\n');
+    out.write(indent);
+    out.write('}');
+
+    return out;
+  }
+
+  @override
   StringBuffer generateASTStatementForEach(
     ASTStatementForEach forEach, {
     StringBuffer? out,

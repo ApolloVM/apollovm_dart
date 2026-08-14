@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="Annotations are parsed and discarded">
+    <source language="dart">
+        <![CDATA[
+enum Color {
+  @Deprecated('use green')
+  red,
+  green,
+}
+
+class Base {
+  int seed() { return 1; }
+}
+
+@Deprecated('legacy')
+class Impl extends Base {
+  @Deprecated('x')
+  int field = 10;
+
+  @pragma('vm:prefer-inline')
+  static int staticField = 20;
+
+  @override
+  int seed() { return 2; }
+
+  @Deprecated('m')
+  int scaled(@Deprecated('p') int factor) {
+    return field * factor;
+  }
+}
+
+@pragma('vm:entry-point')
+int topLevel(@Deprecated('n') int n) {
+  @Deprecated('local')
+  var bump = 5;
+  return n + bump;
+}
+
+int run() {
+  var i = Impl();
+  @Deprecated('r')
+  var total = i.seed() + i.scaled(3) + Impl.staticField + topLevel(7);
+  return total;
+}
+        ]]>
+    </source>
+    <call function="run" return="64">
+        []
+    </call>
+    <output>
+        []
+    </output>
+</test>

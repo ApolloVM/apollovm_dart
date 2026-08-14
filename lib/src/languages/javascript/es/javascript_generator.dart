@@ -308,6 +308,35 @@ class ApolloCodeGeneratorJavaScript extends ApolloCodeGenerator {
   }
 
   @override
+  /// JavaScript has no built-in throwing `assert` (`console.assert` only logs),
+  /// so it is lowered to an explicit check that preserves the semantics.
+  @override
+  StringBuffer generateASTStatementAssert(
+    ASTStatementAssert statement, {
+    StringBuffer? out,
+    String indent = '',
+    bool headIndented = true,
+  }) {
+    out ??= newOutput();
+    if (headIndented) out.write(indent);
+
+    out.write('if (!(');
+    generateASTExpression(statement.condition, out: out, headIndented: false);
+    out.write(')) throw ');
+
+    var message = statement.message;
+    if (message != null) {
+      generateASTExpression(message, out: out, headIndented: false);
+    } else {
+      out.write("'Assertion failed'");
+    }
+
+    out.write(';');
+
+    return out;
+  }
+
+  @override
   StringBuffer generateASTStatementForEach(
     ASTStatementForEach forEach, {
     StringBuffer? out,
@@ -329,17 +358,11 @@ class ApolloCodeGeneratorJavaScript extends ApolloCodeGenerator {
       headIndented: false,
     );
 
-    out.write(') {\n');
+    out.write(')');
 
-    var blockCode = generateASTBlock(
-      forEach.loopBlock,
-      indent: indent,
-      withBrackets: false,
-    );
-
-    out.write(blockCode);
-    out.write(indent);
-    out.write('}');
+    if (writeASTLoopBody(forEach.loopBlock, out: out, indent: indent)) {
+      out.write('}');
+    }
 
     return out;
   }

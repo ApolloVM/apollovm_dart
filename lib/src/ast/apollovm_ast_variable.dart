@@ -139,8 +139,8 @@ class ASTClassFieldWithInitialValue<T> extends ASTClassField<T> {
     String name,
     this._initialValueExpression,
     bool finalValue, {
-    ASTModifiers? modifiers,
-  }) : super(type, name, finalValue, modifiers: modifiers);
+    super.modifiers,
+  }) : super(type, name, finalValue);
 
   ASTExpression get initialValue => _initialValueExpression;
 

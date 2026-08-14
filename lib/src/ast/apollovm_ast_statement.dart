@@ -605,14 +605,23 @@ enum ASTAssignmentOperator {
   multiply('*'),
   divide('/'),
   divideAsInt('~/'),
+  remainder('%'),
   sum('+'),
   subtract('-'),
+  bitwiseAnd('&'),
+  bitwiseOr('|'),
+  bitwiseXor('^'),
+  shiftLeft('<<'),
+  shiftRight('>>'),
   nullCoalesce('??');
 
   final String symbol;
 
   const ASTAssignmentOperator(this.symbol);
 
+  /// The binary operator this compound assignment applies, or `null` for
+  /// [set]. Used to lower `x OP= y` to `x = x OP y` — both by the Wasm backend
+  /// and by text targets that lack the compound form.
   ASTExpressionOperator? get asASTExpressionOperator {
     switch (this) {
       case sum:
@@ -625,9 +634,21 @@ enum ASTAssignmentOperator {
         return ASTExpressionOperator.divide;
       case divideAsInt:
         return ASTExpressionOperator.divideAsInt;
+      case remainder:
+        return ASTExpressionOperator.remainder;
+      case bitwiseAnd:
+        return ASTExpressionOperator.bitwiseAnd;
+      case bitwiseOr:
+        return ASTExpressionOperator.bitwiseOr;
+      case bitwiseXor:
+        return ASTExpressionOperator.bitwiseXor;
+      case shiftLeft:
+        return ASTExpressionOperator.shiftLeft;
+      case shiftRight:
+        return ASTExpressionOperator.shiftRight;
       case nullCoalesce:
         return ASTExpressionOperator.nullCoalesce;
-      default:
+      case set:
         return null;
     }
   }
@@ -645,10 +666,22 @@ ASTAssignmentOperator getASTAssignmentOperator(String op) {
       return ASTAssignmentOperator.divide;
     case '~/=':
       return ASTAssignmentOperator.divideAsInt;
+    case '%=':
+      return ASTAssignmentOperator.remainder;
     case '+=':
       return ASTAssignmentOperator.sum;
     case '-=':
       return ASTAssignmentOperator.subtract;
+    case '&=':
+      return ASTAssignmentOperator.bitwiseAnd;
+    case '|=':
+      return ASTAssignmentOperator.bitwiseOr;
+    case '^=':
+      return ASTAssignmentOperator.bitwiseXor;
+    case '<<=':
+      return ASTAssignmentOperator.shiftLeft;
+    case '>>=':
+      return ASTAssignmentOperator.shiftRight;
     case '??=':
       return ASTAssignmentOperator.nullCoalesce;
     default:
@@ -656,24 +689,8 @@ ASTAssignmentOperator getASTAssignmentOperator(String op) {
   }
 }
 
-String getASTAssignmentOperatorText(ASTAssignmentOperator op) {
-  switch (op) {
-    case ASTAssignmentOperator.set:
-      return '=';
-    case ASTAssignmentOperator.multiply:
-      return '*=';
-    case ASTAssignmentOperator.divide:
-      return '/=';
-    case ASTAssignmentOperator.divideAsInt:
-      return '~/=';
-    case ASTAssignmentOperator.sum:
-      return '+=';
-    case ASTAssignmentOperator.subtract:
-      return '-=';
-    case ASTAssignmentOperator.nullCoalesce:
-      return '??=';
-  }
-}
+String getASTAssignmentOperatorText(ASTAssignmentOperator op) =>
+    op == ASTAssignmentOperator.set ? '=' : '${op.symbol}=';
 
 ASTAssignmentOperator getASTAssignmentDirectOperator(String op) {
   op = op.trim();
@@ -1815,16 +1832,82 @@ class ASTStatementThrow extends ASTStatement {
   String toString() => 'throw $expression ;';
 }
 
+/// An `assert(condition)` / `assert(condition, message)` statement.
+///
+/// ApolloVM has no debug/release split, so the condition is always evaluated —
+/// matching `dart run`'s default. A false condition throws [message] (or a
+/// default text) as an [ApolloVMThrownException], so it is catchable exactly
+/// like a `throw`.
+class ASTStatementAssert extends ASTStatement {
+  ASTExpression condition;
+
+  ASTExpression? message;
+
+  ASTStatementAssert(this.condition, [this.message]);
+
+  @override
+  Iterable<ASTNode> get children => [condition, ?message];
+
+  @override
+  void resolveNode(ASTNode? parentNode) {
+    super.resolveNode(parentNode);
+    condition.resolveNode(parentNode);
+    message?.resolveNode(parentNode);
+  }
+
+  @override
+  FutureOr<ASTValue> run(VMContext parentContext, ASTRunStatus runStatus) {
+    return condition.run(parentContext, runStatus).resolveMapped((value) {
+      var ok = value.getValue(parentContext);
+
+      return ok.resolveMapped((ok) {
+        if (ok == true) return ASTValueVoid.instance;
+
+        var message = this.message;
+        if (message == null) {
+          // A fixed text, not the condition's `toString()`: that renders the
+          // AST (`n != (int) 5`), not the source, and would differ per target.
+          throw ApolloVMThrownException(ASTValueString('Assertion failed'));
+        }
+
+        return message.run(parentContext, runStatus).resolveMapped((msg) {
+          throw ApolloVMThrownException(msg);
+        });
+      });
+    });
+  }
+
+  @override
+  ASTType resolveType(VMContext? context) => ASTTypeVoid.instance;
+
+  @override
+  String toString() => message == null
+      ? 'assert($condition) ;'
+      : 'assert($condition, $message) ;';
+}
+
 /// A single `catch` clause of an [ASTStatementTryCatch].
 ///
 /// [exceptionType] is the matched type (`null` = catch-all); [variableName] is
 /// the bound variable (`null` = no variable); [block] is the handler body.
+///
+/// [stackTraceName] is Dart's second catch variable (`catch (e, s)`). ApolloVM
+/// interprets the AST and has no stack traces of its own, so the variable is
+/// bound to an empty string — enough for a program that passes it around or
+/// prints it to run, without leaking VM internals or making output differ
+/// between targets.
 class ASTCatchClause {
   final ASTType? exceptionType;
   final String? variableName;
+  final String? stackTraceName;
   final ASTBlock block;
 
-  ASTCatchClause(this.exceptionType, this.variableName, this.block);
+  ASTCatchClause(
+    this.exceptionType,
+    this.variableName,
+    this.block, {
+    this.stackTraceName,
+  });
 
   void resolveNode(ASTNode? parentNode) {
     exceptionType?.resolveNode(parentNode);
@@ -1844,6 +1927,14 @@ class ASTCatchClause {
         exceptionType ?? ASTTypeDynamic.instance,
         name,
         caught,
+      );
+    }
+    var stackTraceName = this.stackTraceName;
+    if (stackTraceName != null) {
+      context.declareVariableWithValue(
+        ASTTypeString.instance,
+        stackTraceName,
+        ASTValueString(''),
       );
     }
     var prevContext = VMContext.setCurrent(context);

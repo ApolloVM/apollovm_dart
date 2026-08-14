@@ -395,23 +395,16 @@ class GoGrammarDefinition extends GoGrammarLexer {
         );
       });
 
+  /// Go always requires braces: the spec defines `Block = "{" StatementList "}"`
+  /// and every control-flow statement takes a `Block`, never a single statement.
+  /// So — unlike the other C-style grammars — there is deliberately no
+  /// `codeBlockOrSingleLineBlock` here.
   Parser<ASTBlock> codeBlock() =>
       (char('{').trimHidden() & ref0(statement).star() & char('}').trimHidden())
           .map((v) {
             var statements = (v[1] as List).cast<ASTStatement>().toList();
             return ASTBlock(null)..addAllStatements(statements);
           });
-
-  Parser<ASTBlock> codeBlockOrSingleLineBlock() =>
-      ((codeBlock() | singleLineCodeBlock())).cast<ASTBlock>();
-
-  Parser<ASTSingleLineStatementBlock> singleLineCodeBlock() =>
-      (singleLineStatement().trimHidden()).map((v) {
-        return ASTSingleLineStatementBlock(null)..addStatement(v);
-      });
-
-  Parser<ASTStatement> singleLineStatement() =>
-      (statementReturn() | statementExpression()).cast<ASTStatement>();
 
   // -----------------------------------------------------------------
   // Statements.

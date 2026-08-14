@@ -251,6 +251,66 @@ abstract class ApolloCodeGenerator
     return out;
   }
 
+  /// Writes a branch (`if`/`else`/`else if`) body, starting at the `)` or
+  /// `else` the caller has just written.
+  ///
+  /// Returns `true` when the body was emitted as a braced block, leaving the
+  /// closing `}` for the caller (which may need to continue it with ` else`)
+  /// and the cursor at [indent]. Returns `false` when the body was a single
+  /// statement emitted unbraced (`if (c) return 0;`), in which case the line
+  /// is already terminated and a following `else` must start a fresh one.
+  bool writeASTBranchBody(
+    ASTBlock block, {
+    required StringBuffer out,
+    required String indent,
+  }) {
+    if (block is ASTSingleLineStatementBlock) {
+      out.write(' ');
+      generateASTStatement(
+        block.statements.single,
+        out: out,
+        indent: indent,
+        headIndented: false,
+      );
+      out.write('\n');
+      return false;
+    }
+
+    out.write(' {\n');
+    generateASTBlock(block, out: out, indent: '$indent  ', withBrackets: false);
+    out.write(indent);
+    return true;
+  }
+
+  /// Writes a loop body, starting at the `)` (or `do`) the caller has just
+  /// written. Returns `true` when it was emitted as a braced block, leaving
+  /// the closing `}` for the caller.
+  ///
+  /// Loops differ from branches in two ways that must be preserved: the block
+  /// is passed [indent] unchanged ([generateASTBlock] adds the inner level),
+  /// and no trailing newline is written — the enclosing block adds it.
+  bool writeASTLoopBody(
+    ASTBlock block, {
+    required StringBuffer out,
+    required String indent,
+  }) {
+    if (block is ASTSingleLineStatementBlock) {
+      out.write(' ');
+      generateASTStatement(
+        block.statements.single,
+        out: out,
+        indent: indent,
+        headIndented: false,
+      );
+      return false;
+    }
+
+    out.write(' {\n');
+    out.write(generateASTBlock(block, indent: indent, withBrackets: false));
+    out.write(indent);
+    return true;
+  }
+
   @override
   StringBuffer generateASTStatementImport(
     ASTStatementImport import, {
@@ -330,6 +390,10 @@ abstract class ApolloCodeGenerator
   }) {
     out ??= newOutput();
 
+    if (parameter.isRequired && supportsRequiredParameters) {
+      out.write('required ');
+    }
+
     if (parameter is ASTConstructorParameterDeclaration &&
         parameter.thisParameter) {
       out.write('this.');
@@ -345,6 +409,11 @@ abstract class ApolloCodeGenerator
 
     return out;
   }
+
+  /// Whether this target spells a mandatory named parameter with a `required`
+  /// modifier. Only Dart does; the others express it by the absence of a
+  /// default value, so the modifier is dropped there.
+  bool get supportsRequiredParameters => false;
 
   /// The separator emitted between a parameter and its default value in a
   /// declaration (e.g. ` = ` in Dart/Kotlin/C#/Java, `=` in Python).
@@ -627,6 +696,13 @@ abstract class ApolloCodeGenerator
         indent: indent,
         headIndented: headIndented,
       );
+    } else if (statement is ASTStatementAssert) {
+      return generateASTStatementAssert(
+        statement,
+        out: out,
+        indent: indent,
+        headIndented: headIndented,
+      );
     } else if (statement is ASTStatementTryCatch) {
       return generateASTStatementTryCatch(
         statement,
@@ -705,17 +781,11 @@ abstract class ApolloCodeGenerator
       headIndented: false,
     );
 
-    out.write(') {\n');
+    out.write(')');
 
-    var blockCode = generateASTBlock(
-      forLoop.loopBlock,
-      indent: indent,
-      withBrackets: false,
-    );
-
-    out.write(blockCode);
-    out.write(indent);
-    out.write('}');
+    if (writeASTLoopBody(forLoop.loopBlock, out: out, indent: indent)) {
+      out.write('}');
+    }
 
     return out;
   }
@@ -746,17 +816,11 @@ abstract class ApolloCodeGenerator
       headIndented: false,
     );
 
-    out.write(') {\n');
+    out.write(')');
 
-    var blockCode = generateASTBlock(
-      forEach.loopBlock,
-      indent: indent,
-      withBrackets: false,
-    );
-
-    out.write(blockCode);
-    out.write(indent);
-    out.write('}');
+    if (writeASTLoopBody(forEach.loopBlock, out: out, indent: indent)) {
+      out.write('}');
+    }
 
     return out;
   }
@@ -781,17 +845,11 @@ abstract class ApolloCodeGenerator
       headIndented: false,
     );
 
-    out.write(' ) {\n');
+    out.write(' )');
 
-    var blockCode = generateASTBlock(
-      whileLoop.loopBlock,
-      indent: indent,
-      withBrackets: false,
-    );
-
-    out.write(blockCode);
-    out.write(indent);
-    out.write('}');
+    if (writeASTLoopBody(whileLoop.loopBlock, out: out, indent: indent)) {
+      out.write('}');
+    }
 
     return out;
   }
@@ -806,17 +864,13 @@ abstract class ApolloCodeGenerator
 
     if (headIndented) out.write(indent);
 
-    out.write('do {\n');
+    out.write('do');
 
-    var blockCode = generateASTBlock(
-      doWhileLoop.loopBlock,
-      indent: indent,
-      withBrackets: false,
-    );
-
-    out.write(blockCode);
-    out.write(indent);
-    out.write('} while (');
+    if (writeASTLoopBody(doWhileLoop.loopBlock, out: out, indent: indent)) {
+      out.write('} while (');
+    } else {
+      out.write(' while (');
+    }
 
     generateASTExpression(
       doWhileLoop.conditionExpression,
@@ -926,6 +980,47 @@ abstract class ApolloCodeGenerator
     return out;
   }
 
+  /// `assert(cond)` / `assert(cond, message)`.
+  ///
+  /// The default is Dart's call syntax, which is also Lua's built-in `assert`.
+  /// Targets that spell it differently override this: Java `assert c : m;`,
+  /// Python `assert c, m`, Kotlin `assert(c) { m }`, C# `Debug.Assert(...)`,
+  /// and JS/TS/Go — which have no throwing `assert` — lower it to an explicit
+  /// check.
+  StringBuffer generateASTStatementAssert(
+    ASTStatementAssert statement, {
+    StringBuffer? out,
+    String indent = '',
+    bool headIndented = true,
+  }) {
+    out ??= newOutput();
+
+    if (headIndented) out.write(indent);
+
+    out.write('assert(');
+    generateASTExpression(
+      statement.condition,
+      out: out,
+      indent: indent,
+      headIndented: false,
+    );
+
+    var message = statement.message;
+    if (message != null) {
+      out.write(', ');
+      generateASTExpression(
+        message,
+        out: out,
+        indent: indent,
+        headIndented: false,
+      );
+    }
+
+    out.write(');');
+
+    return out;
+  }
+
   StringBuffer generateASTStatementTryCatch(
     ASTStatementTryCatch tryCatch, {
     StringBuffer? out,
@@ -947,6 +1042,18 @@ abstract class ApolloCodeGenerator
       out.write(' ');
       out.write(generateASTCatchClauseHeader(catchClause));
       out.write(' {\n');
+
+      // Targets whose `catch` header has no second variable declare it as the
+      // handler's first statement instead, so a body that reads it still
+      // compiles after translation.
+      var stackTraceName = catchClause.stackTraceName;
+      if (stackTraceName != null) {
+        var binding = renderCatchStackTraceBinding(stackTraceName);
+        if (binding != null) {
+          out.write('$indent  $binding\n');
+        }
+      }
+
       out.write(
         generateASTBlock(
           catchClause.block,
@@ -980,6 +1087,15 @@ abstract class ApolloCodeGenerator
     return 'catch ($name)';
   }
 
+  /// A statement binding the catch stack-trace variable [name], for targets
+  /// whose `catch` header cannot declare a second variable. `null` means the
+  /// target binds it in the header itself (Dart's `catch (e, s)`).
+  ///
+  /// ApolloVM has no stack traces, so the value is the empty string — see
+  /// [ASTCatchClause.stackTraceName]. The base form suits JavaScript and
+  /// TypeScript.
+  String? renderCatchStackTraceBinding(String name) => "let $name = '';";
+
   @override
   StringBuffer generateASTBranchIfBlock(
     ASTBranchIfBlock branch, {
@@ -998,21 +1114,9 @@ abstract class ApolloCodeGenerator
       indent: indent,
       headIndented: false,
     );
-    out.write(') ');
+    out.write(')');
 
-    final block = branch.block;
-
-    if (block is ASTSingleLineStatementBlock) {
-      generateASTSingleLineStatementBlock(block, out: out);
-    } else {
-      out.write('{\n');
-      generateASTBlock(
-        block,
-        out: out,
-        indent: '$indent  ',
-        withBrackets: false,
-      );
-      out.write(indent);
+    if (writeASTBranchBody(branch.block, out: out, indent: indent)) {
       out.write('}\n');
     }
 
@@ -1037,28 +1141,21 @@ abstract class ApolloCodeGenerator
       indent: indent,
       headIndented: false,
     );
-    out.write(') {\n');
-    generateASTBlock(
-      branch.blockIf,
-      out: out,
-      indent: '$indent  ',
-      withBrackets: false,
-    );
-    out.write(indent);
+    out.write(')');
+
+    var braced = writeASTBranchBody(branch.blockIf, out: out, indent: indent);
 
     var blockElse = branch.blockElse;
 
     if (blockElse != null) {
-      out.write('} else {\n');
-      generateASTBlock(
-        blockElse,
-        out: out,
-        indent: '$indent  ',
-        withBrackets: false,
-      );
-      out.write(indent);
-      out.write('}\n');
-    } else {
+      // An unbraced `if` arm has already ended its line, so `else` starts a
+      // fresh one instead of continuing a `}`.
+      out.write(braced ? '} else' : '${indent}else');
+
+      if (writeASTBranchBody(blockElse, out: out, indent: indent)) {
+        out.write('}\n');
+      }
+    } else if (braced) {
       out.write('}\n');
     }
 
@@ -1083,47 +1180,33 @@ abstract class ApolloCodeGenerator
       indent: indent,
       headIndented: false,
     );
-    out.write(') {\n');
-    generateASTBlock(
-      branch.blockIf,
-      out: out,
-      indent: '$indent  ',
-      withBrackets: false,
-    );
+    out.write(')');
+
+    var braced = writeASTBranchBody(branch.blockIf, out: out, indent: indent);
 
     for (var branchElseIf in branch.blocksElseIf) {
-      out.write(indent);
-      out.write('} else if (');
+      // A braced arm left the cursor at `indent` with its `}` still pending;
+      // an unbraced one ended its line, so indent the `else if` here.
+      out.write(braced ? '} else if (' : '${indent}else if (');
       generateASTExpression(
         branchElseIf.condition,
         out: out,
         indent: indent,
         headIndented: false,
       );
-      out.write(') {\n');
-      generateASTBlock(
-        branchElseIf.block,
-        out: out,
-        indent: '$indent  ',
-        withBrackets: false,
-      );
+      out.write(')');
+      braced = writeASTBranchBody(branchElseIf.block, out: out, indent: indent);
     }
-
-    out.write(indent);
 
     var blockElse = branch.blockElse;
 
     if (blockElse != null) {
-      out.write('} else {\n');
-      generateASTBlock(
-        blockElse,
-        out: out,
-        indent: '$indent  ',
-        withBrackets: false,
-      );
-      out.write(indent);
-      out.write('}\n');
-    } else {
+      out.write(braced ? '} else' : '${indent}else');
+
+      if (writeASTBranchBody(blockElse, out: out, indent: indent)) {
+        out.write('}\n');
+      }
+    } else if (braced) {
       out.write('}\n');
     }
 
@@ -1237,7 +1320,8 @@ abstract class ApolloCodeGenerator
   ///
   /// A `??=` against a target without that operator is lowered to
   /// `= target ?? value`, so only [renderNullCoalesce] has to be defined per
-  /// language.
+  /// language. Any other compound operator the target does not spell (see
+  /// [supportsAssignmentOperator]) is lowered to `= target OP value`.
   void _writeAssignment(
     StringBuffer out,
     ASTAssignmentOperator operator,
@@ -1251,11 +1335,41 @@ abstract class ApolloCodeGenerator
       return;
     }
 
+    if (operator != ASTAssignmentOperator.set &&
+        operator != ASTAssignmentOperator.nullCoalesce &&
+        !supportsAssignmentOperator(operator)) {
+      out.write(' = ');
+      out.write(target);
+      out.write(' ');
+      // The operand types are not available here (both sides are already
+      // rendered text). `num` is the neutral choice: it only matters for
+      // division, and `~/=` has an explicit spelling in every target that
+      // needs this lowering.
+      out.write(
+        resolveASTExpressionOperatorText(
+          operator.asASTExpressionOperator!,
+          ASTNumType.num,
+          ASTNumType.num,
+        ),
+      );
+      out.write(' ');
+      out.write(value);
+      return;
+    }
+
     out.write(' ');
     out.write(resolveASTAssignmentOperatorText(operator));
     out.write(' ');
     out.write(value);
   }
+
+  /// Whether this target spells [operator] as a compound assignment
+  /// (`x OP= y`). When false, it is lowered to `x = x OP y`.
+  ///
+  /// Kotlin has no `&=`/`|=`/`^=`/`<<=`/`>>=` — its bitwise operators are the
+  /// infix functions `and`/`or`/`shl`/`shr` — and Lua has no compound
+  /// assignment at all.
+  bool supportsAssignmentOperator(ASTAssignmentOperator operator) => true;
 
   @override
   StringBuffer generateASTExpressionVariableEntryAssignment(

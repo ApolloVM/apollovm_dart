@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="`late` declarations and `const` at use sites">
+    <source language="dart">
+        <![CDATA[
+class Point {
+  int x = 0;
+  int y = 0;
+  static late final String label;
+  late int scratch;
+
+  Point(this.x, this.y);
+
+  int sum() => x + y;
+}
+
+int run() {
+  late int a = 1;
+  late final int b = 2;
+
+  var p = const Point(3, 4);
+  var q = new Point(5, 6);
+
+  var empty = const [];
+  var one = const [10];
+  var many = const [20, 30];
+  var m = const {'k': 40};
+  var em = const {};
+
+  return a + b + p.sum() + q.sum() +
+      empty.length + one[0] + many[1] + m['k'] + em.length;
+}
+        ]]>
+    </source>
+    <call function="run" return="101">
+        []
+    </call>
+    <output>
+        []
+    </output>
+</test>

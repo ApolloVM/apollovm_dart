@@ -44,7 +44,7 @@ Future<Object?> _compileAndMaybeRun(
     var r = await vmWasm
         .createRunner('wasm')!
         .executeFunction('', functionName, positionalParameters: args);
-    return r.getValueNoContext();
+    return await r.getValueNoContext();
   } on StateError catch (e) {
     // No Wasm runtime on this platform — codegen already verified above.
     if (e.message.contains('not supported on this platform')) return null;

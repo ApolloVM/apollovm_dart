@@ -5144,24 +5144,19 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
   }
 
   /// Maps a compound-assignment operator (`+=`, …) to its binary operator.
+  ///
+  /// The mapping lives on the enum, so `%=` and the bitwise/shift forms come
+  /// for free — `ASTExpressionOperation` already compiles all of them.
   ASTExpressionOperator _compoundToOperator(ASTAssignmentOperator op) {
     switch (op) {
-      case ASTAssignmentOperator.sum:
-        return ASTExpressionOperator.add;
-      case ASTAssignmentOperator.subtract:
-        return ASTExpressionOperator.subtract;
-      case ASTAssignmentOperator.multiply:
-        return ASTExpressionOperator.multiply;
-      case ASTAssignmentOperator.divide:
-        return ASTExpressionOperator.divide;
-      case ASTAssignmentOperator.divideAsInt:
-        return ASTExpressionOperator.divideAsInt;
       case ASTAssignmentOperator.set:
         throw ArgumentError("`set` is not a compound operator");
       case ASTAssignmentOperator.nullCoalesce:
         throw UnimplementedError(
           "Wasm `??=` (null-coalescing assignment) is not supported yet.",
         );
+      default:
+        return op.asASTExpressionOperator!;
     }
   }
 
@@ -7282,6 +7277,14 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       // inferred from the thrown values for an untyped `catch (e)`).
       final clauseVarTypes = <ASTType?>[];
       for (final c in s.catches) {
+        // A bound stack-trace variable (`catch (e, s)`) has no Wasm
+        // representation: refuse rather than silently dropping the binding and
+        // leaving the body referencing an undeclared name.
+        if (c.stackTraceName != null) {
+          ok = false;
+          return cur;
+        }
+
         var varType = c.exceptionType;
         // A declared catch-all type (`Exception`/`Throwable`/`Error`/`Object`/
         // `dynamic`, from Java/Kotlin/C# `catch (Exception e)` or Dart
@@ -8629,6 +8632,12 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       );
     } else if (statement is ASTStatementReturn) {
       return generateASTStatementReturn(statement, out: out, context: context);
+    } else if (statement is ASTStatementAssert) {
+      // Refuse rather than mis-compile: `assert` throws on failure, and the
+      // Wasm backend has no exception lowering for a bare throw.
+      throw UnsupportedSyntaxError(
+        'Wasm compilation of `assert` is not implemented: $statement',
+      );
     }
 
     throw UnsupportedError("Can't handle statement: $statement");
@@ -12634,12 +12643,11 @@ class _WasmMethodFunction extends ASTFunctionDeclaration {
     String name,
     ASTFunctionParametersDeclaration parameters,
     ASTType returnType, {
-    ASTBlock? block,
+    super.block,
   }) : super(
          name,
          parameters,
          returnType,
-         block: block,
          modifiers: ASTModifiers(isPrivate: true),
        );
 }
@@ -12660,8 +12668,8 @@ class _WasmStaticMethodFunction extends ASTFunctionDeclaration {
     String name,
     ASTFunctionParametersDeclaration parameters,
     ASTType returnType, {
-    ASTBlock? block,
-  }) : super(name, parameters, returnType, block: block);
+    super.block,
+  }) : super(name, parameters, returnType);
 }
 
 /// Module-level Wasm codegen state shared across all functions: the function

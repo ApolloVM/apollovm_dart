@@ -1774,8 +1774,20 @@ class ASTParameterDeclaration<T> with ASTNode implements ASTTypedNode {
   /// the parameter has no default. Set by the parser after construction.
   ASTExpression? defaultValue;
 
-  ASTParameterDeclaration(ASTType<T> type, this.name, {this.defaultValue})
-    : _type = type;
+  /// Whether the declaration was marked `required` (Dart named parameters).
+  ///
+  /// Not enforced at run time — ApolloVM has no static checker — but preserved
+  /// so Dart output keeps the modifier. Emitting `{int a}` for
+  /// `{required int a}` produces source ApolloVM re-parses happily but
+  /// `dart analyze` rejects.
+  final bool isRequired;
+
+  ASTParameterDeclaration(
+    ASTType<T> type,
+    this.name, {
+    this.defaultValue,
+    this.isRequired = false,
+  }) : _type = type;
 
   @override
   Iterable<ASTNode> get children =>
@@ -1850,6 +1862,7 @@ class ASTConstructorParameterDeclaration<T> extends ASTParameterDeclaration {
     this.index,
     this.optional, {
     this.thisParameter = false,
+    super.isRequired,
   });
 
   @override
@@ -1890,6 +1903,7 @@ class ASTFunctionParameterDeclaration<T> extends ASTParameterDeclaration<T> {
     this.index,
     this.optional, {
     this.unmodifiable = false,
+    super.isRequired,
   });
 }
 
@@ -2508,9 +2522,9 @@ class ASTClassFunctionDeclaration<T> extends ASTFunctionDeclaration<T> {
     String name,
     ASTFunctionParametersDeclaration parameters,
     ASTType<T> returnType, {
-    ASTBlock? block,
-    ASTModifiers? modifiers,
-  }) : super(name, parameters, returnType, block: block, modifiers: modifiers);
+    super.block,
+    super.modifiers,
+  }) : super(name, parameters, returnType);
 
   FutureOr<ASTValue<T>> objectCall(
     VMContext parent,
@@ -3289,9 +3303,9 @@ class ASTClassGetterDeclaration<T> extends ASTGetterDeclaration<T> {
     String name,
 
     ASTType<T> returnType, {
-    ASTBlock? block,
-    ASTModifiers? modifiers,
-  }) : super(name, returnType, block: block, modifiers: modifiers);
+    super.block,
+    super.modifiers,
+  }) : super(name, returnType);
 
   FutureOr<ASTValue<T>> objectCall(
     VMContext parent,
