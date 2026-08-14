@@ -176,6 +176,53 @@ class B {
     });
   });
 
+  group('ASTSetterDeclaration', () {
+    /// The parsed `value` setter of [_classWithSetter].
+    Future<ASTSetterDeclaration> loadSetter() async {
+      var vm = await _load(_classWithSetter);
+      var clazz = vm.getNamespace('dart', '')!.getClass('B')!;
+      var setter = clazz.getSetterWithName('value');
+      expect(setter, isNotNull, reason: 'setter not registered on the class');
+      return setter!;
+    }
+
+    test('is registered by name on its class', () async {
+      var vm = await _load(_classWithSetter);
+      var clazz = vm.getNamespace('dart', '')!.getClass('B')!;
+
+      expect(clazz.setterNames, equals(['value']));
+      expect(clazz.setter, hasLength(1));
+
+      // Lookup is exact by default and can be made case-insensitive, matching
+      // the getter registry.
+      expect(clazz.getSetterWithName('VALUE'), isNull);
+      expect(
+        clazz.getSetterWithName('VALUE', caseInsensitive: true),
+        isNotNull,
+      );
+    });
+
+    test('carries its parameter and renders it', () async {
+      var setter = await loadSetter();
+
+      expect(setter.name, equals('value'));
+      expect(setter.parameterName, equals('x'));
+      expect(setter.parameterType.name, equals('int'));
+      expect('$setter', contains('set value(int x)'));
+    });
+
+    test('refuses to run as a plain block', () async {
+      var setter = await loadSetter();
+
+      // A setter needs its parameter bound, so the generic block entry point is
+      // a guard: it must be invoked through `call(context, value)`.
+      expect(
+        () => setter.run(VMScopeContext(setter), ASTRunStatus()),
+        throwsA(isA<UnsupportedError>()),
+      );
+    });
+  });
+
   group('accessor generation', () {
     // Only Dart emits setters; every other target must refuse rather than drop
     // the accessor and leave method bodies referencing a property that is gone.
