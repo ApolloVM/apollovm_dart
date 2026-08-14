@@ -8,9 +8,11 @@ class Traces {
       if (n > 0) { throw 'boom'; }
       return 'none';
     } on String catch (e, s) {
-      // `s` is bound but empty: ApolloVM has no stack traces. Reading it
-      // proves the binding exists without making output target-dependent.
-      return 'typed:$e:${s.isEmpty}';
+      // `s` is bound but empty: ApolloVM has no stack traces. Interpolating it
+      // proves the binding exists without making the output target-dependent
+      // (and without needing a bool/int → string conversion helper, which not
+      // every target's runtime provides).
+      return 'typed:$e:[$s]';
     }
   }
 
@@ -19,13 +21,13 @@ class Traces {
       if (n > 0) { throw 'bang'; }
       return 'none';
     } catch (e, s) {
-      return 'bare:$e:${s.isEmpty}';
+      return 'bare:$e:[$s]';
     }
   }
 }
         ]]>
     </source>
-    <call class="Traces" function="typed" returnType="String" return="typed:boom:true">
+    <call class="Traces" function="typed" returnType="String" return="typed:boom:[]">
         [1]
     </call>
     <output>
@@ -39,10 +41,121 @@ class Traces {
         []
     </output>
 
-    <call class="Traces" function="bare" returnType="String" return="bare:bang:true">
+    <call class="Traces" function="bare" returnType="String" return="bare:bang:[]">
         [1]
     </call>
     <output>
         []
     </output>
+
+    <!-- Only Dart can declare the stack trace in the `catch` header. Every
+         other target binds it as the handler's first statement, so a body that
+         reads it still compiles; these blocks pin each of those spellings. -->
+    <source-generated language="java11"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+class Traces {
+
+  static String typed(int n) {
+    try {
+      if (n > 0) {
+          throw "boom";
+      }
+
+      return "none";
+    } catch (String e) {
+      String s = "";
+      return "typed:" + e + ":[" + s + "]";
+    }
+  }
+
+  static String bare(int n) {
+    try {
+      if (n > 0) {
+          throw "bang";
+      }
+
+      return "none";
+    } catch (Exception e) {
+      String s = "";
+      return "bare:" + e + ":[" + s + "]";
+    }
+  }
+
+}
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+
+    <source-generated language="csharp"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+class Traces {
+
+  static String typed(int n) {
+    try {
+      if (n > 0) {
+          throw "boom";
+      }
+
+      return "none";
+    } catch (String e) {
+      string s = "";
+      return "typed:" + e + ":[" + s + "]";
+    }
+  }
+
+  static String bare(int n) {
+    try {
+      if (n > 0) {
+          throw "bang";
+      }
+
+      return "none";
+    } catch (Exception e) {
+      string s = "";
+      return "bare:" + e + ":[" + s + "]";
+    }
+  }
+
+}
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+
+    <source-generated language="kotlin"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+class Traces {
+
+  fun typed(n: Int): String {
+    try {
+      if (n > 0) {
+          throw "boom";
+      }
+
+      return "none"
+    } catch (e: String) {
+      var s = ""
+      return "typed:$e:[$s]"
+    }
+  }
+
+  fun bare(n: Int): String {
+    try {
+      if (n > 0) {
+          throw "bang";
+      }
+
+      return "none"
+    } catch (e: Throwable) {
+      var s = ""
+      return "bare:$e:[$s]"
+    }
+  }
+
+}
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
 </test>

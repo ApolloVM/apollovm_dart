@@ -23,21 +23,21 @@ class Checks {
 }
         ]]>
     </source>
-    <call class="Checks" function="run" returnType="String" return="ok: 3">
+    <call class="Checks" function="run" return="ok: 3">
         [3]
     </call>
     <output>
         []
     </output>
 
-    <call class="Checks" function="run" returnType="String" return="caught: too big: 42">
+    <call class="Checks" function="run" return="caught: too big: 42">
         [42]
     </call>
     <output>
         []
     </output>
 
-    <call class="Checks" function="run" returnType="String" return="bare: Assertion failed">
+    <call class="Checks" function="run" return="bare: Assertion failed">
         [5]
     </call>
     <output>
@@ -62,6 +62,65 @@ class Checks {
       return 'bare: $e';
     }
     return 'ok: $n';
+  }
+
+}
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+
+    <!-- JS/TS have no throwing `assert`, so it lowers to an explicit check.
+         These round-trip and re-execute, pinning that the lowering preserves
+         the semantics (including the caught message).
+
+         The other targets emit their own idiom — Java `assert c : m;`, Python
+         `assert c, m`, Kotlin `assert(c) { m }`, C# `Debug.Assert`, Lua's
+         built-in, Go `panic` — which is correct for their real toolchains but
+         not re-executable inside ApolloVM (`Debug`/`assert` are not VM
+         builtins, and those grammars do not parse their own assert form yet). -->
+    <source-generated language="javascript"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+class Checks {
+
+  static run(n) {
+    if (!(n >= 0)) throw 'Assertion failed';
+    try {
+      if (!(n < 10)) throw `too big: ${n}`;
+    } catch (e) {
+      return `caught: ${e}`;
+    }
+    try {
+      if (!(n !== 5)) throw 'Assertion failed';
+    } catch (e) {
+      return `bare: ${e}`;
+    }
+    return `ok: ${n}`;
+  }
+
+}
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+
+    <source-generated language="typescript"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+class Checks {
+
+  static run(n: number): string {
+    if (!(n >= 0)) throw 'Assertion failed';
+    try {
+      if (!(n < 10)) throw `too big: ${n}`;
+    } catch (e) {
+      return `caught: ${e}`;
+    }
+    try {
+      if (!(n !== 5)) throw 'Assertion failed';
+    } catch (e) {
+      return `bare: ${e}`;
+    }
+    return `ok: ${n}`;
   }
 
 }
