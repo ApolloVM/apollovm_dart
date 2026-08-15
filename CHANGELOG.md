@@ -23,6 +23,25 @@ A leftover positional argument is now reported rather than ignored:
 `apollovm compile foo.dart oops` fails with `Unexpected argument after the
 source file: oops`.
 
+### `compile`: target inferred from the output extension, and `-t`
+
+`--output` now selects the target when `--target` is omitted, so naming the
+file is enough:
+
+```sh
+apollovm compile foo.dart -o foo.avma   # binary AST
+apollovm compile foo.dart -o foo.wasm   # WebAssembly
+```
+
+`.avma` means the AST target and `.wasm` means Wasm; any other extension falls
+back to the `wasm` default as before. An explicit `--target` always wins, so
+`-t ast -o out.bin` still writes an image under that name. The extension is
+read from the final path segment, so a `.` in a parent directory
+(`build.v2/out`) is not mistaken for it.
+
+`--target` also gained the abbreviation `-t`, on both `compile` and
+`translate`.
+
 ## 2.28.0
 
 ### Binary AST serialization

@@ -388,6 +388,7 @@ Examples:
   CommandTranslate() {
     argParser.addOption(
       'target',
+      abbr: 't',
       help:
           'Target Programming language for translation.\n'
           '(defaults to the opposite of the source language)',
@@ -457,9 +458,10 @@ class CommandCompile extends CommandSourceFileBase {
   String get usageFooter => '''
 
 Examples:
-  apollovm compile calc.dart               # writes calc.wasm
+  apollovm compile calc.dart                 # writes calc.wasm
   apollovm compile calc.dart -o build/calc.wasm
-  apollovm compile calc.dart --target=ast  # writes calc.avma (binary AST)''';
+  apollovm compile calc.dart -t ast          # writes calc.avma (binary AST)
+  apollovm compile calc.dart -o calc.avma    # target inferred from the extension''';
 
   CommandCompile() {
     argParser.addOption(
@@ -468,24 +470,71 @@ Examples:
       help:
           'Output file path (defaults to <source>.wasm or <source>.avma,\n'
           'alongside the source file).\n'
+          'A `.wasm` or `.avma` extension selects the target when `--target`\n'
+          'is not given.\n'
           'If multiple Wasm modules are produced, the module name is inserted before `.wasm`.',
       valueHelp: 'file.wasm',
     );
     argParser.addOption(
       'target',
+      abbr: 't',
       help:
           'Binary target:\n'
           '  wasm  WebAssembly module.\n'
           '  ast   Binary AST image (`.avma`, an Apollo Virtual Machine\n'
           '        Archive) — the parsed program, so it can be loaded later\n'
-          '        without running a parser.',
+          '        without running a parser.\n'
+          'Inferred from the `--output` extension when omitted.',
       defaultsTo: 'wasm',
       valueHelp: 'wasm|ast',
     );
   }
 
-  String get target =>
-      (argResults!['target'] as String? ?? 'wasm').toLowerCase();
+  /// The binary target.
+  ///
+  /// An explicit `--target` always wins. Otherwise it is taken from the
+  /// `--output` extension, so `-o calc.avma` does not have to be paired with
+  /// `--target=ast` to mean what it plainly says. Falls back to `wasm`.
+  String get target {
+    var argResults = this.argResults!;
+
+    if (argResults.wasParsed('target')) {
+      return (argResults['target'] as String).toLowerCase().trim();
+    }
+
+    return _targetFromOutputExtension() ??
+        (argResults['target'] as String? ?? 'wasm').toLowerCase().trim();
+  }
+
+  /// The target implied by the [output] extension, or `null` when there is no
+  /// output path or its extension names no target.
+  String? _targetFromOutputExtension() {
+    switch (_outputExtension()) {
+      case ASTBinaryFormat.fileExtension:
+        return 'ast';
+      case 'wasm':
+        return 'wasm';
+      default:
+        return null;
+    }
+  }
+
+  /// The extension of [output], lowercased, without the dot.
+  ///
+  /// Read from the final path segment only: a `.` in a parent directory
+  /// (`build.v2/out`) must not be mistaken for the file's extension.
+  String? _outputExtension() {
+    var path = output;
+    if (path == null) return null;
+
+    var sep = path.lastIndexOf('/');
+    var name = sep >= 0 ? path.substring(sep + 1) : path;
+
+    var dot = name.lastIndexOf('.');
+    if (dot <= 0 || dot == name.length - 1) return null;
+
+    return name.substring(dot + 1).toLowerCase();
+  }
 
   String? get output => argResults!['output'] as String?;
 

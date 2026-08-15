@@ -1086,14 +1086,16 @@ left to the caller — so this works unchanged on the web.
 ### From the command line
 
 ```sh
-apollovm compile --target=ast calc.dart     # writes calc.avma
+apollovm compile calc.dart -t ast           # writes calc.avma
+apollovm compile calc.dart -o build/x.avma  # target inferred from the extension
 apollovm run calc.avma                      # runs it, without parsing
 ```
 
+The target follows `--output` when `--target` (`-t`) is omitted: `.avma` selects
+the binary AST, `.wasm` selects WebAssembly. An explicit `--target` always wins.
+
 `run` detects an image by its magic bytes rather than its extension, and takes
-the language from the image itself. The `.avma` extension is only a convention —
-it decides the default output name, nothing more — so an image named anything
-else still runs.
+the language from the image itself — so an image named anything else still runs.
 
 ### Integrity
 
