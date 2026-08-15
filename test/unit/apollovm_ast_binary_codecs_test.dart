@@ -211,7 +211,12 @@ void main() {
     test('an integer beyond the exact range of a JavaScript double', () {
       // Stored as a decimal string so a VM-written image stays readable. On the
       // web the writer cannot produce such a value in the first place.
-      const big = 9007199254740993; // 2^53 + 1
+      //
+      // Built by arithmetic rather than written as a literal: `testOn` gates
+      // execution, not compilation, and `9007199254740993` cannot be compiled
+      // for the web at all. 2^53 itself is exactly representable, so it can.
+      var big = 9007199254740992 + 1; // 2^53 + 1
+
       var decoded = roundTripNative(big);
       expect(decoded, equals(big));
     }, testOn: 'vm');
