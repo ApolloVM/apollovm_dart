@@ -56,23 +56,36 @@ class ASTCodecRegistry {
 
   /// The codec that handles [node].
   ///
-  /// Throws [ASTNotSerializableException] when the node has no codec — which
-  /// means it holds live Dart state (an external function's closure, a running
-  /// future, a bound runtime value) and was injected by the VM rather than
-  /// produced by a parser.
+  /// Throws [ASTNotSerializableException] for a node that holds live Dart state
+  /// — an external function's closure, a running future, a bound runtime value
+  /// — which the VM injects rather than a parser producing.
   static ASTNodeCodec codecFor(Object node, [String declarationPath = '']) {
     var cached = _resolved[node.runtimeType];
     if (cached != null) return cached;
 
-    for (var c in ordered) {
-      if (c.matches(node)) {
-        return _resolved[node.runtimeType] = c;
+    // Refusal is decided by the concrete class, **not** by "no codec matched".
+    // Several excluded kinds extend one that is perfectly encodable —
+    // `ASTExternalFunction` extends `ASTFunctionDeclaration`,
+    // `ASTExternalGetter` extends `ASTGetterDeclaration` — so an `is` scan
+    // alone would match the superclass and write them as an ordinary
+    // declaration, silently dropping the Dart closure that is their whole
+    // point. Checking the name first is what makes the exclusion list binding.
+    //
+    // This runs once per distinct runtime type, on the way to populating the
+    // cache below.
+    var reason = excluded[_classNameOf(node)];
+
+    if (reason == null) {
+      for (var c in ordered) {
+        if (c.matches(node)) {
+          return _resolved[node.runtimeType] = c;
+        }
       }
     }
 
     throw ASTNotSerializableException(
       node,
-      _reasonFor(node),
+      reason ?? 'this node kind has no binary encoding',
       declarationPath: declarationPath.isEmpty ? null : declarationPath,
     );
   }
@@ -116,12 +129,13 @@ class ASTCodecRegistry {
     'ASTRunStatus': 'it is per-execution control state, not part of the tree',
   };
 
-  static String _reasonFor(Object node) {
+  /// The declared class name of [node], without its type arguments.
+  ///
+  /// A generic instantiation prints as `ASTValueFunction<void Function()>`,
+  /// which would never match an entry in [excluded].
+  static String _classNameOf(Object node) {
     var name = node.runtimeType.toString();
-    // Generic instantiations print as `ASTValueFunction<void Function()>`.
     var generic = name.indexOf('<');
-    if (generic > 0) name = name.substring(0, generic);
-
-    return excluded[name] ?? 'this node kind has no binary encoding';
+    return generic > 0 ? name.substring(0, generic) : name;
   }
 }
