@@ -64,6 +64,9 @@ class ASTBinaryHeader {
   /// Whether a source reference is present.
   bool get hasSourceRef => (flags & ASTBinaryFlags.hasSourceRef) != 0;
 
+  /// Whether this file bundles several code units rather than one.
+  bool get hasArchiveFlag => (flags & ASTBinaryFlags.archive) != 0;
+
   @override
   String toString() =>
       'ASTBinaryHeader{formatVersion: $formatVersion, '

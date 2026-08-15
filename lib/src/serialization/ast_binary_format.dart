@@ -117,8 +117,12 @@ class ASTBinaryFlags {
   /// A [ASTBinarySection.sourceRef] section is present.
   static const int hasSourceRef = 0x00000004;
 
+  /// The file is an archive of several code units rather than a single one.
+  static const int archive = 0x00000008;
+
   /// Every flag bit this build understands.
-  static const int knownMask = signed | hasSectionIndex | hasSourceRef;
+  static const int knownMask =
+      signed | hasSectionIndex | hasSourceRef | archive;
 }
 
 /// Section identifiers in the binary AST section stream.
@@ -151,7 +155,15 @@ enum ASTBinarySection {
   sourceRef(0x05),
 
   /// Offsets and sizes of the other sections, for random access.
-  sectionIndex(0x06);
+  sectionIndex(0x06),
+
+  /// One code unit of an archive: a complete, self-contained single-unit image.
+  ///
+  /// Nesting whole images rather than merging their pools means an archive
+  /// needs no decoding logic of its own — each entry is read by the ordinary
+  /// reader — and each unit keeps its own checksum, so one can be extracted
+  /// and verified without touching the rest.
+  archiveEntry(0x07);
 
   const ASTBinarySection(this.id);
 
