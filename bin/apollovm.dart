@@ -4,6 +4,7 @@ import 'package:apollovm/apollovm.dart';
 import 'package:apollovm/apollovm_lsp.dart';
 import 'package:apollovm/apollovm_mcp_io.dart';
 import 'package:apollovm/apollovm_pub.dart';
+import 'package:apollovm/apollovm_serialization.dart';
 import 'package:args/args.dart';
 import 'package:args/command_runner.dart';
 import 'package:swiss_knife/swiss_knife.dart';
@@ -219,7 +220,8 @@ Examples:
   apollovm run script.dart
   apollovm run app.py --function start
   apollovm run prog.java main foo bar      # call `main` with args foo, bar
-  apollovm run module.wasm''';
+  apollovm run module.wasm
+  apollovm run calc.avma                   # a binary AST image; no parsing''';
 
   CommandRun() {
     argParser.addOption(
@@ -239,29 +241,45 @@ Examples:
   FutureOr<bool> run() async {
     var parameters = this.parameters;
 
-    if (verbose) {
-      _log(
-        'RUN',
-        '$sourceFile ; language: $language > $mainFunction( $parameters )',
-      );
-    }
-
     var vm = ApolloVM(nullSafetyChecks: nullSafetyChecks);
 
-    // A `.wasm` file is a binary module: load its bytes as a `BinaryCodeUnit`
-    // (parsed by `ApolloParserWasm` into its exported functions) and run it
-    // through the Wasm runtime, rather than decoding the binary as UTF-8 source.
+    // A binary AST image already holds a parsed program, and records which
+    // language it came from — so it is detected by its magic bytes rather than
+    // by its extension, and the recorded language wins over anything the file
+    // name suggests.
+    var fileBytes = sourceFile.readAsBytesSync();
+    var isBinaryAST = ASTBinaryReader.isASTBinary(fileBytes);
+
     CodeUnit<Object> codeUnit;
-    if (language == 'wasm') {
-      var bytes = sourceFile.readAsBytesSync();
+    String effectiveLanguage;
+
+    if (isBinaryAST) {
+      codeUnit = const ASTBinaryReader().readCodeUnit(fileBytes);
+      effectiveLanguage = codeUnit.language;
+    } else if (language == 'wasm') {
+      // A `.wasm` file is a binary module: load its bytes as a
+      // `BinaryCodeUnit` (parsed by `ApolloParserWasm` into its exported
+      // functions) and run it through the Wasm runtime, rather than decoding
+      // the binary as UTF-8 source.
+      effectiveLanguage = 'wasm';
       codeUnit = BinaryCodeUnit(
         'wasm',
-        bytes,
+        fileBytes,
         id: sourceFilePath,
         namespace: '',
       );
     } else {
+      effectiveLanguage = language;
       codeUnit = SourceCodeUnit(language, source, id: sourceFilePath);
+    }
+
+    if (verbose) {
+      _log(
+        'RUN',
+        '$sourceFile ; language: $effectiveLanguage'
+            '${isBinaryAST ? ' (binary AST)' : ''} > '
+            '$mainFunction( $parameters )',
+      );
     }
 
     var loadOK = await loadCodeUnitReporting(vm, codeUnit);
@@ -277,9 +295,9 @@ Examples:
 
     await installPackageImporter(vm);
 
-    var runner = vm.createRunner(language)!;
+    var runner = vm.createRunner(effectiveLanguage)!;
 
-    var namespaces = vm.getLanguageNamespaces(language).namespaces;
+    var namespaces = vm.getLanguageNamespaces(effectiveLanguage).namespaces;
     if (!namespaces.contains('')) namespaces.insert(0, '');
 
     ASTValue? result;
@@ -297,7 +315,7 @@ Examples:
       LOOP_NS:
       for (var namespace in namespaces) {
         var classes = vm
-            .getLanguageNamespaces(language)
+            .getLanguageNamespaces(effectiveLanguage)
             .get(namespace)
             .classesNames;
         for (var clazz in classes) {
@@ -406,22 +424,28 @@ class CommandCompile extends CommandSourceFileBase {
 
 Examples:
   apollovm compile calc.dart               # writes calc.wasm
-  apollovm compile calc.dart -o build/calc.wasm''';
+  apollovm compile calc.dart -o build/calc.wasm
+  apollovm compile calc.dart --target=ast  # writes calc.avma (binary AST)''';
 
   CommandCompile() {
     argParser.addOption(
       'output',
       abbr: 'o',
       help:
-          'Output file path (defaults to <source>.wasm, alongside the source file).\n'
-          'If multiple modules are produced, the module name is inserted before `.wasm`.',
+          'Output file path (defaults to <source>.wasm or <source>.avma,\n'
+          'alongside the source file).\n'
+          'If multiple Wasm modules are produced, the module name is inserted before `.wasm`.',
       valueHelp: 'file.wasm',
     );
     argParser.addOption(
       'target',
-      help: 'Binary target (currently: wasm).',
+      help:
+          'Binary target:\n'
+          '  wasm  WebAssembly module.\n'
+          '  ast   Binary AST image (`.avma`) — the parsed program, so it can\n'
+          '        be loaded later without running a parser.',
       defaultsTo: 'wasm',
-      valueHelp: 'wasm',
+      valueHelp: 'wasm|ast',
     );
   }
 
@@ -438,7 +462,7 @@ Examples:
       _log('COMPILE', '$sourceFile ; language: $language > target: $target');
     }
 
-    if (target != 'wasm') {
+    if (target != 'wasm' && target != 'ast') {
       throw StateError('Unsupported compile target: $target');
     }
 
@@ -459,6 +483,20 @@ Examples:
 
     await installPackageImporter(vm);
 
+    if (target == 'ast') {
+      var image = vm.saveCodeUnitAST(codeUnit);
+      var filePath =
+          output ?? _defaultOutputPath(ASTBinaryFormat.fileExtension);
+
+      File(filePath).writeAsBytesSync(image);
+
+      print(
+        'Wrote: $filePath (${image.length} bytes, '
+        'source: ${source.length} bytes)',
+      );
+      return true;
+    }
+
     var storageWasm = vm.generateAllIn<BytesOutput>('wasm');
     var wasmModules = await storageWasm.allEntries();
 
@@ -475,7 +513,7 @@ Examples:
       );
     }
 
-    var outputPath = output ?? _defaultOutputPath();
+    var outputPath = output ?? _defaultOutputPath('wasm');
 
     var single = modules.length == 1;
 
@@ -495,7 +533,7 @@ Examples:
     return true;
   }
 
-  String _defaultOutputPath() {
+  String _defaultOutputPath(String extension) {
     var path = sourceFilePath;
     // Strip the extension from the FILE NAME only — `getPathExtension` keys off
     // the last `.` anywhere in the path, which would wrongly truncate when the
@@ -506,9 +544,10 @@ Examples:
     var dot = name.lastIndexOf('.');
     if (dot > 0) {
       // The file name has a real extension to replace.
-      return '${path.substring(0, path.length - (name.length - dot))}.wasm';
+      return '${path.substring(0, path.length - (name.length - dot))}'
+          '.$extension';
     }
-    return '$path.wasm';
+    return '$path.$extension';
   }
 
   String _insertModuleName(String outputPath, String moduleName) {
