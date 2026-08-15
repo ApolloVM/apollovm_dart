@@ -55,6 +55,11 @@ final List<ASTNodeCodec> variableCodecs = [
       var type = r.type();
       var name = r.str();
       var initialValue = r.node<ASTExpression>();
+
+      // As in the grammars: wiring the field's type to its initializer is what
+      // lets a `var`/`final` field infer its type. A no-op for a declared type.
+      type.associateToType(initialValue);
+
       var finalValue = r.boolean();
       return ASTClassFieldWithInitialValue(
         type,

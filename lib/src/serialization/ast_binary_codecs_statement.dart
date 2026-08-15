@@ -21,10 +21,41 @@ import 'ast_binary_tags.dart';
 /// `addFunction` rebuilds the single/multiple split from the names, so the set
 /// objects themselves are derived data and never stored.
 void writeBlockBody(ASTBinaryWriteContext w, ASTBlock block) {
-  w.nodes(block.statements);
-  w.nodes([for (var set in block.functions) ...set.functions]);
+  var statements = block.statements;
+
+  w.nodes(statements);
+  w.nodes(_declaredFunctionsOf(block, statements));
   w.nodes(block.getter);
   w.nodes(block.setter);
+}
+
+/// The functions of [block] that are genuinely declared *on* it.
+///
+/// A block's function map is not purely declared structure: running a block
+/// mutates it, because `ASTStatementFunctionDeclaration.run` calls
+/// `addFunction` to register a local function on every execution. So after a
+/// block has run, its map also holds declarations that already exist in
+/// [statements], and writing both would emit each of those twice — and move it,
+/// since a statement keeps its position while the map does not.
+///
+/// Skipping them loses nothing: executing the decoded block registers them
+/// again, exactly as executing the original one did. It also makes encoding
+/// independent of whether the AST has been run, which is what keeps the output
+/// deterministic.
+List<ASTFunctionDeclaration> _declaredFunctionsOf(
+  ASTBlock block,
+  List<ASTStatement> statements,
+) {
+  var declaredAsStatements = <ASTFunctionDeclaration>[
+    for (var s in statements)
+      if (s is ASTStatementFunctionDeclaration) s.functionDeclaration,
+  ];
+
+  return [
+    for (var set in block.functions)
+      for (var f in set.functions)
+        if (!declaredAsStatements.any((e) => identical(e, f))) f,
+  ];
 }
 
 /// Fills [block] with the members written by [writeBlockBody].
@@ -117,6 +148,13 @@ final List<ASTNodeCodec> statementCodecs = [
       var type = r.type();
       var name = r.str();
       var value = r.nodeOrNull<ASTExpression>();
+
+      // Every grammar wires a declaration's type to its initializer so a
+      // `var`/`final` can infer from it. That link is parse-time state, not
+      // something `resolveNode` re-derives, so it is replayed here. It is a
+      // no-op for a declared type — only `ASTTypeVar` records it.
+      if (value != null) type.associateToType(value);
+
       // The constructor normalizes a list-literal initializer's component type.
       // It is idempotent on input that is already normalized, so replaying it
       // is safe.

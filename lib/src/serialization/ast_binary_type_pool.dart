@@ -240,6 +240,8 @@ class ASTTypePoolWriter {
   final Map<ASTType, int> _byIdentity = Map<ASTType, int>.identity();
   final Map<String, int> _byKey = {};
 
+  int _uniqueKeys = 0;
+
   ASTTypePoolWriter(this._strings);
 
   /// The number of distinct types interned so far.
@@ -276,6 +278,17 @@ class ASTTypePoolWriter {
   String _keyOf(ASTType type) {
     var wellKnown = ASTWellKnownType.idOf(type);
     if (wellKnown != null) return 'w$wellKnown';
+
+    if (type is ASTTypeVar) {
+      // A `var`/`final` type is *not* interchangeable between use sites: each
+      // one is wired to its own initializer by the parser
+      // (`type.associateToType(value)`) and caches the type it infers from it.
+      // Sharing one instance across declarations would leak one declaration's
+      // inferred type into another, so every occurrence gets its own entry.
+      // The identity map above still collapses repeated uses of the same
+      // object.
+      return 'var#${_uniqueKeys++}';
+    }
 
     var b = StringBuffer()
       ..write(type.runtimeType)
