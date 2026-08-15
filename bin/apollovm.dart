@@ -442,8 +442,9 @@ Examples:
       help:
           'Binary target:\n'
           '  wasm  WebAssembly module.\n'
-          '  ast   Binary AST image (`.avma`) — the parsed program, so it can\n'
-          '        be loaded later without running a parser.',
+          '  ast   Binary AST image (`.avma`, an Apollo Virtual Machine\n'
+          '        Archive) — the parsed program, so it can be loaded later\n'
+          '        without running a parser.',
       defaultsTo: 'wasm',
       valueHelp: 'wasm|ast',
     );

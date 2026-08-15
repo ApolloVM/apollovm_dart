@@ -6,8 +6,9 @@ import 'dart:typed_data';
 
 /// Constants describing the ApolloVM binary AST container format.
 ///
-/// A binary AST file (`.avma`) stores an already-parsed [ASTRoot] so that a
-/// code unit can be loaded without running a parser. The layout is:
+/// A binary AST file — `.avma`, for **A**pollo **V**irtual **M**achine
+/// **A**rchive — stores an already-parsed [ASTRoot] so that a code unit can be
+/// loaded without running a parser. The layout is:
 ///
 /// ```text
 /// offset  size  field
@@ -59,6 +60,13 @@ class ASTBinaryFormat {
   static const int minTrailerSize = 10;
 
   /// The conventional file extension, without a leading dot.
+  ///
+  /// `avma` is short for **A**pollo **V**irtual **M**achine **A**rchive.
+  ///
+  /// It is a convention only: nothing depends on it. A file is recognized by
+  /// its [magic] — which is why `apollovm run` works on an image whatever it
+  /// was named — and the extension merely decides the default output name when
+  /// none is given.
   static const String fileExtension = 'avma';
 
   /// The largest section stream this format can address (`sectionsSize` is a

@@ -16,7 +16,8 @@ import 'ast_binary_pool.dart';
 import 'ast_binary_signer.dart';
 import 'ast_binary_type_pool.dart';
 
-/// Encodes a parsed [ASTRoot] into a binary AST image (`.avma`).
+/// Encodes a parsed [ASTRoot] into a binary AST image — `.avma`, for *Apollo
+/// Virtual Machine Archive*.
 ///
 /// The point of the format is to skip the parser: an application parses once —
 /// at build time, or on first run — and afterwards loads the same code unit by

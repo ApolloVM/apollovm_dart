@@ -2,10 +2,13 @@
 
 ### Binary AST serialization
 
-A parsed AST can now be saved as a compact binary image (`.avma`) and loaded
-back without running a parser. Parsing dominates the cost of loading code, so an
-application can parse once — at build time, or on first run — and afterwards
-load the same code unit by decoding bytes.
+A parsed AST can now be saved as a compact binary image and loaded back without
+running a parser. Parsing dominates the cost of loading code, so an application
+can parse once — at build time, or on first run — and afterwards load the same
+code unit by decoding bytes.
+
+Such an image is an `.avma` file: an **A**pollo **V**irtual **M**achine
+**A**rchive. It holds one parsed code unit, or a whole VM's worth of them.
 
 Measured on a ~4 KB Dart program: decoding is about **11× faster** than parsing
 and the image is about **two thirds** the size of the source. For a very small

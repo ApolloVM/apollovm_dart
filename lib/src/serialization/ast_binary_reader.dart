@@ -64,7 +64,8 @@ class ASTBinaryInfo {
       'size: $fileSize}';
 }
 
-/// Decodes a binary AST image (`.avma`) back into a parsed [ASTRoot].
+/// Decodes a binary AST image — `.avma`, for *Apollo Virtual Machine Archive* —
+/// back into a parsed [ASTRoot].
 ///
 /// The CRC-32 is verified on every read. It detects corruption — a truncated
 /// write, bit rot, a mangled transfer — but it is not a defence against anyone:

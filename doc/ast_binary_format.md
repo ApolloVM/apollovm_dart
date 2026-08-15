@@ -1,7 +1,9 @@
 # Binary AST format (`.avma`)
 
-A `.avma` file stores an already-parsed ApolloVM AST, so a code unit can be
-loaded without running a parser. Parsing dominates the cost of loading code;
+`.avma` stands for **A**pollo **V**irtual **M**achine **A**rchive.
+
+Such a file stores an already-parsed ApolloVM AST, so a code unit can be loaded
+without running a parser. Parsing dominates the cost of loading code;
 decoding an image of a ~4 KB program is roughly **11× faster** than parsing it,
 and the image is about **two thirds** the size of the source.
 
@@ -29,6 +31,11 @@ where `T = 16 + sectionsSize`. The total length is always
 detected structurally, before any integrity arithmetic.
 
 All fixed-width fields are **big-endian**. `Endian.host` is never used.
+
+The extension is a convention only — nothing depends on it. A file is
+identified by its `magic`, which is why `apollovm run` works on an image
+whatever it was named; `.avma` merely decides the default output name when none
+is given.
 
 ### Sections
 

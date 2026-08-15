@@ -1042,9 +1042,12 @@ Generated `Wasm` bytes with description:
 ## Binary AST
 
 Parsing dominates the cost of loading code. ApolloVM can save an already-parsed
-AST as a compact binary image (`.avma`), so an application parses once — at
-build time, or on first run — and afterwards loads the same code unit by
-decoding bytes, with no grammar and no backtracking.
+AST as a compact binary image, so an application parses once — at build time, or
+on first run — and afterwards loads the same code unit by decoding bytes, with
+no grammar and no backtracking.
+
+Such an image is an **`.avma`** file: an **A**pollo **V**irtual **M**achine
+**A**rchive. It carries one parsed code unit, or a whole VM's worth of them.
 
 On a ~4 KB program, decoding is around **11× faster than parsing**, and the
 image is about **two thirds the size** of the source. (For a very small unit the
@@ -1088,7 +1091,9 @@ apollovm run calc.avma                      # runs it, without parsing
 ```
 
 `run` detects an image by its magic bytes rather than its extension, and takes
-the language from the image itself.
+the language from the image itself. The `.avma` extension is only a convention —
+it decides the default output name, nothing more — so an image named anything
+else still runs.
 
 ### Integrity
 

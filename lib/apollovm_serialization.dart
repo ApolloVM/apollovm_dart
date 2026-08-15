@@ -5,9 +5,10 @@
 /// Binary serialization of a parsed ApolloVM AST.
 ///
 /// Parsing dominates the cost of loading code. This library stores an
-/// already-parsed [ASTRoot] as a compact `.avma` image, so an application can
-/// parse once — at build time, or on first run — and afterwards load the same
-/// code unit by decoding bytes, with no grammar and no backtracking.
+/// already-parsed [ASTRoot] as a compact **`.avma`** image — *Apollo Virtual
+/// Machine Archive* — so an application can parse once, at build time or on
+/// first run, and afterwards load the same code unit by decoding bytes, with no
+/// grammar and no backtracking.
 ///
 /// ```dart
 /// // Once, wherever the source is available:
