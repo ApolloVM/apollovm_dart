@@ -126,6 +126,75 @@ void main() {
       expect(ran.stdout.toString(), contains('total: 10'));
     }, timeout: const Timeout(Duration(minutes: 3)));
 
+    test('accepts --target after the source file', () async {
+      // The natural way to write it, and the way `compile --help` shows it.
+      // With trailing options unparsed the flag landed in `rest`, `--target`
+      // kept its `wasm` default, and the command quietly compiled to Wasm —
+      // reported as an unrelated Wasm codegen crash rather than as a rejected
+      // argument.
+      final source = _write('after.dart', _source);
+
+      final r = await _apollovm(['compile', source.path, '--target=ast']);
+      expect(r.exitCode, 0, reason: '${r.stdout}${r.stderr}');
+
+      final image = File('${_tmp.path}/after.avma');
+      expect(
+        image.existsSync(),
+        isTrue,
+        reason: 'A trailing --target=ast must select the AST target',
+      );
+      expect(
+        File('${_tmp.path}/after.wasm').existsSync(),
+        isFalse,
+        reason: 'It must not fall back to the Wasm target',
+      );
+
+      final ran = await _apollovm(['run', image.path]);
+      expect(ran.exitCode, 0, reason: '${ran.stderr}');
+      expect(ran.stdout.toString(), contains('total: 10'));
+    }, timeout: const Timeout(Duration(minutes: 3)));
+
+    test('rejects a stray argument after the source file', () async {
+      final source = _write('stray.dart', _source);
+
+      final r = await _apollovm([
+        'compile',
+        '--target=ast',
+        source.path,
+        'oops',
+      ]);
+
+      expect(r.exitCode, isNot(0));
+      expect('${r.stdout}${r.stderr}', contains('Unexpected argument'));
+      expect('${r.stdout}${r.stderr}', contains('oops'));
+    }, timeout: const Timeout(Duration(minutes: 2)));
+
+    test('run still passes trailing arguments to the program', () async {
+      // `run` is the one command where everything after the file belongs to the
+      // program, so it must keep trailing options unparsed — including ones
+      // that look like `apollovm`'s own flags.
+      final source = _write(
+        'echo.dart',
+        'class Echo {\n'
+            '  static void main(List<String> args) {\n'
+            "    print('args: \$args');\n"
+            '  }\n'
+            '}\n',
+      );
+
+      final r = await _apollovm([
+        'run',
+        source.path,
+        'main',
+        'foo',
+        '--bar',
+        '-v',
+      ]);
+
+      expect(r.exitCode, 0, reason: '${r.stderr}');
+      expect(r.stdout.toString(), contains('[main, foo, --bar, -v]'));
+    }, timeout: const Timeout(Duration(minutes: 3)));
+
     test('rejects an unknown target', () async {
       final source = _write('calc3.dart', _source);
       final r = await _apollovm(['compile', '--target=nope', source.path]);

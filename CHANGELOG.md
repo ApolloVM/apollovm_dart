@@ -1,3 +1,28 @@
+## 2.28.1
+
+### Fixed: `compile <file> --target=ast` silently compiled to Wasm
+
+An option written after the source file was not parsed at all. The
+source-file commands shared a parser built with `allowTrailingOptions: false`,
+so `apollovm compile foo.dart --target=ast` left the flag sitting in the
+leftover positional arguments, `--target` kept its `wasm` default, and the
+command compiled to WebAssembly without saying that it had ignored anything.
+
+It surfaced as an unrelated Wasm codegen crash — `UnimplementedError: Wasm
+maps with value type dynamic are not supported yet` — for a program that was
+never meant to reach the Wasm backend. `2.28.0`'s own `compile --help` showed
+that exact ordering.
+
+Trailing options are now parsed for `compile` and `translate`, whose only
+positional argument is the source file, so both orderings work. `run` keeps
+them unparsed, because everything after the file there belongs to the program
+being executed and must reach it untouched — including arguments that look
+like `apollovm`'s own flags.
+
+A leftover positional argument is now reported rather than ignored:
+`apollovm compile foo.dart oops` fails with `Unexpected argument after the
+source file: oops`.
+
 ## 2.28.0
 
 ### Binary AST serialization
