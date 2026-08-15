@@ -53,10 +53,37 @@ void showVersion() {
 }
 
 abstract class CommandSourceFileBase extends Command<bool> {
-  final _argParser = ArgParser(allowTrailingOptions: false);
+  /// Whether options may follow the source file on the command line.
+  ///
+  /// `true` for the commands whose only positional argument is that file.
+  /// `apollovm compile foo.dart --target=ast` is the natural way to write it,
+  /// and with trailing options disabled the flag is not parsed at all: it lands
+  /// in `rest`, `--target` keeps its default, and the command quietly compiles
+  /// to Wasm instead of reporting that it ignored the argument.
+  ///
+  /// [CommandRun] overrides this to `false`, because there everything after the
+  /// file belongs to the program being run and must reach it untouched.
+  bool get allowTrailingOptions => true;
+
+  late final _argParser = ArgParser(allowTrailingOptions: allowTrailingOptions);
 
   @override
   ArgParser get argParser => _argParser;
+
+  /// Rejects anything after the source file.
+  ///
+  /// With trailing options parsed, a leftover positional argument is a genuine
+  /// mistake — a typo, or a flag for a different command — and saying so beats
+  /// ignoring it.
+  void checkNoExtraArguments() {
+    var extra = argResults!.rest.skip(1).toList();
+    if (extra.isEmpty) return;
+
+    throw StateError(
+      'Unexpected argument${extra.length > 1 ? 's' : ''} after the source '
+      'file: ${extra.join(' ')}',
+    );
+  }
 
   CommandSourceFileBase() {
     argParser.addFlag(
@@ -223,6 +250,11 @@ Examples:
   apollovm run module.wasm
   apollovm run calc.avma                   # a binary AST image; no parsing''';
 
+  // Everything after the source file is passed to the program being run, so it
+  // must not be interpreted as options for `apollovm` itself.
+  @override
+  bool get allowTrailingOptions => false;
+
   CommandRun() {
     argParser.addOption(
       'function',
@@ -356,6 +388,7 @@ Examples:
   CommandTranslate() {
     argParser.addOption(
       'target',
+      abbr: 't',
       help:
           'Target Programming language for translation.\n'
           '(defaults to the opposite of the source language)',
@@ -377,6 +410,8 @@ Examples:
 
   @override
   FutureOr<bool> run() async {
+    checkNoExtraArguments();
+
     if (verbose) {
       _log(
         'TRANSLATE',
@@ -423,9 +458,10 @@ class CommandCompile extends CommandSourceFileBase {
   String get usageFooter => '''
 
 Examples:
-  apollovm compile calc.dart               # writes calc.wasm
+  apollovm compile calc.dart                 # writes calc.wasm
   apollovm compile calc.dart -o build/calc.wasm
-  apollovm compile calc.dart --target=ast  # writes calc.avma (binary AST)''';
+  apollovm compile calc.dart -t ast          # writes calc.avma (binary AST)
+  apollovm compile calc.dart -o calc.avma    # target inferred from the extension''';
 
   CommandCompile() {
     argParser.addOption(
@@ -434,29 +470,78 @@ Examples:
       help:
           'Output file path (defaults to <source>.wasm or <source>.avma,\n'
           'alongside the source file).\n'
+          'A `.wasm` or `.avma` extension selects the target when `--target`\n'
+          'is not given.\n'
           'If multiple Wasm modules are produced, the module name is inserted before `.wasm`.',
       valueHelp: 'file.wasm',
     );
     argParser.addOption(
       'target',
+      abbr: 't',
       help:
           'Binary target:\n'
           '  wasm  WebAssembly module.\n'
           '  ast   Binary AST image (`.avma`, an Apollo Virtual Machine\n'
           '        Archive) — the parsed program, so it can be loaded later\n'
-          '        without running a parser.',
+          '        without running a parser.\n'
+          'Inferred from the `--output` extension when omitted.',
       defaultsTo: 'wasm',
       valueHelp: 'wasm|ast',
     );
   }
 
-  String get target =>
-      (argResults!['target'] as String? ?? 'wasm').toLowerCase();
+  /// The binary target.
+  ///
+  /// An explicit `--target` always wins. Otherwise it is taken from the
+  /// `--output` extension, so `-o calc.avma` does not have to be paired with
+  /// `--target=ast` to mean what it plainly says. Falls back to `wasm`.
+  String get target {
+    var argResults = this.argResults!;
+
+    if (argResults.wasParsed('target')) {
+      return (argResults['target'] as String).toLowerCase().trim();
+    }
+
+    return _targetFromOutputExtension() ??
+        (argResults['target'] as String? ?? 'wasm').toLowerCase().trim();
+  }
+
+  /// The target implied by the [output] extension, or `null` when there is no
+  /// output path or its extension names no target.
+  String? _targetFromOutputExtension() {
+    switch (_outputExtension()) {
+      case ASTBinaryFormat.fileExtension:
+        return 'ast';
+      case 'wasm':
+        return 'wasm';
+      default:
+        return null;
+    }
+  }
+
+  /// The extension of [output], lowercased, without the dot.
+  ///
+  /// Read from the final path segment only: a `.` in a parent directory
+  /// (`build.v2/out`) must not be mistaken for the file's extension.
+  String? _outputExtension() {
+    var path = output;
+    if (path == null) return null;
+
+    var sep = path.lastIndexOf('/');
+    var name = sep >= 0 ? path.substring(sep + 1) : path;
+
+    var dot = name.lastIndexOf('.');
+    if (dot <= 0 || dot == name.length - 1) return null;
+
+    return name.substring(dot + 1).toLowerCase();
+  }
 
   String? get output => argResults!['output'] as String?;
 
   @override
   FutureOr<bool> run() async {
+    checkNoExtraArguments();
+
     var target = this.target;
 
     if (verbose) {
