@@ -13,6 +13,16 @@ import 'package:test/test.dart';
 /// user-facing anyway: what lands on disk, and what the program prints.
 late Directory _tmp;
 
+/// A kernel snapshot of the CLI, compiled once into this suite's own temp
+/// directory.
+///
+/// `dart run bin/apollovm.dart` compiles through a cache shared with every
+/// other process doing the same, and two suites spawning it concurrently
+/// contend on that cache — which shows up as an empty stdout and a non-zero
+/// exit, not as a timeout. Compiling once here keeps this suite independent of
+/// whatever else the runner has in flight.
+late String _cliSnapshot;
+
 const _source = r'''
 class Calc {
   int sum(List<int> ns) {
@@ -34,14 +44,28 @@ File _write(String name, String source) =>
     File('${_tmp.path}/$name')..writeAsStringSync(source);
 
 Future<ProcessResult> _apollovm(List<String> args) => Process.run('dart', [
-  'run',
-  'bin/apollovm.dart',
+  _cliSnapshot,
   ...args,
 ], workingDirectory: Directory.current.path);
 
 void main() {
   setUpAll(() {
     _tmp = Directory.systemTemp.createTempSync('apollovm_cli_astb');
+
+    _cliSnapshot = '${_tmp.path}/apollovm.dill';
+    var compiled = Process.runSync('dart', [
+      'compile',
+      'kernel',
+      'bin/apollovm.dart',
+      '-o',
+      _cliSnapshot,
+    ], workingDirectory: Directory.current.path);
+
+    expect(
+      compiled.exitCode,
+      0,
+      reason: 'Could not compile the CLI: ${compiled.stderr}',
+    );
   });
 
   tearDownAll(() {
