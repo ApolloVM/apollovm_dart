@@ -25,6 +25,9 @@ dependencies:
   swiss_knife: ^3.3.14
   async_extension: ^1.2.22
   data_serializer: ^1.2.2
+  # Built-in HMAC-SHA256 signing for binary AST files (`HmacSha256Signer`).
+  # Pure Dart and web-safe; signing itself is optional and pluggable.
+  crypto: ^3.0.6
   petitparser: ^7.0.2
   collection: ^1.19.1
   args: ^2.7.0
