@@ -1039,6 +1039,107 @@ Generated `Wasm` bytes with description:
 
 -----------------------------
 
+## Binary AST
+
+Parsing dominates the cost of loading code. ApolloVM can save an already-parsed
+AST as a compact binary image, so an application parses once — at build time, or
+on first run — and afterwards loads the same code unit by decoding bytes, with
+no grammar and no backtracking.
+
+Such an image is an **`.avma`** file: an **A**pollo **V**irtual **M**achine
+**A**rchive. It carries one parsed code unit, or a whole VM's worth of them.
+
+On a ~4 KB program, decoding is around **11× faster than parsing**, and the
+image is about **two thirds the size** of the source. (For a very small unit the
+fixed header and pools cost more than the source is worth; the saving appears
+once there is a program to speak of.)
+
+```dart
+import 'package:apollovm/apollovm.dart';
+import 'package:apollovm/apollovm_serialization.dart';
+
+// Once, wherever the source is available:
+var vm = ApolloVM();
+var codeUnit = SourceCodeUnit('dart', source, id: 'calc.dart');
+await vm.loadCodeUnit(codeUnit);
+
+var image = vm.saveCodeUnitAST(codeUnit);   // Uint8List
+
+// Afterwards, with no parser involved:
+var vm2 = ApolloVM();
+await vm2.loadCodeUnitAST(image);
+
+var runner = vm2.createRunner('dart')!;
+await runner.executeClassMethod('', 'Calc', 'main', positionalParameters: [[]]);
+```
+
+A whole VM can be bundled into one archive and loaded back:
+
+```dart
+var archive = vm.saveAllAST();              // every loaded code unit
+await ApolloVM().loadAllAST(archive);
+```
+
+Everything is `Uint8List` in and `Uint8List` out — reading and writing files is
+left to the caller — so this works unchanged on the web.
+
+### From the command line
+
+```sh
+apollovm compile --target=ast calc.dart     # writes calc.avma
+apollovm run calc.avma                      # runs it, without parsing
+```
+
+`run` detects an image by its magic bytes rather than its extension, and takes
+the language from the image itself. The `.avma` extension is only a convention —
+it decides the default output name, nothing more — so an image named anything
+else still runs.
+
+### Integrity
+
+Every image carries a **CRC-32**, verified on load.
+
+> **The checksum detects corruption, not tampering.** Anyone who can modify a
+> file can recompute it in microseconds. Only a signature made with a key the
+> attacker does not have makes an image tamper-evident. An unsigned image
+> deserves exactly as much trust as the source it came from — loading one and
+> running it is equivalent to running arbitrary code from that source, so do not
+> load an unsigned image from an untrusted origin.
+
+Signing is optional and pluggable, with HMAC-SHA256 built in:
+
+```dart
+var image = vm.saveCodeUnitAST(
+  codeUnit,
+  signer: HmacSha256Signer.fromString(secret),
+);
+
+// Refuses to load unless the signature verifies with this key:
+await vm2.loadCodeUnitAST(
+  image,
+  verifier: HmacSha256Verifier.fromString(secret),
+);
+```
+
+Implement `ASTBinarySigner` / `ASTBinaryVerifier` for a public-key scheme or a
+hardware key store; the container stores a signature as opaque bytes.
+
+### Compatibility
+
+An image records the container revision that wrote it and the oldest revision
+that can decode it correctly. Sections are length-prefixed, so a reader skips
+any it does not recognize, and each is read from a bounded view, so fields a
+newer writer appended are ignored rather than misread. A newer ApolloVM's output
+therefore keeps loading in an older one for as long as the additions are purely
+additive, and an older image keeps loading in every later ApolloVM. When a
+change genuinely cannot be understood, the reader fails with an
+`ASTBinaryException` naming both versions instead of producing a wrong AST.
+
+See [`doc/ast_binary_format.md`](doc/ast_binary_format.md) for the byte-level
+specification.
+
+-----------------------------
+
 ## MCP Server
 
 ApolloVM ships an **MCP (Model Context Protocol)** server that exposes the VM as a

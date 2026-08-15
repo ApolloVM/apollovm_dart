@@ -1,3 +1,117 @@
+## 2.28.0
+
+### Binary AST serialization
+
+A parsed AST can now be saved as a compact binary image and loaded back without
+running a parser. Parsing dominates the cost of loading code, so an application
+can parse once — at build time, or on first run — and afterwards load the same
+code unit by decoding bytes.
+
+Such an image is an `.avma` file: an **A**pollo **V**irtual **M**achine
+**A**rchive. It holds one parsed code unit, or a whole VM's worth of them.
+
+Measured on a ~4 KB Dart program: decoding is about **11× faster** than parsing
+and the image is about **two thirds** the size of the source. For a very small
+unit the fixed header and pools cost more than the source is worth; the saving
+appears once there is a program to speak of.
+
+```dart
+import 'package:apollovm/apollovm_serialization.dart';
+
+var image = vm.saveCodeUnitAST(codeUnit);   // Uint8List
+await ApolloVM().loadCodeUnitAST(image);    // no parser involved
+```
+
+`vm.saveAllAST()` / `vm.loadAllAST()` do the same for a whole VM, bundling every
+loaded code unit into one archive. The CLI gained
+`apollovm compile --target=ast`, and `apollovm run` recognizes an image by its
+magic bytes — not its extension — taking the language from the image itself.
+
+Everything is `Uint8List` in and `Uint8List` out, so file access stays with the
+caller and the whole feature works unchanged on the web. The Chrome suite covers
+it, including the places where a JavaScript double behaves unlike a VM `int`.
+
+Loading a decoded unit needs no new path: `ApolloVM.loadCodeUnit` only reaches
+for a parser when a unit has no AST yet, so namespace registration, the
+null-safety check and incremental-resolution invalidation all behave exactly as
+they do for parsed source. Nothing derivable is stored — parent links,
+scope-variable resolution, superclass and extension targets and the `this.field`
+constructor-parameter promotion are re-established by one `resolveNode` call
+after decoding, exactly as every grammar does after a parse.
+
+Nodes holding live Dart state are refused with an error naming where in the
+program they were found: external functions and getters, which carry a closure,
+and runtime values such as a class instance or a pending future. All of them are
+injected by the VM at run time rather than produced by a parser, so a parsed AST
+never contains them and the same bindings are re-injected after a binary load.
+
+Coverage is enforced by a test that scans `lib/src/ast/` and requires every
+concrete `AST*` class to be registered, pooled as a type, encoded inline by a
+parent, or listed as refused with a written reason — so adding a node kind and
+forgetting its codec fails the build rather than silently dropping a field.
+
+### Binary AST integrity
+
+Every image carries a CRC-32, verified on load. **It detects corruption, not
+tampering:** anyone who can modify a file can recompute the checksum in
+microseconds. Only a signature made with a key the attacker does not have makes
+an image tamper-evident, and an unsigned image deserves exactly as much trust as
+the source it came from — loading one and running it is equivalent to running
+arbitrary code from that source.
+
+Signing is optional and pluggable (`ASTBinarySigner` / `ASTBinaryVerifier`), so
+an HMAC, a public-key signature or a hardware key store all fit;
+`HmacSha256Signer` is built in, which is why `crypto` becomes a direct
+dependency — it was already present transitively. The signature covers
+everything up to and including the CRC, so an attacker who edits a section and
+recomputes the checksum still fails verification.
+
+### Binary AST compatibility
+
+An image records two version numbers: the container revision that wrote it, and
+the oldest revision that can decode it correctly. Every section is
+length-prefixed, so a reader skips any section it does not recognize, and every
+section is decoded from a bounded view, so fields appended by a newer writer are
+ignored rather than misread. A newer ApolloVM's output therefore keeps loading
+in an older ApolloVM for as long as the new information is purely additive, and
+an older image keeps loading in every future ApolloVM — the reader retains the
+decode path for every format version it has ever supported. When a change
+genuinely cannot be understood by an older reader, the writer raises the minimum
+reader version and that older reader fails immediately with an
+`ASTBinaryException` naming both versions, rather than silently producing a
+wrong AST. Raising it is a breaking change and will only ever ship in a major
+release, announced here.
+
+A real image written by format version 1 is committed in the test suite and must
+keep loading; it is the only check that can catch an accidental incompatible
+change, since an image synthesized by the current writer would move with it.
+
+### Requires `data_serializer` 1.2.3
+
+The dependency is raised to `^1.2.3`, and this is a requirement rather than a
+preference: earlier versions decode LEB128 incorrectly, which silently
+corrupts a binary AST image.
+
+Building this format surfaced four bugs there, fixed in 1.2.3:
+
+- `BytesBuffer.readLeb128SignedInt` sign-extended from the wrong byte on every
+  platform, so `-2` decoded as `126` and `64` as `-16320`. The binary AST format
+  sidesteps it anyway by writing a form byte plus an unsigned magnitude — which
+  also removes any sign-extension difference between the VM and `dart2js` — but
+  the remaining three could not be sidestepped.
+- On the web, `shiftLeftInt`/`shiftRightInt` fell back to a 32-bit `<<`/`>>`,
+  so any shift of 32 or more produced `0`.
+- On the web, the LEB128 accumulator used `|=`, also a 32-bit operation, and
+  dropped the high bits of any value past 2^32.
+- On the web, signed decoding lost precision above roughly 2^49, because a
+  negative's *unsigned* intermediate is about `2^shift` — the range
+  `DateTime.microsecondsSinceEpoch` occupies.
+
+Together those meant an integer literal of 2^32 or more decoded to the wrong
+number on the web: `4294967296` came back as `0`, and `1000000000000000` as
+`2764472320`. A test now covers literals from 2^28 upwards, positive and
+negative, and it runs under `--platform chrome`.
+
 ## 2.27.0
 
 ### Dart setters
