@@ -86,14 +86,31 @@ A real image written by format version 1 is committed in the test suite and must
 keep loading; it is the only check that can catch an accidental incompatible
 change, since an image synthesized by the current writer would move with it.
 
-### Note: `data_serializer` signed LEB128
+### Requires `data_serializer` 1.2.3
 
-`BytesBuffer.readLeb128SignedInt` in `data_serializer` 1.2.2 does not
-sign-extend correctly — it records the byte *before* the terminating one, so the
-sign test reads the wrong byte and `-2` decodes as `126`, `64` as `-16320`. The
-static `Leb128.decodeSigned` is unaffected. The binary AST format avoids the
-buffer method entirely, writing a form byte plus an unsigned magnitude, which
-also removes any sign-extension difference between the VM and `dart2js`.
+The dependency is raised to `^1.2.3`, and this is a requirement rather than a
+preference: earlier versions decode LEB128 incorrectly, which silently
+corrupts a binary AST image.
+
+Building this format surfaced four bugs there, fixed in 1.2.3:
+
+- `BytesBuffer.readLeb128SignedInt` sign-extended from the wrong byte on every
+  platform, so `-2` decoded as `126` and `64` as `-16320`. The binary AST format
+  sidesteps it anyway by writing a form byte plus an unsigned magnitude — which
+  also removes any sign-extension difference between the VM and `dart2js` — but
+  the remaining three could not be sidestepped.
+- On the web, `shiftLeftInt`/`shiftRightInt` fell back to a 32-bit `<<`/`>>`,
+  so any shift of 32 or more produced `0`.
+- On the web, the LEB128 accumulator used `|=`, also a 32-bit operation, and
+  dropped the high bits of any value past 2^32.
+- On the web, signed decoding lost precision above roughly 2^49, because a
+  negative's *unsigned* intermediate is about `2^shift` — the range
+  `DateTime.microsecondsSinceEpoch` occupies.
+
+Together those meant an integer literal of 2^32 or more decoded to the wrong
+number on the web: `4294967296` came back as `0`, and `1000000000000000` as
+`2764472320`. A test now covers literals from 2^28 upwards, positive and
+negative, and it runs under `--platform chrome`.
 
 ## 2.27.0
 
