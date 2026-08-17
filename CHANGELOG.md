@@ -1,3 +1,39 @@
+## 2.29.0
+
+### `int` and `double` now expose the same `num` interface
+
+Each primitive only carried the conversion that changed its type: `int` had
+`toDouble()` and `double` had `toInt()`, so the identity half of the pair was
+missing on both. `3.toInt()` and `1.5.toDouble()` — both valid Dart, since
+`num.toInt()` / `num.toDouble()` return `this` — failed with
+`Bad state: Can't find core function: int.toInt(...)`.
+
+The same gap covered the rest of the `num` interface on `int`, which had none
+of the members that only `double` had been given:
+
+| on `int` | before | now |
+|---|---|---|
+| `toInt()` | ✗ | ✓ (identity) |
+| `round()`, `floor()`, `ceil()`, `truncate()` | ✗ | ✓ (identities) |
+| `toStringAsFixed()`, `toStringAsExponential()`, `toStringAsPrecision()` | ✗ | ✓ |
+| `toDouble()` | ✓ | ✓ |
+
+and on `double`, `toDouble()` is added as the matching identity.
+
+This mattered most for a `num`-typed variable. ApolloVM has no `num` core
+class, so `num n = ...` dispatches on the *runtime* value's class — meaning
+`n.toInt()` worked or failed depending on whether `n` happened to hold a
+`double` or an `int`. Both now work either way:
+
+```dart
+num n = 3;      // was: Can't find core function: int.toInt
+n.toInt();      // 3
+n.toDouble();   // 3.0
+```
+
+`toNum()` remains unsupported, as it is not a method on `num`, `int` or
+`double` in Dart.
+
 ## 2.28.1
 
 ### Fixed: `compile <file> --target=ast` silently compiled to Wasm

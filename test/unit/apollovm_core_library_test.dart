@@ -141,6 +141,37 @@ void main() {
       expect(await _run('var a = 3; return a.toDouble();'), equals(3.0));
     });
 
+    test('toInt is an identity', () async {
+      // Inherited from `num`, where `toInt()` returns `this` for an `int`.
+      expect(await _run('var a = 7; return a.toInt();'), equals(7));
+      expect(await _run('var a = -5; return a.toInt();'), equals(-5));
+      expect(await _run('var a = 0; return a.toInt();'), equals(0));
+    });
+
+    test('rounding: round, floor, ceil and truncate', () async {
+      // All four are identities on `int`, negatives included.
+      expect(await _run('var a = 7; return a.round();'), equals(7));
+      expect(await _run('var a = 7; return a.floor();'), equals(7));
+      expect(await _run('var a = 7; return a.ceil();'), equals(7));
+      expect(await _run('var a = 7; return a.truncate();'), equals(7));
+      expect(await _run('var a = -5; return a.round();'), equals(-5));
+      expect(await _run('var a = -5; return a.floor();'), equals(-5));
+      expect(await _run('var a = -5; return a.ceil();'), equals(-5));
+      expect(await _run('var a = -5; return a.truncate();'), equals(-5));
+    });
+
+    test('string formatting', () async {
+      expect(await _run('var a = 10; return a.toStringAsFixed(2);'), '10.00');
+      expect(
+        await _run('var a = 10; return a.toStringAsPrecision(3);'),
+        equals('10.0'),
+      );
+      expect(
+        await _run('var a = 1000; return a.toStringAsExponential(1);'),
+        equals('1.0e+3'),
+      );
+    });
+
     test('toString', () async {
       expect(await _run('var a = 7; return a.toString();'), equals('7'));
     });
@@ -177,6 +208,13 @@ void main() {
       expect(await _run('var d = 2.9; return d.toInt();'), equals(2));
     });
 
+    test('toDouble is an identity', () async {
+      // Inherited from `num`, where `toDouble()` returns `this` for a `double`.
+      expect(await _run('var d = 1.5; return d.toDouble();'), equals(1.5));
+      expect(await _run('var d = -2.5; return d.toDouble();'), equals(-2.5));
+      expect(await _run('var d = 0.0; return d.toDouble();'), equals(0.0));
+    });
+
     test('string formatting', () async {
       expect(await _run('var d = 1.5; return d.toStringAsFixed(2);'), '1.50');
       expect(
@@ -192,6 +230,59 @@ void main() {
     test('clamp and toString', () async {
       expect(await _run('var d = 9.0; return d.clamp(1.0, 5.0);'), equals(5.0));
       expect(await _run('var d = 1.5; return d.toString();'), equals('1.5'));
+    });
+  });
+
+  group('core num', () {
+    // There is no `num` core class: a `num`-declared variable dispatches on the
+    // runtime value's class, so `int` and `double` must each carry the whole
+    // `num` surface, not just the half that converts to the other type.
+    test('conversions on a num holding an int', () async {
+      expect(await _run('num n = 3; return n.toInt();'), equals(3));
+      expect(await _run('num n = 3; return n.toDouble();'), equals(3.0));
+    });
+
+    test('conversions on a num holding a double', () async {
+      expect(await _run('num n = 2.5; return n.toInt();'), equals(2));
+      expect(await _run('num n = 2.5; return n.toDouble();'), equals(2.5));
+    });
+
+    test('rounding on a num holding an int', () async {
+      expect(await _run('num n = 3; return n.round();'), equals(3));
+      expect(await _run('num n = 3; return n.floor();'), equals(3));
+      expect(await _run('num n = 3; return n.ceil();'), equals(3));
+      expect(await _run('num n = 3; return n.truncate();'), equals(3));
+    });
+
+    test('string formatting on a num holding an int', () async {
+      expect(await _run('num n = 2; return n.toStringAsFixed(1);'), '2.0');
+      expect(await _run('num n = 2; return n.toStringAsPrecision(2);'), '2.0');
+      expect(
+        await _run('num n = 2; return n.toStringAsExponential(1);'),
+        equals('2.0e+0'),
+      );
+    });
+
+    test('conversions chain in both directions', () async {
+      expect(await _run('var a = 4; return a.toDouble().toInt();'), equals(4));
+      expect(
+        await _run('var d = 4.5; return d.toInt().toDouble();'),
+        equals(4.0),
+      );
+      expect(await _run('var a = 4; return a.toInt().toInt();'), equals(4));
+      expect(
+        await _run('var d = 4.5; return d.toDouble().toDouble();'),
+        equals(4.5),
+      );
+    });
+
+    test('toNum() is not a Dart method and stays unsupported', () async {
+      expect(() => _run('var a = 1; return a.toNum();'), throwsA(isA<Error>()));
+      expect(
+        () => _run('var d = 1.5; return d.toNum();'),
+        throwsA(isA<Error>()),
+      );
+      expect(() => _run('num n = 1; return n.toNum();'), throwsA(isA<Error>()));
     });
   });
 
