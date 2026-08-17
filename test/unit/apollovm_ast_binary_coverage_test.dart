@@ -95,6 +95,12 @@ const Map<String, String> _notTagged = {
   'ASTFunctionParametersDeclaration':
       "written inline as the declaration's three parameter groups",
 
+  // Transient: expanded away before the tree is complete.
+  'ASTStatementVariableDeclarationList':
+      'expanded by ASTBlock.addStatement into one '
+      'ASTStatementVariableDeclaration per declarator, so it never reaches a '
+      'finished tree',
+
   // Abstract in practice: only their subclasses are ever constructed.
   'ASTEntryPointBlock': 'a base class; ASTRoot and ASTClass are what exist',
   'ASTParameterDeclaration':
@@ -202,7 +208,7 @@ void main() {
       );
       expect(
         _notTagged.length,
-        equals(12),
+        equals(13),
         reason:
             'The set of nodes encoded inline or rebuilt changed. Confirm the '
             'new entry really is covered by its parent, then update this count.',
