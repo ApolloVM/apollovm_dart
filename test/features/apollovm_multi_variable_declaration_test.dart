@@ -207,6 +207,81 @@ void main() {
     });
   });
 
+  group('ASTStatementVariableDeclarationList', () {
+    ASTStatementVariableDeclarationList list() =>
+        ASTStatementVariableDeclarationList([
+          ASTStatementVariableDeclaration(
+            ASTTypeInt.instance,
+            'a',
+            ASTExpressionLiteral(ASTValueInt(1)),
+          ),
+          ASTStatementVariableDeclaration(
+            ASTTypeInt.instance,
+            'b',
+            ASTExpressionLiteral(ASTValueInt(2)),
+          ),
+        ]);
+
+    test('a block expands it away instead of storing it', () {
+      var block = ASTBlock(null)..addStatement(list());
+
+      expect(block.statements, hasLength(2));
+      expect(
+        block.statements.map(
+          (s) => (s as ASTStatementVariableDeclaration).name,
+        ),
+        equals(['a', 'b']),
+      );
+      expect(
+        block.statements,
+        everyElement(isA<ASTStatementVariableDeclaration>()),
+      );
+    });
+
+    test('exposes the declarations as its children', () {
+      var l = list();
+      expect(l.children, equals(l.declarations));
+    });
+
+    test('resolveNode reaches every declaration', () {
+      var block = ASTBlock(null);
+      var l = list();
+      l.resolveNode(block);
+
+      expect(l.parentNode, same(block));
+      for (var d in l.declarations) {
+        expect(d.parentNode, same(block));
+      }
+    });
+
+    test('running it declares every variable in the same context', () async {
+      var l = list();
+      var context = VMScopeContext(ASTBlock(null));
+
+      var result = await l.run(context, ASTRunStatus());
+
+      expect(result.getValueNoContext(), equals(2));
+      for (var (name, value) in [('a', 1), ('b', 2)]) {
+        var variable = await context.getVariable(name, false);
+        expect(
+          variable,
+          isNotNull,
+          reason: 'Variable `$name` not declared in the run context.',
+        );
+        expect(
+          (await variable!.getValue(context)).getValueNoContext(),
+          equals(value),
+        );
+      }
+    });
+
+    test('resolveType is void, toString lists the declarations', () {
+      var l = list();
+      expect(l.resolveType(null), isA<ASTTypeVoid>());
+      expect(l.toString(), equals('${l.declarations[0]} ${l.declarations[1]}'));
+    });
+  });
+
   group('translation', () {
     const source = '''
       void main() {
