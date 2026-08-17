@@ -536,6 +536,14 @@ class ASTBlock extends ASTStatement {
   }
 
   void addStatement(ASTStatement statement) {
+    // Expand `int a = 1, b = 2;` into one declaration per statement: the
+    // declarators already share this block's scope, and this keeps
+    // [ASTStatementVariableDeclarationList] out of the generators and runners.
+    if (statement is ASTStatementVariableDeclarationList) {
+      addAllStatements(statement.declarations);
+      return;
+    }
+
     _statements.add(statement);
     if (statement is ASTBlock) {
       statement.parentBlock = this;
@@ -1146,6 +1154,58 @@ class ASTStatementVariableDeclaration<V> extends ASTStatementTyped {
       return '$type $name;';
     }
   }
+}
+
+/// A variable declaration statement with more than one declarator, as parsed
+/// from `num nr = 0.96, ng = 0.24, nb = 0.56;`.
+///
+/// This node is transient: [ASTBlock.addStatement] expands it into its
+/// individual [declarations], so no generator, runner or serializer ever sees
+/// it. The expansion is faithful because every declarator of a multi-declarator
+/// statement shares the enclosing scope and is initialized left to right —
+/// exactly the semantics of the same declarations written one per line. It also
+/// keeps the code generators portable: targets without a comma-separated
+/// declaration form (Python, Go, Kotlin) get one declaration per statement for
+/// free.
+class ASTStatementVariableDeclarationList extends ASTStatement {
+  final List<ASTStatementVariableDeclaration> declarations;
+
+  ASTStatementVariableDeclarationList(this.declarations);
+
+  @override
+  Iterable<ASTNode> get children => declarations;
+
+  @override
+  void resolveNode(ASTNode? parentNode) {
+    super.resolveNode(parentNode);
+
+    for (var d in declarations) {
+      d.resolveNode(parentNode);
+    }
+  }
+
+  /// Runs each declaration in [parentContext]: the declarators share the
+  /// enclosing scope, so no run context is defined here. Only reachable if this
+  /// node escapes the expansion in [ASTBlock.addStatement].
+  @override
+  FutureOr<ASTValue> run(
+    VMContext parentContext,
+    ASTRunStatus runStatus,
+  ) async {
+    FutureOr<ASTValue> returnValue = ASTValueVoid.instance;
+
+    for (var d in declarations) {
+      returnValue = await d.run(parentContext, runStatus);
+    }
+
+    return returnValue;
+  }
+
+  @override
+  ASTType resolveType(VMContext? context) => ASTTypeVoid.instance;
+
+  @override
+  String toString() => declarations.join(' ');
 }
 
 /// [ASTStatement] base for branches.

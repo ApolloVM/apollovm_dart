@@ -1,3 +1,45 @@
+## 2.30.0
+
+### Dart: multiple variables per declaration
+
+A declaration could only introduce one variable, so the ordinary Dart form of
+declaring several at once was a syntax error:
+
+```dart
+void main() {
+  num nr = 0.96, ng = 0.24, nb = 0.56;  // was: [SyntaxError] ";" expected
+
+  print(nr);
+  print(ng);
+  print(nb);
+}
+```
+
+Every declarator is now accepted, in a function body and at the top level,
+sharing the declared type and the `final` / `const` / `late` modifier of the
+first one. A declarator may omit its initializer (`int a, b = 5;`) and may read
+the ones before it (`int p = 1, q = p + 1;`), matching Dart's left-to-right
+initialization.
+
+The declarators are expanded into one declaration each as the code is parsed,
+so translation emits the form every target already supports:
+
+```dart
+num nr = 0.96;
+num ng = 0.24;
+num nb = 0.56;
+```
+
+```python
+nr: float = 0.96
+ng: float = 0.24
+nb: float = 0.56
+```
+
+A `for` initializer still takes a single declarator: a `for` header has no
+place for the extra declarations the expansion produces, and the
+comma-separated form does not exist in every target language.
+
 ## 2.29.0
 
 ### `int` and `double` now expose the same `num` interface

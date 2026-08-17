@@ -80,8 +80,11 @@ class DartGrammarDefinition extends DartGrammarLexer {
                   root.addExtension(def);
                 } else if (def is ASTTypeAlias) {
                   root.addTypeAlias(def);
-                } else if (def is ASTStatementVariableDeclaration) {
-                  root.addStatement(def);
+                } else if (def is ASTStatementVariableDeclaration ||
+                    def is ASTStatementVariableDeclarationList) {
+                  // `addStatement` expands a declaration list into one
+                  // top-level declaration per declarator.
+                  root.addStatement(def as ASTStatement);
                 }
               }
             }
@@ -982,7 +985,7 @@ class DartGrammarDefinition extends DartGrammarLexer {
           });
 
   Parser<ASTStatement> statementSimple() =>
-      (statementVariableDeclaration() | statementExpression())
+      (statementVariableDeclarationSingle() | statementExpression())
           .cast<ASTStatement>();
 
   Parser<ASTStatementForLoop> statementForLoop() =>
@@ -1176,69 +1179,132 @@ class DartGrammarDefinition extends DartGrammarLexer {
             );
           });
 
-  Parser<ASTStatementVariableDeclaration> statementVariableDeclaration() =>
-      (
-          // Metadata attaches to the *declaration*, deliberately not to
-          // `statement()`: attempting a metadata parse at every statement
-          // position would move the farthest-failure offset that
-          // `apollovm_dart_parse_error_position_test` pins on a stray `@`.
-          ref0(metadata).star() &
-              // `late` is accepted and dropped: ApolloVM has no
-              // lazy-initialization semantics, and `late int x = 1;` runs the
-              // same as `int x = 1;`.
-              lateKeyword().optional() &
-              // var definition:
-              (
-              // final Type name:
-              ((finalToken() | constToken()).trimHidden() &
-                      type() &
-                      identifier().trimHidden()) |
-                  // final name:
-                  ((finalToken() | constToken()) & identifier().trimHidden()) |
-                  // Type name:
-                  (type() & identifier().trimHidden())
-              // end var definition
-              ) &
-              (char('=').trimHidden() & ref0(expression)).optional() &
-              char(';').trimHidden())
-          .map((v) {
-            var varDef = v[2] as List;
+  /// A variable declaration statement, with one declarator (`int a = 1;`) or
+  /// several (`num nr = 0.96, ng = 0.24, nb = 0.56;`).
+  ///
+  /// Returns an [ASTStatementVariableDeclaration] for the single-declarator
+  /// form and an [ASTStatementVariableDeclarationList] — expanded back into one
+  /// statement per declarator by `ASTBlock.addStatement` — for the multi form.
+  Parser<ASTStatement> statementVariableDeclaration() =>
+      _variableDeclaration(multipleDeclarators: true);
 
-            bool unmodifiable;
-            ASTType type;
-            String name;
+  /// [statementVariableDeclaration] restricted to a single declarator, for the
+  /// `for` initializer. A `for` header has no place to put the extra
+  /// declarations of the multi form: unlike a block, it can't hold a statement
+  /// list, and the comma-separated form doesn't exist in every target language.
+  Parser<ASTStatementVariableDeclaration>
+  statementVariableDeclarationSingle() => _variableDeclaration(
+    multipleDeclarators: false,
+  ).cast<ASTStatementVariableDeclaration>();
 
-            if (varDef.length == 3) {
+  Parser<ASTStatement> _variableDeclaration({
+    required bool multipleDeclarators,
+  }) {
+    // Extra declarators: `, ng = 0.24`. Each reuses the type and the
+    // `final`/`const` modifier of the first one.
+    final extraDeclarators = multipleDeclarators
+        ? (char(',').trimHidden() &
+                  identifier().trimHidden() &
+                  (char('=').trimHidden() & ref0(expression)).optional())
+              .star()
+        : epsilonWith<List>(const []);
+
+    return (
+        // Metadata attaches to the *declaration*, deliberately not to
+        // `statement()`: attempting a metadata parse at every statement
+        // position would move the farthest-failure offset that
+        // `apollovm_dart_parse_error_position_test` pins on a stray `@`.
+        ref0(metadata).star() &
+            // `late` is accepted and dropped: ApolloVM has no
+            // lazy-initialization semantics, and `late int x = 1;` runs the
+            // same as `int x = 1;`.
+            lateKeyword().optional() &
+            // var definition:
+            (
+            // final Type name:
+            ((finalToken() | constToken()).trimHidden() &
+                    type() &
+                    identifier().trimHidden()) |
+                // final name:
+                ((finalToken() | constToken()) & identifier().trimHidden()) |
+                // Type name:
+                (type() & identifier().trimHidden())
+            // end var definition
+            ) &
+            (char('=').trimHidden() & ref0(expression)).optional() &
+            extraDeclarators &
+            char(';').trimHidden())
+        .map((v) {
+          var varDef = v[2] as List;
+
+          bool unmodifiable;
+          ASTType type;
+          String name;
+
+          if (varDef.length == 3) {
+            unmodifiable = true;
+            assert(['final', 'const'].contains((varDef[0] as Token).value));
+            type = varDef[1];
+            name = varDef[2];
+          } else if (varDef.length == 2) {
+            final varDef0 = varDef[0];
+            if (varDef0 is Token &&
+                (varDef0.value == 'final' || varDef0.value == 'const')) {
               unmodifiable = true;
-              assert(['final', 'const'].contains((varDef[0] as Token).value));
-              type = varDef[1];
-              name = varDef[2];
-            } else if (varDef.length == 2) {
-              final varDef0 = varDef[0];
-              if (varDef0 is Token &&
-                  (varDef0.value == 'final' || varDef0.value == 'const')) {
-                unmodifiable = true;
-                type = getTypeByName(varDef0.value);
-                name = varDef[1];
-              } else {
-                unmodifiable = false;
-                type = varDef[0];
-                name = varDef[1];
-              }
+              type = getTypeByName(varDef0.value);
+              name = varDef[1];
             } else {
-              throw StateError("Invalid var definition: $varDef");
+              unmodifiable = false;
+              type = varDef[0];
+              name = varDef[1];
             }
+          } else {
+            throw StateError("Invalid var definition: $varDef");
+          }
 
-            var valueOpt = v[3];
-            var value = valueOpt != null ? valueOpt[1] as ASTExpression : null;
-            if (value != null) type.associateToType(value);
-            return ASTStatementVariableDeclaration(
-              type,
-              name,
-              value,
-              unmodifiable: unmodifiable,
-            );
-          });
+          var declaration = _newVariableDeclaration(
+            type,
+            name,
+            v[3],
+            unmodifiable: unmodifiable,
+          );
+
+          var extras = v[4] as List;
+          if (extras.isEmpty) return declaration;
+
+          return ASTStatementVariableDeclarationList([
+            declaration,
+            for (var extra in extras)
+              // Each declarator needs its own type instance: the declarations
+              // are independent nodes, and `_newVariableDeclaration` associates
+              // the type to that declarator's own value expression.
+              _newVariableDeclaration(
+                type.cloneType(),
+                extra[1] as String,
+                extra[2],
+                unmodifiable: unmodifiable,
+              ),
+          ]);
+        });
+  }
+
+  ASTStatementVariableDeclaration _newVariableDeclaration(
+    ASTType type,
+    String name,
+    Object? valueOpt, {
+    required bool unmodifiable,
+  }) {
+    var value = valueOpt != null
+        ? (valueOpt as List)[1] as ASTExpression
+        : null;
+    if (value != null) type.associateToType(value);
+    return ASTStatementVariableDeclaration(
+      type,
+      name,
+      value,
+      unmodifiable: unmodifiable,
+    );
+  }
 
   Parser<ASTBranch> branch() =>
       (ref0(branchIfElseIfsElseBlock) |
