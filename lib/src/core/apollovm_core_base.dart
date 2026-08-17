@@ -798,6 +798,18 @@ class CoreClassInt extends CoreClassPrimitive<int> {
   late final ASTExternalClassGetter _getterSign;
   late final ASTExternalClassFunction _functionToDouble;
 
+  // Inherited from `num`: `int` implements these as identities or as `String`
+  // conversions. They are declared here (and mirrored on [CoreClassDouble]) so
+  // both primitives expose the same `num` surface.
+  late final ASTExternalClassFunction _functionToInt;
+  late final ASTExternalClassFunction _functionRound;
+  late final ASTExternalClassFunction _functionFloor;
+  late final ASTExternalClassFunction _functionCeil;
+  late final ASTExternalClassFunction _functionTruncate;
+  late final ASTExternalClassFunction _functionToStringAsFixed;
+  late final ASTExternalClassFunction _functionToStringAsExponential;
+  late final ASTExternalClassFunction _functionToStringAsPrecision;
+
   CoreClassInt._() : super(ASTTypeInt.instance, 'int') {
     _functionToString = _externalClassFunctionArgs0(
       'toString',
@@ -878,6 +890,73 @@ class CoreClassInt extends CoreClassPrimitive<int> {
       ASTTypeDouble.instance,
       (int self) => self.toDouble(),
     );
+
+    // Identity on `int`, but valid Dart: `num.toInt()` returns `this`.
+    _functionToInt = _externalClassFunctionArgs0(
+      'toInt',
+      ASTTypeInt.instance,
+      (int self) => self,
+    );
+
+    _functionRound = _externalClassFunctionArgs0(
+      'round',
+      ASTTypeInt.instance,
+      (int self) => self.round(),
+    );
+
+    _functionFloor = _externalClassFunctionArgs0(
+      'floor',
+      ASTTypeInt.instance,
+      (int self) => self.floor(),
+    );
+
+    _functionCeil = _externalClassFunctionArgs0(
+      'ceil',
+      ASTTypeInt.instance,
+      (int self) => self.ceil(),
+    );
+
+    _functionTruncate = _externalClassFunctionArgs0(
+      'truncate',
+      ASTTypeInt.instance,
+      (int self) => self.truncate(),
+    );
+
+    _functionToStringAsFixed = _externalClassFunctionArgs1(
+      'toStringAsFixed',
+      ASTTypeString.instance,
+      ASTFunctionParameterDeclaration(
+        ASTTypeInt.instance,
+        'fractionDigits',
+        0,
+        false,
+      ),
+      (int self, dynamic digits) => self.toStringAsFixed(digits),
+    );
+
+    _functionToStringAsExponential = _externalClassFunctionArgs1(
+      'toStringAsExponential',
+      ASTTypeString.instance,
+      ASTFunctionParameterDeclaration(
+        ASTTypeInt.instance,
+        'fractionDigits',
+        0,
+        true,
+      ),
+      (int self, dynamic digits) => self.toStringAsExponential(digits),
+    );
+
+    _functionToStringAsPrecision = _externalClassFunctionArgs1(
+      'toStringAsPrecision',
+      ASTTypeString.instance,
+      ASTFunctionParameterDeclaration(
+        ASTTypeInt.instance,
+        'precision',
+        0,
+        false,
+      ),
+      (int self, dynamic precision) => self.toStringAsPrecision(precision),
+    );
   }
 
   @override
@@ -926,6 +1005,22 @@ class CoreClassInt extends CoreClassPrimitive<int> {
         return _functionToRadixString;
       case 'toDouble':
         return _functionToDouble;
+      case 'toInt':
+        return _functionToInt;
+      case 'round':
+        return _functionRound;
+      case 'floor':
+        return _functionFloor;
+      case 'ceil':
+        return _functionCeil;
+      case 'truncate':
+        return _functionTruncate;
+      case 'toStringAsFixed':
+        return _functionToStringAsFixed;
+      case 'toStringAsExponential':
+        return _functionToStringAsExponential;
+      case 'toStringAsPrecision':
+        return _functionToStringAsPrecision;
 
       case 'toString':
         return _functionToString;
@@ -964,6 +1059,9 @@ class CoreClassDouble extends CoreClassPrimitive<double> {
   late final ASTExternalClassFunction _functionFloor;
   late final ASTExternalClassFunction _functionCeil;
   late final ASTExternalClassFunction _functionTruncate;
+
+  /// Inherited from `num`: identity on `double`, mirroring `int.toInt()`.
+  late final ASTExternalClassFunction _functionToDouble;
 
   CoreClassDouble._() : super(ASTTypeDouble.instance, 'double') {
     _functionToString = _externalClassFunctionArgs0(
@@ -1127,6 +1225,13 @@ class CoreClassDouble extends CoreClassPrimitive<double> {
       ASTTypeInt.instance,
       (double self) => self.truncate(),
     );
+
+    // Identity on `double`, but valid Dart: `num.toDouble()` returns `this`.
+    _functionToDouble = _externalClassFunctionArgs0(
+      'toDouble',
+      ASTTypeDouble.instance,
+      (double self) => self,
+    );
   }
 
   @override
@@ -1187,6 +1292,8 @@ class CoreClassDouble extends CoreClassPrimitive<double> {
         return _functionCeil;
       case 'truncate':
         return _functionTruncate;
+      case 'toDouble':
+        return _functionToDouble;
 
       case 'toString':
         return _functionToString;
