@@ -2,7 +2,7 @@ name: apollovm_wasm
 description: >-
   Native (Dart VM) WebAssembly execution for ApolloVM: the wasm_run-backed
   WasmRuntime, kept out of the core package so apollovm stays FFI-free.
-version: 1.2.0
+version: 1.2.1
 repository: https://github.com/ApolloVM/apollovm_dart
 issue_tracker: https://github.com/ApolloVM/apollovm_dart/issues
 
@@ -22,6 +22,13 @@ dependencies:
   # so it tracks the release it is cut against.
   apollovm: ^2.25.0
   wasm_run: ^0.2.0+2
+  # Not imported directly: `wasm_run` pulls it in, but its constraint (`^2.12.0`)
+  # is wrong. `wasm_run`'s FFI bindings are stamped with codegen version 2.12.0,
+  # and `flutter_rust_bridge` refuses to start when the runtime version differs
+  # ("codegen version (2.12.0) should be the same as runtime version"), so 2.13.0
+  # breaks every Wasm call at library-load time. Hold the 2.12.x line until
+  # `wasm_run` regenerates its bindings.
+  flutter_rust_bridge: '>=2.12.0 <2.13.0'
   crypto: ^3.0.7
   path: ^1.9.1
 
