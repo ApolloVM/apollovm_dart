@@ -834,13 +834,19 @@ class ApolloCodeGeneratorApollo extends ApolloCodeGenerator {
 
     void writeAllStrings(List list, {bool raw = false}) {
       var skip = raw ? 2 : 1;
-      for (var e in list) {
-        if (e is String) {
-          out!.write(e.substring(skip, e.length - 1));
-        } else {
-          var s2 = e.toString();
-          out!.write(s2.substring(skip, s2.length - 1));
+
+      var contents = list
+          .map((e) => e is String ? e : e.toString())
+          .map((s) => s.substring(skip, s.length - 1))
+          .toList();
+
+      for (var i = 0; i < contents.length; ++i) {
+        var content = contents[i];
+        // A raw string has no interpolation to delimit.
+        if (!raw && i + 1 < contents.length) {
+          content = _delimitInterpolationBefore(content, contents[i + 1]);
         }
+        out!.write(content);
       }
     }
 
@@ -906,11 +912,16 @@ class ApolloCodeGeneratorApollo extends ApolloCodeGenerator {
         .map(
           (l) => l.reduce((a, b) {
             if (a.startsWith('"""') || a.startsWith("'''")) {
-              return a.substring(0, a.length - 3) + b.substring(3);
+              var head = a.substring(0, a.length - 3);
+              var tail = b.substring(3);
+              return _delimitInterpolationBefore(head, tail) + tail;
             } else if (a.startsWith('r"""') || a.startsWith("r'''")) {
+              // Raw: no interpolation to delimit.
               return a.substring(0, a.length - 3) + b.substring(4);
             } else if (a.startsWith('"') || a.startsWith("'")) {
-              return a.substring(0, a.length - 1) + b.substring(1);
+              var head = a.substring(0, a.length - 1);
+              var tail = b.substring(1);
+              return _delimitInterpolationBefore(head, tail) + tail;
             } else if (a.startsWith('r"') || a.startsWith("r'")) {
               return a.substring(0, a.length - 1) + b.substring(2);
             } else {
@@ -1041,7 +1052,12 @@ class ApolloCodeGeneratorApollo extends ApolloCodeGenerator {
     final expression2 = expression.expression2;
     final operator = expression.operator;
 
-    var groupComplexExpressions = true;
+    // Tracked per operand: relaxing the grouping of a string operand (whose
+    // concatenation is flattened into one literal below) must not also strip
+    // the parentheses off the *other* one. `"q " + (n + 1)` re-emitted as
+    // `"q " + n + 1` re-associates to `("q " + n) + 1`, a different value.
+    var groupComplexExpressions1 = true;
+    var groupComplexExpressions2 = true;
 
     // Merge into string template:
     if (operator == ASTExpressionOperator.add) {
@@ -1051,7 +1067,7 @@ class ApolloCodeGeneratorApollo extends ApolloCodeGenerator {
 
         if (expression1.isLiteralString ||
             expression1.hasDescendantLiteralString) {
-          groupComplexExpressions = false;
+          groupComplexExpressions1 = false;
         }
 
         if ((_isSingleQuoteString(s1) || _isDoubleQuoteString(s1)) &&
@@ -1062,7 +1078,7 @@ class ApolloCodeGeneratorApollo extends ApolloCodeGenerator {
           return out;
         }
       } else if (expression2.isLiteralString) {
-        groupComplexExpressions = false;
+        groupComplexExpressions1 = false;
 
         var s1 = generateASTExpression(expression1).toString();
         var s2 = generateASTExpression(expression2).toString();
@@ -1088,15 +1104,28 @@ class ApolloCodeGeneratorApollo extends ApolloCodeGenerator {
         }
 
         if (_isVariable(s1) && (s2SingleQuote || s2DoubleQuote)) {
-          var sMerge = '${s2.substring(0, 1)}\$$s1${s2.substring(1)}';
+          var rest = s2.substring(1);
+          var head = _delimitInterpolationBefore('\$$s1', rest);
+          var sMerge = '${s2.substring(0, 1)}$head$rest';
           out.write(sMerge);
           return out;
         }
-      } else if (expression1.isLiteralString) {
-        groupComplexExpressions = false;
-      } else if (expression1.hasDescendantLiteralString ||
-          expression2.hasDescendantLiteralString) {
-        groupComplexExpressions = false;
+      } else {
+        var string1 =
+            expression1.isLiteralString ||
+            expression1.hasDescendantLiteralString;
+        var string2 =
+            expression2.isLiteralString ||
+            expression2.hasDescendantLiteralString;
+
+        // Concatenation flattens the string side into one literal, so its
+        // parentheses are noise. Operand 1 can always shed them here: it is
+        // the left operand of a left-associative `+`, so they are redundant.
+        if (string1 || string2) groupComplexExpressions1 = false;
+
+        // Operand 2 keeps its parentheses unless it is a string itself.
+        // Dropping them re-associates `"q " + (n + 1)` into `("q " + n) + 1`.
+        if (string2) groupComplexExpressions2 = false;
       }
     }
 
@@ -1109,8 +1138,8 @@ class ApolloCodeGeneratorApollo extends ApolloCodeGenerator {
     var exp1 = generateASTExpression(expression1);
     var exp2 = generateASTExpression(expression2);
 
-    var group1 = groupComplexExpressions && expression1.isComplex;
-    var group2 = groupComplexExpressions && expression2.isComplex;
+    var group1 = groupComplexExpressions1 && expression1.isComplex;
+    var group2 = groupComplexExpressions2 && expression2.isComplex;
 
     if (group1) out.write('(');
     out.write(exp1);
@@ -1204,8 +1233,42 @@ class ApolloCodeGeneratorApollo extends ApolloCodeGenerator {
     return '$toQuote$unescaped$toQuote';
   }
 
-  String _mergeQuotedStrings(String a, String b) =>
-      a.substring(0, a.length - 1) + b.substring(1);
+  static final RegExp _regexpTrailingInterpolation = RegExp(
+    r'\$([a-zA-Z_]\w*)$',
+  );
+
+  static final RegExp _regexpIdentifierChar = RegExp(r'\w');
+
+  /// Brace-delimits a bare `$name` at the end of [content] when [next] — the
+  /// text about to be appended right after it — starts with a character the
+  /// interpolation would otherwise swallow.
+  ///
+  /// Concatenation is flattened into a single literal, so `'a' + n + 'b'`
+  /// joins as `'a$n'` + `'b'`. Spliced naively that is `'a$nb'`, which names a
+  /// variable `nb`; delimited it is `'a${n}b'`, which is the original value.
+  static String _delimitInterpolationBefore(String content, String next) {
+    if (next.isEmpty || !_regexpIdentifierChar.hasMatch(next[0])) {
+      return content;
+    }
+
+    var match = _regexpTrailingInterpolation.firstMatch(content);
+    if (match == null) return content;
+
+    // An escaped `\$` is a literal dollar sign, not an interpolation.
+    var backslashes = 0;
+    for (var i = match.start - 1; i >= 0 && content[i] == r'\'; --i) {
+      ++backslashes;
+    }
+    if (backslashes.isOdd) return content;
+
+    return '${content.substring(0, match.start)}\${${match[1]}}';
+  }
+
+  String _mergeQuotedStrings(String a, String b) {
+    var aContent = a.substring(0, a.length - 1);
+    var bContent = b.substring(1);
+    return _delimitInterpolationBefore(aContent, bContent) + bContent;
+  }
 
   String? _tryMergeQuotedStrings(String s1, String s2) {
     final q1 = s1[0];

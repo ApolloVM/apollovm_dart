@@ -37,6 +37,25 @@
   by round-trip test fixtures, a dedicated test suite, and an example
   (`example/apollovm_example_apollo.dart`).
 
+#### Generation fixes
+
+Two ways the Apollo generator could emit source that parsed cleanly but *meant*
+something else — both found by covering the generator's emit methods directly:
+
+- **An interpolation is brace-delimited when the next character would extend
+  it.** Concatenation is flattened into a single literal, so `"a" + n + "b"`
+  joined as `'a$n'` + `'b'`, producing `'a$nb'` — a reference to a variable
+  named `nb`. It is now emitted `'a${n}b'`. The braces are added only where they
+  are needed: `"a" + n`, `"a" + n + "!"` and a hand-written `"hello $name"` all
+  still emit the bare `$name` form, and an escaped `\$` is left alone.
+
+- **A parenthesized operand beside a string keeps its parentheses.** Flattening
+  the string side of a `+` also dropped the grouping on the *other* operand, so
+  `"q " + (n + 1)` came back as `"q " + n + 1`, which re-associates to
+  `("q " + n) + 1` — string concatenation instead of arithmetic. Grouping is now
+  decided per operand: the string side still sheds its redundant parentheses,
+  the other side keeps them.
+
 ## 2.30.0
 
 ### Dart: multiple variables per declaration
