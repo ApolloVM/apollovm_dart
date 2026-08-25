@@ -94,6 +94,10 @@ async User loadUser(Int id) {
   Asyncify), classes (fields, constructors, instance & `static` methods,
   `toString()` dispatch, `Object`/`dynamic` boxing), exceptions, closures,
   lists/maps and GC types.
+- **Null safety**: nullable types (`T?`), `??` / `??=`, `?.` / `?[`, `!` and
+  cascades — parsed from Dart, interpreted, compiled to Wasm and translated to
+  every target, plus a flow-aware static analyzer surfaced through the LSP.
+  See [Null safety](#null-safety).
 
 ### Control flow & operators
 
@@ -106,6 +110,7 @@ The **Wasm** column shows what the on-the-fly WebAssembly compiler currently sup
 | Feature | Dart | Java | Kotlin | Go | C# | JS | TS | Lua | Python | Wasm |
 |---|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|
 | `if` / `else if` / `else`        | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Unbraced single-statement body¹⁴ | ✅ | ✅ | ✅ | 🚫 | ✅ | ✅ | ✅ | 🚫  | ✅ | ✅ |
 | `for` (C-style)                  | ✅ | ✅ | 🚫  | ✅ | ✅ | ✅ | ✅ | 🧩¹ | 🚫 | ✅ |
 | `for-each` / `for-in`            | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | `while`                          | ✅ | ✅ | ✅ | 🧩⁸ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
@@ -120,14 +125,15 @@ The **Wasm** column shows what the on-the-fly WebAssembly compiler currently sup
 | Arithmetic (`+ - * / %`)         | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Comparison / logical             | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Bitwise (`& \| ^ << >> ~`)       | ✅ | ✅ | 🧩⁵ | 🧩¹¹ | ✅ | ✅ | ✅ | 🧩⁶ | ✅ | ✅ |
-| `++` / `--`, compound assign     | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `++` / `--`, compound assign¹⁵   | ✅ | ✅ | 🧩¹⁵ | ✅ | ✅ | ✅ | ✅ | 🧩¹⁵ | ✅ | ✅ |
+| `assert`¹⁶                       | ✅ | ✅ | ✅ | 🧩¹⁶ | ✅ | 🧩¹⁶ | 🧩¹⁶ | ✅ | ✅ | 🚧 |
 | Lambdas / closures               | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Named / keyword arguments        | ✅ | 🚫  | ✅ | 🚫 | ✅ | 🚫  | 🚫  | 🚫  | ✅ | ✅ |
 | Parameter default values         | ✅ | 🚫  | ✅ | 🚫 | ✅ | 🚫  | 🚫  | 🚫  | ✅ | ✅ |
 | String interpolation / concat    | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | List & map / dict literals       | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Index access (`a[i]`, nested `m[i][j]`)¹² | ✅ | 🧩 | 🧩 | 🧩 | 🧩 | 🧩 | 🧩 | 🧩 | 🧩 | ✅ |
-| `null` / `None` / `nil`          | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| `null` / `None` / `nil`¹³        | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 🧩¹³ |
 
 ¹ Lua numeric-for (`for i = a, b do`). &nbsp; ² Lua `repeat … until`. &nbsp;
 ³ Kotlin `when`. &nbsp; ⁴ Python `match` / `case`. &nbsp;
@@ -147,7 +153,173 @@ The **Wasm** column shows what the on-the-fly WebAssembly compiler currently sup
 compound assignment (`a[i] += 1`). **Chained/nested** access and assignment
 (`m[0][1]`, `m['a']['b'] = v`) run on the shared interpreter and are parsed from
 **Dart** source; the other languages currently parse a single `[...]` only (`🧩`),
-with nested-index parsing being extended per grammar.
+with nested-index parsing being extended per grammar. &nbsp;
+¹³ The null *literal* and its per-language spelling (`null` / `nil` / `None`).
+Wasm has no null value of its own and represents it as a boxed pointer, so it is
+`🧩` — see [Null safety](#null-safety) for the operators (`??`, `?.`, `!`, …) and
+the Wasm limits. &nbsp;
+¹⁴ A control-flow body may be a single statement without braces
+(`for (var e in l) print(e);`), on `if`/`else`/`else if` and on every loop. A
+dangling `else` binds to the nearest `if`, as in each target language. Python's
+equivalent is the inline suite (`if x: return 1`), including the `;`-joined form.
+Go is `🚫` by its own spec (`Block = "{" StatementList "}"`) and Lua has no such
+form; a single-statement body translated to either is emitted braced /
+`do`…`end`. The *empty* statement as a body (`while (c) ;`) is not supported. &nbsp;
+¹⁵ Compound assignment covers `= += -= *= /= ~/= %= &= |= ^= <<= >>= ??=`.
+Kotlin has no compound form for the bitwise/shift operators and Lua has none at
+all, so those are lowered to `x = x OP y` (`🧩`). &nbsp;
+¹⁶ Each target uses its own idiom: Dart `assert(c, m);`, Java `assert c : m;`,
+Python `assert c, m`, Kotlin `assert(c) { m }`, C# `Debug.Assert(c, m)`, Lua's
+built-in `assert(c, m)`. JS/TS have no throwing `assert` and Go has none at all,
+so they are lowered to an explicit check (`if (!(c)) throw m;` /
+`if !(c) { panic(m) }`) — `🧩`. A failed assertion throws and is catchable like
+any other exception. Wasm refuses to compile `assert` rather than mis-compile it.
+
+### Null safety
+
+Dart's null-safety surface — nullable types (`T?`), the null-coalescing operators
+`??` / `??=`, null-aware access `?.` / `?[`, the null assertion `!`, and cascades
+`..` / `?..` — is **parsed from Dart source** (the other grammars do not accept
+this syntax yet), runs on the interpreter, compiles to Wasm within the limits
+below, and is **translated to every target**.
+
+Comparison against null is the exception: every grammar parses its own spelling,
+including Python's `is None` / `is not None`, so a null check written in any
+supported language round-trips.
+
+Same legend as above, plus **⚠️** *lossy*: the construct is emitted in a form that
+compiles but drops its null semantics (the null check is not performed).
+
+The null-aware *accesses* (`?.`, `?[`) are never lossy: a target without the
+native operator lowers them to an explicit guard that yields null, so the check
+is really performed — see footnote ¹¹. Only the null *assertion* `!` is still
+dropped where the target has no equivalent, and that diverges from Dart solely
+in the error path (a value that should have thrown is used instead).
+
+| Feature | Dart | Java | Kotlin | Go | C# | JS | TS | Lua | Python | Wasm |
+|---|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|
+| Nullable type `T?`               | ✅ | 🚫 | ✅¹ | 🧩² | 🚫 | 🚫 | 🧩³ | 🚫 | 🚫 | 🧩⁴ |
+| `??` (null-coalescing)           | ✅ | 🧩⁵ | ✅⁶ | 🧩⁷ | ✅ | ✅ | ✅ | 🧩⁸ | 🧩⁹ | 🧩⁴ |
+| `??=` (null-coalescing assign)   | ✅ | 🧩⁵ | 🧩⁶ | 🚧¹⁰ | ✅ | ✅ | ✅ | 🧩⁸ | 🧩⁹ | 🧩⁴ |
+| `?.` (null-aware access)         | ✅ | 🧩¹¹ | ✅ | 🚧¹² | ✅ | ✅ | ✅ | 🧩¹¹ | 🧩¹¹ | 🧩⁴ |
+| `?[` (null-aware index)          | ✅ | 🧩¹¹ | ✅¹³ | 🚧¹² | ✅ | ✅¹⁴ | ✅¹⁴ | 🧩¹¹ | 🧩¹¹ | 🧩⁴ |
+| `!` (null assertion)             | ✅ | ⚠️ | ✅¹⁵ | 🧩¹⁶ | ✅ | 🚫¹⁷ | ✅ | ⚠️ | ⚠️ | 🧩⁴ |
+| Cascades `..` / `?..`            | ✅ | 🧩 | 🧩 | 🧩 | 🧩 | 🧩 | 🧩 | 🧩 | 🧩 | 🚧 |
+| `x == null` / `x != null`        | ✅ | ✅ | ✅ | ✅¹⁸ | ✅ | ✅ | ✅ | ✅¹⁹ | ✅²⁰ | ✅ |
+| Static null-safety analysis²¹    | ✅ | 🚫 | 🚫 | 🚫 | 🚫 | 🚫 | 🚫 | 🚫 | 🚫 | 🚫 |
+| Enforce analysis at load²²       | ✅ | 🚫 | 🚫 | 🚫 | 🚫 | 🚫 | 🚫 | 🚫 | 🚫 | 🚫 |
+
+¹ Kotlin renders the suffix natively (`Int?`). &nbsp;
+² Go has no nullable value types: a `T?` is generated as a pointer `*T` — reads
+deref (`(*a)`), `x == null` compares the pointer (`x == nil`), and a non-null
+value takes its address through a generated `func goPtr[T any](v T) *T` helper
+(Go cannot write `&5`). Types already nilable in Go are left alone, so a
+`List<int>?` stays `[]int`, not `*[]int`. &nbsp;
+³ TypeScript renders nullable *types* without the suffix — `T?` on a member is
+not valid TS — while the null-aware *operators* are native. &nbsp;
+⁴ Wasm has no null value of its own, so `null` is the boxed-`Object` pointer `0`.
+That covers everything that stays boxed: a `var` / `Object?` local, a ternary
+arm, a `List<Object>` element, `??`, `== null`, and string interpolation (which
+prints `null`). A slot with a concrete Wasm type has no encoding for it — an
+`int` is an i64 — and is reported as an `UnsupportedSyntaxError` naming the type
+rather than compiled into a module that fails to validate. &nbsp;
+⁵ Java has no null-coalescing operator; emitted as the ternary
+`(a != null ? a : b)`, and `a ??= b` as `a = (a != null ? a : b)`. &nbsp;
+⁶ Kotlin's null-coalescing is the Elvis operator `a ?: b`. It has no `??=`, so
+that becomes `a = a ?: b`. &nbsp;
+⁷ Go has no conditional *expression*, so `a ?? b` is an inline function that
+nil-checks the pointer: `func() int { if a != nil { return *a }; return b }()`.
+&nbsp;
+⁸ Lua has no null-coalescing operator, and neither `a or b` nor the common
+`a ~= nil and a or b` idiom is correct — Lua treats `false` as falsy, so a
+non-nil `false` would wrongly fall through. It is emitted as an
+immediately-invoked function with an explicit `nil` test, which also evaluates
+the left operand only once. &nbsp;
+⁹ Python uses a conditional expression testing `is not None`, so `0` / `''` /
+`False` are preserved (an `or` shortcut would not). &nbsp;
+¹⁰ Go's `??=` lowering (`t = t ?? v`) needs the target's element type to build
+the inline function's return type, which the text-level assignment hook does not
+have; it is reported as unsupported. Plain `??` is unaffected. &nbsp;
+¹¹ Java, Lua and Python have no null-aware access operator, so the access is
+lowered to an explicit guard that yields null — a ternary in Java
+(`(a != null ? a.x : null)`), a conditional expression testing `is not None` in
+Python, and an immediately-invoked function with a `nil` test in Lua. The guard
+wraps the **whole** chain, so `a?.m().toInt()` becomes
+`(a != null ? a.m().toInt() : null)` rather than leaving the trailing call
+outside it. Like the `??` desugaring, the guard repeats the receiver, so it is
+only used for receivers that are safe to evaluate twice (variables, fields and
+index reads). &nbsp;
+¹² In Go, degrading `?.` / `?[` to a plain access would both skip the nil check
+*and* yield a value where a `*T` is expected, so it is reported rather than
+mis-emitted. &nbsp;
+¹³ Kotlin has no `?[` operator: null-aware element access is the call
+`a?.get(i)`. &nbsp;
+¹⁴ TypeScript's and JavaScript's null-aware element access is `a?.[i]`, not
+`a?[i]`. &nbsp;
+¹⁵ Kotlin's null assertion is `!!`. &nbsp;
+¹⁶ Go's `a!` is the pointer dereference `(*a)`, which panics on `nil` — the same
+shape as the assertion's throw. &nbsp;
+¹⁷ JavaScript has no null-assertion operator — a postfix `!` there is logical
+NOT — so `a!` is emitted as plain `a`. Dropping the token is the only
+meaning-preserving option; emitting it would negate the value. &nbsp;
+¹⁸ Go compares the pointer directly (`a != nil`), without dereferencing. &nbsp;
+¹⁹ Lua's null literal is `nil`. &nbsp; ²⁰ Python compares against `None` by
+identity (`x is None` / `x is not None`), not `==`: equality dispatches through
+`__eq__`, which a class can redefine to return `True` for `None`. &nbsp;
+²¹ A pragmatic, flow-aware analyzer reports assigning `null` (or a nullable
+value) to a non-nullable slot, and unconditional member/method/index access or
+operator use on a nullable — with promotion for `if (x != null) { … }` /
+`if (x == null) … else { … }`, and suppression via `?.` / `!` / `??`. Its
+diagnostics are surfaced through the [LSP](#language-server-lsp) for Dart
+documents. It analyzes top-level functions **and** class methods, constructors
+and getters. &nbsp;
+²² `ApolloVM(nullSafetyChecks: true)` makes `loadCodeUnit` throw
+`NullSafetyError` when the AST has null-safety **errors**, so a mistake fails at
+resolution time instead of partway through a run:
+
+```dart
+var vm = ApolloVM(nullSafetyChecks: true);
+
+// class Foo { static void main(int a, int? b) { print(a); var c = a + b; } }
+await vm.loadCodeUnit(unit);
+// NullSafetyError — nothing printed, nothing executed.
+```
+
+Off by default, so loading is unchanged unless you opt in. Only `error`-severity
+findings block; warnings and info stay diagnostic-only. The thrown error carries
+the offending `findings`.
+
+The same check is reachable without writing Dart:
+
+```shell
+# CLI — `run`, `translate` and `compile`; exits non-zero on a finding.
+apollovm run --null-safety script.dart
+
+# MCP — per call, or as the server default via `apollovm mcp --null-safety`.
+{"name": "apollovm.execute",
+ "arguments": {"language": "dart", "source": "...", "nullSafety": true}}
+```
+
+On the MCP tools that *load* code (`execute`, `translate`, `wasm`) a finding
+rejects the source; on the parse-based tools (`parse`, `ast`, `symbols`,
+`types`) nothing is loaded, so the findings are added to `diagnostics` instead.
+See [doc/MCP.md](doc/MCP.md).
+
+> The `⚠️` cells are targets whose language has no equivalent construct: the
+> access is emitted without its null check (`a?.x` becomes `a.x`, `a!` becomes
+> `a`). The generated source compiles, but a null receiver behaves differently
+> than in the source language. `??` / `??=` are never lossy — every target either
+> has the operator or gets a faithful desugaring.
+
+### Member-access chains
+
+A chain of field/method accesses of any depth, in any mix of `.`, `?.` and `!`
+(`a.b.c`, `a.b?.c`, `a.b!.c`, `a.b.m()`, `a.b?.m(x)`), plus chained writes
+(`a.b.c = v`), a field read off a parenthesized receiver (`(a).v`, `(a)?.v`) and
+a call followed by a field access (`(expr).m().field`), are parsed from **Dart**
+source. Each segment folds onto the previous one and reuses the same
+object-access nodes, so the runtime, null-aware and code-generation behaviour is
+shared. The other grammars parse a single access segment only.
 
 ### Classes, types & OOP
 
@@ -165,6 +337,9 @@ Same legend and **Wasm** column semantics as the table above.
 | Generics (generic classes + instantiation + type erasure)    | ✅ | ✅ | ✅ | 🚧 | ✅ | 🚫  | ✅ | 🚫  | 🚫  | 🚧 |
 | Type inference (`var` / `val` / `auto`)                       | ✅ | ✅ | ✅ | ✅ | ✅ | 🚫  | ✅ | 🚫  | 🚫  | ✅⁵ |
 | Extensions (methods + getters)¹¹                              | ✅ | 🚫  | ✅ | 🚫  | 🧩¹² | 🚫  | 🚫  | 🚫  | 🚫  | 🚧 |
+| Getters / setters¹⁴                                           | ✅¹⁴ | 🚧 | 🧩¹⁴ | 🚫  | 🚧 | 🚧 | 🚧 | 🚫  | 🚧 | 🚧 |
+| Annotations / metadata (`@…`)¹⁵                               | 🧩¹⁵ | 🚧 | 🚧 | 🚫  | 🚧 | 🚫  | 🚧 | 🚫  | 🚧 | 🚫  |
+| `required` named parameters                                   | ✅ | 🚫  | 🧩¹⁶ | 🚫  | 🧩¹⁶ | 🚫  | 🚫  | 🚫  | 🧩¹⁶ | ✅ |
 
 ¹ Lua is table-based: "fields" are table entries (`obj.x`), "constructors" are factory/`setmetatable`
 idioms, methods are `function Obj:method`. &nbsp;
@@ -207,7 +382,30 @@ Dart, Java (`extends`), C# / TS / JS (`: Base` / `extends`), Python. Kotlin's
 `class B : A()` base clause and Go embedding aren't parsed yet (`🚧`), and the
 Wasm backend doesn't compile inheritance yet. Constructor initializer lists with
 an explicit `: super(v)` call are not parsed yet — set inherited fields from the
-constructor body or a `this.param`.
+constructor body or a `this.param`. &nbsp;
+¹⁴ **Getters and setters** are parsed and executed on classes and extensions:
+`get name => …` / `get name { … }` (with or without an explicit return type) and
+`set name(T v) { … }` / `set name(v) => …` (typed or untyped parameter). A
+setter runs on `obj.x = v`, `this.x = v`, an unqualified `x = v` inside the
+class, and on compound forms (`+=`, `??=`, …), which read through the getter
+when there is one; `??=` short-circuits, so the setter does not run when the
+current value is non-null. Inherited and overridden accessors resolve through
+the superclass chain. **Only Dart generates them** — Kotlin emits getters
+(`val x: T get() { … }`) but not setters, and every other target refuses an
+accessor with `UnsupportedSyntaxError` rather than dropping it. Not yet
+supported, for getters and setters alike: `static` accessors, top-level
+accessors, and an *unqualified read* of a getter (`return value;` inside a
+method — use `this.value`). &nbsp;
+¹⁵ Dart annotations (`@override`, `@Deprecated('x')`, `@pragma(...)`,
+`@a.B(1)`) are accepted wherever Dart allows them — top-level declarations,
+class and enum members, enum entries, extension members, parameters and local
+variable declarations — and are then **discarded**, so they do not survive a
+round-trip. Their arguments are skipped as a balanced parenthesis group, so an
+annotation using syntax ApolloVM does not model yet still cannot break the
+declaration it precedes. &nbsp;
+¹⁶ Only Dart spells a mandatory named parameter with a `required` modifier. The
+other targets that have named parameters express it by the absence of a default
+value, so the modifier is dropped when generating for them.
 
 > Per-language behavior is normalized to a shared AST, so types and constructs map
 > cleanly when translating between languages (e.g. C# `string` ⇄ Dart `String`,
@@ -705,9 +903,11 @@ on the fly, without the need for any third-party tools.
 - **Status:** *Wasm support is under active development. It already compiles a broad subset of
 the AST — functions, full control flow (`if`/`for`/`for-each`/`while`/`do-while`/`switch`/
 `break`/`continue`/ternary), arithmetic/comparison/logical/bitwise operators, `try`/`catch`/`throw`,
-classes, closures, lists/maps, and `async`/`await` (via Asyncify); see the
-[feature table](#supported-features). Constructs not yet compiled to Wasm are limited to a few
-higher-level features (e.g. non-integer `switch`).*
+classes, closures, lists/maps, `async`/`await` (via Asyncify), and `null` within
+its boxed-`Object` domain; see the [feature table](#supported-features). Constructs not yet
+compiled to Wasm are limited to a few higher-level features (e.g. non-integer `switch`),
+and a `null` in a slot with a concrete Wasm type (an `int` is an i64) is reported as an
+unsupported construct rather than mis-compiled — see [Null safety](#null-safety).*
 
 Example compiling Dart code to WebAssembly (Wasm):
 ```dart
@@ -867,6 +1067,109 @@ Generated `Wasm` bytes with description:
 ```
 
 - NOTE: *When compiling to WebAssembly, ApolloVM keeps track of the stack and performs automatic type casting to facilitate operations between different types or return values.*
+
+-----------------------------
+
+## Binary AST
+
+Parsing dominates the cost of loading code. ApolloVM can save an already-parsed
+AST as a compact binary image, so an application parses once — at build time, or
+on first run — and afterwards loads the same code unit by decoding bytes, with
+no grammar and no backtracking.
+
+Such an image is an **`.avma`** file: an **A**pollo **V**irtual **M**achine
+**A**rchive. It carries one parsed code unit, or a whole VM's worth of them.
+
+On a ~4 KB program, decoding is around **11× faster than parsing**, and the
+image is about **two thirds the size** of the source. (For a very small unit the
+fixed header and pools cost more than the source is worth; the saving appears
+once there is a program to speak of.)
+
+```dart
+import 'package:apollovm/apollovm.dart';
+import 'package:apollovm/apollovm_serialization.dart';
+
+// Once, wherever the source is available:
+var vm = ApolloVM();
+var codeUnit = SourceCodeUnit('dart', source, id: 'calc.dart');
+await vm.loadCodeUnit(codeUnit);
+
+var image = vm.saveCodeUnitAST(codeUnit);   // Uint8List
+
+// Afterwards, with no parser involved:
+var vm2 = ApolloVM();
+await vm2.loadCodeUnitAST(image);
+
+var runner = vm2.createRunner('dart')!;
+await runner.executeClassMethod('', 'Calc', 'main', positionalParameters: [[]]);
+```
+
+A whole VM can be bundled into one archive and loaded back:
+
+```dart
+var archive = vm.saveAllAST();              // every loaded code unit
+await ApolloVM().loadAllAST(archive);
+```
+
+Everything is `Uint8List` in and `Uint8List` out — reading and writing files is
+left to the caller — so this works unchanged on the web.
+
+### From the command line
+
+```sh
+apollovm compile calc.dart -t ast           # writes calc.avma
+apollovm compile calc.dart -o build/x.avma  # target inferred from the extension
+apollovm run calc.avma                      # runs it, without parsing
+```
+
+The target follows `--output` when `--target` (`-t`) is omitted: `.avma` selects
+the binary AST, `.wasm` selects WebAssembly. An explicit `--target` always wins.
+
+`run` detects an image by its magic bytes rather than its extension, and takes
+the language from the image itself — so an image named anything else still runs.
+
+### Integrity
+
+Every image carries a **CRC-32**, verified on load.
+
+> **The checksum detects corruption, not tampering.** Anyone who can modify a
+> file can recompute it in microseconds. Only a signature made with a key the
+> attacker does not have makes an image tamper-evident. An unsigned image
+> deserves exactly as much trust as the source it came from — loading one and
+> running it is equivalent to running arbitrary code from that source, so do not
+> load an unsigned image from an untrusted origin.
+
+Signing is optional and pluggable, with HMAC-SHA256 built in:
+
+```dart
+var image = vm.saveCodeUnitAST(
+  codeUnit,
+  signer: HmacSha256Signer.fromString(secret),
+);
+
+// Refuses to load unless the signature verifies with this key:
+await vm2.loadCodeUnitAST(
+  image,
+  verifier: HmacSha256Verifier.fromString(secret),
+);
+```
+
+Implement `ASTBinarySigner` / `ASTBinaryVerifier` for a public-key scheme or a
+hardware key store; the container stores a signature as opaque bytes.
+
+### Compatibility
+
+An image records the container revision that wrote it and the oldest revision
+that can decode it correctly. Sections are length-prefixed, so a reader skips
+any it does not recognize, and each is read from a bounded view, so fields a
+newer writer appended are ignored rather than misread. A newer ApolloVM's output
+therefore keeps loading in an older one for as long as the additions are purely
+additive, and an older image keeps loading in every later ApolloVM. When a
+change genuinely cannot be understood, the reader fails with an
+`ASTBinaryException` naming both versions instead of producing a wrong AST.
+
+See [`doc/ast_binary_format.md`](doc/ast_binary_format.md) for the byte-level
+specification.
 
 -----------------------------
 

@@ -4,6 +4,7 @@ import 'package:apollovm/apollovm.dart';
 import 'package:apollovm/apollovm_lsp.dart';
 import 'package:apollovm/apollovm_mcp_io.dart';
 import 'package:apollovm/apollovm_pub.dart';
+import 'package:apollovm/apollovm_serialization.dart';
 import 'package:args/args.dart';
 import 'package:args/command_runner.dart';
 import 'package:swiss_knife/swiss_knife.dart';
@@ -40,7 +41,11 @@ void main(List<String> args) async {
     }
   }
 
-  await commandRunner.run(args);
+  // A command returns `false` only when it rejected the source (today: a
+  // `--null-safety` failure), which must be a non-zero exit so a build/CI step
+  // fails. `run` yields `null` when no command executed (`--help`, usage).
+  var ok = await commandRunner.run(args);
+  if (ok == false) exitCode = 1;
 }
 
 void showVersion() {
@@ -48,10 +53,37 @@ void showVersion() {
 }
 
 abstract class CommandSourceFileBase extends Command<bool> {
-  final _argParser = ArgParser(allowTrailingOptions: false);
+  /// Whether options may follow the source file on the command line.
+  ///
+  /// `true` for the commands whose only positional argument is that file.
+  /// `apollovm compile foo.dart --target=ast` is the natural way to write it,
+  /// and with trailing options disabled the flag is not parsed at all: it lands
+  /// in `rest`, `--target` keeps its default, and the command quietly compiles
+  /// to Wasm instead of reporting that it ignored the argument.
+  ///
+  /// [CommandRun] overrides this to `false`, because there everything after the
+  /// file belongs to the program being run and must reach it untouched.
+  bool get allowTrailingOptions => true;
+
+  late final _argParser = ArgParser(allowTrailingOptions: allowTrailingOptions);
 
   @override
   ArgParser get argParser => _argParser;
+
+  /// Rejects anything after the source file.
+  ///
+  /// With trailing options parsed, a leftover positional argument is a genuine
+  /// mistake — a typo, or a flag for a different command — and saying so beats
+  /// ignoring it.
+  void checkNoExtraArguments() {
+    var extra = argResults!.rest.skip(1).toList();
+    if (extra.isEmpty) return;
+
+    throw StateError(
+      'Unexpected argument${extra.length > 1 ? 's' : ''} after the source '
+      'file: ${extra.join(' ')}',
+    );
+  }
 
   CommandSourceFileBase() {
     argParser.addFlag(
@@ -67,6 +99,14 @@ abstract class CommandSourceFileBase extends Command<bool> {
           'Programming language of source file.\n'
           '(defaults to language of the file extension)',
       valueHelp: 'dart|java|kotlin|go|javascript|typescript|lua|python',
+    );
+    argParser.addFlag(
+      'null-safety',
+      help:
+          'Reject source with null-safety errors while loading it, instead of\n'
+          'failing partway through the run.',
+      defaultsTo: false,
+      negatable: false,
     );
     argParser.addFlag(
       'pub',
@@ -95,6 +135,35 @@ abstract class CommandSourceFileBase extends Command<bool> {
   String? get pubHost => argResults!['pub-host'] as String?;
 
   String? get pubCache => argResults!['pub-cache'] as String?;
+
+  /// Whether `--null-safety` was passed: the VM then rejects a code unit whose
+  /// AST has null-safety errors while loading it.
+  bool get nullSafetyChecks => argResults!['null-safety'] as bool;
+
+  /// Set when [loadCodeUnitReporting] rejected the source for null-safety
+  /// errors, so the caller reports nothing further (it was already printed, and
+  /// it is not a parse failure).
+  bool nullSafetyRejected = false;
+
+  /// Loads [codeUnit] into [vm], reporting a [NullSafetyError] as a clean
+  /// message instead of letting it escape as an unhandled error with a stack
+  /// trace — `--null-safety` is user-facing, so its failure should read like a
+  /// diagnostic.
+  Future<bool> loadCodeUnitReporting<T extends Object>(
+    ApolloVM vm,
+    CodeUnit<T> codeUnit,
+  ) async {
+    try {
+      return await vm.loadCodeUnit(codeUnit);
+    } on NullSafetyError catch (e) {
+      nullSafetyRejected = true;
+      print('** NULL SAFETY: ${e.message}');
+      for (var f in e.findings) {
+        print('   - ${f.message}');
+      }
+      return false;
+    }
+  }
 
   /// Installs the optional Dart package importer on [vm] and pre-loads all
   /// reachable `package:` imports. No-op unless `--pub` is set (and Dart).
@@ -178,7 +247,13 @@ Examples:
   apollovm run script.dart
   apollovm run app.py --function start
   apollovm run prog.java main foo bar      # call `main` with args foo, bar
-  apollovm run module.wasm''';
+  apollovm run module.wasm
+  apollovm run calc.avma                   # a binary AST image; no parsing''';
+
+  // Everything after the source file is passed to the program being run, so it
+  // must not be interpreted as options for `apollovm` itself.
+  @override
+  bool get allowTrailingOptions => false;
 
   CommandRun() {
     argParser.addOption(
@@ -198,34 +273,53 @@ Examples:
   FutureOr<bool> run() async {
     var parameters = this.parameters;
 
-    if (verbose) {
-      _log(
-        'RUN',
-        '$sourceFile ; language: $language > $mainFunction( $parameters )',
-      );
-    }
+    var vm = ApolloVM(nullSafetyChecks: nullSafetyChecks);
 
-    var vm = ApolloVM();
+    // A binary AST image already holds a parsed program, and records which
+    // language it came from — so it is detected by its magic bytes rather than
+    // by its extension, and the recorded language wins over anything the file
+    // name suggests.
+    var fileBytes = sourceFile.readAsBytesSync();
+    var isBinaryAST = ASTBinaryReader.isASTBinary(fileBytes);
 
-    // A `.wasm` file is a binary module: load its bytes as a `BinaryCodeUnit`
-    // (parsed by `ApolloParserWasm` into its exported functions) and run it
-    // through the Wasm runtime, rather than decoding the binary as UTF-8 source.
     CodeUnit<Object> codeUnit;
-    if (language == 'wasm') {
-      var bytes = sourceFile.readAsBytesSync();
+    String effectiveLanguage;
+
+    if (isBinaryAST) {
+      codeUnit = const ASTBinaryReader().readCodeUnit(fileBytes);
+      effectiveLanguage = codeUnit.language;
+    } else if (language == 'wasm') {
+      // A `.wasm` file is a binary module: load its bytes as a
+      // `BinaryCodeUnit` (parsed by `ApolloParserWasm` into its exported
+      // functions) and run it through the Wasm runtime, rather than decoding
+      // the binary as UTF-8 source.
+      effectiveLanguage = 'wasm';
       codeUnit = BinaryCodeUnit(
         'wasm',
-        bytes,
+        fileBytes,
         id: sourceFilePath,
         namespace: '',
       );
     } else {
+      effectiveLanguage = language;
       codeUnit = SourceCodeUnit(language, source, id: sourceFilePath);
     }
 
-    var loadOK = await vm.loadCodeUnit(codeUnit);
+    if (verbose) {
+      _log(
+        'RUN',
+        '$sourceFile ; language: $effectiveLanguage'
+            '${isBinaryAST ? ' (binary AST)' : ''} > '
+            '$mainFunction( $parameters )',
+      );
+    }
+
+    var loadOK = await loadCodeUnitReporting(vm, codeUnit);
 
     if (!loadOK) {
+      // A null-safety rejection was already reported in full; it is not a parse
+      // failure, so do not restate it as one.
+      if (nullSafetyRejected) return false;
       throw StateError(
         "Can't parse source! language: $language ; sourceFilePath: $sourceFilePath",
       );
@@ -233,9 +327,9 @@ Examples:
 
     await installPackageImporter(vm);
 
-    var runner = vm.createRunner(language)!;
+    var runner = vm.createRunner(effectiveLanguage)!;
 
-    var namespaces = vm.getLanguageNamespaces(language).namespaces;
+    var namespaces = vm.getLanguageNamespaces(effectiveLanguage).namespaces;
     if (!namespaces.contains('')) namespaces.insert(0, '');
 
     ASTValue? result;
@@ -253,7 +347,7 @@ Examples:
       LOOP_NS:
       for (var namespace in namespaces) {
         var classes = vm
-            .getLanguageNamespaces(language)
+            .getLanguageNamespaces(effectiveLanguage)
             .get(namespace)
             .classesNames;
         for (var clazz in classes) {
@@ -294,6 +388,7 @@ Examples:
   CommandTranslate() {
     argParser.addOption(
       'target',
+      abbr: 't',
       help:
           'Target Programming language for translation.\n'
           '(defaults to the opposite of the source language)',
@@ -315,6 +410,8 @@ Examples:
 
   @override
   FutureOr<bool> run() async {
+    checkNoExtraArguments();
+
     if (verbose) {
       _log(
         'TRANSLATE',
@@ -322,13 +419,16 @@ Examples:
       );
     }
 
-    var vm = ApolloVM();
+    var vm = ApolloVM(nullSafetyChecks: nullSafetyChecks);
 
     var codeUnit = SourceCodeUnit(language, source, id: sourceFilePath);
 
-    var loadOK = await vm.loadCodeUnit(codeUnit);
+    var loadOK = await loadCodeUnitReporting(vm, codeUnit);
 
     if (!loadOK) {
+      // A null-safety rejection was already reported in full; it is not a parse
+      // failure, so do not restate it as one.
+      if (nullSafetyRejected) return false;
       throw StateError(
         "Can't parse source! language: $language ; sourceFilePath: $sourceFilePath",
       );
@@ -358,56 +458,130 @@ class CommandCompile extends CommandSourceFileBase {
   String get usageFooter => '''
 
 Examples:
-  apollovm compile calc.dart               # writes calc.wasm
-  apollovm compile calc.dart -o build/calc.wasm''';
+  apollovm compile calc.dart                 # writes calc.wasm
+  apollovm compile calc.dart -o build/calc.wasm
+  apollovm compile calc.dart -t ast          # writes calc.avma (binary AST)
+  apollovm compile calc.dart -o calc.avma    # target inferred from the extension''';
 
   CommandCompile() {
     argParser.addOption(
       'output',
       abbr: 'o',
       help:
-          'Output file path (defaults to <source>.wasm, alongside the source file).\n'
-          'If multiple modules are produced, the module name is inserted before `.wasm`.',
+          'Output file path (defaults to <source>.wasm or <source>.avma,\n'
+          'alongside the source file).\n'
+          'A `.wasm` or `.avma` extension selects the target when `--target`\n'
+          'is not given.\n'
+          'If multiple Wasm modules are produced, the module name is inserted before `.wasm`.',
       valueHelp: 'file.wasm',
     );
     argParser.addOption(
       'target',
-      help: 'Binary target (currently: wasm).',
+      abbr: 't',
+      help:
+          'Binary target:\n'
+          '  wasm  WebAssembly module.\n'
+          '  ast   Binary AST image (`.avma`, an Apollo Virtual Machine\n'
+          '        Archive) — the parsed program, so it can be loaded later\n'
+          '        without running a parser.\n'
+          'Inferred from the `--output` extension when omitted.',
       defaultsTo: 'wasm',
-      valueHelp: 'wasm',
+      valueHelp: 'wasm|ast',
     );
   }
 
-  String get target =>
-      (argResults!['target'] as String? ?? 'wasm').toLowerCase();
+  /// The binary target.
+  ///
+  /// An explicit `--target` always wins. Otherwise it is taken from the
+  /// `--output` extension, so `-o calc.avma` does not have to be paired with
+  /// `--target=ast` to mean what it plainly says. Falls back to `wasm`.
+  String get target {
+    var argResults = this.argResults!;
+
+    if (argResults.wasParsed('target')) {
+      return (argResults['target'] as String).toLowerCase().trim();
+    }
+
+    return _targetFromOutputExtension() ??
+        (argResults['target'] as String? ?? 'wasm').toLowerCase().trim();
+  }
+
+  /// The target implied by the [output] extension, or `null` when there is no
+  /// output path or its extension names no target.
+  String? _targetFromOutputExtension() {
+    switch (_outputExtension()) {
+      case ASTBinaryFormat.fileExtension:
+        return 'ast';
+      case 'wasm':
+        return 'wasm';
+      default:
+        return null;
+    }
+  }
+
+  /// The extension of [output], lowercased, without the dot.
+  ///
+  /// Read from the final path segment only: a `.` in a parent directory
+  /// (`build.v2/out`) must not be mistaken for the file's extension.
+  String? _outputExtension() {
+    var path = output;
+    if (path == null) return null;
+
+    var sep = path.lastIndexOf('/');
+    var name = sep >= 0 ? path.substring(sep + 1) : path;
+
+    var dot = name.lastIndexOf('.');
+    if (dot <= 0 || dot == name.length - 1) return null;
+
+    return name.substring(dot + 1).toLowerCase();
+  }
 
   String? get output => argResults!['output'] as String?;
 
   @override
   FutureOr<bool> run() async {
+    checkNoExtraArguments();
+
     var target = this.target;
 
     if (verbose) {
       _log('COMPILE', '$sourceFile ; language: $language > target: $target');
     }
 
-    if (target != 'wasm') {
+    if (target != 'wasm' && target != 'ast') {
       throw StateError('Unsupported compile target: $target');
     }
 
-    var vm = ApolloVM();
+    var vm = ApolloVM(nullSafetyChecks: nullSafetyChecks);
 
     var codeUnit = SourceCodeUnit(language, source, id: sourceFilePath);
 
-    var loadOK = await vm.loadCodeUnit(codeUnit);
+    var loadOK = await loadCodeUnitReporting(vm, codeUnit);
 
     if (!loadOK) {
+      // A null-safety rejection was already reported in full; it is not a parse
+      // failure, so do not restate it as one.
+      if (nullSafetyRejected) return false;
       throw StateError(
         "Can't parse source! language: $language ; sourceFilePath: $sourceFilePath",
       );
     }
 
     await installPackageImporter(vm);
+
+    if (target == 'ast') {
+      var image = vm.saveCodeUnitAST(codeUnit);
+      var filePath =
+          output ?? _defaultOutputPath(ASTBinaryFormat.fileExtension);
+
+      File(filePath).writeAsBytesSync(image);
+
+      print(
+        'Wrote: $filePath (${image.length} bytes, '
+        'source: ${source.length} bytes)',
+      );
+      return true;
+    }
 
     var storageWasm = vm.generateAllIn<BytesOutput>('wasm');
     var wasmModules = await storageWasm.allEntries();
@@ -425,7 +599,7 @@ Examples:
       );
     }
 
-    var outputPath = output ?? _defaultOutputPath();
+    var outputPath = output ?? _defaultOutputPath('wasm');
 
     var single = modules.length == 1;
 
@@ -445,7 +619,7 @@ Examples:
     return true;
   }
 
-  String _defaultOutputPath() {
+  String _defaultOutputPath(String extension) {
     var path = sourceFilePath;
     // Strip the extension from the FILE NAME only — `getPathExtension` keys off
     // the last `.` anywhere in the path, which would wrongly truncate when the
@@ -456,9 +630,10 @@ Examples:
     var dot = name.lastIndexOf('.');
     if (dot > 0) {
       // The file name has a real extension to replace.
-      return '${path.substring(0, path.length - (name.length - dot))}.wasm';
+      return '${path.substring(0, path.length - (name.length - dot))}'
+          '.$extension';
     }
-    return '$path.wasm';
+    return '$path.$extension';
   }
 
   String _insertModuleName(String outputPath, String moduleName) {

@@ -351,6 +351,24 @@ abstract class ASTClass<T> extends ASTEntryPointBlock {
     );
   }
 
+  /// Resolves a setter visible from this class: own setters first, then the
+  /// superclass chain (inherited setters).
+  @override
+  ASTSetterDeclaration? getSetter(
+    String fName,
+    VMContext context, {
+    bool caseInsensitive = false,
+  }) {
+    var s = super.getSetter(fName, context, caseInsensitive: caseInsensitive);
+    if (s != null) return s;
+
+    return superClass?.getSetter(
+      fName,
+      context,
+      caseInsensitive: caseInsensitive,
+    );
+  }
+
   List<ASTConstructorSet> get constructors;
 
   void resolveNodeConstructors(ASTNode? parentNode);
@@ -853,6 +871,14 @@ class ASTClassNormal extends ASTClass<VMObject> {
       g.clazz = this;
     }
     super.addGetter(g);
+  }
+
+  @override
+  void addSetter(ASTSetterDeclaration s) {
+    if (s is ASTClassSetterDeclaration) {
+      s.clazz = this;
+    }
+    super.addSetter(s);
   }
 
   @override
@@ -1411,6 +1437,12 @@ class ASTExtension extends ASTBlock {
         g.clazz = targetClass;
       }
     }
+
+    for (var s in setter) {
+      if (s is ASTClassSetterDeclaration) {
+        s.clazz = targetClass;
+      }
+    }
   }
 
   ASTRoot? get _root {
@@ -1461,6 +1493,9 @@ class ASTExtension extends ASTBlock {
 
   /// The extension getter [name], or `null`.
   ASTGetterDeclaration? findGetter(String name) => getGetterWithName(name);
+
+  /// The extension setter [name], or `null`.
+  ASTSetterDeclaration? findSetter(String name) => getSetterWithName(name);
 
   @override
   String toString() => 'ASTExtension[${name ?? ''}]on[$targetType]';
@@ -1523,6 +1558,17 @@ class ASTRoot extends ASTEntryPointBlock {
       if (!extension.matchesReceiver(receiver)) continue;
       var g = extension.findGetter(name);
       if (g != null) return g;
+    }
+    return null;
+  }
+
+  /// Resolves an extension setter [name] for a receiver of class [receiver].
+  /// See [getExtensionFunction].
+  ASTSetterDeclaration? getExtensionSetter(ASTClass receiver, String name) {
+    for (var extension in _extensions) {
+      if (!extension.matchesReceiver(receiver)) continue;
+      var s = extension.findSetter(name);
+      if (s != null) return s;
     }
     return null;
   }
@@ -1698,6 +1744,8 @@ class ASTRoot extends ASTEntryPointBlock {
   }
 
   ASTClassNormal? getClass(String className, {bool caseInsensitive = false}) {
+    if (className.isEmpty) return null;
+
     var clazz = _classes[className];
 
     if (clazz != null) {
@@ -1772,8 +1820,20 @@ class ASTParameterDeclaration<T> with ASTNode implements ASTTypedNode {
   /// the parameter has no default. Set by the parser after construction.
   ASTExpression? defaultValue;
 
-  ASTParameterDeclaration(ASTType<T> type, this.name, {this.defaultValue})
-    : _type = type;
+  /// Whether the declaration was marked `required` (Dart named parameters).
+  ///
+  /// Not enforced at run time — ApolloVM has no static checker — but preserved
+  /// so Dart output keeps the modifier. Emitting `{int a}` for
+  /// `{required int a}` produces source ApolloVM re-parses happily but
+  /// `dart analyze` rejects.
+  final bool isRequired;
+
+  ASTParameterDeclaration(
+    ASTType<T> type,
+    this.name, {
+    this.defaultValue,
+    this.isRequired = false,
+  }) : _type = type;
 
   @override
   Iterable<ASTNode> get children =>
@@ -1848,6 +1908,7 @@ class ASTConstructorParameterDeclaration<T> extends ASTParameterDeclaration {
     this.index,
     this.optional, {
     this.thisParameter = false,
+    super.isRequired,
   });
 
   @override
@@ -1888,6 +1949,7 @@ class ASTFunctionParameterDeclaration<T> extends ASTParameterDeclaration<T> {
     this.index,
     this.optional, {
     this.unmodifiable = false,
+    super.isRequired,
   });
 }
 
@@ -2441,6 +2503,13 @@ abstract class ASTParametersDeclaration<P extends ASTParameterDeclaration> {
   /// Returns true if [param] accepts [type].
   ///
   /// - [exactType]: if true the [param] should be exact to [type].
+  ///
+  /// Passing an argument to a parameter is an *assignment*, so the non-exact
+  /// path uses [ASTType.acceptsAssignment]: a `T?` parameter accepts a `T`
+  /// argument (and `null`), while a `T` parameter still rejects `null`.
+  /// [ASTType.acceptsType] alone would reject `String` for a `String?` slot,
+  /// because [ASTTypeString] compares `nullable` in its `==` (the numeric types
+  /// only appeared to work because [StrictType] ignores it).
   static bool parameterAcceptsType(
     ASTParameterDeclaration? param,
     ASTType? type,
@@ -2452,7 +2521,7 @@ abstract class ASTParametersDeclaration<P extends ASTParameterDeclaration> {
 
     if (exactType) {
       if (param.type != type) return false;
-    } else if (type is! ASTTypeDynamic && !param.type.acceptsType(type)) {
+    } else if (type is! ASTTypeDynamic && !param.type.acceptsAssignment(type)) {
       return false;
     }
 
@@ -2499,9 +2568,9 @@ class ASTClassFunctionDeclaration<T> extends ASTFunctionDeclaration<T> {
     String name,
     ASTFunctionParametersDeclaration parameters,
     ASTType<T> returnType, {
-    ASTBlock? block,
-    ASTModifiers? modifiers,
-  }) : super(name, parameters, returnType, block: block, modifiers: modifiers);
+    super.block,
+    super.modifiers,
+  }) : super(name, parameters, returnType);
 
   FutureOr<ASTValue<T>> objectCall(
     VMContext parent,
@@ -3280,9 +3349,9 @@ class ASTClassGetterDeclaration<T> extends ASTGetterDeclaration<T> {
     String name,
 
     ASTType<T> returnType, {
-    ASTBlock? block,
-    ASTModifiers? modifiers,
-  }) : super(name, returnType, block: block, modifiers: modifiers);
+    super.block,
+    super.modifiers,
+  }) : super(name, returnType);
 
   FutureOr<ASTValue<T>> objectCall(
     VMContext parent,
@@ -3396,6 +3465,130 @@ class ASTGetterDeclaration<T> extends ASTBlock {
   String toString() {
     var block = super.toString();
     return '$modifiers $returnType get $name $block';
+  }
+}
+
+/// An AST Class Setter Declaration.
+class ASTClassSetterDeclaration<T> extends ASTSetterDeclaration<T> {
+  /// The class type of this setter.
+  ASTClass? clazz;
+
+  ASTType? get classType => clazz?.type;
+
+  ASTClassSetterDeclaration(
+    this.clazz,
+    String name,
+    ASTType<T> parameterType,
+    String parameterName, {
+    super.block,
+    super.modifiers,
+  }) : super(name, parameterType, parameterName);
+
+  /// Runs this setter against [classInstance], binding [value] to the
+  /// declared parameter. Mirrors [ASTClassGetterDeclaration.objectCall].
+  FutureOr<ASTValue> objectCall(
+    VMContext parent,
+    ASTValue classInstance,
+    ASTValue value,
+  ) {
+    var objContext = VMClassContext(clazz!, parent: parent);
+    objContext.setClassInstance(classInstance);
+    return call(objContext, value);
+  }
+}
+
+/// An AST setter Declaration: `set name(T value) { ... }`.
+///
+/// The mirror of [ASTGetterDeclaration]: a block that takes one declared
+/// parameter instead of producing a return value. A setter's own result is
+/// discarded — the assignment expression evaluates to the assigned value, as
+/// in Dart — so [call] returns void.
+class ASTSetterDeclaration<T> extends ASTBlock {
+  /// Name of this setter (the property name, without `set`).
+  final String name;
+
+  /// The declared type of the single parameter.
+  final ASTType<T> parameterType;
+
+  /// The declared name of the single parameter.
+  final String parameterName;
+
+  /// Modifiers of this setter.
+  final ASTModifiers modifiers;
+
+  ASTSetterDeclaration(
+    this.name,
+    this.parameterType,
+    this.parameterName, {
+    ASTBlock? block,
+    ASTModifiers? modifiers,
+  }) : modifiers = modifiers ?? ASTModifiers.modifiersNone,
+       super(null) {
+    set(block);
+  }
+
+  @override
+  ASTNode? getNodeIdentifier(String name, {ASTNode? requester}) {
+    var allChildren = descendantChildren;
+
+    var limit = allChildren.length;
+
+    if (requester != null) {
+      var idx = allChildren.indexWhere((e) => identical(e, requester));
+
+      if (idx >= 0) {
+        limit = idx + 1;
+      }
+    }
+
+    for (var i = limit - 1; i >= 0; --i) {
+      var child = allChildren[i];
+
+      if (child is ASTStatementVariableDeclaration && child.name == name) {
+        return child;
+      } else if (child is ASTFunctionDeclaration && child.name == name) {
+        return child;
+      }
+    }
+
+    return super.getNodeIdentifier(name, requester: requester);
+  }
+
+  FutureOr<ASTValue> call(VMContext parent, ASTValue value) async {
+    var context = VMScopeContext(this, parent: parent);
+    context.declareVariableWithValue(parameterType, parameterName, value);
+
+    var prevContext = VMContext.setCurrent(context);
+    try {
+      await super.run(context, ASTRunStatus());
+      return ASTValueVoid.instance;
+    } finally {
+      VMContext.setCurrent(prevContext);
+    }
+  }
+
+  @override
+  VMContext defineRunContext(VMContext parentContext) {
+    // The block runs in the context `call(...)` already built, which holds the
+    // bound parameter.
+    return parentContext;
+  }
+
+  @override
+  ASTValue run(VMContext parentContext, ASTRunStatus runStatus) {
+    throw UnsupportedError(
+      "Can't run this block directly! Should use call(...), since this block "
+      "needs its parameter initialized!",
+    );
+  }
+
+  @override
+  ASTType resolveType(VMContext? context) => ASTTypeVoid.instance;
+
+  @override
+  String toString() {
+    var block = super.toString();
+    return '$modifiers set $name($parameterType $parameterName) $block';
   }
 }
 

@@ -5,6 +5,7 @@
 import 'package:async_extension/async_extension.dart';
 
 import '../apollovm_base.dart';
+import '../apollovm_parser.dart';
 import 'apollovm_ast_base.dart';
 import 'apollovm_ast_expression.dart';
 import 'apollovm_ast_statement.dart';
@@ -138,8 +139,8 @@ class ASTClassFieldWithInitialValue<T> extends ASTClassField<T> {
     String name,
     this._initialValueExpression,
     bool finalValue, {
-    ASTModifiers? modifiers,
-  }) : super(type, name, finalValue, modifiers: modifiers);
+    super.modifiers,
+  }) : super(type, name, finalValue);
 
   ASTExpression get initialValue => _initialValueExpression;
 
@@ -433,4 +434,53 @@ class ASTStaticFieldVariable<T> extends ASTVariable {
   @override
   FutureOr<void> setValue(VMContext context, ASTValue value) =>
       clazz.setStaticFieldValue(context, name, value).resolveMapped((_) {});
+}
+
+/// An [ASTVariable] whose value is produced by evaluating an [ASTExpression].
+///
+/// The object-access nodes ([ASTExpressionObjectGetterAccess],
+/// [ASTExpressionObjectFunctionInvocation], [ASTExpressionVariableEntryAccess])
+/// all take an [ASTVariable] receiver, which restricted a member access to a
+/// *single* identifier: `a.b` parsed, but `a.b.c` and `a.b?.c` did not.
+///
+/// Wrapping the preceding segment of a chain in this variable lets those same
+/// nodes compose, so an access chain of any depth — and any mix of `.`, `?.`
+/// and `!` — reuses the existing runtime, null-aware and code-generation paths
+/// instead of needing a parallel set of expression-receiver nodes.
+class ASTExpressionVariable extends ASTVariable {
+  final ASTExpression expression;
+
+  ASTExpressionVariable(this.expression) : super('<expression>');
+
+  @override
+  Iterable<ASTNode> get children => [expression];
+
+  @override
+  void resolveNode(ASTNode? parentNode) {
+    super.resolveNode(parentNode);
+    expression.resolveNode(parentNode);
+  }
+
+  @override
+  ASTVariable resolveVariable(VMContext context) => this;
+
+  /// Evaluates the wrapped expression. A receiver expression cannot carry
+  /// control flow (`return`/`break`), so a fresh [ASTRunStatus] is enough.
+  @override
+  FutureOr<ASTValue> getValue(VMContext context) =>
+      expression.run(context, ASTRunStatus());
+
+  @override
+  FutureOr<void> setValue(VMContext context, ASTValue value) {
+    throw UnsupportedSyntaxError(
+      "Can't assign to the result of an expression: $expression",
+    );
+  }
+
+  @override
+  FutureOr<ASTType> resolveType(VMContext? context) =>
+      expression.resolveType(context);
+
+  @override
+  String toString() => '$expression';
 }

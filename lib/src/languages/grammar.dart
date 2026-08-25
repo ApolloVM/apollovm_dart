@@ -159,7 +159,7 @@ abstract class BaseGrammarLexer extends GrammarDefinition {
           throw StateError('Missing logical operator between blocks');
         }
 
-        finalExpressionOp = ASTExpressionOperation(
+        finalExpressionOp = astExpressionOperation(
           finalExpressionOp,
           blockOp,
           expressionOp,
@@ -195,12 +195,31 @@ abstract class BaseGrammarLexer extends GrammarDefinition {
     _reduceOps(block, {ASTExpressionOperator.bitwiseXor});
     _reduceOps(block, {ASTExpressionOperator.bitwiseOr});
 
+    // Relational, then equality (looser than the bitwise operators).
+    _reduceOps(block, {
+      ASTExpressionOperator.greater,
+      ASTExpressionOperator.greaterOrEq,
+      ASTExpressionOperator.lower,
+      ASTExpressionOperator.lowerOrEq,
+    });
+    _reduceOps(block, {
+      ASTExpressionOperator.equals,
+      ASTExpressionOperator.notEquals,
+    });
+
+    // Logical AND, then OR.
+    _reduceOps(block, {ASTExpressionOperator.and});
+    _reduceOps(block, {ASTExpressionOperator.or});
+
+    // Null-coalescing (`??`) is the loosest binary operator.
+    _reduceOps(block, {ASTExpressionOperator.nullCoalesce});
+
     // Final left-to-right fallback
     while (block.length >= 3) {
       var e1 = block.removeAt(0);
       var op = block.removeAt(0);
       var e2 = block.removeAt(0);
-      block.insert(0, ASTExpressionOperation(e1, op, e2));
+      block.insert(0, astExpressionOperation(e1, op, e2));
     }
 
     return block.single as ASTExpression;
@@ -221,7 +240,7 @@ abstract class BaseGrammarLexer extends GrammarDefinition {
       // If the operator matches the current precedence group
       // (e.g. *, /, % OR +, -), we reduce this triplet
       if (op != null && ops.contains(op)) {
-        var exp = ASTExpressionOperation(e1, op, e2);
+        var exp = astExpressionOperation(e1, op, e2);
 
         // Replace [e1, op, e2] with the resulting expression
         // Important: always remove at the same index (i),

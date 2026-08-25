@@ -1,0 +1,98 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="Inline suites on the header's own line">
+    <source language="python">
+        <![CDATA[
+class Flow:
+    def classify(self, n):
+        if n < 0: return 'neg'
+        elif n == 0: return 'zero'
+        else: return 'pos'
+
+    def noop(self): pass
+
+    def run(self, l, a):
+        for e in l: print(f'- {e}')
+
+        i = 0
+        while i < 3: i = i + 1
+        print(f'while: {i}')
+
+        if a: print('x')
+        else: print('y')
+
+        for e in l:
+            if e > 2: print(f'gt2: {e}')
+
+        if a: print('p1'); print('q1')
+        else: print('p2'); print('q2')
+
+        print(self.classify(-5))
+        print(self.classify(0))
+        print(self.classify(7))
+        self.noop()
+        print('done')
+        ]]>
+    </source>
+    <call class="Flow" function="run">
+        [[1, 2, 3], true]
+    </call>
+    <output>
+        ["- 1", "- 2", "- 3", "while: 3", "x", "gt2: 3", "p1", "q1", "neg", "zero", "pos", "done"]
+    </output>
+
+    <call class="Flow" function="run">
+        [[1, 2, 3], false]
+    </call>
+    <output>
+        ["- 1", "- 2", "- 3", "while: 3", "y", "gt2: 3", "p2", "q2", "neg", "zero", "pos", "done"]
+    </output>
+
+    <!-- A one-statement inline suite becomes an `ASTSingleLineStatementBlock`,
+         so it emits an unbraced Dart body; a `;`-joined one stays a block. -->
+    <source-generated language="dart"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+class Flow {
+
+  dynamic classify(dynamic n) {
+    if (n < 0) return 'neg';
+    else if (n == 0) return 'zero';
+    else return 'pos';
+
+  }
+
+  void noop() {
+  }
+
+  void run(dynamic l, dynamic a) {
+    for (var e in l) print('- ${e}');
+    var i = 0;
+    while( i < 3 ) i = i + 1;
+    print('while: ${i}');
+    if (a) print('x');
+    else print('y');
+
+    for (var e in l) {
+      if (e > 2) print('gt2: ${e}');
+
+    }
+    if (a) {
+        print('p1');
+        print('q1');
+    } else {
+        print('p2');
+        print('q2');
+    }
+
+    print(this.classify(-5));
+    print(this.classify(0));
+    print(this.classify(7));
+    this.noop();
+    print('done');
+  }
+
+}
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+</test>

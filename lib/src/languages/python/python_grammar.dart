@@ -380,12 +380,51 @@ class PythonGrammarDefinition extends PythonGrammarLexer {
   // ---------------------------------------------------------------------------
   // Suites (indented blocks).
   // ---------------------------------------------------------------------------
+  /// A suite is either the usual indented block or an inline one on the
+  /// header's own line (`if x: return 1`). The two are decidable on a single
+  /// character — an indented suite starts with NEWLINE, an inline one with a
+  /// statement token — so the ordered choice is unambiguous.
   Parser<ASTBlock> suite() =>
+      (ref0(indentedSuite) | ref0(inlineSuite)).cast<ASTBlock>();
+
+  Parser<ASTBlock> indentedSuite() =>
       (newlineToken() & indentToken() & ref0(suiteBody) & dedentToken()).map((
         v,
       ) {
         return v[2] as ASTBlock;
       });
+
+  /// `<simple_stmt> (';' <simple_stmt>)* [';'] NEWLINE` on the header's own
+  /// logical line: `if x: return 1`, `while c: i += 1; j += 1`, `def f(): pass`.
+  ///
+  /// Only *simple* statements are allowed, matching CPython — `if x: if y: pass`
+  /// is a SyntaxError there too.
+  Parser<ASTBlock> inlineSuite() =>
+      ((ref0(passStatement) | ref0(simpleStatement)).cast<ASTStatement?>() &
+              (char(';').trimHidden() & ref0(simpleStatement))
+                  .map((v) => v[1] as ASTStatement)
+                  .star() &
+              char(';').trimHidden().optional() &
+              newlineToken())
+          .map((v) {
+            var first = v[0] as ASTStatement?;
+            var rest = (v[1] as List).cast<ASTStatement>();
+
+            // `pass` contributes no statement, so `def f(): pass` yields an
+            // empty block just as the indented form does.
+            var statements = resolveScopeBindings([?first, ...rest]);
+
+            if (statements.length == 1) {
+              return ASTSingleLineStatementBlock(null)
+                ..addStatement(statements.first);
+            }
+
+            return ASTBlock(null)..addAllStatements(statements);
+          });
+
+  /// `pass` as an inline suite body. Yields no statement.
+  Parser<ASTStatement?> passStatement() =>
+      passToken().trimHidden().map((_) => null);
 
   Parser<ASTBlock> suiteBody() =>
       (ref0(passBody) | ref0(statementsBody)).cast<ASTBlock>();
@@ -407,17 +446,20 @@ class PythonGrammarDefinition extends PythonGrammarLexer {
               simpleStatementLine())
           .cast<ASTStatement>();
 
+  /// A simple statement: one that cannot contain a suite. Shared by
+  /// [simpleStatementLine] and [inlineSuite].
+  Parser<ASTStatement> simpleStatement() =>
+      (statementBreak() |
+              statementContinue() |
+              statementReturn() |
+              statementRaise() |
+              statementVariableDeclaration() |
+              statementExpression())
+          .cast<ASTStatement>();
+
   /// A simple (single-line) statement terminated by NEWLINE.
   Parser<ASTStatement> simpleStatementLine() =>
-      ((statementBreak() |
-                      statementContinue() |
-                      statementReturn() |
-                      statementRaise() |
-                      statementVariableDeclaration() |
-                      statementExpression())
-                  .cast<ASTStatement>() &
-              newlineToken())
-          .map((v) => v[0] as ASTStatement);
+      (ref0(simpleStatement) & newlineToken()).map((v) => v[0] as ASTStatement);
 
   Parser<ASTStatementBreak> statementBreak() =>
       breakToken().trimHidden().map((_) => ASTStatementBreak());
@@ -712,8 +754,28 @@ class PythonGrammarDefinition extends PythonGrammarLexer {
                         return getASTExpressionOperator(v);
                     }
                   }) |
+              ref0(expressionOperatorIsNone) |
               andToken().map((_) => ASTExpressionOperator.and) |
               orToken().map((_) => ASTExpressionOperator.or))
+          .cast<ASTExpressionOperator>();
+
+  /// `is None` / `is not None` — Python's identity test against `None`, which
+  /// is what the generator emits for a null check.
+  ///
+  /// Deliberately restricted to the `None` comparison by a lookahead: general
+  /// `is` is identity, and mapping `a is b` to `==` would silently turn it into
+  /// equality. `a is b` therefore stays unparsed, as it was before.
+  ///
+  /// The `None` itself is left for the operand parser, so the reduction sees
+  /// `[a, equals, None]` and `astExpressionOperation` folds it into an
+  /// [ASTExpressionNullCheck].
+  Parser<ASTExpressionOperator> expressionOperatorIsNone() =>
+      (isToken() & notToken().optional() & noneToken().and())
+          .map(
+            (v) => v[1] != null
+                ? ASTExpressionOperator.notEquals
+                : ASTExpressionOperator.equals,
+          )
           .cast<ASTExpressionOperator>();
 
   Parser<ASTExpression> expressionNoOperation() =>

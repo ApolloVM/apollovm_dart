@@ -19,6 +19,15 @@ class ApolloCodeGeneratorDart extends ApolloCodeGenerator {
     : super('dart', codeStorage);
 
   @override
+  bool get supportsNullableTypeSuffix => true;
+
+  @override
+  bool get supportsNullAwareOperators => true;
+
+  @override
+  bool get supportsRequiredParameters => true;
+
+  @override
   String normalizeTypeName(String typeName, [String? callingFunction]) {
     switch (typeName) {
       case 'Integer':
@@ -31,12 +40,19 @@ class ApolloCodeGeneratorDart extends ApolloCodeGenerator {
   @override
   String generateASTCatchClauseHeader(ASTCatchClause catchClause) {
     var name = catchClause.variableName ?? 'e';
+    var stackTrace = catchClause.stackTraceName;
+    var bind = stackTrace != null ? '$name, $stackTrace' : name;
     var type = catchClause.exceptionType;
     if (type != null) {
-      return 'on ${generateASTType(type)} catch ($name)';
+      return 'on ${generateASTType(type)} catch ($bind)';
     }
-    return 'catch ($name)';
+    return 'catch ($bind)';
   }
+
+  /// Dart declares the stack trace in the header (`catch (e, s)`), so there is
+  /// no separate binding statement.
+  @override
+  String? renderCatchStackTraceBinding(String name) => null;
 
   @override
   String normalizeTypeFunction(String typeName, String functionName) {
@@ -215,6 +231,52 @@ class ApolloCodeGeneratorDart extends ApolloCodeGenerator {
     out.write(generateASTType(getter.returnType));
     out.write(' get ');
     out.write(getter.name);
+    out.write(' {\n');
+    out.write(blockCode);
+    out.write(indent);
+    out.write('}\n\n');
+
+    return out;
+  }
+
+  @override
+  StringBuffer generateASTClassSetterDeclaration(
+    ASTClassSetterDeclaration setter, {
+    StringBuffer? out,
+    String indent = '',
+    String? receiver,
+  }) {
+    out ??= newOutput();
+
+    out.write(indent);
+    out.write('set ');
+    out.write(setter.name);
+    out.write('(');
+    out.write(generateASTType(setter.parameterType));
+    out.write(' ');
+    out.write(setter.parameterName);
+    out.write(')');
+
+    // An arrow-bodied setter parses into a single `return <expr>;`. Emitting
+    // that as a block body would produce `set x(v) { return …; }`, which Dart
+    // rejects — a setter returns void. Emit the arrow form back.
+    var statements = setter.statements;
+    if (statements.length == 1) {
+      var stm = statements.first;
+      if (stm is ASTStatementReturnWithExpression) {
+        out.write(' => ');
+        generateASTExpression(stm.expression, out: out, headIndented: false);
+        out.write(';\n\n');
+        return out;
+      }
+    }
+
+    var blockCode = generateASTBlock(
+      setter,
+      indent: indent,
+      withBrackets: false,
+    );
+
     out.write(' {\n');
     out.write(blockCode);
     out.write(indent);
@@ -426,6 +488,8 @@ class ApolloCodeGeneratorDart extends ApolloCodeGenerator {
 
     var f = expression.function;
     generateFunctionParametersNames(f, out: out);
+
+    if (f.modifiers.isAsync) out.write(' async');
 
     // Dart anonymous functions: `(params) => expr` or `(params) { body }`
     // (no `=>` before a block body, unlike JavaScript).

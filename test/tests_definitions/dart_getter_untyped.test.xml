@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="Getter without an explicit return type">
+    <source language="dart">
+        <![CDATA[
+class Box {
+  int v = 21;
+
+  get twice => v * 2;
+
+  int get tripled => v * 3;
+
+  static int run() {
+    var b = Box();
+    return b.twice + b.tripled;
+  }
+}
+        ]]>
+    </source>
+    <call class="Box" function="run" return="105">
+        []
+    </call>
+    <output>
+        []
+    </output>
+</test>

@@ -289,7 +289,9 @@ void main() {
   group('Wasm Asyncify prototype (real suspension)', () {
     test('suspends to the host, awaits a real Future, and rewinds', () async {
       if (!rt.isSupported) {
-        fail('Wasm runtime not supported (run `dart run wasm_run:setup`).');
+        fail(
+          'Wasm runtime not supported (`wasm_run` native library unavailable).',
+        );
       }
 
       final module = await _loadModule(rt, 'asyncify-1');
@@ -316,7 +318,9 @@ void main() {
 
     test('two suspended computations interleave by host delay', () async {
       if (!rt.isSupported) {
-        fail('Wasm runtime not supported (run `dart run wasm_run:setup`).');
+        fail(
+          'Wasm runtime not supported (`wasm_run` native library unavailable).',
+        );
       }
 
       // Independent instances => independent linear memory / Asyncify state.

@@ -10,6 +10,7 @@ library;
 
 export 'package:async_extension/async_extension.dart';
 
+export 'src/analysis/null_safety_analyzer.dart';
 export 'src/apollovm_base.dart';
 export 'src/apollovm_generated_output.dart';
 export 'src/apollovm_generator.dart';

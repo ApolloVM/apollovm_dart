@@ -160,6 +160,20 @@ abstract class ApolloCodeGenerator
     );
   }
 
+  /// Emits a setter declaration. Refused by default: most targets have no
+  /// property-setter syntax, and silently dropping one would emit code whose
+  /// assignments write a field the source never meant to write.
+  StringBuffer generateASTClassSetterDeclaration(
+    ASTClassSetterDeclaration setter, {
+    StringBuffer? out,
+    String indent = '',
+    String? receiver,
+  }) {
+    throw UnsupportedSyntaxError(
+      "Language '$language' has no setter declaration: ${setter.name}",
+    );
+  }
+
   @override
   StringBuffer generateASTBlock(
     ASTBlock block, {
@@ -226,6 +240,12 @@ abstract class ApolloCodeGenerator
       }
     }
 
+    for (var s in block.setter) {
+      if (s is ASTClassSetterDeclaration) {
+        generateASTClassSetterDeclaration(s, out: out, indent: indent2);
+      }
+    }
+
     for (var stm in block.statements) {
       generateASTStatement(stm, out: out, indent: indent2);
       out.write('\n');
@@ -249,6 +269,66 @@ abstract class ApolloCodeGenerator
     out.write('\n');
 
     return out;
+  }
+
+  /// Writes a branch (`if`/`else`/`else if`) body, starting at the `)` or
+  /// `else` the caller has just written.
+  ///
+  /// Returns `true` when the body was emitted as a braced block, leaving the
+  /// closing `}` for the caller (which may need to continue it with ` else`)
+  /// and the cursor at [indent]. Returns `false` when the body was a single
+  /// statement emitted unbraced (`if (c) return 0;`), in which case the line
+  /// is already terminated and a following `else` must start a fresh one.
+  bool writeASTBranchBody(
+    ASTBlock block, {
+    required StringBuffer out,
+    required String indent,
+  }) {
+    if (block is ASTSingleLineStatementBlock) {
+      out.write(' ');
+      generateASTStatement(
+        block.statements.single,
+        out: out,
+        indent: indent,
+        headIndented: false,
+      );
+      out.write('\n');
+      return false;
+    }
+
+    out.write(' {\n');
+    generateASTBlock(block, out: out, indent: '$indent  ', withBrackets: false);
+    out.write(indent);
+    return true;
+  }
+
+  /// Writes a loop body, starting at the `)` (or `do`) the caller has just
+  /// written. Returns `true` when it was emitted as a braced block, leaving
+  /// the closing `}` for the caller.
+  ///
+  /// Loops differ from branches in two ways that must be preserved: the block
+  /// is passed [indent] unchanged ([generateASTBlock] adds the inner level),
+  /// and no trailing newline is written — the enclosing block adds it.
+  bool writeASTLoopBody(
+    ASTBlock block, {
+    required StringBuffer out,
+    required String indent,
+  }) {
+    if (block is ASTSingleLineStatementBlock) {
+      out.write(' ');
+      generateASTStatement(
+        block.statements.single,
+        out: out,
+        indent: indent,
+        headIndented: false,
+      );
+      return false;
+    }
+
+    out.write(' {\n');
+    out.write(generateASTBlock(block, indent: indent, withBrackets: false));
+    out.write(indent);
+    return true;
   }
 
   @override
@@ -330,6 +410,10 @@ abstract class ApolloCodeGenerator
   }) {
     out ??= newOutput();
 
+    if (parameter.isRequired && supportsRequiredParameters) {
+      out.write('required ');
+    }
+
     if (parameter is ASTConstructorParameterDeclaration &&
         parameter.thisParameter) {
       out.write('this.');
@@ -345,6 +429,11 @@ abstract class ApolloCodeGenerator
 
     return out;
   }
+
+  /// Whether this target spells a mandatory named parameter with a `required`
+  /// modifier. Only Dart does; the others express it by the absence of a
+  /// default value, so the modifier is dropped there.
+  bool get supportsRequiredParameters => false;
 
   /// The separator emitted between a parameter and its default value in a
   /// declaration (e.g. ` = ` in Dart/Kotlin/C#/Java, `=` in Python).
@@ -369,22 +458,52 @@ abstract class ApolloCodeGenerator
   }
 
   /// Emits a type, dispatching on its array rank.
+  /// Whether this target renders a nullable type with a trailing `?` suffix
+  /// (Dart, Kotlin, TypeScript). Targets without a nullable-type syntax
+  /// (Java, Go, …) leave this `false` and drop the suffix (best-effort).
+  bool get supportsNullableTypeSuffix => false;
+
+  /// Whether this target has native null-aware access operators (`?.`, `?[`)
+  /// that can be emitted directly — Dart, Kotlin, TypeScript, C# and
+  /// JavaScript. Targets without them lower the access through
+  /// [renderNullAwareAccess] instead.
+  bool get supportsNullAwareOperators => false;
+
+  /// Whether this target has a postfix *null-assertion* operator (Dart/C#/TS
+  /// `!`, Kotlin `!!`).
+  ///
+  /// Separate from [supportsNullAwareOperators] because the two do not always
+  /// come together: JavaScript has `?.` but no null assertion, and emitting a
+  /// postfix `!` there would be the logical-NOT operator — a silent change of
+  /// meaning rather than a dropped check.
+  bool get supportsNullAssertionOperator => supportsNullAwareOperators;
+
   StringBuffer generateASTType(
     ASTType type, {
     StringBuffer? out,
     String indent = '',
   }) {
+    out ??= newOutput();
+
     if (type is ASTTypeArray) {
-      return generateASTTypeArray(type, out: out, indent: indent);
+      generateASTTypeArray(type, out: out, indent: indent);
     } else if (type is ASTTypeArray2D) {
-      return generateASTTypeArray2D(type, out: out, indent: indent);
+      generateASTTypeArray2D(type, out: out, indent: indent);
     } else if (type is ASTTypeArray3D) {
-      return generateASTTypeArray3D(type, out: out, indent: indent);
+      generateASTTypeArray3D(type, out: out, indent: indent);
     } else if (type is ASTTypeFunction) {
-      return generateASTTypeFunction(type, out: out, indent: indent);
+      generateASTTypeFunction(type, out: out, indent: indent);
+    } else {
+      generateASTTypeDefault(type, out: out, indent: indent);
     }
 
-    return generateASTTypeDefault(type, out: out, indent: indent);
+    // Nullable `?` suffix (`String?`, `List<int>?`, `void Function()?`) for
+    // targets that support it.
+    if (type.nullable && supportsNullableTypeSuffix) {
+      out.write('?');
+    }
+
+    return out;
   }
 
   /// Renders a function type. The default drops the signature generics and
@@ -597,6 +716,13 @@ abstract class ApolloCodeGenerator
         indent: indent,
         headIndented: headIndented,
       );
+    } else if (statement is ASTStatementAssert) {
+      return generateASTStatementAssert(
+        statement,
+        out: out,
+        indent: indent,
+        headIndented: headIndented,
+      );
     } else if (statement is ASTStatementTryCatch) {
       return generateASTStatementTryCatch(
         statement,
@@ -675,17 +801,11 @@ abstract class ApolloCodeGenerator
       headIndented: false,
     );
 
-    out.write(') {\n');
+    out.write(')');
 
-    var blockCode = generateASTBlock(
-      forLoop.loopBlock,
-      indent: indent,
-      withBrackets: false,
-    );
-
-    out.write(blockCode);
-    out.write(indent);
-    out.write('}');
+    if (writeASTLoopBody(forLoop.loopBlock, out: out, indent: indent)) {
+      out.write('}');
+    }
 
     return out;
   }
@@ -716,17 +836,11 @@ abstract class ApolloCodeGenerator
       headIndented: false,
     );
 
-    out.write(') {\n');
+    out.write(')');
 
-    var blockCode = generateASTBlock(
-      forEach.loopBlock,
-      indent: indent,
-      withBrackets: false,
-    );
-
-    out.write(blockCode);
-    out.write(indent);
-    out.write('}');
+    if (writeASTLoopBody(forEach.loopBlock, out: out, indent: indent)) {
+      out.write('}');
+    }
 
     return out;
   }
@@ -751,17 +865,11 @@ abstract class ApolloCodeGenerator
       headIndented: false,
     );
 
-    out.write(' ) {\n');
+    out.write(' )');
 
-    var blockCode = generateASTBlock(
-      whileLoop.loopBlock,
-      indent: indent,
-      withBrackets: false,
-    );
-
-    out.write(blockCode);
-    out.write(indent);
-    out.write('}');
+    if (writeASTLoopBody(whileLoop.loopBlock, out: out, indent: indent)) {
+      out.write('}');
+    }
 
     return out;
   }
@@ -776,17 +884,13 @@ abstract class ApolloCodeGenerator
 
     if (headIndented) out.write(indent);
 
-    out.write('do {\n');
+    out.write('do');
 
-    var blockCode = generateASTBlock(
-      doWhileLoop.loopBlock,
-      indent: indent,
-      withBrackets: false,
-    );
-
-    out.write(blockCode);
-    out.write(indent);
-    out.write('} while (');
+    if (writeASTLoopBody(doWhileLoop.loopBlock, out: out, indent: indent)) {
+      out.write('} while (');
+    } else {
+      out.write(' while (');
+    }
 
     generateASTExpression(
       doWhileLoop.conditionExpression,
@@ -896,6 +1000,47 @@ abstract class ApolloCodeGenerator
     return out;
   }
 
+  /// `assert(cond)` / `assert(cond, message)`.
+  ///
+  /// The default is Dart's call syntax, which is also Lua's built-in `assert`.
+  /// Targets that spell it differently override this: Java `assert c : m;`,
+  /// Python `assert c, m`, Kotlin `assert(c) { m }`, C# `Debug.Assert(...)`,
+  /// and JS/TS/Go — which have no throwing `assert` — lower it to an explicit
+  /// check.
+  StringBuffer generateASTStatementAssert(
+    ASTStatementAssert statement, {
+    StringBuffer? out,
+    String indent = '',
+    bool headIndented = true,
+  }) {
+    out ??= newOutput();
+
+    if (headIndented) out.write(indent);
+
+    out.write('assert(');
+    generateASTExpression(
+      statement.condition,
+      out: out,
+      indent: indent,
+      headIndented: false,
+    );
+
+    var message = statement.message;
+    if (message != null) {
+      out.write(', ');
+      generateASTExpression(
+        message,
+        out: out,
+        indent: indent,
+        headIndented: false,
+      );
+    }
+
+    out.write(');');
+
+    return out;
+  }
+
   StringBuffer generateASTStatementTryCatch(
     ASTStatementTryCatch tryCatch, {
     StringBuffer? out,
@@ -917,6 +1062,18 @@ abstract class ApolloCodeGenerator
       out.write(' ');
       out.write(generateASTCatchClauseHeader(catchClause));
       out.write(' {\n');
+
+      // Targets whose `catch` header has no second variable declare it as the
+      // handler's first statement instead, so a body that reads it still
+      // compiles after translation.
+      var stackTraceName = catchClause.stackTraceName;
+      if (stackTraceName != null) {
+        var binding = renderCatchStackTraceBinding(stackTraceName);
+        if (binding != null) {
+          out.write('$indent  $binding\n');
+        }
+      }
+
       out.write(
         generateASTBlock(
           catchClause.block,
@@ -950,6 +1107,15 @@ abstract class ApolloCodeGenerator
     return 'catch ($name)';
   }
 
+  /// A statement binding the catch stack-trace variable [name], for targets
+  /// whose `catch` header cannot declare a second variable. `null` means the
+  /// target binds it in the header itself (Dart's `catch (e, s)`).
+  ///
+  /// ApolloVM has no stack traces, so the value is the empty string — see
+  /// [ASTCatchClause.stackTraceName]. The base form suits JavaScript and
+  /// TypeScript.
+  String? renderCatchStackTraceBinding(String name) => "let $name = '';";
+
   @override
   StringBuffer generateASTBranchIfBlock(
     ASTBranchIfBlock branch, {
@@ -968,21 +1134,9 @@ abstract class ApolloCodeGenerator
       indent: indent,
       headIndented: false,
     );
-    out.write(') ');
+    out.write(')');
 
-    final block = branch.block;
-
-    if (block is ASTSingleLineStatementBlock) {
-      generateASTSingleLineStatementBlock(block, out: out);
-    } else {
-      out.write('{\n');
-      generateASTBlock(
-        block,
-        out: out,
-        indent: '$indent  ',
-        withBrackets: false,
-      );
-      out.write(indent);
+    if (writeASTBranchBody(branch.block, out: out, indent: indent)) {
       out.write('}\n');
     }
 
@@ -1007,28 +1161,21 @@ abstract class ApolloCodeGenerator
       indent: indent,
       headIndented: false,
     );
-    out.write(') {\n');
-    generateASTBlock(
-      branch.blockIf,
-      out: out,
-      indent: '$indent  ',
-      withBrackets: false,
-    );
-    out.write(indent);
+    out.write(')');
+
+    var braced = writeASTBranchBody(branch.blockIf, out: out, indent: indent);
 
     var blockElse = branch.blockElse;
 
     if (blockElse != null) {
-      out.write('} else {\n');
-      generateASTBlock(
-        blockElse,
-        out: out,
-        indent: '$indent  ',
-        withBrackets: false,
-      );
-      out.write(indent);
-      out.write('}\n');
-    } else {
+      // An unbraced `if` arm has already ended its line, so `else` starts a
+      // fresh one instead of continuing a `}`.
+      out.write(braced ? '} else' : '${indent}else');
+
+      if (writeASTBranchBody(blockElse, out: out, indent: indent)) {
+        out.write('}\n');
+      }
+    } else if (braced) {
       out.write('}\n');
     }
 
@@ -1053,47 +1200,33 @@ abstract class ApolloCodeGenerator
       indent: indent,
       headIndented: false,
     );
-    out.write(') {\n');
-    generateASTBlock(
-      branch.blockIf,
-      out: out,
-      indent: '$indent  ',
-      withBrackets: false,
-    );
+    out.write(')');
+
+    var braced = writeASTBranchBody(branch.blockIf, out: out, indent: indent);
 
     for (var branchElseIf in branch.blocksElseIf) {
-      out.write(indent);
-      out.write('} else if (');
+      // A braced arm left the cursor at `indent` with its `}` still pending;
+      // an unbraced one ended its line, so indent the `else if` here.
+      out.write(braced ? '} else if (' : '${indent}else if (');
       generateASTExpression(
         branchElseIf.condition,
         out: out,
         indent: indent,
         headIndented: false,
       );
-      out.write(') {\n');
-      generateASTBlock(
-        branchElseIf.block,
-        out: out,
-        indent: '$indent  ',
-        withBrackets: false,
-      );
+      out.write(')');
+      braced = writeASTBranchBody(branchElseIf.block, out: out, indent: indent);
     }
-
-    out.write(indent);
 
     var blockElse = branch.blockElse;
 
     if (blockElse != null) {
-      out.write('} else {\n');
-      generateASTBlock(
-        blockElse,
-        out: out,
-        indent: '$indent  ',
-        withBrackets: false,
-      );
-      out.write(indent);
-      out.write('}\n');
-    } else {
+      out.write(braced ? '} else' : '${indent}else');
+
+      if (writeASTBranchBody(blockElse, out: out, indent: indent)) {
+        out.write('}\n');
+      }
+    } else if (braced) {
       out.write('}\n');
     }
 
@@ -1174,26 +1307,89 @@ abstract class ApolloCodeGenerator
 
     if (headIndented) out.write(indent);
 
-    generateASTVariable(
+    // The assignment target, captured so `??=` can repeat it when the target
+    // language has no such operator (`t ??= v` -> `t = t ?? v`).
+    var target = generateASTVariable(
       expression.variable,
-      out: out,
       indent: indent,
-      headIndented: headIndented,
-    );
+      headIndented: false,
+    ).toString();
 
-    var op = getASTAssignmentOperatorText(expression.operator);
-    out.write(' ');
-    out.write(op);
-    out.write(' ');
-    generateASTExpression(
+    out.write(target);
+
+    var value = generateASTExpression(
       expression.expression,
-      out: out,
       indent: '$indent  ',
       headIndented: false,
-    );
+    ).toString();
+
+    _writeAssignment(out, expression.operator, target, value);
 
     return out;
   }
+
+  /// Resolves the assignment operator text for the target language.
+  ///
+  /// Defaults to the shared spelling; a target overrides this where its own
+  /// differs (e.g. Python writes integer division as `//=`, not `~/=`).
+  String resolveASTAssignmentOperatorText(ASTAssignmentOperator operator) =>
+      getASTAssignmentOperatorText(operator);
+
+  /// Writes the operator and right-hand side of an assignment whose left-hand
+  /// side [target] has already been written to [out].
+  ///
+  /// A `??=` against a target without that operator is lowered to
+  /// `= target ?? value`, so only [renderNullCoalesce] has to be defined per
+  /// language. Any other compound operator the target does not spell (see
+  /// [supportsAssignmentOperator]) is lowered to `= target OP value`.
+  void _writeAssignment(
+    StringBuffer out,
+    ASTAssignmentOperator operator,
+    String target,
+    String value,
+  ) {
+    if (operator == ASTAssignmentOperator.nullCoalesce &&
+        !supportsNullCoalesceAssignment) {
+      out.write(' = ');
+      out.write(renderNullCoalesce(target, value));
+      return;
+    }
+
+    if (operator != ASTAssignmentOperator.set &&
+        operator != ASTAssignmentOperator.nullCoalesce &&
+        !supportsAssignmentOperator(operator)) {
+      out.write(' = ');
+      out.write(target);
+      out.write(' ');
+      // The operand types are not available here (both sides are already
+      // rendered text). `num` is the neutral choice: it only matters for
+      // division, and `~/=` has an explicit spelling in every target that
+      // needs this lowering.
+      out.write(
+        resolveASTExpressionOperatorText(
+          operator.asASTExpressionOperator!,
+          ASTNumType.num,
+          ASTNumType.num,
+        ),
+      );
+      out.write(' ');
+      out.write(value);
+      return;
+    }
+
+    out.write(' ');
+    out.write(resolveASTAssignmentOperatorText(operator));
+    out.write(' ');
+    out.write(value);
+  }
+
+  /// Whether this target spells [operator] as a compound assignment
+  /// (`x OP= y`). When false, it is lowered to `x = x OP y`.
+  ///
+  /// Kotlin has no `&=`/`|=`/`^=`/`<<=`/`>>=` — its bitwise operators are the
+  /// infix functions `and`/`or`/`shl`/`shr` — and Lua has no compound
+  /// assignment at all.
+  bool supportsAssignmentOperator(ASTAssignmentOperator operator) => true;
 
   @override
   StringBuffer generateASTExpressionVariableEntryAssignment(
@@ -1206,43 +1402,43 @@ abstract class ApolloCodeGenerator
 
     if (headIndented) out.write(indent);
 
-    generateASTVariable(
+    // The indexed write target, captured so `??=` can repeat it.
+    var target = generateASTVariable(
       expression.variable,
-      out: out,
       indent: indent,
-      headIndented: headIndented,
+      headIndented: false,
     );
 
-    out.write('[');
+    target.write('[');
     generateASTExpression(
       expression.keyExpression,
-      out: out,
+      out: target,
       indent: '$indent  ',
       headIndented: false,
     );
-    out.write(']');
+    target.write(']');
     // Chained keys for a nested write target (`m[0][1] = v`).
     for (var extra in expression.extraKeys) {
-      out.write('[');
+      target.write('[');
       generateASTExpression(
         extra,
-        out: out,
+        out: target,
         indent: '$indent  ',
         headIndented: false,
       );
-      out.write(']');
+      target.write(']');
     }
 
-    var op = getASTAssignmentOperatorText(expression.operator);
-    out.write(' ');
-    out.write(op);
-    out.write(' ');
-    generateASTExpression(
+    var targetStr = target.toString();
+    out.write(targetStr);
+
+    var value = generateASTExpression(
       expression.expression,
-      out: out,
       indent: '$indent  ',
       headIndented: false,
-    );
+    ).toString();
+
+    _writeAssignment(out, expression.operator, targetStr, value);
 
     return out;
   }
@@ -1392,6 +1588,27 @@ abstract class ApolloCodeGenerator
         indent: indent,
         headIndented: headIndented,
       );
+    } else if (expression is ASTExpressionNullCoalesce) {
+      return generateASTExpressionNullCoalesce(
+        expression,
+        out: out,
+        indent: indent,
+        headIndented: headIndented,
+      );
+    } else if (expression is ASTExpressionNullCheck) {
+      return generateASTExpressionNullCheck(
+        expression,
+        out: out,
+        indent: indent,
+        headIndented: headIndented,
+      );
+    } else if (expression is ASTExpressionLogical) {
+      return generateASTExpressionLogical(
+        expression,
+        out: out,
+        indent: indent,
+        headIndented: headIndented,
+      );
     } else if (expression is ASTExpressionVariableAccess) {
       return generateASTExpressionVariableAccess(
         expression,
@@ -1443,6 +1660,20 @@ abstract class ApolloCodeGenerator
       );
     } else if (expression is ASTExpressionMapLiteral) {
       return generateASTExpressionMapLiteral(
+        expression,
+        out: out,
+        indent: indent,
+        headIndented: headIndented,
+      );
+    } else if (expression is ASTExpressionNullAssertion) {
+      return generateASTExpressionNullAssertion(
+        expression,
+        out: out,
+        indent: indent,
+        headIndented: headIndented,
+      );
+    } else if (expression is ASTExpressionCascade) {
+      return generateASTExpressionCascade(
         expression,
         out: out,
         indent: indent,
@@ -1615,6 +1846,182 @@ abstract class ApolloCodeGenerator
     if (group2) out.write('(');
     out.write(exp2);
     if (group2) out.write(')');
+
+    return out;
+  }
+
+  /// Generates a short-circuiting logical expression — `a && b` / `a || b`.
+  ///
+  /// The operator token comes from [resolveASTExpressionOperatorText], so a
+  /// target with its own spelling is honoured (Python and Lua write `and`/`or`).
+  @override
+  StringBuffer generateASTExpressionLogical(
+    ASTExpressionLogical expression, {
+    StringBuffer? out,
+    String indent = '',
+    bool headIndented = true,
+  }) {
+    out ??= newOutput();
+
+    if (headIndented) out.write(indent);
+
+    final expression1 = expression.expression1;
+    final expression2 = expression.expression2;
+
+    var op = resolveASTExpressionOperatorText(
+      expression.operator,
+      ASTNumType.nan,
+      ASTNumType.nan,
+    );
+
+    var exp1 = generateASTExpression(
+      expression1,
+      indent: '$indent  ',
+      headIndented: false,
+    );
+
+    var exp2 = generateASTExpression(
+      expression2,
+      indent: '$indent  ',
+      headIndented: false,
+    );
+
+    var group1 = expression1.isComplex;
+    var group2 = expression2.isComplex;
+
+    if (group1) out.write('(');
+    out.write(exp1);
+    if (group1) out.write(')');
+
+    out.write(' ');
+    out.write(op);
+    out.write(' ');
+
+    if (group2) out.write('(');
+    out.write(exp2);
+    if (group2) out.write(')');
+
+    return out;
+  }
+
+  /// Renders the null-coalescing expression `a ?? b` from already-generated
+  /// operand texts.
+  ///
+  /// The default emits the operator form, resolved through
+  /// [resolveASTExpressionOperatorText] so a target with its own spelling (e.g.
+  /// Kotlin's Elvis `?:`) is honoured. Targets with no null-coalescing operator
+  /// (Java, Lua, Python) override this to desugar into a conditional; a target
+  /// that cannot express it at all (Go) throws an [UnsupportedSyntaxError].
+  ///
+  /// A desugaring override repeats [a] in its output, so it is only safe for
+  /// operands that can be evaluated twice — which is what `??` / `??=` targets
+  /// are in practice (variables, fields and index reads).
+  String renderNullCoalesce(String a, String b) {
+    var op = resolveASTExpressionOperatorText(
+      ASTExpressionOperator.nullCoalesce,
+      ASTNumType.nan,
+      ASTNumType.nan,
+    );
+    return '$a $op $b';
+  }
+
+  /// Whether the target language has a null-coalescing *assignment* operator
+  /// (`??=`). When false, `t ??= v` is generated as `t = t ?? v`, routing the
+  /// `??` through [renderNullCoalesce] so each target needs only one desugar.
+  ///
+  /// Dart, C#, JavaScript and TypeScript have `??=`; Kotlin, Java, Lua, Python
+  /// and Go do not.
+  bool get supportsNullCoalesceAssignment => true;
+
+  /// Generates the null-coalescing expression `a ?? b`.
+  @override
+  StringBuffer generateASTExpressionNullCoalesce(
+    ASTExpressionNullCoalesce expression, {
+    StringBuffer? out,
+    String indent = '',
+    bool headIndented = true,
+  }) {
+    out ??= newOutput();
+
+    if (headIndented) out.write(indent);
+
+    var a = generateASTExpression(
+      expression.expression1,
+      indent: '$indent  ',
+      headIndented: false,
+    ).toString();
+
+    var b = generateASTExpression(
+      expression.expression2,
+      indent: '$indent  ',
+      headIndented: false,
+    ).toString();
+
+    out.write(renderNullCoalesce(a, b));
+
+    return out;
+  }
+
+  /// Renders a comparison against `null` from the already-generated operand
+  /// text: `x == null` / `x != null`.
+  ///
+  /// The equality token is resolved through [resolveASTExpressionOperatorText]
+  /// so a target's own spelling is honoured — JavaScript and TypeScript use
+  /// strict equality (`=== null`), Lua writes `~=` for inequality — and the
+  /// literal through [nullValueLiteral] (Lua/Go `nil`).
+  ///
+  /// Python overrides this outright: it compares against `None` by identity.
+  ///
+  /// [nullFirst] preserves the operand order the source used, so `null == x`
+  /// does not silently become `x == null`.
+  String renderNullCheck(
+    String operand, {
+    required bool negated,
+    required bool nullFirst,
+  }) {
+    var op = resolveASTExpressionOperatorText(
+      negated ? ASTExpressionOperator.notEquals : ASTExpressionOperator.equals,
+      ASTNumType.nan,
+      ASTNumType.nan,
+    );
+    var nullLiteral = nullValueLiteral;
+    return nullFirst
+        ? '$nullLiteral $op $operand'
+        : '$operand $op $nullLiteral';
+  }
+
+  /// How this target spells the `null` literal, used by [renderNullCheck].
+  String get nullValueLiteral => 'null';
+
+  /// Generates a comparison against `null` — `x == null` / `x != null`.
+  @override
+  StringBuffer generateASTExpressionNullCheck(
+    ASTExpressionNullCheck expression, {
+    StringBuffer? out,
+    String indent = '',
+    bool headIndented = true,
+  }) {
+    out ??= newOutput();
+
+    if (headIndented) out.write(indent);
+
+    final inner = expression.expression;
+
+    var operand = generateASTExpression(
+      inner,
+      indent: '$indent  ',
+      headIndented: false,
+    ).toString();
+
+    if (inner.isComplex) operand = '($operand)';
+
+    out.write(
+      renderNullCheck(
+        operand,
+        negated: expression.negated,
+        nullFirst: expression.nullFirst,
+      ),
+    );
 
     return out;
   }
@@ -1817,6 +2224,194 @@ abstract class ApolloCodeGenerator
     return out;
   }
 
+  /// Renders a cascade (`receiver..sel..sel`, `receiver?..sel`). Each section
+  /// operates on the synthetic cascade target; rendering the section yields
+  /// `<target>.sel`, so the target prefix is stripped and the cascade operator
+  /// supplies the extra dot. Targets without cascades still emit valid (if less
+  /// idiomatic) output for the common single-section forms.
+  StringBuffer generateASTExpressionCascade(
+    ASTExpressionCascade expression, {
+    StringBuffer? out,
+    String indent = '',
+    bool headIndented = true,
+  }) {
+    out ??= newOutput();
+
+    if (headIndented) out.write(indent);
+
+    generateASTExpression(
+      expression.receiver,
+      out: out,
+      indent: indent,
+      headIndented: false,
+    );
+
+    final target = expression.targetVariableName;
+    final sections = expression.sections;
+
+    for (var i = 0; i < sections.length; i++) {
+      var s = generateASTExpression(
+        sections[i],
+        headIndented: false,
+      ).toString();
+      // Strip the synthetic target so `<target>.sel` becomes `.sel`.
+      if (s.startsWith(target)) {
+        s = s.substring(target.length);
+      }
+      var op = (i == 0 && expression.isNullAware && supportsNullAwareOperators)
+          ? '?.'
+          : '.';
+      out.write(op);
+      out.write(s);
+    }
+
+    return out;
+  }
+
+  /// The postfix null-assertion token for this target (`!` for Dart/TypeScript,
+  /// `!!` for Kotlin). Only emitted when [supportsNullAssertionOperator] is
+  /// true.
+  String get nullAssertionSuffix => '!';
+
+  /// The opening token for a null-aware index access (`?[` for Dart/C#, `?.[`
+  /// for TypeScript/JavaScript, `?.get(` for Kotlin). Only used when
+  /// [supportsNullAwareOperators] is true.
+  String get nullAwareIndexOpen => '?[';
+
+  /// The closing token that matches [nullAwareIndexOpen]. Kotlin's null-aware
+  /// index is the call `a?.get(i)`, so it closes with `)` rather than `]`.
+  String get nullAwareIndexClose => ']';
+
+  /// Guards [guarded] on [receiver] being non-null, yielding null instead —
+  /// the lowering of `?.` / `?[` for a target with no native operator.
+  ///
+  /// [receiver] is the *root* of the access chain and [guarded] is the whole
+  /// chain applied to it, so `a?.m().toInt()` arrives as
+  /// `renderNullAwareGuard('a', 'a.m().toInt()')` and the trailing `.toInt()`
+  /// stays inside the guard. Guarding only the first link would still
+  /// dereference null on the rest of the chain.
+  ///
+  /// Only called when [supportsNullAwareOperators] is false. The default is the
+  /// best-effort unguarded form, which drops the check; Java, Lua and Python
+  /// override it, and Go reports the construct as unsupported.
+  ///
+  /// Like [renderNullCoalesce], an override repeats [receiver] in its output,
+  /// so it is only valid for receivers that can be evaluated twice — variables,
+  /// fields and index reads, which is what these are in practice.
+  String renderNullAwareGuard(String receiver, String guarded) => guarded;
+
+  /// Set while generating the inside of a hoisted null-aware guard, so the
+  /// nested access nodes emit their plain form instead of each re-guarding.
+  bool _inNullAwareChain = false;
+
+  /// Joins a receiver and the member text following it. The null-aware form is
+  /// only emitted here for targets with the native operator — targets without
+  /// one are handled by [generateNullAwareChain], which hoists a single guard
+  /// around the whole chain.
+  String _composeMemberAccess(
+    String receiver,
+    String member, {
+    required bool nullAware,
+  }) => (nullAware && supportsNullAwareOperators)
+      ? '$receiver?.$member'
+      : '$receiver.$member';
+
+  /// The root receiver of [node]'s access chain when some link in it is
+  /// null-aware, or `null` when none is.
+  ///
+  /// `a?.m().toInt()` nests as an invocation of `toInt` whose receiver is the
+  /// null-aware invocation of `m` on `a`, so this walks down through
+  /// [ASTExpressionVariable] wrappers and returns `a`.
+  ASTVariable? _nullAwareChainRoot(ASTExpression node) {
+    ASTVariable? variable;
+    bool nullAware;
+
+    switch (node) {
+      case ASTExpressionObjectFunctionInvocation():
+        variable = node.variable;
+        nullAware = node.isNullAware;
+      case ASTExpressionObjectGetterAccess():
+        variable = node.variable;
+        nullAware = node.isNullAware;
+      case ASTExpressionVariableEntryAccess():
+        variable = node.variable;
+        nullAware = node.isNullAware;
+      default:
+        return null;
+    }
+
+    if (nullAware) return variable;
+
+    // Not null-aware itself — look further down the receiver chain.
+    if (variable is ASTExpressionVariable) {
+      return _nullAwareChainRoot(variable.expression);
+    }
+
+    return null;
+  }
+
+  /// Emits [node] wrapped in a single null guard when this target has no native
+  /// `?.` and [node]'s chain contains a null-aware link. Returns `null` when no
+  /// hoisting applies and the caller should generate normally.
+  StringBuffer? generateNullAwareChain(
+    ASTExpression node, {
+    required StringBuffer out,
+    required String indent,
+  }) {
+    if (supportsNullAwareOperators || _inNullAwareChain) return null;
+
+    var root = _nullAwareChainRoot(node);
+    if (root == null) return null;
+
+    var receiver = generateASTVariable(
+      root,
+      indent: indent,
+      headIndented: false,
+    ).toString();
+
+    // Re-enter generation with the guard suppressed, so the chain renders in
+    // its plain form and every link ends up inside this one guard.
+    _inNullAwareChain = true;
+    String guarded;
+    try {
+      guarded = generateASTExpression(
+        node,
+        indent: indent,
+        headIndented: false,
+      ).toString();
+    } finally {
+      _inNullAwareChain = false;
+    }
+
+    out.write(renderNullAwareGuard(receiver, guarded));
+    return out;
+  }
+
+  StringBuffer generateASTExpressionNullAssertion(
+    ASTExpressionNullAssertion expression, {
+    StringBuffer? out,
+    String indent = '',
+    bool headIndented = true,
+  }) {
+    out ??= newOutput();
+
+    if (headIndented) out.write(indent);
+
+    final inner = expression.expression;
+    final group = inner.isComplex;
+
+    if (group) out.write('(');
+    generateASTExpression(inner, out: out, indent: indent, headIndented: false);
+    if (group) out.write(')');
+
+    // Best-effort: targets without a null-assertion operator drop it.
+    if (supportsNullAssertionOperator) {
+      out.write(nullAssertionSuffix);
+    }
+
+    return out;
+  }
+
   @override
   StringBuffer generateASTExpressionNegation(
     ASTExpressionNegation expression, {
@@ -1964,6 +2559,9 @@ abstract class ApolloCodeGenerator
 
     if (headIndented) out.write(indent);
 
+    var hoisted = generateNullAwareChain(expression, out: out, indent: indent);
+    if (hoisted != null) return hoisted;
+
     var functionName = expression.name;
 
     if (expression.variable.isTypeIdentifier) {
@@ -1973,26 +2571,39 @@ abstract class ApolloCodeGenerator
       functionName = normalizeIdentifier(functionName);
     }
 
-    generateASTVariable(
+    var receiver = generateASTVariable(
       expression.variable,
       callingFunction: functionName,
-      out: out,
       indent: indent,
       headIndented: false,
-    );
-    out.write('.');
+    ).toString();
 
-    final arguments = expression.arguments;
+    if (expression.assertReceiver && supportsNullAssertionOperator) {
+      receiver += nullAssertionSuffix;
+    }
+
+    // The call and any trailing chain form the member text, so a lowering that
+    // guards the access covers `a?.b().c()` whole rather than only its first
+    // link.
+    var member = newOutput();
 
     _generateFunctionInvocation(
       functionName,
-      arguments,
-      out,
+      expression.arguments,
+      member,
       indent,
       namedArguments: expression.namedArguments,
     );
 
-    _generateChainFunctionInvocation(expression, out, indent);
+    _generateChainFunctionInvocation(expression, member, indent);
+
+    out.write(
+      _composeMemberAccess(
+        receiver,
+        member.toString(),
+        nullAware: expression.isNullAware,
+      ),
+    );
 
     return out;
   }
@@ -2143,6 +2754,9 @@ abstract class ApolloCodeGenerator
 
     if (headIndented) out.write(indent);
 
+    var hoisted = generateNullAwareChain(expression, out: out, indent: indent);
+    if (hoisted != null) return hoisted;
+
     var getterName = expression.name;
 
     if (expression.variable.isTypeIdentifier) {
@@ -2152,18 +2766,28 @@ abstract class ApolloCodeGenerator
       getterName = normalizeIdentifier(getterName);
     }
 
-    generateASTVariable(
+    var receiver = generateASTVariable(
       expression.variable,
       callingFunction: getterName,
-      out: out,
       indent: indent,
       headIndented: false,
+    ).toString();
+
+    if (expression.assertReceiver && supportsNullAssertionOperator) {
+      receiver += nullAssertionSuffix;
+    }
+
+    var member = newOutput()..write(getterName);
+
+    _generateChainFunctionInvocation(expression, member, indent);
+
+    out.write(
+      _composeMemberAccess(
+        receiver,
+        member.toString(),
+        nullAware: expression.isNullAware,
+      ),
     );
-    out.write('.');
-
-    out.write(getterName);
-
-    _generateChainFunctionInvocation(expression, out, indent);
 
     return out;
   }
@@ -2178,25 +2802,25 @@ abstract class ApolloCodeGenerator
 
     if (headIndented) out.write(indent);
 
-    generateASTVariable(
+    // The `obj.field` write target, captured so `??=` can repeat it.
+    var target = generateASTVariable(
       expression.variable,
-      out: out,
       indent: indent,
       headIndented: false,
     );
-    out.write('.');
-    out.write(normalizeIdentifier(expression.name));
+    target.write('.');
+    target.write(normalizeIdentifier(expression.name));
 
-    var op = getASTAssignmentOperatorText(expression.operator);
-    out.write(' ');
-    out.write(op);
-    out.write(' ');
-    generateASTExpression(
+    var targetStr = target.toString();
+    out.write(targetStr);
+
+    var value = generateASTExpression(
       expression.expression,
-      out: out,
       indent: '$indent  ',
       headIndented: false,
-    );
+    ).toString();
+
+    _writeAssignment(out, expression.operator, targetStr, value);
 
     return out;
   }
@@ -2265,31 +2889,49 @@ abstract class ApolloCodeGenerator
 
     if (headIndented) out.write(indent);
 
-    generateASTVariable(
+    var hoisted = generateNullAwareChain(expression, out: out, indent: indent);
+    if (hoisted != null) return hoisted;
+
+    var receiver = generateASTVariable(
       expression.variable,
-      out: out,
       indent: indent,
       headIndented: headIndented,
-    );
-    out.write('[');
-    generateASTExpression(
+    ).toString();
+
+    if (expression.assertReceiver && supportsNullAssertionOperator) {
+      receiver += nullAssertionSuffix;
+    }
+
+    var index = generateASTExpression(
       expression.expression,
-      out: out,
       indent: indent,
       headIndented: false,
-    );
-    out.write(']');
-    // Chained indices for nested access (`m[0][1]`).
+    ).toString();
+
+    // Chained indices for nested access (`m[0][1]`). They belong inside the
+    // null guard: `a?[0][1]` short-circuits the whole postfix chain.
+    var extras = newOutput();
     for (var extra in expression.extraIndices) {
-      out.write('[');
+      extras.write('[');
       generateASTExpression(
         extra,
-        out: out,
+        out: extras,
         indent: indent,
         headIndented: false,
       );
-      out.write(']');
+      extras.write(']');
     }
+
+    // A null-aware index on a target without `?[` is handled by the hoisted
+    // guard above, which re-enters here with the plain form.
+    if (expression.isNullAware && supportsNullAwareOperators) {
+      out.write(
+        '$receiver$nullAwareIndexOpen$index$nullAwareIndexClose$extras',
+      );
+    } else {
+      out.write('$receiver[$index]$extras');
+    }
+
     return out;
   }
 
@@ -2301,7 +2943,18 @@ abstract class ApolloCodeGenerator
     String indent = '',
     bool headIndented = true,
   }) {
-    if (variable is ASTScopeVariable) {
+    if (variable is ASTExpressionVariable) {
+      // A member-access chain wraps each preceding segment as a receiver
+      // "variable"; generating it means generating that expression, not a name.
+      out ??= newOutput();
+      if (headIndented) out.write(indent);
+      return generateASTExpression(
+        variable.expression,
+        out: out,
+        indent: indent,
+        headIndented: false,
+      );
+    } else if (variable is ASTScopeVariable) {
       return generateASTScopeVariable(
         variable,
         callingFunction: callingFunction,

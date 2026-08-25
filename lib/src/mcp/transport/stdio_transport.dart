@@ -22,6 +22,7 @@ import '../mcp_config.dart';
 /// Returns the running server; await its `done` to know when the peer closes.
 ApolloMcpServer serveStdio({
   McpLimits limits = const McpLimits(),
+  bool nullSafetyChecks = false,
   Stream<List<int>>? input,
   StreamSink<List<int>>? output,
   RepositoryAdapter? repository,
@@ -31,6 +32,7 @@ ApolloMcpServer serveStdio({
   return ApolloMcpServer(
     channel,
     limits: limits,
+    nullSafetyChecks: nullSafetyChecks,
     repository: repository,
     repoConfig: repoConfig,
   );

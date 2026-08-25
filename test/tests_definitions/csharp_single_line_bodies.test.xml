@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="Unbraced single-statement control-flow bodies">
+    <source language="csharp">
+        <![CDATA[
+
+          class Bar {
+            static public void Run(object[] args) {
+              var l = args[0];
+              var a = args[1];
+              var b = args[2];
+
+              foreach (var e in l) print("- " + e) ;
+
+              for (var i = 0; i < 3; ++i) print("i: " + i);
+
+              var i = 0;
+              while (i < 3) i = i + 1;
+              print("while: " + i);
+
+              do i = i - 1; while (i > 0);
+              print("do: " + i);
+
+              if (a) print("x"); else print("y");
+
+              if (a) print("A"); else if (b) print("B"); else print("C");
+
+              if (a) if (b) print("ab"); else print("a!b");
+
+              foreach (var e in l) if (e > 2) print("gt2: " + e);
+
+              foreach (var e in l) { print("braced: " + e); }
+
+              if (a) print("guard");
+              var elseCount = 1;
+              print("elseCount: " + elseCount);
+            }
+          }
+
+        ]]>
+    </source>
+    <call class="Bar" function="Run">
+        [
+          [[1, 2, 3], true, false]
+        ]
+    </call>
+    <output>
+        ["- 1", "- 2", "- 3", "i: 0", "i: 1", "i: 2", "while: 3", "do: 0", "x", "A", "a!b", "gt2: 3", "braced: 1", "braced: 2", "braced: 3", "guard", "elseCount: 1"]
+    </output>
+
+    <call class="Bar" function="Run">
+        [
+          [[1, 2, 3], false, true]
+        ]
+    </call>
+    <output>
+        ["- 1", "- 2", "- 3", "i: 0", "i: 1", "i: 2", "while: 3", "do: 0", "y", "B", "gt2: 3", "braced: 1", "braced: 2", "braced: 3", "elseCount: 1"]
+    </output>
+
+    <call class="Bar" function="Run">
+        [
+          [[1, 2, 3], false, false]
+        ]
+    </call>
+    <output>
+        ["- 1", "- 2", "- 3", "i: 0", "i: 1", "i: 2", "while: 3", "do: 0", "y", "C", "gt2: 3", "braced: 1", "braced: 2", "braced: 3", "elseCount: 1"]
+    </output>
+</test>

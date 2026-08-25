@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="Null-safety: null-coalescing and null-aware index">
+    <source language="dart">
+        <![CDATA[
+class Calc {
+  int coalesce(int? a, int b) {
+    return a ?? b;
+  }
+  int? firstOr(List<int>? xs, int? d) {
+    return xs?[0] ?? d;
+  }
+}
+        ]]>
+    </source>
+    <call class="Calc" function="coalesce" return="5">
+        [null, 5]
+    </call>
+    <output>
+        []
+    </output>
+    <call class="Calc" function="coalesce" return="7">
+        [7, 5]
+    </call>
+    <output>
+        []
+    </output>
+    <call class="Calc" function="firstOr" return="9">
+        [null, 9]
+    </call>
+    <output>
+        []
+    </output>
+    <call class="Calc" function="firstOr" return="3">
+        [[3, 4], 9]
+    </call>
+    <output>
+        []
+    </output>
+
+    <source-generated language="dart"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+class Calc {
+
+  int coalesce(int? a, int b) {
+    return a ?? b;
+  }
+
+  int? firstOr(List<int>? xs, int? d) {
+    return xs?[0] ?? d;
+  }
+
+}
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+</test>

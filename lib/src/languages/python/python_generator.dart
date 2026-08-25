@@ -190,6 +190,22 @@ class ApolloCodeGeneratorPython extends ApolloCodeGenerator {
       }
     }
 
+    // Python has no property accessors in this generator yet. Route them
+    // through the base declarations so an unsupported accessor is refused
+    // rather than silently dropped — dropping it emits a body that still
+    // references the property, which is broken code that looks fine.
+    for (var g in block.getter) {
+      if (g is ASTClassGetterDeclaration) {
+        generateASTClassGetterDeclaration(g, out: out, indent: indent);
+      }
+    }
+
+    for (var s in block.setter) {
+      if (s is ASTClassSetterDeclaration) {
+        generateASTClassSetterDeclaration(s, out: out, indent: indent);
+      }
+    }
+
     for (var stm in block.statements) {
       generateASTStatement(stm, out: out, indent: indent);
     }
@@ -359,6 +375,22 @@ class ApolloCodeGeneratorPython extends ApolloCodeGenerator {
     for (var set in clazz.functions) {
       for (var f in set.functions) {
         _generateFunction(f, out: out, indent: bodyIndent, isMethod: true);
+      }
+    }
+
+    // Property accessors are not emitted as Python `@property` yet. Route them
+    // through the base declarations so an unsupported accessor is refused
+    // rather than silently dropped — dropping it leaves the method bodies
+    // referencing a property that no longer exists.
+    for (var g in clazz.getter) {
+      if (g is ASTClassGetterDeclaration) {
+        generateASTClassGetterDeclaration(g, out: out, indent: bodyIndent);
+      }
+    }
+
+    for (var s in clazz.setter) {
+      if (s is ASTClassSetterDeclaration) {
+        generateASTClassSetterDeclaration(s, out: out, indent: bodyIndent);
       }
     }
 
@@ -770,6 +802,31 @@ class ApolloCodeGeneratorPython extends ApolloCodeGenerator {
     return out;
   }
 
+  /// Python spells it `assert cond, message` — a statement, not a call.
+  @override
+  StringBuffer generateASTStatementAssert(
+    ASTStatementAssert statement, {
+    StringBuffer? out,
+    String indent = '',
+    bool headIndented = true,
+  }) {
+    out ??= newOutput();
+    if (headIndented) out.write(indent);
+
+    out.write('assert ');
+    generateASTExpression(statement.condition, out: out, headIndented: false);
+
+    var message = statement.message;
+    if (message != null) {
+      out.write(', ');
+      generateASTExpression(message, out: out, headIndented: false);
+    }
+
+    out.write('\n');
+
+    return out;
+  }
+
   @override
   StringBuffer generateASTStatementThrow(
     ASTStatementThrow statement, {
@@ -812,6 +869,14 @@ class ApolloCodeGeneratorPython extends ApolloCodeGenerator {
         }
       }
       out.write(':\n');
+
+      // Python's `except` header has no second variable, so a Dart
+      // `catch (e, s)` binds the stack trace as the handler's first statement.
+      var stackTraceName = catchClause.stackTraceName;
+      if (stackTraceName != null) {
+        out.write('$indent$_tab$stackTraceName = ""\n');
+      }
+
       _writeSuite(catchClause.block, out, '$indent$_tab');
     }
 
@@ -956,6 +1021,44 @@ class ApolloCodeGeneratorPython extends ApolloCodeGenerator {
     return out;
   }
 
+  /// Python has no `do`-`while`, so it becomes the standard idiom:
+  ///
+  ///     while True:
+  ///         <body>
+  ///         if not (<cond>):
+  ///             break
+  ///
+  /// Without this the base generator would emit C-style `do { ... } while (c);`,
+  /// which is not Python at all.
+  @override
+  StringBuffer generateASTStatementDoWhileLoop(
+    ASTStatementDoWhileLoop doWhileLoop, {
+    StringBuffer? out,
+    String indent = '',
+    bool headIndented = true,
+  }) {
+    out ??= newOutput();
+    if (headIndented) out.write(indent);
+
+    var bodyIndent = '$indent$_tab';
+
+    out.write('while True:\n');
+    _writeSuite(doWhileLoop.loopBlock, out, bodyIndent);
+
+    out.write(bodyIndent);
+    out.write('if not (');
+    generateASTExpression(
+      doWhileLoop.conditionExpression,
+      out: out,
+      headIndented: false,
+    );
+    out.write('):\n');
+    out.write('$bodyIndent$_tab');
+    out.write('break\n');
+
+    return out;
+  }
+
   /// A C-style `for (init; cond; cont)` (e.g. from another language) becomes a
   /// `while` loop, the faithful Python translation.
   @override
@@ -1013,6 +1116,42 @@ class ApolloCodeGeneratorPython extends ApolloCodeGenerator {
       default:
         return getASTExpressionOperatorText(operator);
     }
+  }
+
+  /// Python has no null-coalescing operator, so `a ?? b` becomes a conditional
+  /// expression. It tests `is not None` rather than truthiness, so `0` / `''` /
+  /// `False` are preserved (unlike an `a or b` shortcut).
+  @override
+  String renderNullCoalesce(String a, String b) =>
+      '($a if $a is not None else $b)';
+
+  /// Python has no `??=`; it becomes `t = (t if t is not None else v)`.
+  @override
+  bool get supportsNullCoalesceAssignment => false;
+
+  @override
+  String get nullValueLiteral => 'None';
+
+  /// Python has no `?.` or `?[`, so a null-aware access becomes a conditional
+  /// expression guarded by an `is not None` test. Without this the access would
+  /// degrade to a plain `.` and raise `AttributeError` on `None`.
+  @override
+  String renderNullAwareGuard(String receiver, String guarded) =>
+      '($guarded if $receiver is not None else None)';
+
+  /// Python compares against `None` by *identity*, not equality: `==` dispatches
+  /// through `__eq__`, which a class can redefine to return `True` for `None`.
+  /// `is None` / `is not None` is the form PEP 8 mandates.
+  @override
+  String renderNullCheck(
+    String operand, {
+    required bool negated,
+    required bool nullFirst,
+  }) {
+    var op = negated ? 'is not' : 'is';
+    // `None is x` is legal but jarring; Python always reads `x is None`, so the
+    // operand order is normalized here even when the source wrote it reversed.
+    return '$operand $op None';
   }
 
   @override
@@ -1098,27 +1237,9 @@ class ApolloCodeGeneratorPython extends ApolloCodeGenerator {
     return out;
   }
 
+  /// Python spells integer division `//`, so its assignment form is `//=`.
   @override
-  StringBuffer generateASTExpressionVariableAssignment(
-    ASTExpressionVariableAssignment expression, {
-    StringBuffer? out,
-    String indent = '',
-    bool headIndented = true,
-  }) {
-    out ??= newOutput();
-    if (headIndented) out.write(indent);
-
-    generateASTVariable(expression.variable, out: out, headIndented: false);
-
-    out.write(' ');
-    out.write(_assignmentOperatorText(expression.operator));
-    out.write(' ');
-    generateASTExpression(expression.expression, out: out, headIndented: false);
-
-    return out;
-  }
-
-  String _assignmentOperatorText(ASTAssignmentOperator operator) {
+  String resolveASTAssignmentOperatorText(ASTAssignmentOperator operator) {
     var text = getASTAssignmentOperatorText(operator);
     return text == '~/=' ? '//=' : text;
   }

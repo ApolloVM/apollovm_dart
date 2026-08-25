@@ -20,6 +20,16 @@ class ApolloCodeGeneratorTypeScript extends ApolloCodeGenerator {
   ApolloCodeGeneratorTypeScript(ApolloSourceCodeStorage codeStorage)
     : super('typescript', codeStorage);
 
+  // TypeScript has native `?.`, `!` and `??`, but a nullable *type* is written
+  // `T | null` (or an optional `?:` member), not a `T?` suffix — so the type
+  // suffix stays off (best-effort: nullability is dropped from type positions).
+  @override
+  bool get supportsNullAwareOperators => true;
+
+  // Null-aware element access in TS is `a?.[i]`, not `a?[i]`.
+  @override
+  String get nullAwareIndexOpen => '?.[';
+
   @override
   String normalizeTypeName(String typeName, [String? callingFunction]) {
     // Static-call targets (e.g. `Number.parseInt`) use the JS global object,
@@ -572,6 +582,35 @@ class ApolloCodeGeneratorTypeScript extends ApolloCodeGenerator {
   }
 
   @override
+  /// TypeScript has no built-in throwing `assert`, so it is lowered to an
+  /// explicit check that preserves the semantics.
+  @override
+  StringBuffer generateASTStatementAssert(
+    ASTStatementAssert statement, {
+    StringBuffer? out,
+    String indent = '',
+    bool headIndented = true,
+  }) {
+    out ??= newOutput();
+    if (headIndented) out.write(indent);
+
+    out.write('if (!(');
+    generateASTExpression(statement.condition, out: out, headIndented: false);
+    out.write(')) throw ');
+
+    var message = statement.message;
+    if (message != null) {
+      generateASTExpression(message, out: out, headIndented: false);
+    } else {
+      out.write("'Assertion failed'");
+    }
+
+    out.write(';');
+
+    return out;
+  }
+
+  @override
   StringBuffer generateASTStatementForEach(
     ASTStatementForEach forEach, {
     StringBuffer? out,
@@ -593,17 +632,11 @@ class ApolloCodeGeneratorTypeScript extends ApolloCodeGenerator {
       headIndented: false,
     );
 
-    out.write(') {\n');
+    out.write(')');
 
-    var blockCode = generateASTBlock(
-      forEach.loopBlock,
-      indent: indent,
-      withBrackets: false,
-    );
-
-    out.write(blockCode);
-    out.write(indent);
-    out.write('}');
+    if (writeASTLoopBody(forEach.loopBlock, out: out, indent: indent)) {
+      out.write('}');
+    }
 
     return out;
   }

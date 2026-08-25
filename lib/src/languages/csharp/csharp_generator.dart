@@ -17,6 +17,11 @@ class ApolloCodeGeneratorCSharp extends ApolloCodeGenerator {
   ApolloCodeGeneratorCSharp(ApolloSourceCodeStorage codeStorage)
     : super('csharp', codeStorage);
 
+  /// C# has had null-conditional access (`a?.b`, `a?[i]`) since C# 6 and the
+  /// null-forgiving `!` since C# 8, so all three are emitted natively.
+  @override
+  bool get supportsNullAwareOperators => true;
+
   @override
   StringBuffer generateASTExpressionLiteralFunction(
     ASTExpressionLiteralFunction expression, {
@@ -63,6 +68,9 @@ class ApolloCodeGeneratorCSharp extends ApolloCodeGenerator {
     var typeStr = type != null ? '${generateASTType(type)}' : 'Exception';
     return 'catch ($typeStr $name)';
   }
+
+  @override
+  String? renderCatchStackTraceBinding(String name) => 'string $name = "";';
 
   @override
   String normalizeTypeFunction(String typeName, String functionName) {
@@ -530,6 +538,32 @@ class ApolloCodeGeneratorCSharp extends ApolloCodeGenerator {
   }
 
   @override
+  /// C# has no `assert` keyword: `System.Diagnostics.Debug.Assert(cond, msg)`.
+  @override
+  StringBuffer generateASTStatementAssert(
+    ASTStatementAssert statement, {
+    StringBuffer? out,
+    String indent = '',
+    bool headIndented = true,
+  }) {
+    out ??= newOutput();
+    if (headIndented) out.write(indent);
+
+    out.write('Debug.Assert(');
+    generateASTExpression(statement.condition, out: out, headIndented: false);
+
+    var message = statement.message;
+    if (message != null) {
+      out.write(', ');
+      generateASTExpression(message, out: out, headIndented: false);
+    }
+
+    out.write(');');
+
+    return out;
+  }
+
+  @override
   StringBuffer generateASTStatementForEach(
     ASTStatementForEach forEach, {
     StringBuffer? out,
@@ -552,17 +586,11 @@ class ApolloCodeGeneratorCSharp extends ApolloCodeGenerator {
       headIndented: false,
     );
 
-    out.write(') {\n');
+    out.write(')');
 
-    var blockCode = generateASTBlock(
-      forEach.loopBlock,
-      indent: indent,
-      withBrackets: false,
-    );
-
-    out.write(blockCode);
-    out.write(indent);
-    out.write('}');
+    if (writeASTLoopBody(forEach.loopBlock, out: out, indent: indent)) {
+      out.write('}');
+    }
 
     return out;
   }

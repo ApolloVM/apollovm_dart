@@ -38,7 +38,7 @@ Future<void> _testWasmPrints(
 
   var rt = WasmRuntime()..ensureBooted();
   if (!rt.isSupported) {
-    fail('Wasm runtime not supported (run `dart run wasm_run:setup`).');
+    fail('Wasm runtime not supported (`wasm_run` native library unavailable).');
   }
 
   // 3) Run the compiled Wasm.

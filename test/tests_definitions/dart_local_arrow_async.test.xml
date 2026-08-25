@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="Arrow and async bodies on local and anonymous functions">
+    <source language="dart">
+        <![CDATA[
+int apply(int v, Function f) {
+  return f(v);
+}
+
+Future<int> run(int n) async {
+  int twice(int x) => x * 2;
+
+  int thrice(int x) {
+    return x * 3;
+  }
+
+  Future<int> boosted(int x) async {
+    return x + 100;
+  }
+
+  var lambda = (int x) => x + 1;
+  var lambdaAsync = (int x) async => x + 7;
+
+  var a = twice(n);
+  var b = thrice(n);
+  var c = await boosted(n);
+  var d = apply(n, lambda);
+  var e = await lambdaAsync(n);
+
+  return a + b + c + d + e;
+}
+        ]]>
+    </source>
+    <call function="run" return="148">
+        [5]
+    </call>
+    <output>
+        []
+    </output>
+</test>

@@ -576,17 +576,35 @@ class KotlinGrammarDefinition extends KotlinGrammarLexer {
             return ASTBlock(null)..addAllStatements(statements);
           });
 
+  /// A control-flow body: either a braced block or a single unbraced
+  /// statement (`for (e in l) print(e)`). [codeBlock] is tried first, so a
+  /// body starting with `{` is always a block.
   Parser<ASTBlock> codeBlockOrSingleLineBlock() =>
-      ((codeBlock() | singleLineCodeBlock())).cast<ASTBlock>();
+      (ref0(codeBlock) | ref0(singleLineCodeBlock)).cast<ASTBlock>();
 
   Parser<ASTSingleLineStatementBlock> singleLineCodeBlock() =>
-      (singleLineStatement().trimHidden()).map((v) {
+      ref0(singleLineStatement).trimHidden().map((v) {
         var statements = v;
         return ASTSingleLineStatementBlock(null)..addStatement(statements);
       });
 
+  /// The [statement] alternation minus [statementVariableDeclaration], which
+  /// is illegal as an unbraced body. The relative order must match
+  /// [statement]. Every alternative must be a `ref0`, otherwise the cycle back
+  /// through [branch] recurses forever while *building* the grammar.
   Parser<ASTStatement> singleLineStatement() =>
-      (statementReturn() | statementExpression()).cast<ASTStatement>();
+      (ref0(statementTryCatch) |
+              ref0(statementThrow) |
+              ref0(statementWhen) |
+              ref0(branch) |
+              ref0(statementBreak) |
+              ref0(statementContinue) |
+              ref0(statementDoWhileLoop) |
+              ref0(statementForEach) |
+              ref0(statementWhileLoop) |
+              ref0(statementReturn) |
+              ref0(statementExpression))
+          .cast<ASTStatement>();
 
   Parser<ASTStatement> statement() =>
       (statementTryCatch() |
@@ -619,7 +637,7 @@ class KotlinGrammarDefinition extends KotlinGrammarLexer {
   Parser<ASTStatementDoWhileLoop> statementDoWhileLoop() =>
       (string('do') &
               ref0(identifierPartLexicalToken).not() &
-              codeBlock().trimHidden() &
+              ref0(codeBlockOrSingleLineBlock).trimHidden() &
               whileToken().trimHidden() &
               char('(').trimHidden() &
               ref0(expression) &
@@ -658,7 +676,7 @@ class KotlinGrammarDefinition extends KotlinGrammarLexer {
           });
 
   Parser<ASTExpression?> whenEntryLabel() =>
-      ((elseToken().trimHidden()).map((v) => null) |
+      ((keywordToken('else')).map((v) => null) |
               ref0(expression).map((v) => v as ASTExpression?))
           .cast<ASTExpression?>();
 
@@ -706,7 +724,7 @@ class KotlinGrammarDefinition extends KotlinGrammarLexer {
               inToken().trimHidden() &
               ref0(expression) &
               char(')').trimHidden() &
-              codeBlock())
+              ref0(codeBlockOrSingleLineBlock))
           .map((v) {
             var variableName = v[2];
             var iterableExp = v[4];
@@ -725,7 +743,7 @@ class KotlinGrammarDefinition extends KotlinGrammarLexer {
               char('(').trimHidden() &
               ref0(expression) &
               char(')').trimHidden() &
-              codeBlock())
+              ref0(codeBlockOrSingleLineBlock))
           .map((v) {
             var condExp = v[2];
             var block = v[4];
@@ -816,9 +834,9 @@ class KotlinGrammarDefinition extends KotlinGrammarLexer {
               char('(').trimHidden() &
               ref0(expression) &
               char(')').trimHidden() &
-              codeBlock() &
-              elseToken().trimHidden() &
-              codeBlock())
+              ref0(codeBlockOrSingleLineBlock) &
+              keywordToken('else') &
+              ref0(codeBlockOrSingleLineBlock))
           .map((v) {
             var condition = v[2];
             var blockIf = v[4];
@@ -831,9 +849,10 @@ class KotlinGrammarDefinition extends KotlinGrammarLexer {
               char('(').trimHidden() &
               ref0(expression) &
               char(')').trimHidden() &
-              codeBlock() &
+              ref0(codeBlockOrSingleLineBlock) &
               ref0(branchElseIfs).plus() &
-              (elseToken().trimHidden() & codeBlock()).optional())
+              (keywordToken('else') & ref0(codeBlockOrSingleLineBlock))
+                  .optional())
           .map((v) {
             var condition = v[2];
             var blockIf = v[4];
@@ -849,12 +868,12 @@ class KotlinGrammarDefinition extends KotlinGrammarLexer {
           });
 
   Parser<ASTBranchIfBlock> branchElseIfs() =>
-      (elseToken().trimHidden() &
-              ifToken().trimHidden() &
+      (keywordToken('else') &
+              keywordToken('if') &
               char('(').trimHidden() &
               ref0(expression) &
               char(')').trimHidden() &
-              codeBlock())
+              ref0(codeBlockOrSingleLineBlock))
           .map((v) {
             var condition = v[3];
             var blockIf = v[5];
@@ -879,7 +898,7 @@ class KotlinGrammarDefinition extends KotlinGrammarLexer {
               ref0(expression) &
               char(')').trimHidden() &
               ref0(expressionOperationChain) &
-              elseToken().trimHidden() &
+              keywordToken('else') &
               ref0(expression))
           .map(
             (v) => ASTExpressionConditional(

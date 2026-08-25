@@ -65,7 +65,11 @@ class ApolloRuntime {
   ///
   /// Uses the parser directly (not `loadCodeUnit`) so a parse failure yields
   /// structured line/column diagnostics instead of a thrown [SyntaxError].
-  Future<ParseOutcome> parse(String language, String source) async {
+  Future<ParseOutcome> parse(
+    String language,
+    String source, {
+    bool nullSafety = false,
+  }) async {
     final tooLarge = _checkSource(source);
     if (tooLarge != null) return (root: null, diagnostics: tooLarge);
 
@@ -81,18 +85,48 @@ class ApolloRuntime {
     final codeUnit = SourceCodeUnit(language, source, id: 'mcp');
     final result = await parser.parse(codeUnit);
     if (result.isOK) {
-      return (root: result.root, diagnostics: const <Diagnostic>[]);
+      // This path never loads, so a null-safety problem cannot *reject* the
+      // source here — it is reported instead, which is the useful form for the
+      // inspection tools (`parse`/`ast`/`symbols`/`types`).
+      return (
+        root: result.root,
+        diagnostics: nullSafety
+            ? _nullSafetyDiagnostics(result.root!)
+            : const <Diagnostic>[],
+      );
     }
     return (root: null, diagnostics: [diagnosticFromParseResult(result)]);
+  }
+
+  /// Null-safety findings for [root] as MCP diagnostics.
+  ///
+  /// Best-effort, like the LSP path: an internal analyzer failure must not turn
+  /// a successful parse into a tool error.
+  List<Diagnostic> _nullSafetyDiagnostics(ASTRoot root) {
+    List<NullSafetyDiagnostic> findings;
+    try {
+      findings = NullSafetyAnalyzer().analyze(root);
+    } catch (_) {
+      return const <Diagnostic>[];
+    }
+    return [
+      for (final f in findings)
+        <String, Object?>{
+          'severity': f.severity.name,
+          'message': f.message,
+          'code': f.code,
+        },
+    ];
   }
 
   /// Loads [source] into a fresh [ApolloVM], returning `(vm, null)` on success
   /// or `(null, diagnostics)` on failure.
   Future<(ApolloVM?, List<Diagnostic>?)> _load(
     String language,
-    String source,
-  ) async {
-    final vm = ApolloVM();
+    String source, {
+    bool nullSafety = false,
+  }) async {
+    final vm = ApolloVM(nullSafetyChecks: nullSafety);
     // Reject unknown languages up front: `loadCodeUnit` throws a `StateError`
     // (rather than returning false) when there is no parser for the language.
     if (vm.getParser<String>(language) == null) {
@@ -105,6 +139,19 @@ class ApolloRuntime {
         return (null, [_err('Unsupported language: $language')]);
       }
       return (vm, null);
+    } on NullSafetyError catch (e) {
+      // A tool must return structured diagnostics, never throw.
+      return (
+        null,
+        [
+          for (final f in e.findings)
+            <String, Object?>{
+              'severity': f.severity.name,
+              'message': f.message,
+              'code': f.code,
+            },
+        ],
+      );
     } on SyntaxError catch (e) {
       return (null, [diagnosticFromError(e)]);
     }
@@ -121,7 +168,11 @@ class ApolloRuntime {
     String? className,
     List<Object?> args = const [],
     int? timeoutMs,
+    bool nullSafety = false,
   }) async {
+    function = _normalizeEntryName(function) ?? 'main';
+    className = _normalizeEntryName(className);
+
     final tooLarge = _checkSource(source);
     if (tooLarge != null) {
       return (
@@ -133,7 +184,11 @@ class ApolloRuntime {
       );
     }
 
-    final (vm, loadDiagnostics) = await _load(language, source);
+    final (vm, loadDiagnostics) = await _load(
+      language,
+      source,
+      nullSafety: nullSafety,
+    );
     if (vm == null) {
       return (
         result: null,
@@ -190,10 +245,7 @@ class ApolloRuntime {
       final diagnostics = <Diagnostic>[];
       if (!hasResult) {
         diagnostics.add(
-          _err(
-            "Entry function not found: ${className != null ? '$className.' : ''}"
-            '$function',
-          ),
+          _entryNotFound(vm, language, function, className, args),
         );
       }
 
@@ -223,6 +275,141 @@ class ApolloRuntime {
         diagnostics: [diagnosticFromError(e)],
       );
     }
+  }
+
+  /// Builds the diagnostic for an entry point that could not be invoked.
+  ///
+  /// A failed lookup has two very different causes, and the message must say
+  /// which one: there is no declaration with that *name* at all, or one (or
+  /// more) exist but none accepts the passed arguments. The latter is the
+  /// common case for a caller that guessed the parameters, so the declared
+  /// signatures are listed to show what to pass instead.
+  Diagnostic _entryNotFound(
+    ApolloVM vm,
+    String language,
+    String function,
+    String? className,
+    List<Object?> args,
+  ) {
+    final entryName = className != null ? '$className.$function' : function;
+    final namespaces = vm.getLanguageNamespaces(language).namespaces;
+    if (!namespaces.contains('')) namespaces.insert(0, '');
+
+    final signatures = <String>[];
+
+    if (className != null) {
+      var classFound = false;
+      for (var ns in namespaces) {
+        final clazz = vm
+            .getLanguageNamespaces(language)
+            .get(ns)
+            .getClass(className);
+        if (clazz == null) continue;
+        classFound = true;
+        _collectSignatures(
+          clazz.getFunctionWithName(function),
+          signatures,
+          className: className,
+        );
+      }
+
+      if (!classFound) {
+        return _err(
+          'Entry class not found: $className '
+          "(looking for the method `$function`)",
+        );
+      }
+    } else {
+      for (var ns in namespaces) {
+        for (var codeUnit
+            in vm.getLanguageNamespaces(language).get(ns).codeUnits) {
+          final root = codeUnit.root;
+          if (root == null) continue;
+
+          _collectSignatures(root.getFunctionWithName(function), signatures);
+
+          for (var clazz in root.classes) {
+            _collectSignatures(
+              clazz.getFunctionWithName(function),
+              signatures,
+              className: clazz.name,
+            );
+          }
+        }
+      }
+    }
+
+    if (signatures.isEmpty) {
+      return _err('Entry function not found: $entryName');
+    }
+
+    final declared = signatures.map((s) => '`$s`').join(', ');
+
+    final found = signatures.length > 1
+        ? '${signatures.length} functions named `$function` exist, but with '
+              'different signatures'
+        : 'A function named `$function` exists, but with a different signature';
+
+    return _err(
+      'No entry function matching the passed arguments: '
+      '`$entryName(${_argsSignature(args)})`. '
+      '$found: $declared. '
+      'Adjust the arguments to match a declared signature.',
+    );
+  }
+
+  /// Adds the formatted signature of every declaration in [set] to [out].
+  void _collectSignatures(
+    ASTFunctionSet? set,
+    List<String> out, {
+    String? className,
+  }) {
+    if (set == null) return;
+    for (var f in set.functions) {
+      final signature = _signature(f, className: className);
+      if (!out.contains(signature)) out.add(signature);
+    }
+  }
+
+  /// Formats a declaration as `Ret name(T1 a, T2 b)`, qualified with
+  /// [className] when it is a class method.
+  String _signature(ASTInvocableDeclaration f, {String? className}) {
+    final params = [
+      for (var p in f.parameters.allParameters)
+        '${_typeName(p.type)} ${p.name}',
+    ].join(', ');
+
+    final name = className != null ? '$className.${f.name}' : f.name;
+    final returnType = _typeName(f.returnType);
+    final prefix = returnType.isEmpty ? '' : '$returnType ';
+
+    return '$prefix$name($params)';
+  }
+
+  /// The argument types as passed by the caller, e.g. `int, String`.
+  String _argsSignature(List<Object?> args) =>
+      args.map(_argTypeName).join(', ');
+
+  String _argTypeName(Object? arg) {
+    if (arg == null) return 'null';
+    // Generic collections stringify with their (always dynamic, since these
+    // come from JSON) type arguments: not useful noise in the message.
+    if (arg is List) return 'List';
+    if (arg is Map) return 'Map';
+    return arg.runtimeType.toString();
+  }
+
+  String _typeName(ASTType? type) => type?.name ?? '';
+
+  /// Normalize class/function name.
+  String? _normalizeEntryName(String? entryName) {
+    if (entryName != null) {
+      entryName = entryName.trim();
+      if (entryName.isEmpty) {
+        entryName = null;
+      }
+    }
+    return entryName;
   }
 
   /// Finds and runs the entry point, mirroring the CLI's discovery order:
@@ -310,12 +497,17 @@ class ApolloRuntime {
   Future<TranslateOutcome> translate(
     String from,
     String to,
-    String source,
-  ) async {
+    String source, {
+    bool nullSafety = false,
+  }) async {
     final tooLarge = _checkSource(source);
     if (tooLarge != null) return (generated: null, diagnostics: tooLarge);
 
-    final (vm, loadDiagnostics) = await _load(from, source);
+    final (vm, loadDiagnostics) = await _load(
+      from,
+      source,
+      nullSafety: nullSafety,
+    );
     if (vm == null) return (generated: null, diagnostics: loadDiagnostics!);
 
     try {
@@ -335,11 +527,19 @@ class ApolloRuntime {
 
   /// Compiles [source] to WebAssembly, returning each produced module as
   /// `{name, base64}` (the module bytes, base64-encoded for JSON transport).
-  Future<WasmOutcome> compileWasm(String language, String source) async {
+  Future<WasmOutcome> compileWasm(
+    String language,
+    String source, {
+    bool nullSafety = false,
+  }) async {
     final tooLarge = _checkSource(source);
     if (tooLarge != null) return (modules: null, diagnostics: tooLarge);
 
-    final (vm, loadDiagnostics) = await _load(language, source);
+    final (vm, loadDiagnostics) = await _load(
+      language,
+      source,
+      nullSafety: nullSafety,
+    );
     if (vm == null) return (modules: null, diagnostics: loadDiagnostics!);
 
     try {

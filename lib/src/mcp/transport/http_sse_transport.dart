@@ -45,6 +45,9 @@ class _Session {
 class HttpSseTransport {
   final McpLimits limits;
 
+  /// Server-wide default for the tools' `nullSafety` argument.
+  final bool nullSafetyChecks;
+
   /// Optional workspace/repository backend shared by all sessions (exposes the
   /// `apollovm.fs.*`/`search.*`/`code.*`/`git.*` tools when set).
   final RepositoryAdapter? repository;
@@ -56,6 +59,7 @@ class HttpSseTransport {
 
   HttpSseTransport({
     this.limits = const McpLimits(),
+    this.nullSafetyChecks = false,
     this.repository,
     this.repoConfig = const RepoConfig(),
   });
@@ -139,6 +143,7 @@ class HttpSseTransport {
     final server = ApolloMcpServer(
       channel,
       limits: limits,
+      nullSafetyChecks: nullSafetyChecks,
       repository: repository,
       repoConfig: repoConfig,
     );

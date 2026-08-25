@@ -92,9 +92,10 @@ void main() {
 
   // Previously `~/=` (Dart) and `//=` (Python, rewritten to `~/=`) matched the
   // grammar but had no case in `getASTAssignmentOperator`, so the `.map` action
-  // threw an uncaught `UnsupportedError` out of `loadCodeUnit`. `~/=` is now a
-  // supported compound operator, and any still-unsupported compound operator
-  // (e.g. JS/TS `%=`) surfaces as a clean `SyntaxError`, not a raw crash.
+  // threw an uncaught `UnsupportedError` out of `loadCodeUnit`. `%=` had the
+  // same shape in JavaScript/TypeScript: listed in the grammar, missing from
+  // the enum. `ASTAssignmentOperator` now covers the full set
+  // (`%= &= |= ^= <<= >>=` alongside the originals), so all of them parse.
   group('Compound assignment operators', () {
     test('Dart `~/=` parses and truncates', () async {
       expect(
@@ -118,21 +119,29 @@ void main() {
       );
     });
 
-    test(
-      'an unsupported compound op (`%=`) is a clean SyntaxError, not a crash',
-      () async {
-        await expectLater(
-          () => ApolloVM().loadCodeUnit(
-            SourceCodeUnit(
-              'javascript',
-              'function run() { var x = 10; x %= 3; return x; }',
-              id: 'test',
-            ),
-          ),
-          throwsA(isA<SyntaxError>()),
-        );
-      },
-    );
+    test('JavaScript `%=` parses and takes the remainder', () async {
+      expect(
+        await _runFunc(
+          'javascript',
+          'function run() { var x = 10; x %= 3; return x; }',
+          'run',
+        ),
+        equals(1),
+      );
+    });
+
+    test('Dart bitwise and shift compound operators', () async {
+      expect(
+        await _runFunc(
+          'dart',
+          'int run() { int x = 23; x &= 12; x |= 1; x ^= 2; '
+              'x <<= 3; x >>= 1; return x; }',
+          'run',
+        ),
+        // 23&12=4, |1=5, ^2=7, <<3=56, >>1=28.
+        equals(28),
+      );
+    });
   });
 
   // `Enum.values` used to be built with a `dynamic` element type while its

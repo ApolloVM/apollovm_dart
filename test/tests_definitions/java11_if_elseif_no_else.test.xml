@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="if / else-if chain with no trailing else">
+    <source language="java11">
+        <![CDATA[
+
+          class Bar {
+            static public void main(Object[] args) {
+              var a = args[0] ;
+
+              if (a < 10) {
+                print("small");
+              }
+              else if (a < 100) {
+                print("medium");
+              }
+
+              print("done");
+            }
+          }
+
+        ]]>
+    </source>
+    <call class="Bar" function="main">
+        [
+          [5]
+        ]
+    </call>
+    <output>
+        ["small", "done"]
+    </output>
+
+    <call class="Bar" function="main">
+        [
+          [50]
+        ]
+    </call>
+    <output>
+        ["medium", "done"]
+    </output>
+
+    <call class="Bar" function="main">
+        [
+          [500]
+        ]
+    </call>
+    <output>
+        ["done"]
+    </output>
+</test>

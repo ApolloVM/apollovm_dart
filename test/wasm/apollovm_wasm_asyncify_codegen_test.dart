@@ -106,7 +106,9 @@ void main() {
   group('Wasm Asyncify codegen (generated, real suspension)', () {
     test('async fn awaiting an external host call really suspends', () async {
       if (!rt.isSupported) {
-        fail('Wasm runtime not supported (run `dart run wasm_run:setup`).');
+        fail(
+          'Wasm runtime not supported (`wasm_run` native library unavailable).',
+        );
       }
 
       // `hostDouble` is NOT a module function => compiled as a suspending host
@@ -137,7 +139,9 @@ void main() {
 
     test('pre/post-await locals survive the suspension', () async {
       if (!rt.isSupported) {
-        fail('Wasm runtime not supported (run `dart run wasm_run:setup`).');
+        fail(
+          'Wasm runtime not supported (`wasm_run` native library unavailable).',
+        );
       }
 
       // `base` is set before the await and must survive the unwind/rewind.
@@ -220,7 +224,9 @@ void main() {
 
     test('two generated computations interleave by host delay', () async {
       if (!rt.isSupported) {
-        fail('Wasm runtime not supported (run `dart run wasm_run:setup`).');
+        fail(
+          'Wasm runtime not supported (`wasm_run` native library unavailable).',
+        );
       }
 
       final wasm = await _compile(r'''

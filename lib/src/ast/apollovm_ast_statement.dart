@@ -321,6 +321,10 @@ class ASTBlock extends ASTStatement {
     for (var e in _getters.values) {
       e.resolveNode(this);
     }
+
+    for (var e in _setters.values) {
+      e.resolveNode(this);
+    }
   }
 
   @override
@@ -381,6 +385,50 @@ class ASTBlock extends ASTStatement {
 
     return gExternal;
   }
+
+  //// Setters:
+
+  final Map<String, ASTSetterDeclaration> _setters = {};
+
+  List<ASTSetterDeclaration> get setter => _setters.values.toList();
+
+  List<String> get setterNames => _setters.keys.toList();
+
+  void addSetter(ASTSetterDeclaration s) {
+    var name = s.name;
+    s.parentBlock = this;
+    _setters[name] = s;
+  }
+
+  void addAllSetters(Iterable<ASTSetterDeclaration> ss) {
+    for (var s in ss) {
+      addSetter(s);
+    }
+  }
+
+  ASTSetterDeclaration? getSetterWithName(
+    String name, {
+    bool caseInsensitive = false,
+  }) {
+    var s = _setters[name];
+
+    if (s == null && caseInsensitive) {
+      for (var entry in _setters.entries) {
+        if (equalsIgnoreAsciiCase(entry.key, name)) {
+          s = entry.value;
+          break;
+        }
+      }
+    }
+
+    return s;
+  }
+
+  ASTSetterDeclaration? getSetter(
+    String fName,
+    VMContext context, {
+    bool caseInsensitive = false,
+  }) => getSetterWithName(fName, caseInsensitive: caseInsensitive);
 
   //// Functions
 
@@ -480,11 +528,22 @@ class ASTBlock extends ASTStatement {
     _getters.clear();
     addAllGetters(other._getters.values);
 
+    _setters.clear();
+    addAllSetters(other._setters.values);
+
     _statements.clear();
     addAllStatements(other._statements);
   }
 
   void addStatement(ASTStatement statement) {
+    // Expand `int a = 1, b = 2;` into one declaration per statement: the
+    // declarators already share this block's scope, and this keeps
+    // [ASTStatementVariableDeclarationList] out of the generators and runners.
+    if (statement is ASTStatementVariableDeclarationList) {
+      addAllStatements(statement.declarations);
+      return;
+    }
+
     _statements.add(statement);
     if (statement is ASTBlock) {
       statement.parentBlock = this;
@@ -605,13 +664,23 @@ enum ASTAssignmentOperator {
   multiply('*'),
   divide('/'),
   divideAsInt('~/'),
+  remainder('%'),
   sum('+'),
-  subtract('-');
+  subtract('-'),
+  bitwiseAnd('&'),
+  bitwiseOr('|'),
+  bitwiseXor('^'),
+  shiftLeft('<<'),
+  shiftRight('>>'),
+  nullCoalesce('??');
 
   final String symbol;
 
   const ASTAssignmentOperator(this.symbol);
 
+  /// The binary operator this compound assignment applies, or `null` for
+  /// [set]. Used to lower `x OP= y` to `x = x OP y` — both by the Wasm backend
+  /// and by text targets that lack the compound form.
   ASTExpressionOperator? get asASTExpressionOperator {
     switch (this) {
       case sum:
@@ -624,7 +693,21 @@ enum ASTAssignmentOperator {
         return ASTExpressionOperator.divide;
       case divideAsInt:
         return ASTExpressionOperator.divideAsInt;
-      default:
+      case remainder:
+        return ASTExpressionOperator.remainder;
+      case bitwiseAnd:
+        return ASTExpressionOperator.bitwiseAnd;
+      case bitwiseOr:
+        return ASTExpressionOperator.bitwiseOr;
+      case bitwiseXor:
+        return ASTExpressionOperator.bitwiseXor;
+      case shiftLeft:
+        return ASTExpressionOperator.shiftLeft;
+      case shiftRight:
+        return ASTExpressionOperator.shiftRight;
+      case nullCoalesce:
+        return ASTExpressionOperator.nullCoalesce;
+      case set:
         return null;
     }
   }
@@ -642,31 +725,31 @@ ASTAssignmentOperator getASTAssignmentOperator(String op) {
       return ASTAssignmentOperator.divide;
     case '~/=':
       return ASTAssignmentOperator.divideAsInt;
+    case '%=':
+      return ASTAssignmentOperator.remainder;
     case '+=':
       return ASTAssignmentOperator.sum;
     case '-=':
       return ASTAssignmentOperator.subtract;
+    case '&=':
+      return ASTAssignmentOperator.bitwiseAnd;
+    case '|=':
+      return ASTAssignmentOperator.bitwiseOr;
+    case '^=':
+      return ASTAssignmentOperator.bitwiseXor;
+    case '<<=':
+      return ASTAssignmentOperator.shiftLeft;
+    case '>>=':
+      return ASTAssignmentOperator.shiftRight;
+    case '??=':
+      return ASTAssignmentOperator.nullCoalesce;
     default:
       throw UnsupportedError(op);
   }
 }
 
-String getASTAssignmentOperatorText(ASTAssignmentOperator op) {
-  switch (op) {
-    case ASTAssignmentOperator.set:
-      return '=';
-    case ASTAssignmentOperator.multiply:
-      return '*=';
-    case ASTAssignmentOperator.divide:
-      return '/=';
-    case ASTAssignmentOperator.divideAsInt:
-      return '~/=';
-    case ASTAssignmentOperator.sum:
-      return '+=';
-    case ASTAssignmentOperator.subtract:
-      return '-=';
-  }
-}
+String getASTAssignmentOperatorText(ASTAssignmentOperator op) =>
+    op == ASTAssignmentOperator.set ? '=' : '${op.symbol}=';
 
 ASTAssignmentOperator getASTAssignmentDirectOperator(String op) {
   op = op.trim();
@@ -1031,7 +1114,7 @@ class ASTStatementVariableDeclaration<V> extends ASTStatementTyped {
     ASTExpression value,
   ) async {
     if (valueResolvedType != ASTTypeDynamic.instance &&
-        !valueResolvedType.canCastToType(variableResolvedType)) {
+        !variableResolvedType.acceptsAssignment(valueResolvedType)) {
       throw ApolloVMRuntimeError(
         "Can't cast value type ($valueResolvedType) to variable type ($variableResolvedType).",
       );
@@ -1071,6 +1154,58 @@ class ASTStatementVariableDeclaration<V> extends ASTStatementTyped {
       return '$type $name;';
     }
   }
+}
+
+/// A variable declaration statement with more than one declarator, as parsed
+/// from `num nr = 0.96, ng = 0.24, nb = 0.56;`.
+///
+/// This node is transient: [ASTBlock.addStatement] expands it into its
+/// individual [declarations], so no generator, runner or serializer ever sees
+/// it. The expansion is faithful because every declarator of a multi-declarator
+/// statement shares the enclosing scope and is initialized left to right —
+/// exactly the semantics of the same declarations written one per line. It also
+/// keeps the code generators portable: targets without a comma-separated
+/// declaration form (Python, Go, Kotlin) get one declaration per statement for
+/// free.
+class ASTStatementVariableDeclarationList extends ASTStatement {
+  final List<ASTStatementVariableDeclaration> declarations;
+
+  ASTStatementVariableDeclarationList(this.declarations);
+
+  @override
+  Iterable<ASTNode> get children => declarations;
+
+  @override
+  void resolveNode(ASTNode? parentNode) {
+    super.resolveNode(parentNode);
+
+    for (var d in declarations) {
+      d.resolveNode(parentNode);
+    }
+  }
+
+  /// Runs each declaration in [parentContext]: the declarators share the
+  /// enclosing scope, so no run context is defined here. Only reachable if this
+  /// node escapes the expansion in [ASTBlock.addStatement].
+  @override
+  FutureOr<ASTValue> run(
+    VMContext parentContext,
+    ASTRunStatus runStatus,
+  ) async {
+    FutureOr<ASTValue> returnValue = ASTValueVoid.instance;
+
+    for (var d in declarations) {
+      returnValue = await d.run(parentContext, runStatus);
+    }
+
+    return returnValue;
+  }
+
+  @override
+  ASTType resolveType(VMContext? context) => ASTTypeVoid.instance;
+
+  @override
+  String toString() => declarations.join(' ');
 }
 
 /// [ASTStatement] base for branches.
@@ -1808,16 +1943,82 @@ class ASTStatementThrow extends ASTStatement {
   String toString() => 'throw $expression ;';
 }
 
+/// An `assert(condition)` / `assert(condition, message)` statement.
+///
+/// ApolloVM has no debug/release split, so the condition is always evaluated —
+/// matching `dart run`'s default. A false condition throws [message] (or a
+/// default text) as an [ApolloVMThrownException], so it is catchable exactly
+/// like a `throw`.
+class ASTStatementAssert extends ASTStatement {
+  ASTExpression condition;
+
+  ASTExpression? message;
+
+  ASTStatementAssert(this.condition, [this.message]);
+
+  @override
+  Iterable<ASTNode> get children => [condition, ?message];
+
+  @override
+  void resolveNode(ASTNode? parentNode) {
+    super.resolveNode(parentNode);
+    condition.resolveNode(parentNode);
+    message?.resolveNode(parentNode);
+  }
+
+  @override
+  FutureOr<ASTValue> run(VMContext parentContext, ASTRunStatus runStatus) {
+    return condition.run(parentContext, runStatus).resolveMapped((value) {
+      var ok = value.getValue(parentContext);
+
+      return ok.resolveMapped((ok) {
+        if (ok == true) return ASTValueVoid.instance;
+
+        var message = this.message;
+        if (message == null) {
+          // A fixed text, not the condition's `toString()`: that renders the
+          // AST (`n != (int) 5`), not the source, and would differ per target.
+          throw ApolloVMThrownException(ASTValueString('Assertion failed'));
+        }
+
+        return message.run(parentContext, runStatus).resolveMapped((msg) {
+          throw ApolloVMThrownException(msg);
+        });
+      });
+    });
+  }
+
+  @override
+  ASTType resolveType(VMContext? context) => ASTTypeVoid.instance;
+
+  @override
+  String toString() => message == null
+      ? 'assert($condition) ;'
+      : 'assert($condition, $message) ;';
+}
+
 /// A single `catch` clause of an [ASTStatementTryCatch].
 ///
 /// [exceptionType] is the matched type (`null` = catch-all); [variableName] is
 /// the bound variable (`null` = no variable); [block] is the handler body.
+///
+/// [stackTraceName] is Dart's second catch variable (`catch (e, s)`). ApolloVM
+/// interprets the AST and has no stack traces of its own, so the variable is
+/// bound to an empty string — enough for a program that passes it around or
+/// prints it to run, without leaking VM internals or making output differ
+/// between targets.
 class ASTCatchClause {
   final ASTType? exceptionType;
   final String? variableName;
+  final String? stackTraceName;
   final ASTBlock block;
 
-  ASTCatchClause(this.exceptionType, this.variableName, this.block);
+  ASTCatchClause(
+    this.exceptionType,
+    this.variableName,
+    this.block, {
+    this.stackTraceName,
+  });
 
   void resolveNode(ASTNode? parentNode) {
     exceptionType?.resolveNode(parentNode);
@@ -1837,6 +2038,14 @@ class ASTCatchClause {
         exceptionType ?? ASTTypeDynamic.instance,
         name,
         caught,
+      );
+    }
+    var stackTraceName = this.stackTraceName;
+    if (stackTraceName != null) {
+      context.declareVariableWithValue(
+        ASTTypeString.instance,
+        stackTraceName,
+        ASTValueString(''),
       );
     }
     var prevContext = VMContext.setCurrent(context);

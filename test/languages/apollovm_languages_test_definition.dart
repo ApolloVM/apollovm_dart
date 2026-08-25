@@ -1,6 +1,9 @@
 import 'dart:convert';
 
 import 'package:apollovm/apollovm.dart';
+// Serialization internals are not re-exported from the public library.
+import 'package:apollovm/src/serialization/ast_binary_reader.dart';
+import 'package:apollovm/src/serialization/ast_binary_writer.dart';
 import 'package:collection/collection.dart';
 import 'package:swiss_knife/swiss_knife.dart';
 import 'package:test/test.dart';
@@ -150,13 +153,27 @@ Future<void> runTestDefinitions(List<TestDefinition> testDefinitions) async {
             expect(loadOK, isTrue, reason: "Error loading '$language ' code!");
           }
 
+          var calls = testDefinition.calls;
+          var outputs = testDefinition.outputs;
+
+          // Before anything runs. Executing an AST mutates it — local function
+          // declarations get registered on their block, and `var` declarations
+          // cache an inferred type — so a post-execution AST is not the same
+          // object a fresh parse produces. Encoding here compares like with
+          // like, and matches the real use case: an image is written by a build
+          // step that never runs the code.
+          await _testBinaryASTRoundTrip(
+            vm,
+            language,
+            calls,
+            outputs,
+            autoImportDartMath: autoImportDartMath,
+          );
+
           var runner = vm.createRunner(
             language,
             importCorePackageMath: autoImportDartMath,
           )!;
-
-          var calls = testDefinition.calls;
-          var outputs = testDefinition.outputs;
 
           for (var i = 0; i < calls.length; ++i) {
             var call = calls[i];
@@ -223,6 +240,68 @@ Future<void> runTestDefinitions(List<TestDefinition> testDefinitions) async {
         });
       }
     });
+  }
+}
+
+/// Encodes every code unit loaded in [vm] as a binary AST, decodes the images
+/// into a fresh VM, and re-runs the whole test against it.
+///
+/// This reuses the language fixtures as binary round-trip coverage: every
+/// construct any fixture exercises has to survive encode/decode, in every
+/// language, or the fixture fails. The generated-source comparison is the
+/// strongest part — it exercises every field the code generator reads across
+/// the whole tree, so a field dropped by a codec shows up as a diff rather than
+/// going unnoticed.
+Future<void> _testBinaryASTRoundTrip(
+  ApolloVM vm,
+  String language,
+  List<XmlElement> calls,
+  List<XmlElement> outputs, {
+  required bool autoImportDartMath,
+}) async {
+  print('.......................................');
+  print('-- Binary AST round trip');
+
+  var expectedSources = (await vm.generateAllCodeIn(language).writeAllSources())
+      .toString();
+
+  var vmBin = ApolloVM();
+
+  for (var codeUnit in vm.allCodeUnitsAllLanguages()) {
+    var image = const ASTBinaryWriter().writeCodeUnit(codeUnit);
+
+    print(
+      '-- Encoded ${codeUnit.id}: ${image.length} bytes '
+      '(source: ${codeUnit.code is String ? (codeUnit.code as String).length : '?'})',
+    );
+
+    var decoded = const ASTBinaryReader().readCodeUnit(image);
+
+    var ok = await vmBin.loadCodeUnit(decoded);
+    expect(
+      ok,
+      isTrue,
+      reason: 'Error loading the decoded binary AST: ${codeUnit.id}',
+    );
+  }
+
+  var binSources = (await vmBin.generateAllCodeIn(language).writeAllSources())
+      .toString();
+
+  expect(
+    binSources,
+    equals(expectedSources),
+    reason: 'Regenerated source diverged after a binary AST round trip',
+  );
+
+  var runnerBin = vmBin.createRunner(
+    language,
+    importCorePackageMath: autoImportDartMath,
+  )!;
+
+  for (var i = 0; i < calls.length; ++i) {
+    var outputJson = _resolveLanguageOutput(outputs[i], language);
+    await _testCall(calls[i], i, outputJson, runnerBin);
   }
 }
 

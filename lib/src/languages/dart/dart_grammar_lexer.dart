@@ -127,6 +127,19 @@ abstract class DartGrammarLexer extends BaseGrammarLexer {
 
   Parser awaitToken() => _keywordToken('await');
 
+  // Whole-word forms of keywords used as *optional* prefixes. The `ref1(token,
+  // …)` variants above are plain prefix matchers, which would read `constValue`
+  // as `const Value` and `lateBinding` as `late Binding`.
+  Parser constKeyword() => _keywordToken('const');
+
+  Parser lateKeyword() => _keywordToken('late');
+
+  Parser requiredKeyword() => _keywordToken('required');
+
+  Parser setKeyword() => _keywordToken('set');
+
+  Parser assertKeyword() => _keywordToken('assert');
+
   Parser _keywordToken(String word) =>
       (string(word) & ref0(identifierPartLexicalToken).not())
           .map((v) => v[0])
@@ -193,6 +206,8 @@ abstract class DartGrammarLexer extends BaseGrammarLexer {
       (string("'''") &
               (string(r"\'").map((_) => "'") |
                       stringContentQuotedLexicalTokenEscaped() |
+                      ref0(stringVariable) |
+                      ref0(stringExpression) |
                       any())
                   .starLazy(string("'''")) &
               string("'''"))
@@ -208,6 +223,8 @@ abstract class DartGrammarLexer extends BaseGrammarLexer {
       (string('"""') &
               (string(r'\"').map((_) => '"') |
                       stringContentQuotedLexicalTokenEscaped() |
+                      ref0(stringVariable) |
+                      ref0(stringExpression) |
                       any())
                   .starLazy(string('"""')) &
               string('"""'))

@@ -67,6 +67,9 @@ class ApolloCodeGeneratorJava11 extends ApolloCodeGenerator {
   }
 
   @override
+  String? renderCatchStackTraceBinding(String name) => 'String $name = "";';
+
+  @override
   String normalizeTypeFunction(String typeName, String functionName) {
     switch (typeName) {
       case 'int':
@@ -104,6 +107,31 @@ class ApolloCodeGeneratorJava11 extends ApolloCodeGenerator {
 
   /// Java for-each uses `for (Type x : coll)` (colon), not the default
   /// `for (var x in coll)`.
+  /// Java spells it `assert cond : message;` — a statement, not a call.
+  @override
+  StringBuffer generateASTStatementAssert(
+    ASTStatementAssert statement, {
+    StringBuffer? out,
+    String indent = '',
+    bool headIndented = true,
+  }) {
+    out ??= newOutput();
+    if (headIndented) out.write(indent);
+
+    out.write('assert ');
+    generateASTExpression(statement.condition, out: out, headIndented: false);
+
+    var message = statement.message;
+    if (message != null) {
+      out.write(' : ');
+      generateASTExpression(message, out: out, headIndented: false);
+    }
+
+    out.write(';');
+
+    return out;
+  }
+
   @override
   StringBuffer generateASTStatementForEach(
     ASTStatementForEach forEach, {
@@ -135,17 +163,11 @@ class ApolloCodeGeneratorJava11 extends ApolloCodeGenerator {
       headIndented: false,
     );
 
-    out.write(') {\n');
+    out.write(')');
 
-    var blockCode = generateASTBlock(
-      forEach.loopBlock,
-      indent: indent,
-      withBrackets: false,
-    );
-
-    out.write(blockCode);
-    out.write(indent);
-    out.write('}');
+    if (writeASTLoopBody(forEach.loopBlock, out: out, indent: indent)) {
+      out.write('}');
+    }
 
     return out;
   }
@@ -400,6 +422,23 @@ class ApolloCodeGeneratorJava11 extends ApolloCodeGenerator {
     }
     return getASTExpressionOperatorText(operator);
   }
+
+  /// Java has no null-coalescing operator, so `a ?? b` becomes the equivalent
+  /// ternary. `a` is repeated, which is safe for the variable/field/index reads
+  /// that `??` and `??=` target.
+  @override
+  String renderNullCoalesce(String a, String b) => '($a != null ? $a : $b)';
+
+  /// Java has no `?.` or `?[`, so a null-aware access becomes an explicit
+  /// guard. Without this the access would degrade to a plain `.` and throw a
+  /// `NullPointerException` on exactly the input `?.` exists to handle.
+  @override
+  String renderNullAwareGuard(String receiver, String guarded) =>
+      '($receiver != null ? $guarded : null)';
+
+  /// Java has no `??=`; a null-coalescing assignment becomes `t = (t != null ? t : v)`.
+  @override
+  bool get supportsNullCoalesceAssignment => false;
 
   @override
   StringBuffer generateASTExpressionListLiteral(

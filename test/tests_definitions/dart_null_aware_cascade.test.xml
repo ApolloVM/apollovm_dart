@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="Null-safety: cascades, null-assertion access and ??=">
+    <source language="dart">
+        <![CDATA[
+class Box {
+  int n = 0;
+  void add(int x) { n = n + x; }
+  int cascadeSum(int a, int c) { Box bx = Box(); bx..add(a)..add(c); return bx.n; }
+  int forced(int a) { Box? bx = Box(); bx!.add(a); return bx.n; }
+  int orElse(int? a, int d) { int? v = a; v ??= d; return v; }
+}
+        ]]>
+    </source>
+    <call class="Box" function="cascadeSum" return="5">
+        [2, 3]
+    </call>
+    <output>
+        []
+    </output>
+    <call class="Box" function="forced" return="7">
+        [7]
+    </call>
+    <output>
+        []
+    </output>
+    <call class="Box" function="orElse" return="9">
+        [null, 9]
+    </call>
+    <output>
+        []
+    </output>
+    <call class="Box" function="orElse" return="4">
+        [4, 9]
+    </call>
+    <output>
+        []
+    </output>
+
+    <source-generated language="dart"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+class Box {
+
+  int n = 0;
+
+  void add(int x) {
+    n = n + x;
+  }
+
+  int cascadeSum(int a, int c) {
+    Box bx = Box();
+    bx..add(a)..add(c);
+    return bx.n;
+  }
+
+  int forced(int a) {
+    Box? bx = Box();
+    bx!.add(a);
+    return bx.n;
+  }
+
+  int orElse(int? a, int d) {
+    int? v = a;
+    v ??= d;
+    return v;
+  }
+
+}
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+</test>

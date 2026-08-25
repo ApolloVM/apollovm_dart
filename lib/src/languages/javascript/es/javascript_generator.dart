@@ -20,6 +20,20 @@ class ApolloCodeGeneratorJavaScript extends ApolloCodeGenerator {
   ApolloCodeGeneratorJavaScript(ApolloSourceCodeStorage codeStorage)
     : super('javascript', codeStorage);
 
+  /// Optional chaining (`a?.b`, `a?.[i]`) is ES2020.
+  @override
+  bool get supportsNullAwareOperators => true;
+
+  /// JavaScript has no null-assertion operator: a postfix `!` is logical NOT,
+  /// so emitting it would change the meaning rather than drop a check. `x!` is
+  /// emitted as plain `x` (the assertion is a no-op at runtime in JS anyway).
+  @override
+  bool get supportsNullAssertionOperator => false;
+
+  /// JavaScript's null-aware element access is `a?.[i]`, not `a?[i]`.
+  @override
+  String get nullAwareIndexOpen => '?.[';
+
   @override
   String normalizeTypeName(String typeName, [String? callingFunction]) {
     switch (typeName) {
@@ -294,6 +308,35 @@ class ApolloCodeGeneratorJavaScript extends ApolloCodeGenerator {
   }
 
   @override
+  /// JavaScript has no built-in throwing `assert` (`console.assert` only logs),
+  /// so it is lowered to an explicit check that preserves the semantics.
+  @override
+  StringBuffer generateASTStatementAssert(
+    ASTStatementAssert statement, {
+    StringBuffer? out,
+    String indent = '',
+    bool headIndented = true,
+  }) {
+    out ??= newOutput();
+    if (headIndented) out.write(indent);
+
+    out.write('if (!(');
+    generateASTExpression(statement.condition, out: out, headIndented: false);
+    out.write(')) throw ');
+
+    var message = statement.message;
+    if (message != null) {
+      generateASTExpression(message, out: out, headIndented: false);
+    } else {
+      out.write("'Assertion failed'");
+    }
+
+    out.write(';');
+
+    return out;
+  }
+
+  @override
   StringBuffer generateASTStatementForEach(
     ASTStatementForEach forEach, {
     StringBuffer? out,
@@ -315,17 +358,11 @@ class ApolloCodeGeneratorJavaScript extends ApolloCodeGenerator {
       headIndented: false,
     );
 
-    out.write(') {\n');
+    out.write(')');
 
-    var blockCode = generateASTBlock(
-      forEach.loopBlock,
-      indent: indent,
-      withBrackets: false,
-    );
-
-    out.write(blockCode);
-    out.write(indent);
-    out.write('}');
+    if (writeASTLoopBody(forEach.loopBlock, out: out, indent: indent)) {
+      out.write('}');
+    }
 
     return out;
   }

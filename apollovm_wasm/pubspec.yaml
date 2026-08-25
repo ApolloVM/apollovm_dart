@@ -2,7 +2,7 @@ name: apollovm_wasm
 description: >-
   Native (Dart VM) WebAssembly execution for ApolloVM: the wasm_run-backed
   WasmRuntime, kept out of the core package so apollovm stays FFI-free.
-version: 1.0.0
+version: 1.2.0
 repository: https://github.com/ApolloVM/apollovm_dart
 issue_tracker: https://github.com/ApolloVM/apollovm_dart/issues
 
@@ -16,8 +16,12 @@ environment:
   sdk: '>=3.10.0 <4.0.0'
 
 dependencies:
-  apollovm: ^2.0.0
-  wasm_run: ^0.1.0+2
+  # This runtime decodes values the `apollovm` Wasm generator encodes — the
+  # boxed-`Object` cell layout and its `_boxTag*` values are a contract between
+  # the two. `^2.0.0` allowed pairings that were never built or tested together,
+  # so it tracks the release it is cut against.
+  apollovm: ^2.25.0
+  wasm_run: ^0.2.0+2
   crypto: ^3.0.7
   path: ^1.9.1
 

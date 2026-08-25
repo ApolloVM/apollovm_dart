@@ -9,6 +9,7 @@ import 'package:collection/collection.dart'
     show MapEquality, equalsIgnoreAsciiCase;
 import 'package:swiss_knife/swiss_knife.dart';
 
+import 'analysis/null_safety_analyzer.dart';
 import 'apollovm_code_generator.dart';
 import 'apollovm_code_storage.dart';
 import 'apollovm_generated_output.dart';
@@ -63,11 +64,29 @@ import 'resolution/symbol_table.dart';
 /// The Apollo VM.
 class ApolloVM implements VMTypeResolver {
   // ignore: non_constant_identifier_names
-  static final String VERSION = '2.16.0';
+  static final String VERSION = '2.31.0';
 
   static int _idCount = 0;
 
   final int id = ++_idCount;
+
+  /// Whether [loadCodeUnit] rejects a code unit whose AST has null-safety
+  /// **errors**, throwing [NullSafetyError] before the unit is registered.
+  ///
+  /// Off by default, so loading behaves as it always has and a null-safety
+  /// mistake surfaces at runtime. Turning it on moves the failure to resolution
+  /// time, before any statement runs:
+  ///
+  /// ```dart
+  /// var vm = ApolloVM(nullSafetyChecks: true);
+  /// await vm.loadCodeUnit(unit); // throws on `int a; int? b; ... a + b`
+  /// ```
+  ///
+  /// Only [NullSafetySeverity.error] blocks; warnings and info are reported
+  /// through the LSP but never fail a load.
+  final bool nullSafetyChecks;
+
+  ApolloVM({this.nullSafetyChecks = false});
 
   /// Returns a parser for a [language].
   ApolloCodeParser<T>? getParser<T extends Object>(String language) {
@@ -239,6 +258,11 @@ class ApolloVM implements VMTypeResolver {
       throw StateError("`CodeUnit` namespace NOT defined. Parser: $parser");
     }
 
+    // Reject a unit with null-safety errors before it is registered, so the
+    // failure lands at resolution time rather than partway through a run. A
+    // `BinaryCodeUnit` (Wasm) carries no AST, so there is nothing to analyze.
+    _checkNullSafety(codeUnit);
+
     var langNamespaces = getLanguageNamespaces(language);
     var codeNamespace = langNamespaces.get(namespace);
 
@@ -249,6 +273,38 @@ class ApolloVM implements VMTypeResolver {
     _resolutionEngine?.invalidate(codeUnit.id);
 
     return true;
+  }
+
+  /// Throws [NullSafetyError] when [nullSafetyChecks] is on and [codeUnit]'s AST
+  /// has error-severity null-safety findings.
+  ///
+  /// Warnings and info never block — they stay diagnostic-only, as in the LSP.
+  /// The analysis is best-effort: it must never turn an internal failure into a
+  /// load failure, so an unexpected error inside the analyzer is swallowed (the
+  /// LSP path does the same).
+  void _checkNullSafety(CodeUnit codeUnit) {
+    if (!nullSafetyChecks) return;
+
+    var root = codeUnit.root;
+    if (root == null) return;
+
+    List<NullSafetyDiagnostic> findings;
+    try {
+      findings = NullSafetyAnalyzer().analyze(root);
+    } catch (_) {
+      return;
+    }
+
+    var errors = findings
+        .where((f) => f.severity == NullSafetySeverity.error)
+        .toList();
+    if (errors.isEmpty) return;
+
+    throw NullSafetyError(
+      "Can't load `${codeUnit.id}` (${codeUnit.language}): "
+      '${errors.length} null-safety error(s).',
+      findings: errors,
+    );
   }
 
   /// Creates a runner for the [language].
@@ -595,6 +651,8 @@ class LanguageNamespaces {
     String? namespace,
     bool caseInsensitive = false,
   }) {
+    if (className.isEmpty) return null;
+
     if (namespace != null) {
       var ns = _namespaces[namespace];
       return ns?.getClass(className, caseInsensitive: caseInsensitive);
@@ -699,6 +757,8 @@ class CodeNamespace {
 
   /// Returns an [ASTClassNormal] for [className].
   ASTClassNormal? getClass(String className, {bool caseInsensitive = false}) {
+    if (className.isEmpty) return null;
+
     for (var cu in _codeUnits) {
       var clazz = cu.root!.getClass(
         className,
@@ -711,6 +771,8 @@ class CodeNamespace {
 
   /// Returns `true` if contains class with [className].
   bool containsClass(String className, {bool caseInsensitive = false}) {
+    if (className.isEmpty) return false;
+
     for (var cu in _codeUnits) {
       if (cu.root!.containsClass(className, caseInsensitive: caseInsensitive)) {
         return true;
@@ -1133,8 +1195,7 @@ final class VMClassContext<T> extends VMContext {
   /// The class of this context.
   ASTClass<T> clazz;
 
-  VMClassContext(this.clazz, {VMContext? parent, VMTypeResolver? typeResolver})
-    : super(clazz, parent: parent, typeResolver: typeResolver);
+  VMClassContext(this.clazz, {super.parent, super.typeResolver}) : super(clazz);
 
   ASTValue<T>? _classInstance;
 
@@ -1337,6 +1398,15 @@ sealed class VMContext {
     var g = block.getGetter(name, this);
     if (g != null) return g;
     return parent?.getGetter(name);
+  }
+
+  /// Returns a setter of [name].
+  ///
+  /// If [parent] is defined, will also look in the parent context.
+  ASTSetterDeclaration? getSetter(String name) {
+    var s = block.getSetter(name, this);
+    if (s != null) return s;
+    return parent?.getSetter(name);
   }
 
   /// Returns a function of [name] and [parametersSignature]

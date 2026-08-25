@@ -1,4 +1,4 @@
-## 2.16.0
+## 2.31.0
 
 ### New language: Apollo (`.apollo`)
 
@@ -37,7 +37,1037 @@
   by round-trip test fixtures, a dedicated test suite, and an example
   (`example/apollovm_example_apollo.dart`).
 
-## 2.15.0
+## 2.30.0
+
+### Dart: multiple variables per declaration
+
+A declaration could only introduce one variable, so the ordinary Dart form of
+declaring several at once was a syntax error:
+
+```dart
+void main() {
+  num nr = 0.96, ng = 0.24, nb = 0.56;  // was: [SyntaxError] ";" expected
+
+  print(nr);
+  print(ng);
+  print(nb);
+}
+```
+
+Every declarator is now accepted, in a function body and at the top level,
+sharing the declared type and the `final` / `const` / `late` modifier of the
+first one. A declarator may omit its initializer (`int a, b = 5;`) and may read
+the ones before it (`int p = 1, q = p + 1;`), matching Dart's left-to-right
+initialization.
+
+The declarators are expanded into one declaration each as the code is parsed,
+so translation emits the form every target already supports:
+
+```dart
+num nr = 0.96;
+num ng = 0.24;
+num nb = 0.56;
+```
+
+```python
+nr: float = 0.96
+ng: float = 0.24
+nb: float = 0.56
+```
+
+A `for` initializer still takes a single declarator: a `for` header has no
+place for the extra declarations the expansion produces, and the
+comma-separated form does not exist in every target language.
+
+## 2.29.0
+
+### `int` and `double` now expose the same `num` interface
+
+Each primitive only carried the conversion that changed its type: `int` had
+`toDouble()` and `double` had `toInt()`, so the identity half of the pair was
+missing on both. `3.toInt()` and `1.5.toDouble()` — both valid Dart, since
+`num.toInt()` / `num.toDouble()` return `this` — failed with
+`Bad state: Can't find core function: int.toInt(...)`.
+
+The same gap covered the rest of the `num` interface on `int`, which had none
+of the members that only `double` had been given:
+
+| on `int` | before | now |
+|---|---|---|
+| `toInt()` | ✗ | ✓ (identity) |
+| `round()`, `floor()`, `ceil()`, `truncate()` | ✗ | ✓ (identities) |
+| `toStringAsFixed()`, `toStringAsExponential()`, `toStringAsPrecision()` | ✗ | ✓ |
+| `toDouble()` | ✓ | ✓ |
+
+and on `double`, `toDouble()` is added as the matching identity.
+
+This mattered most for a `num`-typed variable. ApolloVM has no `num` core
+class, so `num n = ...` dispatches on the *runtime* value's class — meaning
+`n.toInt()` worked or failed depending on whether `n` happened to hold a
+`double` or an `int`. Both now work either way:
+
+```dart
+num n = 3;      // was: Can't find core function: int.toInt
+n.toInt();      // 3
+n.toDouble();   // 3.0
+```
+
+`toNum()` remains unsupported, as it is not a method on `num`, `int` or
+`double` in Dart.
+
+## 2.28.1
+
+### Fixed: `compile <file> --target=ast` silently compiled to Wasm
+
+An option written after the source file was not parsed at all. The
+source-file commands shared a parser built with `allowTrailingOptions: false`,
+so `apollovm compile foo.dart --target=ast` left the flag sitting in the
+leftover positional arguments, `--target` kept its `wasm` default, and the
+command compiled to WebAssembly without saying that it had ignored anything.
+
+It surfaced as an unrelated Wasm codegen crash — `UnimplementedError: Wasm
+maps with value type dynamic are not supported yet` — for a program that was
+never meant to reach the Wasm backend. `2.28.0`'s own `compile --help` showed
+that exact ordering.
+
+Trailing options are now parsed for `compile` and `translate`, whose only
+positional argument is the source file, so both orderings work. `run` keeps
+them unparsed, because everything after the file there belongs to the program
+being executed and must reach it untouched — including arguments that look
+like `apollovm`'s own flags.
+
+A leftover positional argument is now reported rather than ignored:
+`apollovm compile foo.dart oops` fails with `Unexpected argument after the
+source file: oops`.
+
+### `compile`: target inferred from the output extension, and `-t`
+
+`--output` now selects the target when `--target` is omitted, so naming the
+file is enough:
+
+```sh
+apollovm compile foo.dart -o foo.avma   # binary AST
+apollovm compile foo.dart -o foo.wasm   # WebAssembly
+```
+
+`.avma` means the AST target and `.wasm` means Wasm; any other extension falls
+back to the `wasm` default as before. An explicit `--target` always wins, so
+`-t ast -o out.bin` still writes an image under that name. The extension is
+read from the final path segment, so a `.` in a parent directory
+(`build.v2/out`) is not mistaken for it.
+
+`--target` also gained the abbreviation `-t`, on both `compile` and
+`translate`.
+
+## 2.28.0
+
+### Binary AST serialization
+
+A parsed AST can now be saved as a compact binary image and loaded back without
+running a parser. Parsing dominates the cost of loading code, so an application
+can parse once — at build time, or on first run — and afterwards load the same
+code unit by decoding bytes.
+
+Such an image is an `.avma` file: an **A**pollo **V**irtual **M**achine
+**A**rchive. It holds one parsed code unit, or a whole VM's worth of them.
+
+Measured on a ~4 KB Dart program: decoding is about **11× faster** than parsing
+and the image is about **two thirds** the size of the source. For a very small
+unit the fixed header and pools cost more than the source is worth; the saving
+appears once there is a program to speak of.
+
+```dart
+import 'package:apollovm/apollovm_serialization.dart';
+
+var image = vm.saveCodeUnitAST(codeUnit);   // Uint8List
+await ApolloVM().loadCodeUnitAST(image);    // no parser involved
+```
+
+`vm.saveAllAST()` / `vm.loadAllAST()` do the same for a whole VM, bundling every
+loaded code unit into one archive. The CLI gained
+`apollovm compile --target=ast`, and `apollovm run` recognizes an image by its
+magic bytes — not its extension — taking the language from the image itself.
+
+Everything is `Uint8List` in and `Uint8List` out, so file access stays with the
+caller and the whole feature works unchanged on the web. The Chrome suite covers
+it, including the places where a JavaScript double behaves unlike a VM `int`.
+
+Loading a decoded unit needs no new path: `ApolloVM.loadCodeUnit` only reaches
+for a parser when a unit has no AST yet, so namespace registration, the
+null-safety check and incremental-resolution invalidation all behave exactly as
+they do for parsed source. Nothing derivable is stored — parent links,
+scope-variable resolution, superclass and extension targets and the `this.field`
+constructor-parameter promotion are re-established by one `resolveNode` call
+after decoding, exactly as every grammar does after a parse.
+
+Nodes holding live Dart state are refused with an error naming where in the
+program they were found: external functions and getters, which carry a closure,
+and runtime values such as a class instance or a pending future. All of them are
+injected by the VM at run time rather than produced by a parser, so a parsed AST
+never contains them and the same bindings are re-injected after a binary load.
+
+Coverage is enforced by a test that scans `lib/src/ast/` and requires every
+concrete `AST*` class to be registered, pooled as a type, encoded inline by a
+parent, or listed as refused with a written reason — so adding a node kind and
+forgetting its codec fails the build rather than silently dropping a field.
+
+### Binary AST integrity
+
+Every image carries a CRC-32, verified on load. **It detects corruption, not
+tampering:** anyone who can modify a file can recompute the checksum in
+microseconds. Only a signature made with a key the attacker does not have makes
+an image tamper-evident, and an unsigned image deserves exactly as much trust as
+the source it came from — loading one and running it is equivalent to running
+arbitrary code from that source.
+
+Signing is optional and pluggable (`ASTBinarySigner` / `ASTBinaryVerifier`), so
+an HMAC, a public-key signature or a hardware key store all fit;
+`HmacSha256Signer` is built in, which is why `crypto` becomes a direct
+dependency — it was already present transitively. The signature covers
+everything up to and including the CRC, so an attacker who edits a section and
+recomputes the checksum still fails verification.
+
+### Binary AST compatibility
+
+An image records two version numbers: the container revision that wrote it, and
+the oldest revision that can decode it correctly. Every section is
+length-prefixed, so a reader skips any section it does not recognize, and every
+section is decoded from a bounded view, so fields appended by a newer writer are
+ignored rather than misread. A newer ApolloVM's output therefore keeps loading
+in an older ApolloVM for as long as the new information is purely additive, and
+an older image keeps loading in every future ApolloVM — the reader retains the
+decode path for every format version it has ever supported. When a change
+genuinely cannot be understood by an older reader, the writer raises the minimum
+reader version and that older reader fails immediately with an
+`ASTBinaryException` naming both versions, rather than silently producing a
+wrong AST. Raising it is a breaking change and will only ever ship in a major
+release, announced here.
+
+A real image written by format version 1 is committed in the test suite and must
+keep loading; it is the only check that can catch an accidental incompatible
+change, since an image synthesized by the current writer would move with it.
+
+### Requires `data_serializer` 1.2.3
+
+The dependency is raised to `^1.2.3`, and this is a requirement rather than a
+preference: earlier versions decode LEB128 incorrectly, which silently
+corrupts a binary AST image.
+
+Building this format surfaced four bugs there, fixed in 1.2.3:
+
+- `BytesBuffer.readLeb128SignedInt` sign-extended from the wrong byte on every
+  platform, so `-2` decoded as `126` and `64` as `-16320`. The binary AST format
+  sidesteps it anyway by writing a form byte plus an unsigned magnitude — which
+  also removes any sign-extension difference between the VM and `dart2js` — but
+  the remaining three could not be sidestepped.
+- On the web, `shiftLeftInt`/`shiftRightInt` fell back to a 32-bit `<<`/`>>`,
+  so any shift of 32 or more produced `0`.
+- On the web, the LEB128 accumulator used `|=`, also a 32-bit operation, and
+  dropped the high bits of any value past 2^32.
+- On the web, signed decoding lost precision above roughly 2^49, because a
+  negative's *unsigned* intermediate is about `2^shift` — the range
+  `DateTime.microsecondsSinceEpoch` occupies.
+
+Together those meant an integer literal of 2^32 or more decoded to the wrong
+number on the web: `4294967296` came back as `0`, and `1000000000000000` as
+`2764472320`. A test now covers literals from 2^28 upwards, positive and
+negative, and it runs under `--platform chrome`.
+
+## 2.27.0
+
+### Dart setters
+
+`set name(T value) { … }` is implemented. It was the last accessor with no
+support at all — no grammar rule, no AST node, no dispatch. `2.26.0` made it a
+clean parse error instead of a silent misparse into a method named `name`
+returning a type named `set`; it now works.
+
+Parsed on classes and extensions, with a typed or untyped parameter and an
+arrow or block body:
+
+```dart
+class Box {
+  int _v = 0;
+  int get value => _v;
+  set value(int x) { _v = x; }
+  set scaled(v) => _v = v * 10;
+}
+```
+
+A setter runs on every write position: `obj.x = v`, `this.x = v`, and an
+unqualified `x = v` inside the class — the write-side mirror of an unqualified
+getter read. A real variable in scope still wins, so a setter's own parameter
+cannot re-enter it. Compound assignment (`obj.x += 1`) reads through the getter
+when there is one and falls back to the backing field; `??=` short-circuits, so
+the setter does not run when the current value is non-null. Inherited and
+overridden setters resolve through the superclass chain, and extension setters
+work like extension getters.
+
+Only Dart **generates** setters. Every other target refuses with
+`UnsupportedSyntaxError`, and Wasm refuses rather than letting an assignment
+silently write the backing field instead of running the setter body.
+
+An arrow-bodied setter regenerates as an arrow: emitting it as a block would
+produce `set x(v) { return …; }`, which Dart rejects because a setter returns
+void. The generated output is checked with the real `dart analyze`.
+
+### Fixed: getters silently dropped when translating to Python, Go and Lua
+
+Those three generators never iterated the class's accessors, so a class with a
+getter translated to any of them **lost the accessor entirely** while the method
+bodies kept referencing the property — broken code that looked fine, rather than
+the honest `UnsupportedSyntaxError` Java/C#/JS/TS already produced. They now
+refuse, like the others.
+
+### Fixed: `ASTBlock.set` dropped setters
+
+It copied functions, getters and statements, so every class member survived the
+temporary parse block except the new ones.
+
+### Still missing
+
+For getters and setters alike: `static` accessors, top-level accessors, and an
+*unqualified read* of a getter (`return value;` inside a method — `this.value`
+works). Kotlin generates getters but not setters.
+
+## 2.26.0
+
+### Control-flow bodies no longer require braces
+
+`for (var e in l) print('- $e');` is ordinary Dart, and it did not parse. Only
+the plain `if` accepted an unbraced single-statement body — every loop, every
+`if`/`else` and every `else if` demanded `{ }`.
+
+All seven remaining rules now accept either form, in **Dart, Java 11, Kotlin,
+C#, JavaScript and TypeScript**: `for`, `for-in`/`for-each`, `while`,
+`do`/`while`, `if`/`else`, the `else if` chain, and the final `else`. A braced
+body is still tried first, so nothing about existing sources changes.
+
+`singleLineStatement` was also far too narrow — `return …;` or an expression
+statement, nothing else — so even the `if` that already supported it rejected
+`if (x) break;`, `if (x) throw e;` and a nested `if`. It is now the language's
+full statement set minus declarations and bare blocks.
+
+A dangling `else` binds to the **nearest** `if`, matching every target
+language. Python gets the equivalent construct, the **inline suite**
+(`if x: return 1`, `def f(): pass`, `while c: i += 1; j += 1`), for every
+`suite()` position: `if`/`elif`/`else`, `for`, `while`, `try`, `def`, `class`
+and `case`.
+
+**Go is deliberately excluded** — its spec defines `Block = "{" StatementList "}"`
+and every control-flow statement takes a `Block` — and Lua has no such form. A
+single-statement body translated to either is emitted braced / `do`…`end`.
+
+Not supported, on purpose: the *empty* statement as a body (`while (c) ;`),
+`for (;;)`, and `;`-separated statements on an ordinary (non-suite) Python line.
+
+### Fixed: a `else`-prefix miscompile, latent until now
+
+`BaseGrammarLexer.token()` is a prefix matcher with no word-boundary guard, so
+`string('else')` matches the start of an identifier such as `elseCount`. That
+was unreachable while every `else` arm was preceded by a mandatory braced
+block, and would have become a **silent miscompile** the moment bodies could be
+unbraced:
+
+```dart
+if (a) x();
+elseCount = 1;   // `else` matches; `Count = 1;` becomes the else arm
+```
+
+The branch and loop rules of all six C-style grammars now use whole-word
+keyword tokens. Also covers Kotlin's `when` entry labels and `if` expression.
+
+### Other grammar fixes
+
+- **Java and C#**: `if (a) {} else if (b) {}` with no trailing `else` failed to
+  parse — both made the final `else` non-optional, unlike every other language.
+- **Python**: a `do`/`while` translated to Python emitted literal
+  `do { … } while (c);`. It now lowers to `while True: … if not (c): break`.
+- **Lua**: compound assignment was emitted verbatim (`a += 1`), which is not
+  valid Lua. It now lowers to `a = a + 1`.
+- **Go**: removed a dead `codeBlockOrSingleLineBlock` cluster that was defined
+  but never referenced.
+
+### New Dart syntax
+
+- **Interpolation inside triple-quoted strings**. `'''Hello $name'''` yielded
+  the *literal* text `$name` — wrong output, not an error. Raw `r'''…'''` is
+  unaffected.
+- **`assert(c)` / `assert(c, m)`** as a real statement. It previously parsed as
+  a call to a user function named `assert` and failed later with a confusing
+  message. A failed assertion throws and is catchable. Every target emits its
+  own idiom (Java `assert c : m;`, Python `assert c, m`, Kotlin
+  `assert(c) { m }`, C# `Debug.Assert`, Lua's built-in, JS/TS/Go lowered to an
+  explicit check). Wasm refuses to compile it rather than mis-compile it.
+- **`required` named parameters** on plain, constructor-typed and `this.`
+  forms. `({required int a})` was a hard parse failure. Dart output keeps the
+  modifier; other targets express required-ness by the absence of a default.
+- **Annotations** — `@override`, `@Deprecated('x')`, `@pragma(...)`, `@a.B(1)`
+  — at every position Dart allows. There was no `@` in any grammar in the repo,
+  so one `@override` broke the whole class body; this matters beyond
+  hand-written sources, since `lib/src/pub` loads real pub packages. Parsed and
+  discarded for now.
+- **`late`** on locals and fields (accepted and dropped).
+- **`const` at use sites**: `const Foo()`, `const []`, `const {}`. `const [1]`
+  used to *silently misparse* as an index read on a variable named `const`.
+- **Arrow and `async` bodies on local and anonymous functions**:
+  `int f(int x) => x * 2;` inside a function, and `(x) async => …`.
+- **`catch (e, s)`** now binds the stack trace. It was parsed and thrown away,
+  so any handler that referenced `s` failed. ApolloVM has no stack traces, so
+  it binds to an empty string; targets whose `catch` header has no second
+  variable declare it as the handler's first statement.
+- **Compound assignment `%= &= |= ^= <<= >>=`**. In JS/TS `%=` was already in
+  the grammar but missing from the shared operator enum, so it surfaced as a
+  `SyntaxError`.
+- **Untyped getters** (`get twice => …`) now parse. They failed because
+  `type().optional()` greedily ate `get` and petitparser's `optional()` cannot
+  backtrack.
+
+### Fixed: `set` no longer misparses into a method
+
+`simpleType()` accepted any identifier, so `set value(int v) {}` silently became
+a **method** named `value` returning a type named `set`, failing much later with
+a confusing error. `get`/`set` are now rejected in a type position, turning that
+into a parse error at the `set`.
+
+Full setter support remains unimplemented: it would mirror the entire getter
+subsystem plus assignment dispatch, and getters are generated for only 2 of 9
+targets. This change converts a silent misparse into a clear error.
+
+## 2.25.1
+
+### apollovm_wasm 1.2.0: the runtime now tracks the core it decodes
+
+No change to this package's code — this release exists to carry the
+`apollovm_wasm` bump, the way `2.23.2` carried `apollovm_wasm 1.1.0`.
+
+`apollovm_wasm` declared `apollovm: ^2.0.0`, but it is not a loosely-coupled
+consumer: it *decodes* what this package's Wasm generator encodes. The
+boxed-`Object` cell layout and its `_boxTag*` values are a contract, and both
+`wasm_runner.dart` and `wasm_generator.dart` carry a comment saying the
+constants must match.
+
+That constraint let pub pair the runtime with any 2.x, including releases whose
+box encoding it was never built against — a mismatch that shows up as a wrong
+value or a trap at run time, not as a resolution failure. It is now
+`apollovm: ^2.25.0`, widened deliberately rather than by default. Its `wasm_run`
+also moves to `^0.2.0+2` (patch, no API change).
+
+## 2.25.0
+
+### Wasm: `?.` on a boxed slot no longer refuses to compile
+
+`var x = null; x?.length` was an `UnimplementedError` — *"Wasm getter `.length`
+on Null is not supported yet"*. That was reachable from ordinary code, and the
+advice the neighbouring error gives ("declare the variable as `var` / `Object?`
+/ `dynamic`") led straight into it.
+
+A boxed slot is the only Wasm representation that can hold `null`, so it is also
+the only place `?.` has anything to do — on a concrete slot the receiver cannot
+be null and the null-awareness is vacuous. `.length` / `.isEmpty` / `.isNotEmpty`
+on a boxed receiver now dispatch on the box tag at runtime:
+
+```dart
+var missing = null;
+var n = missing?.length;   // -> null
+return n ?? -1;            // -> -1
+```
+
+Only a boxed **String** carries these members — `List`/`Map` have no boxed form
+at all, and the int/double/bool/instance tags have no length — so any other tag
+traps rather than reading a length word out of a payload that is not a string
+pointer. A *plain* `.` on a null box traps too, matching the interpreter's
+`ApolloVMNullPointerException`.
+
+The null-aware result is itself boxed, because it can be `null` and a nullable
+value has no unboxed encoding. That is what lets it flow into `??` and
+`== null`, which already understand boxes. The plain form still yields an
+unboxed `int`/`bool`.
+
+### Known gap this exposed
+
+An explicitly-declared `Object?` local initialized from a *concrete* value keeps
+the initializer's type instead of being boxed, so `Object? s = ''` makes `s` a
+String slot. `s?.isEmpty` then takes the concrete-String path and stores its i32
+boolean into a slot sized i64, producing a module that compiles but fails Wasm
+validation. That reproduces byte-identically on 2.24.0, so it is a separate
+defect in the declaration path rather than a consequence of this change; it is
+pinned as a skipped test in `test/wasm/apollovm_wasm_boxed_member_test.dart`.
+
+## 2.24.0
+
+### Null-aware access is now really checked on every target, not dropped
+
+`a?.b` was emitted as a plain `a.b` on Java, C#, JavaScript, Lua and Python: the
+generated code compiled, but the null check was gone — it threw on exactly the
+input `?.` exists to handle. The README's null-safety matrix marked those cells
+⚠️ *lossy*.
+
+Java, Lua and Python now lower the access to an explicit guard, and the guard
+wraps the **whole** chain rather than the null-aware link alone:
+
+```dart
+// Dart source
+int chain(A? a) { return a?.m().toInt(); }
+```
+
+```java
+// Java, before: threw when `a` was null
+return a.m().toInt();
+// Java, now
+return (a != null ? a.m().toInt() : null);
+```
+
+```python
+# Python
+return (a.m().toInt() if a is not None else None)
+```
+
+C# and JavaScript were lossy for a simpler reason — both have had the operator
+all along (C# 6, ES2020) and merely never declared it — so they now emit `a?.b`
+natively. JavaScript uses `?.[i]` for element access, and its postfix `!` is
+handled separately: JavaScript has no null-assertion operator (a postfix `!` is
+logical NOT), so `a!` is emitted as plain `a` rather than negating the value.
+
+Go continues to report `?.` / `?[` as unsupported: it represents a nullable `T?`
+as `*T`, so a degraded access would both skip the nil check and yield the wrong
+type.
+
+### `??`, `&&`, `||` and `x == null` are AST nodes of their own
+
+These four were shapes encoded on the generic binary-operation node and
+special-cased ahead of its operator switch, because each of them short-circuits.
+Every consumer had to re-detect them by inspecting operands — the null-safety
+analyzer reconstructed `x != null` to promote a variable, the Go backend probed
+for a null literal to compare the pointer instead of dereferencing it, and the
+Wasm backend re-tested the operator — and the enum's exhaustiveness forced
+`throw StateError('unreachable')` arms in three places.
+
+`ASTExpressionNullCoalesce`, `ASTExpressionLogicalAnd`, `ASTExpressionLogicalOr`
+and `ASTExpressionNullCheck` now carry those shapes, built by the new
+`astExpressionOperation()` factory that the shared grammar reduction uses, so
+all nine front-ends get them. Consumers dispatch on the node type instead of
+pattern-matching, and evaluating `x == null` no longer concretizes both operands
+and runs them through equality dispatch.
+
+This is internal structure — the generated source is unchanged, except where a
+target has a better idiom that the dedicated node makes reachable. Python is the
+one such case:
+
+```python
+# before
+if a == None:
+# now
+if a is None:
+```
+
+`==` dispatches through `__eq__`, which a class can redefine to return `True`
+for `None`; `is` cannot be intercepted, and is the form PEP 8 mandates.
+
+The Python **grammar** learned `is None` / `is not None` to match, so the
+generated source still round-trips — ApolloVM can now read back what it writes.
+This is deliberately limited to the `None` comparison: general `a is b` is
+identity, and mapping it to `==` would silently turn it into equality, so it
+stays unparsed as before.
+
+Building a binary operation directly with `ASTExpressionOperation` still works
+for the ordinary operators. Constructing one with `??`, `&&` or `||` now throws
+rather than silently evaluating both operands, which would no longer be a
+short-circuit.
+
+## 2.23.3
+
+### A signature mismatch is no longer reported as a missing entry function
+
+Calling `apollovm.execute` with arguments that no declaration of the entry name
+accepts reported the same thing as a typo in the name — `Entry function not
+found: main` — leaving the caller with nothing to correct:
+
+```shell
+$ apollovm mcp call apollovm.execute --language dart --args '[1,2,3]' \
+    --source 'int main(int a, String b){ return 1; }'
+{
+  "diagnostics": [
+    { "severity": "error", "message": "Entry function not found: main" }
+  ],
+  "isError": true
+}
+```
+
+`ApolloRuntime.execute` now separates the two causes. When the name exists but
+no overload matches, the diagnostic shows the call that was attempted and every
+declared signature of that name (qualified with the class when it is a method,
+including one reached by the auto-discovery order):
+
+```
+No entry function matching the passed arguments: `main(int, int, int)`.
+A function named `main` exists, but with a different signature:
+`int main(int a, String b)`. Adjust the arguments to match a declared signature.
+```
+
+An explicit `className` that does not exist now reports `Entry class not found:
+Bar (looking for the method `run`)` instead of blaming the method. A name that
+is genuinely absent from the source still reports `Entry function not found`.
+
+## 2.23.2
+
+### The native Wasm runtime no longer has an install step
+
+`apollovm_wasm` 1.1.0 moves to `wasm_run` 0.2, which dropped `dart run wasm_run:setup` in favor
+of the SDK's build hooks: the native library is downloaded automatically by `dart run`,
+`dart test` and `dart compile`. `mcp doctor` and the Wasm test suite said otherwise, so they now
+just point at `package:apollovm_wasm`.
+
+Nothing changes for `package:apollovm` itself — it still compiles Wasm everywhere and pulls in no
+native toolchain. See the [`apollovm_wasm` changelog][apollovm_wasm_changelog] for the details,
+including a macOS/Apple-Silicon issue in the upstream 0.2.0 binary.
+
+[apollovm_wasm_changelog]: https://pub.dev/packages/apollovm_wasm/changelog
+
+## 2.23.1
+
+### A blank `className`/`function` no longer breaks execution
+
+A client that fills in every field rather than omitting the optional ones sends
+`""` — and `""` was taken as a real name to look up, so nothing matched:
+
+```shell
+$ apollovm mcp call apollovm.execute --language dart --class-name "" \
+    --source 'int main(List a){ return 7; }'
+{
+  "result": null,
+  ...
+  "diagnostics": [
+    { "severity": "error", "message": "Entry function not found: .main" }
+  ],
+  "isError": true
+}
+```
+
+`ApolloRuntime.execute` now normalizes both entry names: they are trimmed, and a
+name that is empty after trimming means "not specified" — `className` falls back
+to the full discovery order (top-level function, then any class method) and
+`function` falls back to `main`. Trimming also makes `" main "` resolve, which
+previously did not. A name that is genuinely absent from the source still
+reports `Entry function not found`, now with the trimmed name in the message.
+
+Class lookup is guarded at the source as well, so an empty name can never match
+an entry regardless of the caller: `LanguageNamespaces.getClass`,
+`CodeNamespace.getClass`/`containsClass`, `ASTRoot.getClass` and
+`ApolloRunner.getClassMethod` return early for a blank class name.
+
+### Dart tooling ignores the LSP fixtures
+
+`lsp/example_workspace/broken.dart` is intentionally unparseable (it is what
+makes the language server emit a parse diagnostic), which made `dart format .`
+fail with exit 65 and made the analyzer report it whenever it was opened in an
+editor. The root `analyzer: exclude:` did not cover either case, and the
+formatter has no exclude option at all.
+
+The fixture is now `lsp/example_workspace/.broken.dart`: both `dart format` and
+`dart analyze` skip dot-prefixed paths during a directory walk, while the editor
+still sees a `.dart` file and hands it to the ApolloVM language server, so the
+demo is unchanged. A local `analysis_options.yaml` silences the remaining
+fixture diagnostics. No published code is affected — `lsp/` is `.pubignore`d.
+
+## 2.23.0
+
+### `nullSafetyChecks` is reachable from the CLI and MCP
+
+2.22.0 added `ApolloVM(nullSafetyChecks: true)`, but the only way to turn it on
+was to construct the VM in Dart. It is now exposed at every entry point that
+actually loads code.
+
+**CLI** — `--null-safety` on `run`, `translate` and `compile` (added once on the
+shared `CommandSourceFileBase`, like `--pub`):
+
+```shell
+$ apollovm run --null-safety foo.dart
+** NULL SAFETY: Can't load `foo.dart` (dart): 1 null-safety error(s).
+   - The operand 'b' can be 'null', so it can't be used in an operation
+     unconditionally. Use '??', '!' or a null check.
+$ echo $?
+1
+```
+
+The rejection is printed as a report rather than escaping as an unhandled error
+with a stack trace, and it is not restated as a parse failure. `main` now maps a
+command result of `false` to exit status 1, so a check can gate a build; no
+existing command path returns `false`.
+
+**MCP** — every source tool takes an optional `nullSafety` argument, and
+`--null-safety` on both `apollovm mcp serve` and `apollovm mcp call` sets the
+default (a per-call value always wins). The two tool kinds behave differently,
+by design:
+
+- the tools that **load** — `apollovm.execute`, `apollovm.translate`,
+  `apollovm.wasm` — reject the source, returning the findings as diagnostics
+  rather than throwing;
+- the **parse-based** tools — `apollovm.parse`, `apollovm.ast`,
+  `apollovm.symbols`, `apollovm.types` — never load anything, so a "fail the
+  load" flag would be meaningless. They add the findings to `diagnostics` and
+  still succeed, which is the useful form for inspection.
+
+The server default is merged into the tool arguments at the single dispatch
+point shared by the in-process and isolate paths. That matters: `_IsolateJob`
+carries only the arguments and limits, so a field on the server object would
+never reach a spawned isolate — and `apollovm.execute` runs in one by default.
+It is deliberately *not* stored in `McpLimits`, which is documented as resource
+and security limits.
+
+Adds `mcpCoerceBool` beside `mcpCoerceInt`, so a client sending `"true"` or `1`
+is handled rather than crashing the tool on a hard cast — the same class of bug
+2.16.0 fixed for the integer arguments.
+
+### Not changed
+
+The LSP was checked and deliberately left alone: its `Analyzer` uses its VM only
+for `getParser` and never loads a code unit, and it already reports null-safety
+findings as diagnostics. An editor must report, not refuse to open a file.
+
+## 2.22.0
+
+### The null-safety analyzer had never seen a class method
+
+`NullSafetyAnalyzer.analyze` walked `root.descendantChildren` looking for
+invocables. But `ASTBlock.children` is only `[functions, statements]`, and
+`ASTRoot` keeps its classes in a separate map — so the traversal never entered a
+class body. `ASTClass` compounds it by keeping constructors and getters outside
+`children` too.
+
+The effect: **every method, constructor and getter of every class went
+unanalyzed**, including in the LSP/Problems panel. Only top-level functions were
+ever checked, which is also why the existing tests — all written against
+top-level functions — never caught it.
+
+```dart
+class Foo {
+  static void main(int a, int? b) {
+    var c = a + b;   // reported no diagnostic at all
+  }
+}
+```
+
+`analyze` now walks each class and extension explicitly, plus their constructors
+and getters. The reported case produces `unchecked-nullable-operand` with no rule
+changes — the rules were fine, nothing was reaching them.
+
+### Opt-in: fail the load instead of failing mid-run
+
+`ApolloVM(nullSafetyChecks: true)` makes `loadCodeUnit` throw the new
+`NullSafetyError` when the AST has null-safety **errors**, before the unit is
+registered:
+
+```dart
+var vm = ApolloVM(nullSafetyChecks: true);
+await vm.loadCodeUnit(unit); // throws — nothing printed, nothing executed
+```
+
+Without it, the snippet above prints `5` and `null` and *then* throws
+`ApolloVMNullPointerException` from the `+`, having already produced output.
+
+- **Off by default**, so existing behaviour is unchanged unless you opt in.
+- Only `NullSafetySeverity.error` blocks; warnings (e.g. `null!`) and info stay
+  diagnostic-only, exactly as in the LSP.
+- A `BinaryCodeUnit` (Wasm) carries no AST and is skipped.
+- The analysis is best-effort: an internal analyzer failure never becomes a load
+  failure.
+- The thrown `NullSafetyError` carries the offending `findings`.
+
+No language gate is needed — only the Dart grammar parses `?`, so every other
+language's types are non-nullable and produce no findings. There is a test
+asserting that rather than assuming it.
+
+## 2.21.0
+
+### Two invalid-output fixes found while documenting null safety
+
+Writing the README's null-safety matrix meant generating every construct into
+every target and reading the result. Two cells were emitting source that is not
+valid in the target language:
+
+- **Kotlin's null-aware index was `xs?[0]`.** Kotlin has no `?[` operator — its
+  null-aware element access is the call `xs?.get(0)`. The shared
+  `nullAwareIndexOpen` hook gained a matching `nullAwareIndexClose`, so a target
+  can close with `)` instead of `]`.
+- **Lua's null literal was `null`.** Lua's is `nil`, so the generated code
+  referenced an undefined global: `a == null` was always false rather than a nil
+  test. Both null-rendering hooks are now overridden for Lua.
+
+### README: the null-safety surface is documented
+
+The feature tables covered control flow, operators and OOP, but nothing of the
+null-safety work from 2.16.0 onwards. A new **Null safety** section carries a
+per-language table for nullable types, `??` / `??=`, `?.` / `?[`, `!`, cascades,
+`== null` and the static analyzer — each cell verified by generating the
+construct and reading the output, not from memory.
+
+It adds a **⚠️ lossy** marker for targets that emit a form which compiles but
+drops the null check (`a?.x` → `a.x`), distinguishing those from a faithful
+idiom (`🧩`) such as Java's ternary for `??` or Go's pointer dereference for `!`.
+A **Member-access chains** section covers the 2.17.0 chain support, the `null`
+row in the operators table now points at the Wasm limits, and the Wasm status
+paragraph mentions the boxed-`null` domain.
+
+## 2.20.0
+
+### Go: a nullable `T?` is generated as a pointer `*T`
+
+Go had no representation for nullability at all. A nullable local was emitted as
+`var s string = nil` — source that does not compile — and `??` was reported as
+unsupported because a plain Go value type cannot be compared to `nil`. 2.19.0
+turned the broken output into an explicit error; this release implements the
+representation.
+
+A nullable `T?` now becomes a Go pointer `*T`, which is the one Go form that can
+hold `nil`:
+
+- **Declarations and parameters** carry the pointer type — `int? a` is `a *int`,
+  a `String? name` field is `name *string`.
+- **Reads deref** (`(*a)`), including a bare `return x`, which takes its own
+  generation path.
+- **Null checks compare the pointer** — `x == null` is `x == nil`, not a deref.
+- **A non-null value takes its address** through a generated
+  `func goPtr[T any](v T) *T` helper, since Go cannot write `&5`. The helper is
+  emitted only in modules that need it.
+- **`a ?? b`** lowers to an inline function that nil-checks the pointer:
+  `func() int { if a != nil { return *a }; return b }()`. Go has no conditional
+  *expression*, so this is the only correct form.
+- **Types already nilable in Go are left alone** — a `List<int>?` stays `[]int`,
+  not `*[]int`, and likewise for maps and interfaces.
+
+Every shape above is verified by compiling the generated source with a real Go
+toolchain (`go build`), not by asserting on text — which is what let
+`var s string = nil` ship in the first place.
+
+Two constructs remain unsupported in Go, and both now *report* rather than emit
+something wrong:
+
+- **`?.`** — the shared fallback degrades it to `.`, which was merely lossy when
+  a nullable was a plain `T`. Against a `*T` it would skip the nil check *and*
+  yield a value where a pointer is expected. Lowering it needs the accessed
+  member's type at generation time, which the generator does not resolve yet.
+- **`??=`** — lowering it to `t = t ?? v` needs the target's element type to
+  build the inline function's return type, and the text-level assignment hook
+  does not have it. Plain `??` is unaffected.
+
+## 2.19.0
+
+### `x == null` no longer throws
+
+`x == null` — the most common null check in Dart — threw for **any** typed left
+operand:
+
+```dart
+int? a = 1;  if (a == null) { … }
+// _TypeError: type 'Null' is not a subtype of type 'FutureOr<int>' in type cast
+```
+
+No ternary, nullable slot or `?.` was needed; `String s = 'x'; s == null` failed
+the same way. Only the reversed `null == x` worked, because `ASTValueNull.equals`
+type-tests instead of casting.
+
+`ASTValue.equals` read the other operand through `_getValue`, which casts it to
+*this* value's `T`. That is right for arithmetic — a mismatched operand there is
+a real error — but wrong for equality, where a different type must compare
+`false`. Equality now reads both operands uncast, so `x == null` is `false`,
+`x == 'other type'` is `false`, and neither throws. The three `equals` overrides
+(`ASTValueStatic`, `ASTValuePrimitive`, `ASTValueNum`) had the same cast and were
+fixed with it.
+
+This predates the null-safety work — it is in the base `ASTValue` — but 2.16.0
+made `x == null` the idiom people reach for, so it went from obscure to
+prominent.
+
+### Wasm: `== null` / `!= null` against the null box
+
+With `null` representable since 2.18.0, the equality paths had to learn about it.
+A comparison against a `null` literal is now recognised **before** the String and
+numeric paths:
+
+- a **boxed** operand compares its pointer against the null box, so
+  `a[0] == null` on a `List<Object>` answers correctly (it previously took the
+  `__streq` route and compared *contents* against address 0, reporting a non-null
+  String as null);
+- a **concrete** operand (`int`, `double`, `String`, an instance) can never be
+  the null box, so the result is a constant — and, importantly, a *valid* module.
+  `String s; s == null` previously pushed two i32 handles into an `i64.eq` and
+  produced a module that failed to validate.
+
+### Grammar: `(expr).m().field`
+
+A group *invocation* followed by member access did not parse — the
+group-invocation rule chains only further invocations, so a trailing `.field` had
+nothing to match it. A new rule reuses that rule for the head and folds the
+trailing segments. It requires at least one trailing segment, so `(expr).m()`
+keeps its own rule and parenthesized arithmetic is untouched (reordering the
+rules instead changes how the operation chain groups and breaks round-trip
+generation).
+
+### Go: no more `var s string = nil`
+
+The Go generator emitted `var s string = nil` for a nullable local — source that
+does not compile. It now reports an `UnsupportedSyntaxError` naming the type,
+consistent with how `??` is already handled. A `List`/`Map` still accepts `nil`,
+since those become a Go slice/map, which are nilable.
+
+Go's nullable representation remains the open item: supporting `T?` properly
+means generating `*T` throughout — declarations, zero values, every dereference,
+and parameter/return types.
+
+## 2.18.0
+
+### Wasm: `null` in the boxed-`Object` domain
+
+Compiling a `null` literal to Wasm threw a bare
+`UnimplementedError: generateASTExpressionNullValue` — a leftover `TODO` — so an
+ordinary Dart idiom such as `var a = args.length > 0 ? args[0] : null;` could
+not be compiled at all.
+
+`null` is now a real value in the backend's *boxed* domain: **the boxed-`Object`
+pointer 0**. The heap never allocates at address 0, so it needs no cell, costs no
+allocation, and is distinguishable from every real box.
+
+- **Ternary arms unify.** Both arms of a conditional are now coerced to the
+  block's result type, and an arm that is `null` forces that type to a boxed
+  `Object` — otherwise `c ? 1 : null` mixed an i64 with an i32 and produced a
+  module that failed to validate.
+- **`??` tests a boxed operand.** It previously always yielded its left operand
+  ("a Wasm value is never null"), which remains correct in the *numeric* domain.
+  A boxed operand is now compared against the null box, so `a ?? 99` falls back
+  when `a` is null.
+- **String interpolation prints `null`.** The box-to-string helper checks the
+  null box before dereferencing a tag.
+- **`__alloc` look-ahead.** Boxing allocates, but the alloc export is decided
+  *before* the Code section while the boxing is only discovered while writing
+  it — so `[1, null, 3]` and `a ?? 99` aborted at run time with
+  `No exported Wasm function __alloc`. The generator now scans function bodies
+  for a `null` literal up front.
+- **An `Object?` return decodes to `null`** instead of the raw pointer `0`. Two
+  causes: the return path had no `Object` case, and `_typeTag`'s fallback gave
+  tag `5` to *both* `Object` and a class instance, so the runner could not tell
+  a box from a bare instance pointer. A class instance now carries tag `8`,
+  leaving `5` unambiguously "boxed value".
+
+Where `null` genuinely has no representation — a slot whose Wasm type is
+concrete, such as `int` (i64) or `String` (a string pointer) — the compiler now
+reports an `UnsupportedSyntaxError` naming the type and suggesting `var` /
+`Object?` / `dynamic`, rather than emitting a module that fails to validate.
+
+### Null-safety analyzer: operands and nullable-to-non-nullable assignment
+
+The analyzer checked unconditional *member/method/index* access on a nullable,
+and the `null` *literal* assigned to a non-nullable slot. Two adjacent mistakes
+went unreported:
+
+- **A nullable operand in an operation** (`x + (y ?? 0)` where `x` is `int?`)
+  now reports `unchecked-nullable-operand`. `??`, `==` and `!=` are exempt — a
+  nullable operand is exactly what they exist to handle — and `!` or a preceding
+  null check still suppress it.
+- **A nullable *value* assigned to a non-nullable slot** (`int x = a;` where `a`
+  is `int?`) now reports `nullable-to-non-nullable`. Previously only a literal
+  `null` was caught, so the same error one step removed passed silently.
+
+## 2.17.0
+
+### Null-safety fixes: nullable parameters, null-aware typing, access chains
+
+Four gaps found by exercising the 2.16.0 null-safety surface end-to-end.
+
+- **A `T?` parameter now accepts a `T` argument.** Calling a method with a
+  `String?` parameter and a non-null `String` failed with `parameters signature
+  not compatible`, though passing `null` worked. Argument passing is an
+  assignment, so `ASTFunctionParameters.parameterAcceptsType` now uses
+  `ASTType.acceptsAssignment` instead of `acceptsType`. (`int?`/`double?` only
+  appeared to work because `StrictType` ignores `nullable` in `==`, while
+  `ASTTypeString` compares it — so `String?` and `String` were unequal and
+  `ASTTypeString.acceptsType` rejected the argument.) A non-nullable parameter
+  still rejects `null`.
+- **A null-aware access now reports a nullable static type.** Storing a
+  short-circuited result in a local failed: `var v = s?.length` on a `null`
+  receiver threw ``Class not set for type: Null``, and `var v = xs?[0]` threw
+  ``Can't cast initial (null) value to type: int``. `?.` (getter and method) and
+  `?[` now resolve to `T?`, and resolving the type of an access whose receiver
+  is `null` reports `Null` instead of trying to find a class for it. Using the
+  result in a `return`, inline with `??`, or in a string interpolation already
+  worked and is unchanged.
+- **Member-access chains parse.** `a.b.c`, `a.b?.c`, `a.b!.c`, `a.b.m()`,
+  `a.b?.m(x)` and chained writes (`a.b.c = v`) previously failed — the grammar
+  accepted only a *single* identifier receiver, so `a.next?.value` reported
+  ``SyntaxError: digit expected`` (the `?` was read as the start of a number)
+  and even plain `a.next.value` reported ``"(" expected``. A new chain rule
+  folds each segment onto the previous one, wrapping it in the new
+  `ASTExpressionVariable` (an `ASTVariable` backed by an expression) so the
+  existing object-access nodes supply the runtime, null-aware and
+  code-generation behaviour. Chains of any depth work, in any mix of `.`, `?.`
+  and `!`. Single-segment access keeps its own rules — the chain rule requires
+  two or more segments — so enum entries, static fields and import prefixes
+  resolve exactly as before. A field read off a parenthesized receiver
+  (`(a).v`, `(a)?.v`) also parses now; only `(expr).m().field` remains
+  unsupported.
+- **`??` and `??=` no longer leak into targets that cannot compile them.**
+  Java, Lua, Python and Go emitted `a ?? b` verbatim, and `??=` leaked into
+  *every* target — including Kotlin, which had a correct `?:` for `??` but no
+  hook for the assignment form. `??` now goes through an overridable
+  `renderNullCoalesce`, and `??=` is lowered to `t = t ?? v` wherever
+  `supportsNullCoalesceAssignment` is false, so each target defines only one
+  desugaring:
+  - Java: `(a != null ? a : b)`
+  - Python: `(a if a is not None else b)` — an `is not None` test, so `0`/`''`/
+    `False` are preserved
+  - Lua: an immediately-invoked function with an explicit `nil` test, because
+    both `a or b` and the `a ~= nil and a or b` idiom return `b` for a non-nil
+    `false`; it also binds `a` to a local, so it is evaluated once
+  - Kotlin: `?:` for `??`, and `t = t ?: v` for `??=`
+  - Dart, C#, JavaScript, TypeScript: unchanged, they have both operators
+  - Go: reports an `UnsupportedSyntaxError`. Go has neither a null-coalescing
+    operator nor a conditional *expression*, and this generator maps a nullable
+    `T?` onto a plain Go `T`, which for a value type cannot be compared to
+    `nil` — any rendering would be code that does not compile. Representing
+    `T?` as `*T` throughout the Go generator is separate work.
+
+Also adds an overridable `resolveASTAssignmentOperatorText`, which lets the
+Python generator drop its whole `generateASTExpressionVariableAssignment`
+override (it existed only to spell integer division `//=`).
+
+## 2.16.0
+
+### Dart null-safety support
+
+- **Nullable type syntax (`T?`).** The Dart grammar now parses the `?` suffix on
+  simple, generic, collection and function types (`String?`, `List<String?>`,
+  `Map<String, User?>`, `Future<User?>`, `void Function()?`,
+  `String? Function(int)`). `ASTType` carries an `isNullable`/`nullable` flag
+  (via `asNullable()` / `withoutNullability()`), and the Dart/Kotlin generators
+  round-trip the `?` suffix (TypeScript renders nullable *types* without the
+  suffix — `T?` on a member isn't valid TS — and other targets drop it,
+  best-effort).
+- **Null-aware operators.** Added full parse + runtime + Dart round-trip support
+  for `??` (null-coalescing), `??=` (null-coalescing assignment), `?.`
+  (null-aware getter and method invocation), `?[` (null-aware indexing), postfix
+  `!` (null assertion — standalone `x!` and before access: `x!.f`, `x!.m()`,
+  `x![i]` — throwing `ApolloVMNullPointerException` on null), and cascades
+  `..` / `?..` (null-aware). `??` is wired into the operator-precedence
+  reducer as the loosest binary operator (relational/equality/logical tiers were
+  made explicit at the same time).
+- **Assignability is nullability-aware.** `ASTType.acceptsAssignment` (used by the
+  runtime declaration/instance-of checks) accepts `null` only for nullable slots
+  and lets a `T?` slot accept a `T` value.
+- **Static null-safety analysis pass.** A new pragmatic, flow-aware analyzer
+  (`NullSafetyAnalyzer`) reports assigning `null` to a non-nullable
+  declaration/parameter and unconditional member/method/index access on a
+  nullable local, with flow promotion for `if (x != null) { … }` /
+  `if (x == null) … else { … }` and suppression via `?.`/`!`. Its diagnostics are
+  surfaced through the LSP analyzer for Dart documents.
+- **Cross-language generation.** Kotlin emits the Elvis operator `?:` for `??`
+  and `!!` for `!`; TypeScript emits `??`, `?.`, `?.[` (element access) and `!`.
+  Java, JavaScript, C#, Go, Python and Lua are best-effort (C#/JS keep native
+  `??`; the rest render the closest form without failing).
+- **Wasm compilation.** The Wasm backend lowers null-safety syntax within its
+  non-null numeric domain: `x!` compiles to `x`, `a ?? b` to its left operand,
+  `?.`/`?[` to plain access, and a nullable `T?` to the underlying numeric type.
+  A `null` *literal* stays an explicit unsupported-construct error (Wasm has no
+  null value) rather than a silent miscompilation.
 
 ### LSP & MCP correctness fixes
 

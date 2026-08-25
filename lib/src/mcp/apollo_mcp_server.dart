@@ -36,9 +36,14 @@ final class ApolloMcpServer extends MCPServer with ToolsSupport {
   /// The workspace/repository runtime, present only when an adapter was given.
   final RepoRuntime? _repo;
 
+  /// Server-wide default for the tools' `nullSafety` argument (the
+  /// `--null-safety` flag). A per-call argument always overrides it.
+  final bool nullSafetyChecks;
+
   ApolloMcpServer(
     super.channel, {
     this.limits = const McpLimits(),
+    this.nullSafetyChecks = false,
     RepositoryAdapter? repository,
     RepoConfig repoConfig = const RepoConfig(),
   }) : _repo = repository == null
@@ -78,7 +83,16 @@ final class ApolloMcpServer extends MCPServer with ToolsSupport {
   }
 
   Future<CallToolResult> _handle(String name, CallToolRequest request) async {
-    final args = request.arguments ?? const <String, Object?>{};
+    final requestArgs = request.arguments ?? const <String, Object?>{};
+
+    // Merge the server default into the args here — this is the one dispatch
+    // point shared by the in-process and isolate paths, and `_IsolateJob`
+    // carries only `args`/`limits`, so a field on the server would not reach a
+    // spawned isolate. Spread last so a per-call value wins.
+    final args = <String, Object?>{
+      if (nullSafetyChecks) 'nullSafety': true,
+      ...requestArgs,
+    };
 
     final Map<String, Object?> result;
     if (limits.runsInIsolate(name)) {
