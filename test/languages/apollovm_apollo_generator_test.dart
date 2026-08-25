@@ -513,6 +513,64 @@ run() {
       expect(apollo, contains(r"print('${n + 1} x');"));
     });
 
+    test(r'an escaped `$` before a name is left undelimited', () async {
+      // The `$` is escaped, so `\$namex` is the literal text — brace-delimiting
+      // it would invent an interpolation that was never there.
+      var apollo = await _roundTrip(r'''
+run() {
+  print("\$name" + "x")
+  print("\$name" + "!")
+}
+''');
+
+      expect(apollo, contains(r"print('\$namex');"));
+      expect(apollo, contains(r"print('\$name!');"));
+    });
+
+    test(
+      'a string with an escaped quote merges by converting quotes',
+      () async {
+        var apollo = await _roundTrip(r'''
+run() {
+  print("a \" b" + "c")
+  print('a \' b' + 'c')
+}
+''');
+
+        expect(apollo, contains("""print('a " bc');"""));
+        expect(apollo, contains('''print("a ' bc");'''));
+      },
+    );
+
+    test('parts that cannot share a quote stay a `+`', () async {
+      // Neither side can be converted without escaping, so no merge happens.
+      var apollo = await _roundTrip(r'''
+run() {
+  print("a \" b" + 'c \' d')
+}
+''');
+
+      expect(apollo, contains("""print('a " b' + "c ' d");"""));
+    });
+
+    test('raw form is chosen per the quotes the text contains', () async {
+      var apollo = await _roundTrip(r'''
+run() {
+  print("back \\ slash")
+  print("back \\ and ' quote")
+  print("back \\ and \" quote")
+  print("back \\ both ' and \" quotes")
+}
+''');
+
+      // A lone backslash goes raw, quoted so nothing inside needs escaping;
+      // with both quote kinds present raw is impossible, so it escapes instead.
+      expect(apollo, contains(r"print(r'back \ slash');"));
+      expect(apollo, contains("""print(r"back \\ and ' quote");"""));
+      expect(apollo, contains("""print(r'back \\ and " quote');"""));
+      expect(apollo, contains("""print("back \\\\ both ' and \\" quotes");"""));
+    });
+
     test(
       'multiline strings collapse to an escaped single-line literal',
       () async {
@@ -763,6 +821,46 @@ run() {
             )
             .toString(),
         equals(r"'a${n}b'"),
+      );
+    });
+
+    test('parts that share one quote style merge under it', () {
+      // Each `every(...)` opener case: all raw-single, all double, all
+      // raw-double. Merging keeps the shared opener and drops the inner quotes.
+      expect(
+        generator
+            .generateASTValueStringConcatenation(
+              ASTValueStringConcatenation([
+                ASTValueString(r'a \ b'),
+                ASTValueString(r'c \ d'),
+              ]),
+            )
+            .toString(),
+        equals(r"r'a \ bc \ d'"),
+      );
+
+      expect(
+        generator
+            .generateASTValueStringConcatenation(
+              ASTValueStringConcatenation([
+                ASTValueString("a ' b"),
+                ASTValueString("c ' d"),
+              ]),
+            )
+            .toString(),
+        equals('''"a ' bc ' d"'''),
+      );
+
+      expect(
+        generator
+            .generateASTValueStringConcatenation(
+              ASTValueStringConcatenation([
+                ASTValueString("a \\ ' b"),
+                ASTValueString("c \\ ' d"),
+              ]),
+            )
+            .toString(),
+        equals("""r"a \\ ' bc \\ ' d\""""),
       );
     });
 

@@ -723,6 +723,209 @@ int loadUser(int id) async {
       );
     });
   });
+
+  group('Apollo statement surface', () {
+    test('a function declared inside a body', () async {
+      var output = await _run(r'''
+run() {
+  Int twice(Int x) { return x * 2 }
+  print(twice(21))
+}
+''');
+      expect(output, equals([42]));
+    });
+
+    test('final and const locals, typed and untyped', () async {
+      var output = await _run(r'''
+run() {
+  final Int a = 1
+  const Int b = 2
+  final c = 3
+  const d = 4
+  print(a + b + c + d)
+}
+''');
+      expect(output, equals([10]));
+    });
+
+    test('a bare `return` leaves the function', () async {
+      var output = await _run(r'''
+Void guard(Int n) {
+  if n > 0 {
+    return
+  }
+  print("negative")
+}
+
+run() {
+  guard(1)
+  guard(-1)
+}
+''');
+      expect(output, equals(['negative']));
+    });
+
+    test('try / catch / finally runs the finally block', () async {
+      var output = await _run(r'''
+run() {
+  try {
+    print("body")
+  } catch e {
+    print("caught")
+  } finally {
+    print("finally")
+  }
+
+  try {
+    throw "x"
+  } catch e {
+    print("caught")
+  } finally {
+    print("finally")
+  }
+}
+''');
+      expect(output, equals(['body', 'finally', 'caught', 'finally']));
+    });
+  });
+
+  group('Apollo expression surface', () {
+    test('`null`, `true` and `false` literals', () async {
+      var output = await _run(r'''
+run() {
+  var n = null
+  var t = true
+  var f = false
+  print(n)
+  print(t)
+  print(f)
+}
+''');
+      expect(output, equals([null, true, false]));
+    });
+
+    test('prefix increment and decrement yield the updated value', () async {
+      var output = await _run(r'''
+run() {
+  var i = 1
+  print(++i)
+  print(--i)
+  print(i)
+}
+''');
+      expect(output, equals([2, 1, 1]));
+    });
+
+    test('empty list and map literals', () async {
+      var output = await _run(r'''
+run() {
+  var xs = []
+  var m = {}
+  print(xs)
+  print(m)
+}
+''');
+      expect(output, equals([[], {}]));
+    });
+
+    test('assigning into a list index and a map key', () async {
+      var output = await _run(r'''
+run() {
+  var xs = [1, 2, 3]
+  var m = {"k": 1}
+  xs[0] = 9
+  m["k"] = 5
+  print(xs[0])
+  print(m["k"])
+}
+''');
+      expect(output, equals([9, 5]));
+    });
+
+    test('a nested list literal is indexed twice', () async {
+      var output = await _run(r'''
+run() {
+  List<List<Int>> grid = [[1, 2], [3, 4]]
+  print(grid[0][1])
+  print(grid[1][0])
+}
+''');
+      expect(output, equals([2, 3]));
+    });
+
+    test('`new` instantiates, and a field can be assigned', () async {
+      var output = await _run(r'''
+class P {
+  Int x
+  P(this.x)
+}
+
+run() {
+  var p = new P(7)
+  print(p.x)
+  p.x = 8
+  print(p.x)
+}
+''');
+      expect(output, equals([7, 8]));
+    });
+
+    test('invocations chain across returned instances', () async {
+      var output = await _run(r'''
+class B {
+  Int v
+  B(this.v)
+  B plus(Int n) { return new B(v + n) }
+  Int value() { return v }
+}
+
+run() {
+  var b = new B(1)
+  print(b.plus(2).plus(3).value())
+}
+''');
+      expect(output, equals([6]));
+    });
+  });
+
+  group('Apollo statement surface: regeneration', () {
+    test('the statement surface round-trips and reruns identically', () async {
+      var source = r'''
+run() {
+  Int twice(Int x) { return x * 2 }
+
+  var xs = [1, 2, 3]
+  xs[0] = 9
+
+  var m = {"k": 0}
+  m["k"] = twice(4)
+
+  var i = 1
+  print(++i)
+  print(xs[0])
+  print(m["k"])
+
+  try {
+    throw "x"
+  } catch e {
+    print(e)
+  } finally {
+    print("done")
+  }
+}
+''';
+
+      var apollo = _extractCodeUnit(await _translate(source, 'apollo'));
+
+      expect(apollo, contains('Int twice(Int x) {'));
+      expect(apollo, contains('xs[0] = 9;'));
+      expect(apollo, contains("m['k'] = twice(4);"));
+      expect(apollo, contains('print(++i);'));
+      expect(apollo, contains('} finally {'));
+
+      expect(await _run(apollo), equals(await _run(source)));
+    });
+  });
 }
 
 /// Extracts the raw source of the single generated code unit from the
