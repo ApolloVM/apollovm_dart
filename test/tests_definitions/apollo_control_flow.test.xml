@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="Apollo control flow: paren-less if/else-if/else + while (no semicolons)">
+    <source language="apollo">
+        <![CDATA[
+String classify(Int n) {
+  if n < 0 {
+    return "neg"
+  } else if n == 0 {
+    return "zero"
+  } else {
+    return "pos"
+  }
+}
+
+Int sumTo(Int n) {
+  var sum = 0
+  var i = 1
+  while i <= n {
+    sum = sum + i
+    i = i + 1
+  }
+  return sum
+}
+
+run() {
+  print(classify(-3))
+  print(classify(0))
+  print(classify(8))
+  print("sum=" + sumTo(5))
+}
+        ]]>
+    </source>
+    <call function="run">
+        []
+    </call>
+    <output>
+        ["neg", "zero", "pos", "sum=15"]
+    </output>
+
+    <source-generated language="apollo"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+  String classify(Int n) {
+    if (n < 0) {
+        return 'neg';
+    } else if (n == 0) {
+        return 'zero';
+    } else {
+        return 'pos';
+    }
+
+  }
+
+  Int sumTo(Int n) {
+    var sum = 0;
+    var i = 1;
+    while( i <= n ) {
+      sum = sum + i;
+      i = i + 1;
+    }
+    return sum;
+  }
+
+  dynamic run() {
+    print(classify(-3));
+    print(classify(0));
+    print(classify(8));
+    print('sum=' + sumTo(5));
+  }
+
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+</test>

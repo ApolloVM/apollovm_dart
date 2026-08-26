@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="Apollo range-based for: ascending/descending, round-trips to range sugar">
+    <source language="apollo">
+        <![CDATA[
+run() {
+  var total = 0
+  for i++ from 1..5 {
+    total = total + i
+  }
+  print("sum=" + total)
+
+  for i-- from 3..>0 {
+    print("down=" + i)
+  }
+}
+        ]]>
+    </source>
+    <call function="run">
+        []
+    </call>
+    <output>
+        ["sum=15", "down=3", "down=2", "down=1"]
+    </output>
+
+    <source-generated language="apollo"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+  dynamic run() {
+    var total = 0;
+    for i++ from 1..5 {
+      total = total + i;
+    }
+    print('sum=$total');
+    for i-- from 3..>0 {
+      print('down=$i');
+    }
+  }
+
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+</test>

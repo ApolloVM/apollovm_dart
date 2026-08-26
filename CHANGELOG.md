@@ -1,3 +1,99 @@
+## 2.31.0
+
+### New language: Apollo (`.apollo`)
+
+- **Added the Apollo language**, a Dart-derived language designed for both humans
+  and coding agents. Apollo parses, runs, translates to/from every other
+  supported language, and regenerates back to Apollo source. It uses Dart as its
+  reference, diverging in a few deliberate ways:
+  - **Strings use the exact Dart syntax** — single/double quotes, triple-quoted
+    multiline, raw (`r'...'`), `$var`/`${expr}` interpolation and adjacent-string
+    concatenation.
+  - **Parentheses are optional** in control-flow conditions (`if`, `else if`,
+    `while`, `do`/`while`, `switch`, `catch`). Both `if age >= 18 { … }`
+    and `if (age >= 18) { … }` parse.
+  - **Concise range-based `for`** — `for i++ from 0..limit { … }` with ascending
+    (`++`/`+=`) and descending (`--`/`-=`) steps, custom steps, and inclusive
+    (`..`) / exclusive (`..<`, `..>`) bounds. It is equivalent to a classic
+    `for (var i = …; …; …)`, and Apollo regenerates the range sugar for any loop
+    with this canonical counting shape (so a matching classic loop also comes
+    back as range sugar). The classic C-style loop stays available but now
+    **requires parentheses** (a paren-less header is a clear syntax error).
+  - **`async` is a leading declaration modifier** (`async User loadUser(…) { … }`,
+    `async main() { … }`). The canonical/generated form is leading `async` with
+    the unwrapped return type; the Dart spellings (`async Future<User> f()`,
+    `Future<User> f() async`, and trailing `async`) are also parsed and
+    normalized to it.
+  - **Statement-terminating semicolons are optional** — including on class
+    fields and body-less constructors, so an enhanced (`;`-separated) enum body
+    with a `const` constructor parses without any semicolons.
+  - **Primitive types are capitalized-only** (`Int`, `Double`, `Bool`, `Num`,
+    `Void`); translating Apollo to Dart lowercases them, and Dart→Apollo
+    capitalizes them.
+  - **Typed catch** is written `catch IOException error { … }` (parentheses
+    optional).
+- The language is registered as `apollo` (file extension `.apollo`) across the
+  parser/runner/generator dispatch, exported from the public library, and covered
+  by round-trip test fixtures, a dedicated test suite, and an example
+  (`example/apollovm_example_apollo.dart`).
+
+#### Generation fixes
+
+Two ways the Apollo generator could emit source that parsed cleanly but *meant*
+something else — both found by covering the generator's emit methods directly:
+
+- **An interpolation is brace-delimited when the next character would extend
+  it.** Concatenation is flattened into a single literal, so `"a" + n + "b"`
+  joined as `'a$n'` + `'b'`, producing `'a$nb'` — a reference to a variable
+  named `nb`. It is now emitted `'a${n}b'`. The braces are added only where they
+  are needed: `"a" + n`, `"a" + n + "!"` and a hand-written `"hello $name"` all
+  still emit the bare `$name` form, and an escaped `\$` is left alone.
+
+- **A parenthesized operand beside a string keeps its parentheses.** Flattening
+  the string side of a `+` also dropped the grouping on the *other* operand, so
+  `"q " + (n + 1)` came back as `"q " + n + 1`, which re-associates to
+  `("q " + n) + 1` — string concatenation instead of arithmetic. Grouping is now
+  decided per operand: the string side still sheds its redundant parentheses,
+  the other side keeps them.
+
+#### Parse fixes
+
+- **A method call on a field calls the method.** `o.inner.twice()` parsed as the
+  field read `o.inner` with the call silently dropped, so it evaluated to the
+  *field* — `Inner{n: int}` where `10` was expected. Apollo now folds a
+  multi-segment member chain (`a.b.c`, `a.b.m()`) left-to-right, each segment
+  becoming the receiver of the next, matching what the Dart grammar already did.
+
+- **Literals that carry their inferred type parse back.** The generator emits a
+  literal's type (`<dynamic, dynamic>{}`, `<List<Int>>[<Int>[1, 2]]`), but the
+  literal rules accepted only a *simple* type name there, and the empty-map rule
+  read its value type from the position of the comma. An empty map and a nested
+  list therefore generated source that Apollo could not re-parse — an internal
+  cast error, not even a syntax error. Both round-trip now, as does a 3D list
+  (`array3DTyped` was reading the innermost `List` token as the element type).
+
+- **`typedef` no longer requires a semicolon**, matching the rest of the
+  language. `typedef Id = List<Int>` without one failed with an internal cast
+  error.
+
+#### Named constructors (all languages)
+
+`Point.origin()` could not be declared or called in *any* ApolloVM language —
+the parser rejected the declaration, so the `.name` the generators already emit
+was unreachable. Constructors may now be named, in the Dart grammar as well as
+Apollo's, and `Foo.named(...)` resolves against the class: a receiver that names
+a class already reaches the invocation path used by `static` methods, so the
+named-constructor lookup is a single fallback there. `Point.origin()` runs,
+translates between languages, and survives regeneration.
+
+#### Apollo in the LSP and MCP tools
+
+Apollo was registered for parsing, running and generating, but not in the
+language lists the LSP analyzer and the MCP tools consult, so `.apollo` worked
+through the VM and CLI while those tools rejected it. `apollo` is now in the
+analyzer's extension map, `LspRuntime.supportedLanguages`, and
+`mcpSupportedLanguages`.
+
 ## 2.30.0
 
 ### Dart: multiple variables per declaration

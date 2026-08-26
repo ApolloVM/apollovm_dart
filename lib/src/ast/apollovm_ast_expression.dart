@@ -3468,6 +3468,11 @@ class ASTExpressionObjectFunctionInvocation
         parentContext,
       );
 
+      // `Foo.named(...)` on a class receiver: not a static method but a named
+      // constructor. The receiver reaches here through the same static-access
+      // path a `static` method uses, so this is where the two are told apart.
+      f ??= clazz.getConstructor(name, fSignature, parentContext);
+
       if (f == null) {
         throw ApolloVMRuntimeError(
           "Can't find class[${clazz.name}] function[$name( $fSignature )] for object!",

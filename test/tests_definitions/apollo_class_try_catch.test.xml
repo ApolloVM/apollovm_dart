@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="Apollo class: field + constructor + method + typed catch (paren-less)">
+    <source language="apollo">
+        <![CDATA[
+class Account {
+  Int balance
+
+  Account(Int start) {
+    this.balance = start
+  }
+
+  Int deposit(Int amount) {
+    this.balance = this.balance + amount
+    return this.balance
+  }
+
+  static run() {
+    var a = Account(100)
+    print("bal=" + a.deposit(50))
+    try {
+      throw "overdraft"
+    } catch String e {
+      print("caught=" + e)
+    }
+  }
+}
+        ]]>
+    </source>
+    <call class="Account" function="run">
+        []
+    </call>
+    <output>
+        ["bal=150", "caught=overdraft"]
+    </output>
+
+    <source-generated language="apollo"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+class Account {
+
+  Int balance;
+
+  Account(Int start) {
+    this.balance = start;
+  }
+
+  Int deposit(Int amount) {
+    this.balance = this.balance + amount;
+    return this.balance;
+  }
+
+  static dynamic run() {
+    var a = Account(100);
+    print('bal=' + a.deposit(50));
+    try {
+      throw 'overdraft';
+    } catch (String e) {
+      print('caught=$e');
+    }
+  }
+
+}
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+</test>

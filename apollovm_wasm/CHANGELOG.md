@@ -1,3 +1,16 @@
+## 1.2.1
+
+- `flutter_rust_bridge: '>=2.12.0 <2.13.0'` — a new direct constraint on a package this runtime
+  never imports, added because `wasm_run`'s own constraint (`^2.12.0`) is too wide to be safe.
+
+  `wasm_run` 0.2.0+2 ships FFI bindings stamped with codegen version 2.12.0, and
+  `flutter_rust_bridge` aborts at library-load time when the runtime version differs from the
+  codegen version. So the moment 2.13.0 was published, every Wasm call — in this package and in
+  any consumer — started failing with `Bad state: wasm_run_dart's codegen version (2.12.0)
+  should be the same as runtime version (2.13.0)`, with nothing in either pubspec to prevent it.
+
+  The bound holds the 2.12.x line until `wasm_run` regenerates its bindings.
+
 ## 1.2.0
 
 - `apollovm: ^2.25.0` (was `^2.0.0`) — this runtime decodes what the `apollovm` Wasm generator

@@ -297,6 +297,41 @@ void main() {
     });
   });
 
+  group('Named constructors', () {
+    test('a named constructor is declared, called and translated', () async {
+      const source = r'''
+class Point {
+  int x = 0;
+  int y = 0;
+
+  Point(this.x, this.y);
+  Point.origin() { x = 0; y = 0; }
+  Point.square(int n) { x = n; y = n; }
+
+  int sum() { return x + y; }
+}
+
+class Main {
+  int run(List args) {
+    print(Point(1, 2).sum());
+    print(Point.origin().sum());
+    print(Point.square(4).sum());
+    return 0;
+  }
+}
+''';
+
+      var r = await runDart(source, 'Main', 'run');
+      expect(r.output, equals([3, 0, 8]));
+
+      // The declaration and the call both survive regeneration.
+      var dart = await translateDart(source, 'dart');
+      expect(dart, contains('Point.origin() {'));
+      expect(dart, contains('Point.square(int n) {'));
+      expect(dart, contains('Point.origin().sum()'));
+    });
+  });
+
   group('Translation round-trip', () {
     const source = r'''
       class Calc {

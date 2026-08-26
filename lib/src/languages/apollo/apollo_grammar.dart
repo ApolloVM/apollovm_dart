@@ -5,6 +5,7 @@
 import 'package:petitparser/petitparser.dart';
 
 import '../../apollovm_base.dart';
+import '../../apollovm_parser.dart';
 import '../../ast/apollovm_ast_base.dart';
 import '../../ast/apollovm_ast_expression.dart';
 import '../../ast/apollovm_ast_statement.dart';
@@ -12,26 +13,43 @@ import '../../ast/apollovm_ast_toplevel.dart';
 import '../../ast/apollovm_ast_type.dart';
 import '../../ast/apollovm_ast_value.dart';
 import '../../ast/apollovm_ast_variable.dart';
-import 'dart_grammar_lexer.dart';
+import 'apollo_grammar_lexer.dart';
 
-/// Dart grammar definition.
-class DartGrammarDefinition extends DartGrammarLexer {
+/// Apollo grammar definition.
+///
+/// Apollo is Dart with three deliberate divergences (see the language spec):
+///  1. Strings use the exact Dart syntax (inherited from [ApolloGrammarLexer]).
+///  2. Parentheses are optional in control-flow conditions
+///     (`if`, `else if`, `while`, `do`/`while`, `switch`, `for`, `catch`) — see
+///     [conditionInParens] and the individual statement rules.
+///  3. `async` is a leading declaration modifier (`async User loadUser(...)`),
+///     never Dart's trailing `foo() async {}` — see [functionSignature] /
+///     [methodModifiers].
+///
+/// Additionally, statement-terminating semicolons are optional and primitive
+/// types are capitalized-only (`Int`, `Double`, `Bool`, `Num`, `Void`).
+class ApolloGrammarDefinition extends ApolloGrammarLexer {
   static ASTType getTypeByName(String name) {
     switch (name) {
       case 'Object':
         return ASTTypeObject.instance;
+      // Primitive types are capitalized-only in Apollo. The lowercase Dart
+      // spellings (`int`, `double`, `bool`, `num`) are treated as ordinary
+      // user types instead.
+      case 'Void':
       case 'void':
         return ASTTypeVoid.instance;
-      case 'bool':
+      case 'Bool':
         return ASTTypeBool.instance;
-      case 'int':
+      case 'Int':
         return ASTTypeInt.instance;
-      case 'double':
+      case 'Double':
         return ASTTypeDouble.instance;
-      case 'num':
+      case 'Num':
         return ASTTypeNum.instance;
       case 'String':
         return ASTTypeString.instance;
+      case 'Dynamic':
       case 'dynamic':
         return ASTTypeDynamic.instance;
       case 'List':
@@ -80,11 +98,8 @@ class DartGrammarDefinition extends DartGrammarLexer {
                   root.addExtension(def);
                 } else if (def is ASTTypeAlias) {
                   root.addTypeAlias(def);
-                } else if (def is ASTStatementVariableDeclaration ||
-                    def is ASTStatementVariableDeclarationList) {
-                  // `addStatement` expands a declaration list into one
-                  // top-level declaration per declarator.
-                  root.addStatement(def as ASTStatement);
+                } else if (def is ASTStatementVariableDeclaration) {
+                  root.addStatement(def);
                 }
               }
             }
@@ -99,56 +114,31 @@ class DartGrammarDefinition extends DartGrammarLexer {
       (ref0(statementImport) | ref0(statementExport)).cast<ASTStatement>();
 
   Parser topLevelDefinition() =>
-      (ref0(metadata).star() &
-              (typeAliasDeclaration() |
-                  enumDeclaration() |
-                  extensionDeclaration() |
-                  classDeclaration() |
-                  functionDeclaration() |
-                  statementVariableDeclaration()))
-          // Unwrap: `compilationUnit` type-switches over the definitions, so a
-          // wrapper list here would make every top-level definition vanish.
-          .map((v) => v[1])
+      (typeAliasDeclaration() |
+              enumDeclaration() |
+              extensionDeclaration() |
+              classDeclaration() |
+              functionDeclaration() |
+              statementVariableDeclaration())
           .plus();
 
-  /// Metadata / annotation: `@override`, `@Deprecated('x')`,
-  /// `@pragma('vm:prefer-inline')`, `@foo.Bar(1, n: 2)`.
-  ///
-  /// Parsed and discarded. [ASTAnnotation] exists but is never populated, so
-  /// annotations do not survive a round-trip; preserving them is the natural
-  /// next step and needs no grammar change.
-  Parser metadata() =>
-      (char('@').trimHidden() &
-              identifier() &
-              (char('.').trimHidden() & identifier()).star() &
-              ref0(balancedParenGroup).optional())
-          .trimHidden();
-
-  /// A balanced `( … )` group, skipped without interpreting its contents.
-  ///
-  /// Annotation arguments are discarded anyway, and skipping them structurally
-  /// means an annotation using syntax ApolloVM does not model yet still never
-  /// breaks the declaration it precedes. (A parenthesis inside a string
-  /// literal in the arguments would confuse the balance count — rare enough to
-  /// accept.)
-  Parser balancedParenGroup() =>
-      (char('(') &
-              (ref0(balancedParenGroup) | pattern('^()')).star() &
-              char(')'))
-          .trimHidden();
-
   Parser<ASTFunctionDeclaration> functionDeclaration() =>
-      (type().optional() &
-              identifier() &
-              functionParametersDeclaration() &
+      (asyncToken().optional() &
+              functionSignature() &
               asyncToken().optional() &
               (arrowBody() | codeBlock()))
           .map((v) {
-            var returnType = v[0] as ASTType? ?? ASTTypeDynamic.instance;
-            var parameters = v[2];
-            var name = v[1];
-            var isAsync = v[3] != null;
-            var block = v[4];
+            // `async` may lead (canonical Apollo) or trail (Dart form) — both
+            // accepted so agent-produced Dart parses.
+            var isAsync = v[0] != null || v[2] != null;
+            var sig = v[1] as List;
+            var returnType = _normalizeAsyncReturnType(
+              sig[0] as ASTType,
+              isAsync,
+            );
+            var name = sig[1] as String;
+            var parameters = sig[2] as ASTFunctionParametersDeclaration;
+            var block = v[3];
             return ASTFunctionDeclaration(
               name,
               parameters,
@@ -158,12 +148,64 @@ class DartGrammarDefinition extends DartGrammarLexer {
             );
           });
 
+  /// Canonicalizes an `async` function's declared return type: a return type
+  /// written as `Future<T>` (the `async Future<T> f()` and `Future<T> f() async`
+  /// forms) is unwrapped to `T`, so all three async spellings produce the same
+  /// AST as the official `async T f()` form (and regenerate to it). A bare
+  /// `Future` with no type argument is left as-is.
+  static ASTType _normalizeAsyncReturnType(ASTType returnType, bool isAsync) {
+    if (isAsync && returnType is ASTTypeFuture) {
+      var generics = returnType.generics;
+      if (generics != null && generics.isNotEmpty) {
+        return generics.first;
+      }
+    }
+    return returnType;
+  }
+
+  /// A function/method signature `[ReturnType] name(params)` → a
+  /// `[ASTType returnType, String name, ASTFunctionParametersDeclaration params]`
+  /// list. The return type is optional; when omitted it is `dynamic`.
+  ///
+  /// Ordered choice (return-type-present tried first, then bare) so that a
+  /// return-type-less `main()` does not have its name consumed as the type —
+  /// petitparser backtracks between the two alternatives.
+  Parser<List> functionSignature() =>
+      ((type().trim() & identifier() & functionParametersDeclaration()).map(
+                (v) => <dynamic>[v[0], v[1], v[2]],
+              ) |
+              (identifier() & functionParametersDeclaration()).map(
+                (v) => <dynamic>[ASTTypeDynamic.instance, v[0], v[1]],
+              ))
+          .cast<List>();
+
+  /// Apollo leading method modifiers: `static` and/or `async`, in any order.
+  Parser<({bool isStatic, bool isAsync})> methodModifiers() =>
+      ((staticToken().map((_) => 'static') | asyncToken().map((_) => 'async'))
+              .star())
+          .map(
+            (mods) => (
+              isStatic: mods.contains('static'),
+              isAsync: mods.contains('async'),
+            ),
+          );
+
+  /// Apollo control-flow condition with optional parentheses: both
+  /// `if (x) { }` and `if x { }` are accepted. The bare condition stops at the
+  /// opening `{` of the body.
+  Parser<ASTExpression> conditionInParens() =>
+      ((char('(').trimHidden() & ref0(expression) & char(')').trimHidden()).map(
+                (v) => v[1] as ASTExpression,
+              ) |
+              ref0(expression))
+          .cast<ASTExpression>();
+
   Parser<ASTStatementImport> statementImport() =>
       (importToken().trimHidden() &
               stringLexicalToken() &
               (asToken().trimHidden() & identifier()).optional() &
               (ref0(importShow) | ref0(importHide)).star() &
-              char(';').trimHidden())
+              char(';').trimHidden().optional())
           .map((v) {
             var parsedPath = v[1] as ParsedString;
             var path =
@@ -194,7 +236,7 @@ class DartGrammarDefinition extends DartGrammarLexer {
       (exportToken().trimHidden() &
               stringLexicalToken() &
               (ref0(importShow) | ref0(importHide)).star() &
-              char(';').trimHidden())
+              char(';').trimHidden().optional())
           .map((v) {
             var parsedPath = v[1] as ParsedString;
             var path =
@@ -232,7 +274,8 @@ class DartGrammarDefinition extends DartGrammarLexer {
               identifier() &
               char('=').trimHidden() &
               type() &
-              char(';').trimHidden())
+              // Apollo semicolons are optional, here as everywhere else.
+              char(';').trimHidden().optional())
           .map((v) => ASTTypeAlias(v[1] as String, v[3] as ASTType));
 
   /// `extension [Name] on Type { <methods and getters> }`.
@@ -247,11 +290,7 @@ class DartGrammarDefinition extends DartGrammarLexer {
               onToken().trimHidden() &
               type() &
               char('{').trimHidden() &
-              (ref0(metadata).star() &
-                      (ref0(classFunctionDeclaration) |
-                          ref0(getterDeclaration) |
-                          ref0(setterDeclaration)))
-                  .map((v) => v[1])
+              (ref0(classFunctionDeclaration) | ref0(getterDeclaration))
                   .star() &
               char('}').trimHidden())
           .map((v) {
@@ -263,8 +302,6 @@ class DartGrammarDefinition extends DartGrammarLexer {
             for (var member in (v[5] as List)) {
               if (member is ASTClassGetterDeclaration) {
                 extension.addGetter(member);
-              } else if (member is ASTClassSetterDeclaration) {
-                extension.addSetter(member);
               } else if (member is ASTFunctionDeclaration) {
                 extension.addFunction(member);
               }
@@ -299,52 +336,15 @@ class DartGrammarDefinition extends DartGrammarLexer {
             );
           });
 
-  /// `set name(T value) { ... }` / `set name(T value) => ...`.
-  ///
-  /// A leading `void` is accepted and dropped: a setter has no return value.
-  /// The declared parameter is mandatory and single, as in Dart.
-  ///
-  /// [simpleType] rejects `set` in a type position, so this rule is reached
-  /// even though it is tried after [classFunctionDeclaration] — that rule
-  /// cannot consume `set` as a return type.
-  Parser<ASTClassSetterDeclaration> setterDeclaration() =>
-      (type().optional() &
-              setKeyword() &
-              identifier() &
-              char('(').trimHidden() &
-              ref0(setterParameter) &
-              char(')').trimHidden() &
-              (arrowBody() | codeBlock()))
-          .map((v) {
-            var name = v[2] as String;
-            var (parameterType, parameterName) = v[4] as (ASTType, String);
-            var block = v[6] as ASTBlock;
-            return ASTClassSetterDeclaration(
-              null,
-              name,
-              parameterType,
-              parameterName,
-              block: block,
-            );
-          });
-
-  /// The single parameter of a setter, typed (`int v`) or untyped (`v`).
-  ///
-  /// An ordered choice rather than `type().optional() & identifier()`: for an
-  /// untyped parameter `type()` would match the *name* and petitparser's
-  /// `optional()` cannot backtrack, so the rule would fail.
-  Parser<(ASTType, String)> setterParameter() =>
-      ((type().trimHidden() & identifier().trimHidden()).map(
-                (v) => (v[0] as ASTType, v[1] as String),
-              ) |
-              identifier().trimHidden().map(
-                (v) => (ASTTypeDynamic.instance as ASTType, v),
-              ))
-          .cast<(ASTType, String)>();
-
   /// Type-parameter names of the class currently being parsed (e.g. `T` in
   /// `class Wrapper<T>`). Used by [simpleType] to erase them to `dynamic`.
   final Set<String> _classTypeParameters = <String>{};
+
+  /// Name of the class/enum currently being parsed. Used by
+  /// [classConstructorName] to tell a constructor (`ClassName(...)`) apart from
+  /// a return-type-less method (`foo(...)`) — in Apollo (unlike Dart) methods
+  /// may omit the return type, so the two forms are otherwise identical.
+  String? _currentClassName;
 
   Parser<ASTClassNormal> classDeclaration() =>
       (abstractToken().trimHidden().optional() &
@@ -354,7 +354,10 @@ class DartGrammarDefinition extends DartGrammarLexer {
                 _classTypeParameters.clear();
                 return v;
               }) &
-              identifier() &
+              identifier().map((name) {
+                _currentClassName = name;
+                return name;
+              }) &
               typeParameters().optional() &
               (extendsToken().trimHidden() & identifier()).optional() &
               (implementsToken().trimHidden() &
@@ -432,7 +435,10 @@ class DartGrammarDefinition extends DartGrammarLexer {
 
   Parser<ASTClassEnum> enumDeclaration() =>
       (string('enum').trimHidden() &
-              identifier() &
+              identifier().map((name) {
+                _currentClassName = name;
+                return name;
+              }) &
               char('{').trimHidden() &
               enumEntry() &
               (char(',').trimHidden() & enumEntry()).star() &
@@ -440,12 +446,10 @@ class DartGrammarDefinition extends DartGrammarLexer {
               // Enhanced/rich enum body: `;` then class members (fields, a
               // `const` constructor, methods) — reusing class-member parsing.
               (char(';').trimHidden() &
-                      (ref0(metadata).star() &
-                              (ref0(classConstructorDefaultDeclaration) |
-                                  ref0(classFunctionDeclaration) |
-                                  ref0(classFieldDeclaration) |
-                                  ref0(classFieldDeclarationWithValue)))
-                          .map((v) => v[1])
+                      (ref0(classConstructorDefaultDeclaration) |
+                              ref0(classFunctionDeclaration) |
+                              ref0(classFieldDeclarationWithValue) |
+                              ref0(classFieldDeclaration))
                           .star())
                   .optional() &
               char('}').trimHidden())
@@ -478,16 +482,15 @@ class DartGrammarDefinition extends DartGrammarLexer {
           });
 
   Parser<ASTEnumEntry> enumEntry() =>
-      (ref0(metadata).star() &
-              identifier().trimHidden() &
+      (identifier().trimHidden() &
               ((char('=').trimHidden() & ref0(expression)) |
                       (char('(').trimHidden() &
                           expressionSequence().optional() &
                           char(')').trimHidden()))
                   .optional())
           .map((v) {
-            var name = v[1] as String;
-            var suffix = v[2] as List?;
+            var name = v[0] as String;
+            var suffix = v[1] as List?;
             ASTExpression? value;
             List<ASTExpression>? arguments;
             if (suffix != null) {
@@ -506,14 +509,14 @@ class DartGrammarDefinition extends DartGrammarLexer {
 
   Parser<ASTBlock> classCodeBlock() =>
       (char('{').trimHidden() &
-              (ref0(metadata).star() &
-                      (ref0(classConstructorDefaultDeclaration) |
-                          ref0(classFunctionDeclaration) |
-                          ref0(getterDeclaration) |
-                          ref0(setterDeclaration) |
-                          ref0(classFieldDeclaration) |
-                          ref0(classFieldDeclarationWithValue)))
-                  .map((v) => v[1])
+              (ref0(classConstructorDefaultDeclaration) |
+                      ref0(classFunctionDeclaration) |
+                      ref0(getterDeclaration) |
+                      // With-value tried before the bare field: since a field's
+                      // terminating `;` is optional in Apollo, the bare-field
+                      // rule would otherwise claim `Int x` from `Int x = 5`.
+                      ref0(classFieldDeclarationWithValue) |
+                      ref0(classFieldDeclaration))
                   .star() &
               char('}').trimHidden())
           .map((v) {
@@ -523,7 +526,6 @@ class DartGrammarDefinition extends DartGrammarLexer {
                 .whereType<ASTClassConstructorDeclaration>()
                 .toList();
             var getters = list.whereType<ASTClassGetterDeclaration>().toList();
-            var setters = list.whereType<ASTClassSetterDeclaration>().toList();
             var functions = list.whereType<ASTFunctionDeclaration>().toList();
 
             var block = ASTClassNormal('?', ASTType<VMObject>('?'), null);
@@ -532,25 +534,21 @@ class DartGrammarDefinition extends DartGrammarLexer {
             block.addAllConstructors(constructors);
             block.addAllFunctions(functions);
             block.addAllGetters(getters);
-            block.addAllSetters(setters);
 
             return block;
           });
 
   Parser<ASTClassField> classFieldDeclaration() =>
       (staticToken().trimHidden().optional() &
-              // Dart's modifier order is `static late final`. `late` is
-              // accepted and dropped.
-              lateKeyword().optional() &
               (finalToken() | constToken()).optional() &
               type().trimHidden() &
               identifier().trimHidden() &
-              char(';').trimHidden())
+              char(';').trimHidden().optional())
           .map((v) {
             var isStatic = v[0] != null;
-            var finalValue = v[2] != null;
-            var type = v[3] as ASTType;
-            var name = v[4] as String;
+            var finalValue = v[1] != null;
+            var type = v[2] as ASTType;
+            var name = v[3] as String;
             return ASTClassField(
               type,
               name,
@@ -561,19 +559,18 @@ class DartGrammarDefinition extends DartGrammarLexer {
 
   Parser<ASTClassField> classFieldDeclarationWithValue() =>
       (staticToken().trimHidden().optional() &
-              lateKeyword().optional() &
               (finalToken() | constToken()).optional() &
               type() &
               identifier() &
               char('=').trimHidden() &
               ref0(expression) &
-              char(';').trimHidden())
+              char(';').trimHidden().optional())
           .map((v) {
             var isStatic = v[0] != null;
-            var finalValue = v[2] != null;
-            var type = v[3] as ASTType;
-            var name = v[4] as String;
-            var expression = v[6] as ASTExpression;
+            var finalValue = v[1] != null;
+            var type = v[2] as ASTType;
+            var name = v[3] as String;
+            var expression = v[5] as ASTExpression;
             type.associateToType(expression);
             return ASTClassFieldWithInitialValue(
               type,
@@ -586,12 +583,15 @@ class DartGrammarDefinition extends DartGrammarLexer {
 
   Parser<ASTClassConstructorDeclaration> classConstructorDefaultDeclaration() =>
       (constToken().trimHidden().optional() &
-              identifier() &
+              classConstructorName() &
               // A named constructor: `Foo.origin(...)`. The name is what
               // `Foo.origin(...)` resolves against at the call site.
               (char('.') & identifier()).optional() &
               constructorParametersDeclaration() &
-              (char(';').trim() | codeBlock()))
+              // A body-less constructor may end with `;` or, since Apollo
+              // semicolons are optional, with nothing at all (e.g. a rich-enum
+              // `const Foo(...)` before the closing `}`).
+              (char(';').trim() | codeBlock()).optional())
           .map((v) {
             var className = v[1];
             var name = (v[2] as List?)?[1] as String? ?? '';
@@ -605,6 +605,13 @@ class DartGrammarDefinition extends DartGrammarLexer {
               block: block,
             );
           });
+
+  /// A constructor name: an identifier that matches the enclosing class/enum
+  /// name. The [where] guard is what lets a return-type-less method (which the
+  /// constructor rule would otherwise greedily claim) fall through to
+  /// [classFunctionDeclaration].
+  Parser<String> classConstructorName() =>
+      identifier().where((name) => name == _currentClassName);
 
   Parser<ASTConstructorParametersDeclaration>
   constructorParametersDeclaration() =>
@@ -706,59 +713,53 @@ class DartGrammarDefinition extends DartGrammarLexer {
 
   Parser<ASTConstructorParameterDeclaration>
   constructorThisParameterDeclaration() =>
-      (ref0(metadata).star() &
-              requiredKeyword().optional() &
-              thisToken().trim() &
+      (thisToken().trim() &
               char('.') &
               identifier() &
               parameterDefaultValue().optional())
           .map((v) {
             return ASTConstructorParameterDeclaration(
               ASTTypeConstructorThis.instance,
-              v[4],
+              v[2],
               -1,
               false,
               thisParameter: true,
-              isRequired: v[1] != null,
-            )..defaultValue = v[5] as ASTExpression?;
+            )..defaultValue = v[3] as ASTExpression?;
           });
 
   Parser<ASTConstructorParameterDeclaration>
   constructorTypedParameterDeclaration() =>
-      (ref0(metadata).star() &
-              requiredKeyword().optional() &
-              (finalToken() | constToken()).trim().optional() &
+      ((finalToken() | constToken()).trim().optional() &
               type().trim() &
               identifier() &
               parameterDefaultValue().optional())
           .map((v) {
-            return ASTConstructorParameterDeclaration(
-              v[3],
-              v[4],
-              -1,
-              false,
-              isRequired: v[1] != null,
-            )..defaultValue = v[5] as ASTExpression?;
+            return ASTConstructorParameterDeclaration(v[1], v[2], -1, false)
+              ..defaultValue = v[3] as ASTExpression?;
           });
 
   Parser<ASTFunctionDeclaration> classFunctionDeclaration() =>
-      (functionModifiers().optional() &
-              type().optional() &
-              identifier() &
-              functionParametersDeclaration() &
+      (methodModifiers() &
+              functionSignature() &
               asyncToken().optional() &
               (arrowBody() | char(';').trimHidden() | codeBlock()))
           .map((v) {
-            var modifiers =
-                (v[0] as ASTModifiers?) ?? ASTModifiers.modifiersNone;
-            if (v[4] != null) {
-              modifiers = modifiers.copyWith(isAsync: true);
-            }
-            var returnType = v[1] as ASTType? ?? ASTTypeDynamic.instance;
-            var name = v[2] as String;
-            var parameters = v[3] as ASTFunctionParametersDeclaration;
+            var mods = v[0] as ({bool isStatic, bool isAsync});
+            var sig = v[1] as List;
+            // `async` may lead (via [methodModifiers]) or trail (Dart form).
+            var isAsync = mods.isAsync || v[2] != null;
+            var returnType = _normalizeAsyncReturnType(
+              sig[0] as ASTType,
+              isAsync,
+            );
+            var name = sig[1] as String;
+            var parameters = sig[2] as ASTFunctionParametersDeclaration;
+            var modifiers = ASTModifiers(
+              isStatic: mods.isStatic,
+              isAsync: isAsync,
+            );
             // An abstract/interface method has no body (`;` instead of a block).
-            var block = v[5] is ASTBlock ? v[5] as ASTBlock : null;
+            var block = v[3] is ASTBlock ? v[3] as ASTBlock : null;
             if (block == null) {
               modifiers = modifiers.copyWith(isAbstract: true);
             }
@@ -784,50 +785,30 @@ class DartGrammarDefinition extends DartGrammarLexer {
             return ASTBlock(null)..addAllStatements(statements);
           });
 
-  /// A control-flow body: either a braced block or a single unbraced
-  /// statement (`for (var e in l) print(e);`). [codeBlock] is tried first, so
-  /// a body starting with `{` is always a block.
   Parser<ASTBlock> codeBlockOrSingleLineBlock() =>
-      (ref0(codeBlock) | ref0(singleLineCodeBlock)).cast<ASTBlock>();
+      ((codeBlock() | singleLineCodeBlock())).cast<ASTBlock>();
 
   Parser<ASTSingleLineStatementBlock> singleLineCodeBlock() =>
-      ref0(singleLineStatement).trimHidden().map((v) {
+      (singleLineStatement().trimHidden()).map((v) {
         var statements = v;
         return ASTSingleLineStatementBlock(null)..addStatement(statements);
       });
 
-  /// The [statement] alternation minus declarations (illegal as an unbraced
-  /// body) and [statementBlock] (already covered by [codeBlock]). The relative
-  /// order must match [statement]: `break`/`continue`/`throw` before
-  /// [statementExpression], `do`-`while` before `while`, `for` before
-  /// `for`-`in`. Every alternative must be a `ref0`, otherwise the cycle back
-  /// through [branch] recurses forever while *building* the grammar.
   Parser<ASTStatement> singleLineStatement() =>
-      (ref0(statementTryCatch) |
-              ref0(statementThrow) |
-              ref0(statementSwitch) |
-              ref0(branch) |
-              ref0(statementBreak) |
-              ref0(statementContinue) |
-              ref0(statementDoWhileLoop) |
-              ref0(statementForLoop) |
-              ref0(statementForEach) |
-              ref0(statementWhileLoop) |
-              ref0(statementReturn) |
-              ref0(statementExpression))
-          .cast<ASTStatement>();
+      (statementReturn() | statementExpression()).cast<ASTStatement>();
 
   Parser<ASTStatement> statement() =>
       (statementTryCatch() |
               statementThrow() |
-              statementAssert() |
               statementSwitch() |
               branch() |
               statementBreak() |
               statementContinue() |
               statementDoWhileLoop() |
-              statementForLoop() |
               statementForEach() |
+              statementForRange() |
+              statementForLoop() |
+              statementForParensError() |
               statementWhileLoop() |
               statementReturn() |
               statementFunctionDeclaration() |
@@ -839,40 +820,36 @@ class DartGrammarDefinition extends DartGrammarLexer {
   Parser<ASTStatementBreak> statementBreak() =>
       (string('break') &
               ref0(identifierPartLexicalToken).not() &
-              char(';').trimHidden())
+              char(';').trimHidden().optional())
           .map((v) => ASTStatementBreak());
 
   Parser<ASTStatementContinue> statementContinue() =>
       (string('continue') &
               ref0(identifierPartLexicalToken).not() &
-              char(';').trimHidden())
+              char(';').trimHidden().optional())
           .map((v) => ASTStatementContinue());
 
   Parser<ASTStatementDoWhileLoop> statementDoWhileLoop() =>
-      (keywordToken('do') &
-              ref0(codeBlockOrSingleLineBlock) &
+      (string('do').trimHidden() &
+              codeBlock() &
               string('while').trimHidden() &
-              char('(').trimHidden() &
-              ref0(expression) &
-              char(')').trimHidden() &
-              char(';').trimHidden())
+              conditionInParens() &
+              char(';').trimHidden().optional())
           .map((v) {
             var block = v[1] as ASTBlock;
-            var cond = v[4] as ASTExpression;
+            var cond = v[3] as ASTExpression;
             return ASTStatementDoWhileLoop(block, cond);
           });
 
   Parser<ASTStatementSwitch> statementSwitch() =>
       (string('switch').trimHidden() &
-              char('(').trimHidden() &
-              ref0(expression) &
-              char(')').trimHidden() &
+              conditionInParens() &
               char('{').trimHidden() &
               switchCase().star() &
               char('}').trimHidden())
           .map((v) {
-            var exp = v[2] as ASTExpression;
-            var cases = (v[5] as List).cast<ASTSwitchCase>();
+            var exp = v[1] as ASTExpression;
+            var cases = (v[3] as List).cast<ASTSwitchCase>();
             return ASTStatementSwitch(exp, cases);
           });
 
@@ -896,33 +873,33 @@ class DartGrammarDefinition extends DartGrammarLexer {
   Parser<ASTBlock> switchCaseBody() =>
       (codeBlock() | switchCaseStatements()).cast<ASTBlock>();
 
-  Parser<ASTBlock> switchCaseStatements() => ref0(statement).star().map((v) {
-    var statements = v.cast<ASTStatement>();
-    return ASTBlock(null)..addAllStatements(statements);
-  });
+  // A bare case body runs statements up to the next `case`/`default`/`}`.
+  // Because Apollo statement semicolons are optional, we cannot rely on a `;`
+  // to stop the run — an unguarded `statement().star()` would read the next
+  // `case` label as an identifier expression. The [switchCaseGuard] lookahead
+  // stops the body at the next label (`}` stops it naturally).
+  Parser<ASTBlock> switchCaseStatements() =>
+      (switchCaseGuard().not() & ref0(statement))
+          .map((v) => v[1] as ASTStatement)
+          .star()
+          .map((v) {
+            var statements = v.cast<ASTStatement>();
+            return ASTBlock(null)..addAllStatements(statements);
+          });
+
+  /// Whole-word `case`/`default` lookahead marking the end of a bare case body.
+  /// Leading hidden whitespace/comments are skipped so the guard still fires
+  /// when the next label sits on its own line.
+  Parser switchCaseGuard() =>
+      ref0(hiddenStuffWhitespace).star() &
+      (string('case') | string('default')) &
+      ref0(identifierPartLexicalToken).not();
 
   Parser<ASTStatementThrow> statementThrow() =>
-      (string('throw').trimHidden() & ref0(expression) & char(';').trimHidden())
-          .map((v) => ASTStatementThrow(v[1] as ASTExpression));
-
-  /// `assert(cond)` / `assert(cond, message)`, with an optional trailing comma.
-  ///
-  /// Must precede [statementExpression] in [statement]: without this rule
-  /// `assert(x);` parses as a call to a user function named `assert` and fails
-  /// much later with a confusing "can't find function" error.
-  Parser<ASTStatementAssert> statementAssert() =>
-      (assertKeyword() &
-              char('(').trimHidden() &
+      (string('throw').trimHidden() &
               ref0(expression) &
-              (char(',').trimHidden() & ref0(expression)).optional() &
-              char(',').trimHidden().optional() &
-              char(')').trimHidden() &
-              char(';').trimHidden())
-          .map((v) {
-            var condition = v[2] as ASTExpression;
-            var message = (v[3] as List?)?[1] as ASTExpression?;
-            return ASTStatementAssert(condition, message);
-          });
+              char(';').trimHidden().optional())
+          .map((v) => ASTStatementThrow(v[1] as ASTExpression));
 
   Parser<ASTStatementTryCatch> statementTryCatch() =>
       (string('try').trimHidden() &
@@ -939,59 +916,53 @@ class DartGrammarDefinition extends DartGrammarLexer {
             return ASTStatementTryCatch(tryBlock, catches, finallyBlock);
           });
 
+  /// Apollo `catch [Type] name { }` with optional parentheses. Accepts:
+  /// `catch error { }`, `catch IOException error { }`,
+  /// `catch (error) { }`, `catch (IOException error) { }`, and an optional
+  /// trailing stack-trace identifier (`catch (e, st) { }`).
   Parser<ASTCatchClause> catchClause() =>
-      (onCatchClause() | bareCatchClause()).cast<ASTCatchClause>();
+      (string('catch').trimHidden() & catchHeader() & codeBlock()).map((v) {
+        var header = v[1] as List;
+        var type = header[0] as ASTType?;
+        var name = header[1] as String;
+        var block = v[2] as ASTBlock;
+        return ASTCatchClause(type, name, block);
+      });
 
-  /// Dart `on Type [catch (e[, st])] { }`.
-  Parser<ASTCatchClause> onCatchClause() =>
-      (string('on').trimHidden() &
-              type() &
-              (string('catch').trimHidden() &
-                      char('(').trimHidden() &
-                      identifier().trimHidden() &
-                      (char(',').trimHidden() & identifier().trimHidden())
-                          .optional() &
-                      char(')').trimHidden())
-                  .optional() &
-              codeBlock())
-          .map((v) {
-            var type = v[1] as ASTType;
-            var catchPart = v[2] as List?;
-            var varName = catchPart != null ? catchPart[2] as String : null;
-            var stackTraceName = (catchPart?[3] as List?)?[1] as String?;
-            var block = v[3] as ASTBlock;
-            return ASTCatchClause(
-              type,
-              varName,
-              block,
-              stackTraceName: stackTraceName,
-            );
-          });
+  /// The catch header, with parentheses optional → `[ASTType? type, String name]`.
+  Parser<List> catchHeader() =>
+      (catchHeaderParens() | catchHeaderBare()).cast<List>();
 
-  /// Dart `catch (e[, st]) { }` (untyped catch-all).
-  Parser<ASTCatchClause> bareCatchClause() =>
-      (string('catch').trimHidden() &
-              char('(').trimHidden() &
-              identifier().trimHidden() &
+  Parser<List> catchHeaderParens() =>
+      (char('(').trimHidden() &
+              catchTypeAndName() &
               (char(',').trimHidden() & identifier().trimHidden()).optional() &
-              char(')').trimHidden() &
-              codeBlock())
-          .map((v) {
-            var varName = v[2] as String;
-            var stackTraceName = (v[3] as List?)?[1] as String?;
-            var block = v[5] as ASTBlock;
-            return ASTCatchClause(
-              null,
-              varName,
-              block,
-              stackTraceName: stackTraceName,
-            );
-          });
+              char(')').trimHidden())
+          .map((v) => v[1] as List);
+
+  Parser<List> catchHeaderBare() =>
+      (catchTypeAndName() &
+              (char(',').trimHidden() & identifier().trimHidden()).optional())
+          .map((v) => v[0] as List);
+
+  /// `Type name` or just `name` → `[ASTType?, String]`. The typed form is tried
+  /// first; petitparser backtracks to the bare form for `catch error {`.
+  Parser<List> catchTypeAndName() =>
+      ((type().trim() & identifier().trimHidden()).map(
+                (v) => <dynamic>[v[0] as ASTType, v[1] as String],
+              ) |
+              identifier().trimHidden().map((v) => <dynamic>[null, v]))
+          .cast<List>();
 
   Parser<ASTStatement> statementSimple() =>
-      (statementVariableDeclarationSingle() | statementExpression())
+      (statementVariableDeclaration() | statementExpression())
           .cast<ASTStatement>();
 
+  // Apollo: the classic C-style `for` header REQUIRES parentheses (this
+  // disambiguates it from the range-based `for` and from a statement that
+  // merely starts with a `for`-shaped identifier). See [statementForRange] for
+  // the concise counting form and [statementForParensError] for the error given
+  // when the parentheses are omitted.
   Parser<ASTStatementForLoop> statementForLoop() =>
       (string('for').trimHidden() &
               char('(').trimHidden() &
@@ -1000,7 +971,7 @@ class DartGrammarDefinition extends DartGrammarLexer {
               char(';').trimHidden() &
               ref0(expression) &
               char(')').trimHidden() &
-              ref0(codeBlockOrSingleLineBlock))
+              codeBlock())
           .map((v) {
             var initExp = v[2];
             var condExp = v[3];
@@ -1009,15 +980,148 @@ class DartGrammarDefinition extends DartGrammarLexer {
             return ASTStatementForLoop(initExp, condExp, contExp, block);
           });
 
+  /// Range-based counting `for` — desugars to a classic [ASTStatementForLoop]:
+  ///
+  ///     for i++ from 0..limit    =>  for (var i = 0;     i <= limit; i++)
+  ///     for i-- from limit..0    =>  for (var i = limit; i >= 0;     i--)
+  ///     for i++ from 0..<limit   =>  for (var i = 0;     i <  limit; i++)
+  ///     for i-- from limit..>0   =>  for (var i = limit; i >  0;     i--)
+  ///     for i += 2 from 0..limit =>  for (var i = 0;     i <= limit; i += 2)
+  ///     for i -= 2 from limit..0 =>  for (var i = limit; i >= 0;     i -= 2)
+  ///
+  /// Direction (ascending/descending) comes from the step (`++`/`+=` vs
+  /// `--`/`-=`); the range operator (`..` inclusive, `..<` exclusive-upper,
+  /// `..>` exclusive-lower) selects the comparison.
+  Parser<ASTStatementForLoop> statementForRange() =>
+      (string('for').trimHidden() &
+              identifier().trimHidden() &
+              rangeStep() &
+              rangeFromToken() &
+              ref0(expression) &
+              rangeOperator() &
+              ref0(expression) &
+              codeBlock())
+          .map((v) {
+            var varName = v[1] as String;
+            var step = v[2] as List;
+            var startExp = v[4] as ASTExpression;
+            var rangeOp = v[5] as String;
+            var endExp = v[6] as ASTExpression;
+            var block = v[7] as ASTBlock;
+            return _buildRangeForLoop(
+              varName,
+              step,
+              startExp,
+              rangeOp,
+              endExp,
+              block,
+            );
+          });
+
+  /// Whole-word `from` keyword separating the loop step from the range.
+  Parser rangeFromToken() =>
+      (string('from') & ref0(identifierPartLexicalToken).not()).trimHidden();
+
+  /// The loop step of a range `for`, as `[op, amountExpr?]`:
+  /// `++`/`--` (unit step) or `+= expr`/`-= expr` (custom step).
+  Parser<List> rangeStep() =>
+      ((string('++') | string('--')).trimHidden().map((op) => <dynamic>[op]) |
+              ((string('+=') | string('-=')).trimHidden() & ref0(expression))
+                  .map((v) => <dynamic>[v[0], v[1]]))
+          .cast<List>();
+
+  /// A range operator: `..` (inclusive), `..<` (exclusive upper) or `..>`
+  /// (exclusive lower). Longer operators are tried first.
+  Parser<String> rangeOperator() =>
+      (string('..<') | string('..>') | string('..'))
+          .trimHidden()
+          .cast<String>();
+
+  ASTStatementForLoop _buildRangeForLoop(
+    String varName,
+    List step,
+    ASTExpression startExp,
+    String rangeOp,
+    ASTExpression endExp,
+    ASTBlock block,
+  ) {
+    var stepOp = step[0] as String;
+    var ascending = stepOp == '++' || stepOp == '+=';
+
+    // Continue expression: `i++`/`i--` or `i += n`/`i -= n`.
+    ASTExpression continueExp;
+    if (stepOp == '++' || stepOp == '--') {
+      continueExp = ASTExpressionVariableDirectOperation(
+        ASTScopeVariable(varName),
+        getASTAssignmentDirectOperator(stepOp),
+        false,
+      );
+    } else {
+      continueExp = ASTExpressionVariableAssignment(
+        ASTScopeVariable(varName),
+        getASTAssignmentOperator(stepOp),
+        step[1] as ASTExpression,
+      );
+    }
+
+    // Comparison operator: `..<`/`..>` are always strict; `..` depends on the
+    // iteration direction.
+    String compareOp;
+    if (rangeOp == '..<') {
+      compareOp = '<';
+    } else if (rangeOp == '..>') {
+      compareOp = '>';
+    } else {
+      compareOp = ascending ? '<=' : '>=';
+    }
+
+    var conditionExp = ASTExpressionOperation(
+      ASTExpressionVariableAccess(ASTScopeVariable(varName)),
+      getASTExpressionOperator(compareOp),
+      endExp,
+    );
+
+    // Init statement: `var <name> = <start>`.
+    var varType = ASTTypeVar();
+    varType.associateToType(startExp);
+    var initStatement = ASTStatementVariableDeclaration(
+      varType,
+      varName,
+      startExp,
+      unmodifiable: false,
+    );
+
+    return ASTStatementForLoop(initStatement, conditionExp, continueExp, block);
+  }
+
+  /// Emits a helpful error when a classic `for` omits its now-mandatory
+  /// parentheses (e.g. `for var i = 0; i < n; i++ { … }`). It matches the
+  /// paren-less classic-`for` header — reached only after the parenthesized,
+  /// range and for-each forms have been tried — and throws, so the malformed
+  /// loop is a clean syntax error rather than being silently mis-parsed as a
+  /// sequence of statements beginning with an identifier `for`.
+  Parser<ASTStatement> statementForParensError() =>
+      (string('for').trimHidden() &
+              char('(').not() &
+              ref0(statementSimple) &
+              ref0(expression) &
+              char(';').trimHidden())
+          .map<ASTStatement>(
+            (v) => throw SyntaxError(
+              'Classic for loops require parentheses:\nfor (...)',
+            ),
+          );
+
+  // Apollo: parentheses of the `for … in …` header are optional.
   Parser<ASTStatementForEach> statementForEach() =>
       (string('for').trimHidden() &
-              char('(').trimHidden() &
+              char('(').trimHidden().optional() &
               type().trimHidden() &
               ref0(identifier).trimHidden() &
               string('in').trimHidden() &
               ref0(expression) &
-              char(')').trimHidden() &
-              ref0(codeBlockOrSingleLineBlock))
+              char(')').trimHidden().optional() &
+              codeBlock())
           .map((v) {
             var variableType = v[2];
             var variableName = v[3];
@@ -1033,21 +1137,18 @@ class DartGrammarDefinition extends DartGrammarLexer {
           });
 
   Parser<ASTStatementWhileLoop> statementWhileLoop() =>
-      (string('while').trimHidden() &
-              char('(').trimHidden() &
-              ref0(expression) &
-              char(')').trimHidden() &
-              ref0(codeBlockOrSingleLineBlock))
-          .map((v) {
-            var condExp = v[2];
-            var block = v[4];
-            return ASTStatementWhileLoop(condExp, block);
-          });
+      (string('while').trimHidden() & conditionInParens() & codeBlock()).map((
+        v,
+      ) {
+        var condExp = v[1];
+        var block = v[2];
+        return ASTStatementWhileLoop(condExp, block);
+      });
 
   Parser<ASTStatementReturn> statementReturn() =>
       (string('return').trimHidden() &
               expression().optional() &
-              char(';').trimHidden())
+              char(';').trimHidden().optional())
           .map((v) {
             var value = v[1];
 
@@ -1079,7 +1180,9 @@ class DartGrammarDefinition extends DartGrammarLexer {
   /// Expression-bodied function/method body: `=> expr ;` desugars to a block
   /// with a single `return expr;`.
   Parser<ASTBlock> arrowBody() =>
-      (string('=>').trimHidden() & ref0(expression) & char(';').trimHidden())
+      (string('=>').trimHidden() &
+              ref0(expression) &
+              char(';').trimHidden().optional())
           .map((v) {
             var value = v[1] as ASTExpression;
             return ASTBlock(null)
@@ -1087,7 +1190,7 @@ class DartGrammarDefinition extends DartGrammarLexer {
           });
 
   Parser<ASTStatementExpression> statementExpression() =>
-      (expression() & char(';').trimHidden()).map((v) {
+      (expression() & char(';').trimHidden().optional()).map((v) {
         return ASTStatementExpression(v[0]);
       });
 
@@ -1095,22 +1198,18 @@ class DartGrammarDefinition extends DartGrammarLexer {
   /// `(params) { body }`. Parameters may be typed (`(int a)`) or untyped
   /// (`(a)`). Captures the enclosing scope at runtime.
   Parser<ASTExpression> expressionAnonymousFunction() =>
-      (anonFunctionParameters() &
-              asyncToken().optional() &
-              (anonArrowBody() | codeBlock()))
-          .map((v) {
-            var parameters = v[0] as ASTFunctionParametersDeclaration;
-            var isAsync = v[1] != null;
-            var block = v[2] as ASTBlock;
-            var f = ASTFunctionDeclaration(
-              '',
-              parameters,
-              ASTTypeDynamic.instance,
-              block: block,
-              modifiers: ASTModifiers(isStatic: true, isAsync: isAsync),
-            );
-            return ASTExpressionLiteralFunction(f);
-          });
+      (anonFunctionParameters() & (anonArrowBody() | codeBlock())).map((v) {
+        var parameters = v[0] as ASTFunctionParametersDeclaration;
+        var block = v[1] as ASTBlock;
+        var f = ASTFunctionDeclaration(
+          '',
+          parameters,
+          ASTTypeDynamic.instance,
+          block: block,
+          modifiers: ASTModifiers.modifierStatic,
+        );
+        return ASTExpressionLiteralFunction(f);
+      });
 
   /// `=> expr` body for an anonymous function (no trailing `;`, unlike a
   /// declaration's [arrowBody]).
@@ -1161,17 +1260,20 @@ class DartGrammarDefinition extends DartGrammarLexer {
       (codeBlock()).map((v) => ASTStatementBlock(v));
 
   Parser<ASTStatementFunctionDeclaration> statementFunctionDeclaration() =>
-      (type().optional() &
-              identifier() &
-              functionParametersDeclaration() &
+      (asyncToken().optional() &
+              functionSignature() &
               asyncToken().optional() &
-              (arrowBody() | codeBlock()))
+              codeBlock())
           .map((v) {
-            var returnType = v[0] as ASTType? ?? ASTTypeDynamic.instance;
-            var parameters = v[2];
-            var name = v[1];
-            var isAsync = v[3] != null;
-            var block = v[4];
+            var isAsync = v[0] != null || v[2] != null;
+            var sig = v[1] as List;
+            var returnType = _normalizeAsyncReturnType(
+              sig[0] as ASTType,
+              isAsync,
+            );
+            var name = sig[1] as String;
+            var parameters = sig[2] as ASTFunctionParametersDeclaration;
+            var block = v[3];
             return ASTStatementFunctionDeclaration(
               ASTFunctionDeclaration(
                 name,
@@ -1183,132 +1285,60 @@ class DartGrammarDefinition extends DartGrammarLexer {
             );
           });
 
-  /// A variable declaration statement, with one declarator (`int a = 1;`) or
-  /// several (`num nr = 0.96, ng = 0.24, nb = 0.56;`).
-  ///
-  /// Returns an [ASTStatementVariableDeclaration] for the single-declarator
-  /// form and an [ASTStatementVariableDeclarationList] — expanded back into one
-  /// statement per declarator by `ASTBlock.addStatement` — for the multi form.
-  Parser<ASTStatement> statementVariableDeclaration() =>
-      _variableDeclaration(multipleDeclarators: true);
+  Parser<ASTStatementVariableDeclaration> statementVariableDeclaration() =>
+      (
+          // var definition:
+          (
+              // final Type name:
+              ((finalToken() | constToken()).trimHidden() &
+                      type() &
+                      identifier().trimHidden()) |
+                  // final name:
+                  ((finalToken() | constToken()) & identifier().trimHidden()) |
+                  // Type name:
+                  (type() & identifier().trimHidden())
+              // end var definition
+              ) &
+              (char('=').trimHidden() & ref0(expression)).optional() &
+              char(';').trimHidden().optional())
+          .map((v) {
+            var varDef = v[0] as List;
 
-  /// [statementVariableDeclaration] restricted to a single declarator, for the
-  /// `for` initializer. A `for` header has no place to put the extra
-  /// declarations of the multi form: unlike a block, it can't hold a statement
-  /// list, and the comma-separated form doesn't exist in every target language.
-  Parser<ASTStatementVariableDeclaration>
-  statementVariableDeclarationSingle() => _variableDeclaration(
-    multipleDeclarators: false,
-  ).cast<ASTStatementVariableDeclaration>();
+            bool unmodifiable;
+            ASTType type;
+            String name;
 
-  Parser<ASTStatement> _variableDeclaration({
-    required bool multipleDeclarators,
-  }) {
-    // Extra declarators: `, ng = 0.24`. Each reuses the type and the
-    // `final`/`const` modifier of the first one.
-    final extraDeclarators = multipleDeclarators
-        ? (char(',').trimHidden() &
-                  identifier().trimHidden() &
-                  (char('=').trimHidden() & ref0(expression)).optional())
-              .star()
-        : epsilonWith<List>(const []);
-
-    return (
-        // Metadata attaches to the *declaration*, deliberately not to
-        // `statement()`: attempting a metadata parse at every statement
-        // position would move the farthest-failure offset that
-        // `apollovm_dart_parse_error_position_test` pins on a stray `@`.
-        ref0(metadata).star() &
-            // `late` is accepted and dropped: ApolloVM has no
-            // lazy-initialization semantics, and `late int x = 1;` runs the
-            // same as `int x = 1;`.
-            lateKeyword().optional() &
-            // var definition:
-            (
-            // final Type name:
-            ((finalToken() | constToken()).trimHidden() &
-                    type() &
-                    identifier().trimHidden()) |
-                // final name:
-                ((finalToken() | constToken()) & identifier().trimHidden()) |
-                // Type name:
-                (type() & identifier().trimHidden())
-            // end var definition
-            ) &
-            (char('=').trimHidden() & ref0(expression)).optional() &
-            extraDeclarators &
-            char(';').trimHidden())
-        .map((v) {
-          var varDef = v[2] as List;
-
-          bool unmodifiable;
-          ASTType type;
-          String name;
-
-          if (varDef.length == 3) {
-            unmodifiable = true;
-            assert(['final', 'const'].contains((varDef[0] as Token).value));
-            type = varDef[1];
-            name = varDef[2];
-          } else if (varDef.length == 2) {
-            final varDef0 = varDef[0];
-            if (varDef0 is Token &&
-                (varDef0.value == 'final' || varDef0.value == 'const')) {
+            if (varDef.length == 3) {
               unmodifiable = true;
-              type = getTypeByName(varDef0.value);
-              name = varDef[1];
+              assert(['final', 'const'].contains((varDef[0] as Token).value));
+              type = varDef[1];
+              name = varDef[2];
+            } else if (varDef.length == 2) {
+              final varDef0 = varDef[0];
+              if (varDef0 is Token &&
+                  (varDef0.value == 'final' || varDef0.value == 'const')) {
+                unmodifiable = true;
+                type = getTypeByName(varDef0.value);
+                name = varDef[1];
+              } else {
+                unmodifiable = false;
+                type = varDef[0];
+                name = varDef[1];
+              }
             } else {
-              unmodifiable = false;
-              type = varDef[0];
-              name = varDef[1];
+              throw StateError("Invalid var definition: $varDef");
             }
-          } else {
-            throw StateError("Invalid var definition: $varDef");
-          }
 
-          var declaration = _newVariableDeclaration(
-            type,
-            name,
-            v[3],
-            unmodifiable: unmodifiable,
-          );
-
-          var extras = v[4] as List;
-          if (extras.isEmpty) return declaration;
-
-          return ASTStatementVariableDeclarationList([
-            declaration,
-            for (var extra in extras)
-              // Each declarator needs its own type instance: the declarations
-              // are independent nodes, and `_newVariableDeclaration` associates
-              // the type to that declarator's own value expression.
-              _newVariableDeclaration(
-                type.cloneType(),
-                extra[1] as String,
-                extra[2],
-                unmodifiable: unmodifiable,
-              ),
-          ]);
-        });
-  }
-
-  ASTStatementVariableDeclaration _newVariableDeclaration(
-    ASTType type,
-    String name,
-    Object? valueOpt, {
-    required bool unmodifiable,
-  }) {
-    var value = valueOpt != null
-        ? (valueOpt as List)[1] as ASTExpression
-        : null;
-    if (value != null) type.associateToType(value);
-    return ASTStatementVariableDeclaration(
-      type,
-      name,
-      value,
-      unmodifiable: unmodifiable,
-    );
-  }
+            var valueOpt = v[1];
+            var value = valueOpt != null ? valueOpt[1] as ASTExpression : null;
+            if (value != null) type.associateToType(value);
+            return ASTStatementVariableDeclaration(
+              type,
+              name,
+              value,
+              unmodifiable: unmodifiable,
+            );
+          });
 
   Parser<ASTBranch> branch() =>
       (ref0(branchIfElseIfsElseBlock) |
@@ -1318,45 +1348,38 @@ class DartGrammarDefinition extends DartGrammarLexer {
 
   Parser<ASTBranchIfBlock> branchIfBlock() =>
       (string('if').trimHidden() &
-              char('(').trimHidden() &
-              ref0(expression) &
-              char(')').trimHidden() &
+              conditionInParens() &
               codeBlockOrSingleLineBlock())
           .map((v) {
-            var condition = v[2];
-            var block = v[4];
+            var condition = v[1];
+            var block = v[2];
             return ASTBranchIfBlock(condition, block);
           });
 
   Parser<ASTBranchIfElseBlock> branchIfElseBlock() =>
       (string('if').trimHidden() &
-              char('(').trimHidden() &
-              ref0(expression) &
-              char(')').trimHidden() &
-              ref0(codeBlockOrSingleLineBlock) &
-              keywordToken('else') &
-              ref0(codeBlockOrSingleLineBlock))
+              conditionInParens() &
+              codeBlock() &
+              string('else').trimHidden() &
+              codeBlock())
           .map((v) {
-            var condition = v[2];
-            var blockIf = v[4];
-            var blockElse = v[6];
+            var condition = v[1];
+            var blockIf = v[2];
+            var blockElse = v[4];
             return ASTBranchIfElseBlock(condition, blockIf, blockElse);
           });
 
   Parser<ASTBranchIfElseIfsElseBlock> branchIfElseIfsElseBlock() =>
       (string('if').trimHidden() &
-              char('(').trimHidden() &
-              ref0(expression) &
-              char(')').trimHidden() &
-              ref0(codeBlockOrSingleLineBlock) &
+              conditionInParens() &
+              codeBlock() &
               ref0(branchElseIfs).plus() &
-              (keywordToken('else') & ref0(codeBlockOrSingleLineBlock))
-                  .optional())
+              (string('else').trimHidden() & codeBlock()).optional())
           .map((v) {
-            var condition = v[2];
-            var blockIf = v[4];
-            var blockElseIfs = v[5] as List;
-            var blockElse = v[6]?[1];
+            var condition = v[1];
+            var blockIf = v[2];
+            var blockElseIfs = v[3] as List;
+            var blockElse = v[4]?[1];
 
             return ASTBranchIfElseIfsElseBlock(
               condition,
@@ -1367,15 +1390,13 @@ class DartGrammarDefinition extends DartGrammarLexer {
           });
 
   Parser<ASTBranchIfBlock> branchElseIfs() =>
-      (keywordToken('else') &
-              keywordToken('if') &
-              char('(').trimHidden() &
-              ref0(expression) &
-              char(')').trimHidden() &
-              ref0(codeBlockOrSingleLineBlock))
+      (string('else').trimHidden() &
+              string('if').trimHidden() &
+              conditionInParens() &
+              codeBlock())
           .map((v) {
-            var condition = v[3];
-            var blockIf = v[5];
+            var condition = v[2];
+            var blockIf = v[3];
             return ASTBranchIfBlock(condition, blockIf);
           });
 
@@ -1402,19 +1423,9 @@ class DartGrammarDefinition extends DartGrammarLexer {
             );
           });
 
-  /// A primary expression optionally followed by the postfix null-assertion
-  /// operator (`expr!`). The `!` is only consumed when it is not the start of
-  /// `!=` (guarded by `char('=').not()`).
-  Parser<ASTExpression> expressionUnaryPostfix() =>
-      (ref0(expressionNoOperation) & (char('!') & char('=').not()).optional())
-          .map((v) {
-            var exp = v[0] as ASTExpression;
-            return v[1] != null ? ASTExpressionNullAssertion(exp) : exp;
-          });
-
   Parser<ASTExpression> expressionOperationChain() =>
-      (ref0(expressionUnaryPostfix) &
-              (expressionOperator() & ref0(expressionUnaryPostfix)).star())
+      (ref0(expressionNoOperation) &
+              (expressionOperator() & ref0(expressionNoOperation)).star())
           .map((v) {
             var exp1 = v[0];
 
@@ -1446,9 +1457,6 @@ class DartGrammarDefinition extends DartGrammarLexer {
               char('%') |
               string('&&') |
               string('||') |
-              // `??` must be matched before `?` disambiguation and before the
-              // single `&`/`|` operators; it is the null-coalescing operator.
-              string('??') |
               char('&') |
               char('|') |
               char('^'))
@@ -1465,123 +1473,13 @@ class DartGrammarDefinition extends DartGrammarLexer {
       (awaitToken() & (ref0(expressionNoOperation) | ref0(expressionGroup)))
           .map((v) => ASTExpressionAwait(v[1] as ASTExpression));
 
-  /// Synthetic variable name the cascade sections operate on. Stripped again
-  /// when the cascade is rendered back to source (see [ASTExpressionCascade]).
-  static const String cascadeTargetName = r'$cascadeTarget';
-
-  /// A cascade expression: `receiver..sel..sel` (and null-aware `receiver?..`).
-  /// Requires at least one `..`/`?..` section, so it never matches a plain
-  /// primary and can safely be tried first.
-  Parser<ASTExpression> expressionCascade() =>
-      ((expressionFunctionInvocation() |
-                      variable().map((v) => ASTExpressionVariableAccess(v)))
-                  .cast<ASTExpression>() &
-              cascadeSection().plus())
-          .map((v) {
-            var receiver = v[0] as ASTExpression;
-            var sectionsRaw = v[1] as List;
-            var isNullAware = false;
-            var sections = <ASTExpression>[];
-            for (var i = 0; i < sectionsRaw.length; i++) {
-              var rec =
-                  sectionsRaw[i]
-                      as ({bool isNullAware, ASTExpression selector});
-              if (i == 0) isNullAware = rec.isNullAware;
-              sections.add(rec.selector);
-            }
-            return ASTExpressionCascade(
-              receiver,
-              cascadeTargetName,
-              sections,
-              isNullAware: isNullAware,
-            );
-          });
-
-  Parser<({bool isNullAware, ASTExpression selector})> cascadeSection() =>
-      ((string('?..') | string('..')) & cascadeSelector()).map((v) {
-        return (isNullAware: v[0] == '?..', selector: v[1] as ASTExpression);
-      });
-
-  /// A single cascade selector applied to the implicit target: a method call
-  /// (`m(args)`), a setter (`f = v`, `f += v`), or a getter (`g`).
-  Parser<ASTExpression> cascadeSelector() =>
-      (identifier() &
-              ((char('(').trimHidden() &
-                          ref0(callArguments).optional() &
-                          char(')').trimHidden()) |
-                      (assigmentOperator() & ref0(expression)))
-                  .optional())
-          .map((v) {
-            var name = v[0] as String;
-            var rest = v[1];
-            var target = ASTScopeVariable(cascadeTargetName);
-
-            if (rest is List && rest.isNotEmpty && rest[0] == '(') {
-              var argsRec =
-                  rest[1]
-                      as ({
-                        List<ASTExpression> positional,
-                        Map<String, ASTExpression>? named,
-                      })?;
-              var args = argsRec?.positional ?? <ASTExpression>[];
-              var named = argsRec?.named;
-              return ASTExpressionObjectFunctionInvocation(
-                target,
-                name,
-                args,
-                const [],
-                false,
-              )..namedArguments = named;
-            } else if (rest is List && rest[0] is ASTAssignmentOperator) {
-              return ASTExpressionObjectSetterAssignment(
-                target,
-                name,
-                rest[0] as ASTAssignmentOperator,
-                rest[1] as ASTExpression,
-              );
-            } else {
-              return ASTExpressionObjectGetterAccess(target, name);
-            }
-          });
-
-  /// A `const` collection literal at a use site. `const` carries no extra
-  /// semantics in ApolloVM, so it is consumed and discarded — the same as
-  /// `new` in [expressionFunctionInvocation].
-  Parser<ASTExpression> expressionConstCollection() =>
-      (constKeyword() &
-              (expressionListEmptyLiteral() |
-                      expressionListLiteral() |
-                      expressionMapEmptyLiteral() |
-                      expressionMapLiteral())
-                  .cast<ASTExpression>())
-          .map((v) => v[1] as ASTExpression);
-
   Parser<ASTExpression> expressionNoOperation() =>
-      (expressionCascade() |
-              expressionAwait() |
+      (expressionAwait() |
               expressionAnonymousFunction() |
               expressionNegate() |
               expressionBitwiseNot() |
               expressionLiteral() |
-              // `const [1, 2]`, `const {}`. Must come *before*
-              // `expressionVariableEntryAccess` below, which would otherwise
-              // read `const [1]` as an index access on a variable named
-              // `const`.
-              expressionConstCollection() |
-              // `(expr).m().field` — needs at least one trailing segment, so it
-              // cannot shadow the plain group-invocation rule below.
-              expressionGroupInvocationChain() |
               expressionGroupFunctionInvocation() |
-              // `(expr).field`, `(expr)?.field`, `(expr).a.b` — a member chain
-              // on a parenthesized receiver.
-              //
-              // Deliberately *after* the group-invocation rule: putting it
-              // first lets it win on parenthesized arithmetic and changes how
-              // the operation chain groups, which breaks round-trip generation.
-              // The cost is that a call followed by a field — `(e).m().field` —
-              // still does not parse, since the invocation rule consumes
-              // `(e).m()` and only chains further calls.
-              expressionGroupMemberChain() |
               expressionGroup() |
               expressionListEmptyLiteral() |
               expressionListLiteral() |
@@ -1589,13 +1487,12 @@ class DartGrammarDefinition extends DartGrammarLexer {
               expressionMapLiteral() |
               expressionVariableDirectOperation() |
               expressionVariableEntryAssignment() |
-              expressionObjectFieldChainAssignment() |
               expressionObjectFieldAssignment() |
               expressionVariableAssigment() |
-              // Multi-segment member access (`a.b.c`, `a.b?.c`, `a.b.m()`).
-              // Placed after the assignment rules so a chained *write* still
-              // reaches them first, and before the single-segment access rules
-              // (it requires two or more segments, so it can't shadow them).
+              // Multi-segment member access (`a.b.c`, `a.b.m()`). Placed after
+              // the assignment rules so a chained *write* still reaches them
+              // first, and before the single-segment access rules — it requires
+              // two or more segments, so it cannot shadow them.
               expressionMemberChain() |
               expressionFunctionInvocation() |
               expressionObjectEntryFunctionInvocation() |
@@ -1667,66 +1564,12 @@ class DartGrammarDefinition extends DartGrammarLexer {
             )..namedArguments = named;
           });
 
-  /// `(expr).m().field` — a group *invocation* followed by further member
-  /// access, which [expressionGroupFunctionInvocation] cannot express (it
-  /// chains only further invocations).
-  ///
-  /// Reuses that rule for the head and folds the trailing segments the same way
-  /// as [expressionMemberChain]. It requires **at least one** trailing segment,
-  /// so `(expr).m()` keeps its own rule and parenthesized arithmetic is
-  /// untouched — the reason this is a separate rule rather than a reordering.
-  Parser<ASTExpression> expressionGroupInvocationChain() =>
-      (ref0(expressionGroupFunctionInvocation) &
-              ref0(memberChainSegment).plus())
-          .map((v) {
-            var current = v[0] as ASTExpression;
-            var segments = (v[1] as List)
-                .cast<
-                  ({
-                    bool assertReceiver,
-                    bool isNullAware,
-                    String name,
-                    ({
-                      List<ASTExpression> positional,
-                      Map<String, ASTExpression>? named,
-                    })?
-                    args,
-                  })
-                >();
-
-            for (var seg in segments) {
-              var variable = ASTExpressionVariable(current);
-              var args = seg.args;
-              if (args != null) {
-                current = ASTExpressionObjectFunctionInvocation(
-                  variable,
-                  seg.name,
-                  args.positional,
-                  null,
-                  seg.isNullAware,
-                  seg.assertReceiver,
-                )..namedArguments = args.named;
-              } else {
-                current = ASTExpressionObjectGetterAccess(
-                  variable,
-                  seg.name,
-                  null,
-                  seg.isNullAware,
-                  seg.assertReceiver,
-                );
-              }
-            }
-
-            return current;
-          });
-
   Parser<ASTExpressionFunctionInvocation> expressionFunctionInvocation() =>
-      // Optional `new`/`const` prefix for class instantiation (`new User()`,
-      // `const Point(1, 2)`); the keyword is consumed and discarded — all three
-      // spellings resolve to the class constructor via `ASTRoot.getFunction`.
-      ((newToken() | constKeyword()).optional() &
-              (identifier() & char('!').optional() & (string('?.') | char('.')))
-                  .optional() &
+      // Optional `new` prefix for class instantiation (`new User()`); the
+      // keyword is consumed and discarded — `new User()` and `User()` both
+      // resolve to the class constructor via `ASTRoot.getFunction`.
+      (newToken().optional() &
+              (identifier() & char('.')).optional() &
               identifier() &
               ref0(typeArguments).optional() &
               char('(').trimHidden() &
@@ -1736,8 +1579,6 @@ class DartGrammarDefinition extends DartGrammarLexer {
           .map((v) {
             var objOpt = v[1] as List?;
             var obj = objOpt != null ? objOpt[0] as String : null;
-            var assertReceiver = objOpt != null && objOpt[1] == '!';
-            var isNullAware = objOpt != null && objOpt[2] == '?.';
             var name = v[2] as String;
             // v[3]: optional generic type arguments (`<int>`), discarded — the
             // constructor/function resolves by name.
@@ -1760,8 +1601,6 @@ class DartGrammarDefinition extends DartGrammarLexer {
                 name,
                 args,
                 chainFunctions,
-                isNullAware,
-                assertReceiver,
               )..namedArguments = named;
             } else {
               return ASTExpressionLocalFunctionInvocation(
@@ -1773,15 +1612,13 @@ class DartGrammarDefinition extends DartGrammarLexer {
           });
 
   Parser<ASTExpressionGetterAccess> expressionGetterAccess() =>
-      ((identifier() & char('!').optional() & (string('?.') | char('.'))) &
+      ((identifier() & char('.')) &
               identifier().trimHidden() &
               expressionChainFunctionInvocation().star())
           .map((v) {
             var obj = v[0] as String?;
-            var assertReceiver = v[1] == '!';
-            var isNullAware = v[2] == '?.';
-            var name = v[3] as String;
-            var chainFunctions = (v[4] as List)
+            var name = v[2] as String;
+            var chainFunctions = (v[3] as List)
                 .whereType<ASTExpressionChainFunctionInvocation>()
                 .toList();
 
@@ -1794,8 +1631,6 @@ class DartGrammarDefinition extends DartGrammarLexer {
               variable,
               name,
               chainFunctions,
-              isNullAware,
-              assertReceiver,
             );
           });
 
@@ -1823,26 +1658,21 @@ class DartGrammarDefinition extends DartGrammarLexer {
 
   Parser<ASTExpressionVariableEntryAccess> expressionVariableEntryAccess() =>
       (variable() &
-              char('!').optional() &
-              (string('?[') | char('[')) &
+              char('[') &
               ref0(expression) &
               char(']') &
               (char('[').trimHidden() & ref0(expression) & char(']')).star())
           .map((v) {
             var variable = v[0];
-            var assertReceiver = v[1] == '!';
-            var isNullAware = v[2] == '?[';
-            var expression = v[3];
+            var expression = v[2];
             // Chained `[..]` accesses for nested indexing (`m[0][1]`).
-            var extra = (v[5] as List)
+            var extra = (v[4] as List)
                 .map((e) => (e as List)[1] as ASTExpression)
                 .toList();
             return ASTExpressionVariableEntryAccess(
               variable,
               expression,
               extra,
-              isNullAware,
-              assertReceiver,
             );
           });
 
@@ -1883,32 +1713,25 @@ class DartGrammarDefinition extends DartGrammarLexer {
             )..namedArguments = named;
           });
 
-  /// One segment of a member-access chain: an optional `!` asserting the
-  /// *preceding* value, the `.` or `?.` accessor, the member name, and — when
-  /// it is a method call — its argument list.
+  /// One `.name` or `.name(args)` step of a member chain.
   Parser<
     ({
-      bool assertReceiver,
-      bool isNullAware,
       String name,
       ({List<ASTExpression> positional, Map<String, ASTExpression>? named})?
       args,
     })
   >
   memberChainSegment() =>
-      (char('!').optional() &
-              (string('?.') | char('.')) &
+      (char('.').trimHidden() &
               identifier() &
               (char('(').trimHidden() &
                       ref0(callArguments).optional() &
                       char(')').trimHidden())
                   .optional())
           .map((v) {
-            var call = v[3] as List?;
+            var call = v[2] as List?;
             return (
-              assertReceiver: v[0] == '!',
-              isNullAware: v[1] == '?.',
-              name: v[2] as String,
+              name: v[1] as String,
               args: call == null
                   ? null
                   : (call[1]
@@ -1920,67 +1743,12 @@ class DartGrammarDefinition extends DartGrammarLexer {
             );
           });
 
-  /// A member-access chain on a parenthesized receiver: `(a).v`, `(a)?.v`,
-  /// `(a.next)?.v`, `(a).b.c`.
+  /// Member access with two or more segments: `a.b.c`, `a.b.m()`, `a.m().n()`.
   ///
-  /// The grammar previously accepted only `(expr).method()` (via
-  /// [expressionGroupFunctionInvocation]), so a *field* read off a group — and
-  /// any `?.` after one — failed to parse. Segments fold exactly as in
-  /// [expressionMemberChain].
-  Parser<ASTExpression> expressionGroupMemberChain() =>
-      (ref0(expressionGroup) & ref0(memberChainSegment).plus()).map((v) {
-        var current = v[0] as ASTExpression;
-        var segments = (v[1] as List)
-            .cast<
-              ({
-                bool assertReceiver,
-                bool isNullAware,
-                String name,
-                ({
-                  List<ASTExpression> positional,
-                  Map<String, ASTExpression>? named,
-                })?
-                args,
-              })
-            >();
-
-        for (var seg in segments) {
-          var variable = ASTExpressionVariable(current);
-          var args = seg.args;
-          if (args != null) {
-            current = ASTExpressionObjectFunctionInvocation(
-              variable,
-              seg.name,
-              args.positional,
-              null,
-              seg.isNullAware,
-              seg.assertReceiver,
-            )..namedArguments = args.named;
-          } else {
-            current = ASTExpressionObjectGetterAccess(
-              variable,
-              seg.name,
-              null,
-              seg.isNullAware,
-              seg.assertReceiver,
-            );
-          }
-        }
-
-        return current;
-      });
-
-  /// A member-access chain of **two or more** segments: `a.b.c`, `a.b?.c`,
-  /// `a.b!.c`, `a.b.m()`, `a.b?.m(x)` and any mix of them.
-  ///
-  /// Single-segment accesses keep their own dedicated rules (which also resolve
-  /// enum entries, static fields and import prefixes), so this only takes over
-  /// where nothing matched before — every chain here previously failed to parse.
-  ///
-  /// Each segment is folded onto the previous one, with the accumulated
-  /// expression wrapped as an [ASTExpressionVariable] receiver, so the existing
-  /// object-access nodes provide the runtime, null-aware and code-generation
-  /// behaviour.
+  /// [expressionGetterAccess] reads a single `obj.field` and then only accepts
+  /// *calls* after it, so `o.inner.twice()` parsed as the field `o.inner` with
+  /// the call silently dropped — it evaluated to the field. Folding the
+  /// segments left-to-right makes each one the receiver of the next.
   Parser<ASTExpression> expressionMemberChain() =>
       (variable() & ref0(memberChainSegment) & ref0(memberChainSegment).plus())
           .map((v) {
@@ -1988,8 +1756,6 @@ class DartGrammarDefinition extends DartGrammarLexer {
             var segments = [
               v[1]
                   as ({
-                    bool assertReceiver,
-                    bool isNullAware,
                     String name,
                     ({
                       List<ASTExpression> positional,
@@ -2015,18 +1781,9 @@ class DartGrammarDefinition extends DartGrammarLexer {
                   variable,
                   seg.name,
                   args.positional,
-                  null,
-                  seg.isNullAware,
-                  seg.assertReceiver,
                 )..namedArguments = args.named;
               } else {
-                current = ASTExpressionObjectGetterAccess(
-                  variable,
-                  seg.name,
-                  null,
-                  seg.isNullAware,
-                  seg.assertReceiver,
-                );
+                current = ASTExpressionObjectGetterAccess(variable, seg.name);
               }
             }
 
@@ -2055,7 +1812,7 @@ class DartGrammarDefinition extends DartGrammarLexer {
           });
 
   Parser<ASTExpressionListLiteral> expressionListEmptyLiteral() =>
-      ((char('<').trimHidden() & simpleType() & char('>').trimHidden())
+      ((char('<').trimHidden() & typeNonFunction() & char('>').trimHidden())
                   .optional() &
               char('[').trimHidden() &
               char(']').trimHidden())
@@ -2064,8 +1821,12 @@ class DartGrammarDefinition extends DartGrammarLexer {
             return ASTExpressionListLiteral(type, []);
           });
 
+  // The element/key/value types below use [typeNonFunction], not [simpleType]:
+  // the generator emits the literal's inferred type, which for a nested literal
+  // is itself generic (`<List<Int>>[<Int>[1, 2]]`), and a simple name cannot
+  // parse that back.
   Parser<ASTExpressionListLiteral> expressionListLiteral() =>
-      ((char('<').trimHidden() & simpleType() & char('>').trimHidden())
+      ((char('<').trimHidden() & typeNonFunction() & char('>').trimHidden())
                   .optional() &
               char('[').trimHidden() &
               ref0(expression) &
@@ -2100,24 +1861,26 @@ class DartGrammarDefinition extends DartGrammarLexer {
 
   Parser<ASTExpressionMapLiteral> expressionMapEmptyLiteral() =>
       ((char('<').trimHidden() &
-                      simpleType() &
+                      typeNonFunction() &
                       char(',').trimHidden() &
-                      simpleType() &
+                      typeNonFunction() &
                       char('>').trimHidden())
                   .optional() &
               char('{').trimHidden() &
               char('}').trimHidden())
           .map((v) {
+            // The `<K, V>` group is `['<', key, ',', value, '>']`, so the value
+            // type is at index 3 — index 2 is the comma.
             var keyType = (v[0]?[1] as ASTType?) ?? ASTTypeDynamic.instance;
-            var valueType = (v[0]?[2] as ASTType?) ?? ASTTypeDynamic.instance;
+            var valueType = (v[0]?[3] as ASTType?) ?? ASTTypeDynamic.instance;
             return ASTExpressionMapLiteral(keyType, valueType, []);
           });
 
   Parser<ASTExpressionMapLiteral> expressionMapLiteral() =>
       ((char('<').trimHidden() &
-                      simpleType() &
+                      typeNonFunction() &
                       char(',').trimHidden() &
-                      simpleType() &
+                      typeNonFunction() &
                       char('>').trimHidden())
                   .optional() &
               char('{').trimHidden() &
@@ -2200,83 +1963,6 @@ class DartGrammarDefinition extends DartGrammarLexer {
             );
           });
 
-  /// `a.b.field = value` — a field write whose receiver is itself a member
-  /// chain (`a.b`, `a.b.c`, `a.b!.c`, …), including `+=`, `??=` etc.
-  ///
-  /// Requires **two or more** segments so the single-segment
-  /// [expressionObjectFieldAssignment] keeps handling `obj.field = value`. The
-  /// leading segments are folded into the receiver exactly as in
-  /// [expressionMemberChain]; the final segment names the field being written,
-  /// so it must be a plain `.name` (not `?.` and not a call).
-  Parser<ASTExpressionObjectSetterAssignment>
-  expressionObjectFieldChainAssignment() =>
-      (variable() &
-              ref0(memberChainSegment) &
-              ref0(memberChainSegment).plus() &
-              assigmentOperator() &
-              ref0(expression))
-          .map((v) {
-            var receiverVar = v[0] as ASTVariable;
-            var segments = [v[1], ...(v[2] as List)]
-                .cast<
-                  ({
-                    bool assertReceiver,
-                    bool isNullAware,
-                    String name,
-                    ({
-                      List<ASTExpression> positional,
-                      Map<String, ASTExpression>? named,
-                    })?
-                    args,
-                  })
-                >();
-
-            var op = v[3] as ASTAssignmentOperator;
-            var valueExpr = v[4] as ASTExpression;
-
-            var last = segments.last;
-            // The write target must be a plain field access.
-            if (last.isNullAware || last.args != null) {
-              return null;
-            }
-
-            ASTExpression? current;
-            for (var seg in segments.take(segments.length - 1)) {
-              var variable = current == null
-                  ? receiverVar
-                  : ASTExpressionVariable(current);
-
-              var args = seg.args;
-              if (args != null) {
-                current = ASTExpressionObjectFunctionInvocation(
-                  variable,
-                  seg.name,
-                  args.positional,
-                  null,
-                  seg.isNullAware,
-                  seg.assertReceiver,
-                )..namedArguments = args.named;
-              } else {
-                current = ASTExpressionObjectGetterAccess(
-                  variable,
-                  seg.name,
-                  null,
-                  seg.isNullAware,
-                  seg.assertReceiver,
-                );
-              }
-            }
-
-            return ASTExpressionObjectSetterAssignment(
-              ASTExpressionVariable(current!),
-              last.name,
-              op,
-              valueExpr,
-            );
-          })
-          .where((v) => v != null)
-          .cast<ASTExpressionObjectSetterAssignment>();
-
   /// `obj.field = value` (and `this.field = value`), including `+=` etc.
   Parser<ASTExpressionObjectSetterAssignment>
   expressionObjectFieldAssignment() =>
@@ -2301,22 +1987,13 @@ class DartGrammarDefinition extends DartGrammarLexer {
             );
           });
 
-  /// Longest-first: `<<=` must be tried before `<`-anything, and every
-  /// two-character form before the bare `=`.
   Parser<ASTAssignmentOperator> assigmentOperator() =>
-      (string('??=') |
-              string('~/=') |
-              string('<<=') |
-              string('>>=') |
+      (char('=') |
               string('+=') |
               string('-=') |
               string('*=') |
               string('/=') |
-              string('%=') |
-              string('&=') |
-              string('|=') |
-              string('^=') |
-              char('='))
+              string('~/='))
           .trimHidden()
           .map((v) {
             return getASTAssignmentOperator(v);
@@ -2418,32 +2095,22 @@ class DartGrammarDefinition extends DartGrammarLexer {
           });
 
   Parser<ASTFunctionParameterDeclaration> parameterDeclaration() =>
-      (ref0(metadata).star() &
-              requiredKeyword().optional() &
-              (finalToken() | constToken()).trim().optional() &
+      ((finalToken() | constToken()).trim().optional() &
               type().trim() &
               identifier() &
               parameterDefaultValue().optional())
           .map((v) {
             return ASTFunctionParameterDeclaration(
-              v[3],
-              v[4],
+              v[1],
+              v[2],
               -1,
               false,
-              unmodifiable: v[2] != null,
-              isRequired: v[1] != null,
-            )..defaultValue = v[5] as ASTExpression?;
+              unmodifiable: v[0] != null,
+            )..defaultValue = v[3] as ASTExpression?;
           });
 
   Parser<ASTType> type() =>
-      ((functionType() | typeNonFunction()).cast<ASTType>() &
-              char('?').trimHidden().optional())
-          .map((v) {
-            var t = v[0] as ASTType;
-            // A trailing `?` marks the whole type nullable (`String?`,
-            // `List<int>?`, `void Function()?`).
-            return v[1] != null ? t.asNullable() : t;
-          });
+      (functionType() | typeNonFunction()).cast<ASTType>();
 
   /// Any type except a function type (used as the return type of a function
   /// type, and as the fallback when there is no trailing `Function(...)`).
@@ -2464,16 +2131,13 @@ class DartGrammarDefinition extends DartGrammarLexer {
 
   Parser<ASTType> functionTypeWithReturn() =>
       (ref0(typeNonFunction) &
-              char('?').trimHidden().optional() &
               string('Function').trim() &
               char('(').trimHidden() &
               functionTypeParameters().optional() &
               char(')').trimHidden())
           .map((v) {
             var returnType = v[0] as ASTType;
-            // A nullable return type (`String? Function(int)`).
-            if (v[1] != null) returnType = returnType.asNullable();
-            var parameters = v[4] as List<ASTType>?;
+            var parameters = v[3] as List<ASTType>?;
             return ASTTypeFunction(returnType, parameters);
           });
 
@@ -2515,30 +2179,17 @@ class DartGrammarDefinition extends DartGrammarLexer {
           });
 
   Parser<ASTType> simpleType() =>
-      // Guard the contextual keywords that would otherwise be read as a type
-      // name: `await x;` must parse as an await expression rather than an
-      // `await x` variable declaration, and `get`/`set` must not be swallowed
-      // as the return type of an accessor. Without the `set` guard,
-      // `set value(int v) {}` silently becomes a *method* named `value`
-      // returning a type named `set`; without the `get` guard an untyped
-      // getter (`get twice => …`) fails, because `type().optional()` eats
-      // `get` and petitparser's `optional()` cannot backtrack.
-      //
-      // `var`/`final`/`const`/`void`/`dynamic` must stay accepted here:
-      // [getTypeByName] maps them, and rules like `for (final e in l)` depend
-      // on it.
-      (awaitToken().not() &
-              getToken().not() &
-              setKeyword().not() &
-              identifier())
-          .map((v) {
-            var name = v[3] as String;
-            // A class type parameter (`T`) is erased to `dynamic`.
-            if (_classTypeParameters.contains(name)) {
-              return ASTTypeDynamic.instance;
-            }
-            return getTypeByName(name);
-          });
+      // Guard against the `await` contextual keyword being read as a type name
+      // (so `await x;` parses as an await expression, not a `await x` variable
+      // declaration).
+      (awaitToken().not() & identifier()).map((v) {
+        var name = v[1] as String;
+        // A class type parameter (`T`) is erased to `dynamic`.
+        if (_classTypeParameters.contains(name)) {
+          return ASTTypeDynamic.instance;
+        }
+        return getTypeByName(name);
+      });
 
   Parser<ASTTypeArray> arrayTyped() =>
       (array3DTyped() | array2DTyped() | array1DTyped()).cast<ASTTypeArray>();
@@ -2574,7 +2225,9 @@ class DartGrammarDefinition extends DartGrammarLexer {
               char('>') &
               char('>'))
           .map((v) {
-            var t = v[4] as ASTType;
+            // `List` `<` `List` `<` `List` `<` <type> — the element type is the
+            // 7th element, not the 5th (which is the innermost `List`).
+            var t = v[6] as ASTType;
             return ASTTypeArray3D.fromElementType(t);
           });
 
