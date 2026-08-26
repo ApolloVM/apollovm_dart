@@ -587,16 +587,20 @@ class DartGrammarDefinition extends DartGrammarLexer {
   Parser<ASTClassConstructorDeclaration> classConstructorDefaultDeclaration() =>
       (constToken().trimHidden().optional() &
               identifier() &
+              // A named constructor: `Foo.origin(...)`. The name is what
+              // `Foo.origin(...)` resolves against at the call site.
+              (char('.') & identifier()).optional() &
               constructorParametersDeclaration() &
               (char(';').trim() | codeBlock()))
           .map((v) {
             var className = v[1];
-            var parameters = v[2] as ASTConstructorParametersDeclaration;
-            var optionalBlock = v[3];
+            var name = (v[2] as List?)?[1] as String? ?? '';
+            var parameters = v[3] as ASTConstructorParametersDeclaration;
+            var optionalBlock = v[4];
             var block = optionalBlock is ASTBlock ? optionalBlock : null;
             return ASTClassConstructorDeclaration(
               ASTType(className),
-              '',
+              name,
               parameters,
               block: block,
             );

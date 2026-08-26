@@ -23,6 +23,7 @@ class LspRuntime {
   /// Canonical language name -> file extension, so the LSP analyzer (which
   /// infers the language from the document URI) selects the right parser.
   static const _extensions = <String, String>{
+    'apollo': 'apollo',
     'dart': 'dart',
     'java': 'java',
     'kotlin': 'kt',

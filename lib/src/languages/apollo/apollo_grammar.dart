@@ -274,7 +274,8 @@ class ApolloGrammarDefinition extends ApolloGrammarLexer {
               identifier() &
               char('=').trimHidden() &
               type() &
-              char(';').trimHidden())
+              // Apollo semicolons are optional, here as everywhere else.
+              char(';').trimHidden().optional())
           .map((v) => ASTTypeAlias(v[1] as String, v[3] as ASTType));
 
   /// `extension [Name] on Type { <methods and getters> }`.
@@ -583,6 +584,9 @@ class ApolloGrammarDefinition extends ApolloGrammarLexer {
   Parser<ASTClassConstructorDeclaration> classConstructorDefaultDeclaration() =>
       (constToken().trimHidden().optional() &
               classConstructorName() &
+              // A named constructor: `Foo.origin(...)`. The name is what
+              // `Foo.origin(...)` resolves against at the call site.
+              (char('.') & identifier()).optional() &
               constructorParametersDeclaration() &
               // A body-less constructor may end with `;` or, since Apollo
               // semicolons are optional, with nothing at all (e.g. a rich-enum
@@ -590,12 +594,13 @@ class ApolloGrammarDefinition extends ApolloGrammarLexer {
               (char(';').trim() | codeBlock()).optional())
           .map((v) {
             var className = v[1];
-            var parameters = v[2] as ASTConstructorParametersDeclaration;
-            var optionalBlock = v[3];
+            var name = (v[2] as List?)?[1] as String? ?? '';
+            var parameters = v[3] as ASTConstructorParametersDeclaration;
+            var optionalBlock = v[4];
             var block = optionalBlock is ASTBlock ? optionalBlock : null;
             return ASTClassConstructorDeclaration(
               ASTType(className),
-              '',
+              name,
               parameters,
               block: block,
             );
@@ -1484,6 +1489,11 @@ class ApolloGrammarDefinition extends ApolloGrammarLexer {
               expressionVariableEntryAssignment() |
               expressionObjectFieldAssignment() |
               expressionVariableAssigment() |
+              // Multi-segment member access (`a.b.c`, `a.b.m()`). Placed after
+              // the assignment rules so a chained *write* still reaches them
+              // first, and before the single-segment access rules — it requires
+              // two or more segments, so it cannot shadow them.
+              expressionMemberChain() |
               expressionFunctionInvocation() |
               expressionObjectEntryFunctionInvocation() |
               expressionVariableEntryAccess() |
@@ -1703,6 +1713,83 @@ class ApolloGrammarDefinition extends ApolloGrammarLexer {
             )..namedArguments = named;
           });
 
+  /// One `.name` or `.name(args)` step of a member chain.
+  Parser<
+    ({
+      String name,
+      ({List<ASTExpression> positional, Map<String, ASTExpression>? named})?
+      args,
+    })
+  >
+  memberChainSegment() =>
+      (char('.').trimHidden() &
+              identifier() &
+              (char('(').trimHidden() &
+                      ref0(callArguments).optional() &
+                      char(')').trimHidden())
+                  .optional())
+          .map((v) {
+            var call = v[2] as List?;
+            return (
+              name: v[1] as String,
+              args: call == null
+                  ? null
+                  : (call[1]
+                            as ({
+                              List<ASTExpression> positional,
+                              Map<String, ASTExpression>? named,
+                            })?) ??
+                        (positional: <ASTExpression>[], named: null),
+            );
+          });
+
+  /// Member access with two or more segments: `a.b.c`, `a.b.m()`, `a.m().n()`.
+  ///
+  /// [expressionGetterAccess] reads a single `obj.field` and then only accepts
+  /// *calls* after it, so `o.inner.twice()` parsed as the field `o.inner` with
+  /// the call silently dropped — it evaluated to the field. Folding the
+  /// segments left-to-right makes each one the receiver of the next.
+  Parser<ASTExpression> expressionMemberChain() =>
+      (variable() & ref0(memberChainSegment) & ref0(memberChainSegment).plus())
+          .map((v) {
+            var receiver = v[0] as ASTVariable;
+            var segments = [
+              v[1]
+                  as ({
+                    String name,
+                    ({
+                      List<ASTExpression> positional,
+                      Map<String, ASTExpression>? named,
+                    })?
+                    args,
+                  }),
+              ...(v[2] as List).cast(),
+            ];
+
+            ASTExpression? current;
+
+            for (var seg in segments) {
+              // The head keeps the parsed receiver variable; later segments
+              // wrap the expression built so far.
+              var variable = current == null
+                  ? receiver
+                  : ASTExpressionVariable(current);
+
+              var args = seg.args;
+              if (args != null) {
+                current = ASTExpressionObjectFunctionInvocation(
+                  variable,
+                  seg.name,
+                  args.positional,
+                )..namedArguments = args.named;
+              } else {
+                current = ASTExpressionObjectGetterAccess(variable, seg.name);
+              }
+            }
+
+            return current!;
+          });
+
   Parser<ASTExpressionChainFunctionInvocation>
   expressionChainFunctionInvocation() =>
       (char('.').trimHidden() &
@@ -1725,7 +1812,7 @@ class ApolloGrammarDefinition extends ApolloGrammarLexer {
           });
 
   Parser<ASTExpressionListLiteral> expressionListEmptyLiteral() =>
-      ((char('<').trimHidden() & simpleType() & char('>').trimHidden())
+      ((char('<').trimHidden() & typeNonFunction() & char('>').trimHidden())
                   .optional() &
               char('[').trimHidden() &
               char(']').trimHidden())
@@ -1734,8 +1821,12 @@ class ApolloGrammarDefinition extends ApolloGrammarLexer {
             return ASTExpressionListLiteral(type, []);
           });
 
+  // The element/key/value types below use [typeNonFunction], not [simpleType]:
+  // the generator emits the literal's inferred type, which for a nested literal
+  // is itself generic (`<List<Int>>[<Int>[1, 2]]`), and a simple name cannot
+  // parse that back.
   Parser<ASTExpressionListLiteral> expressionListLiteral() =>
-      ((char('<').trimHidden() & simpleType() & char('>').trimHidden())
+      ((char('<').trimHidden() & typeNonFunction() & char('>').trimHidden())
                   .optional() &
               char('[').trimHidden() &
               ref0(expression) &
@@ -1770,24 +1861,26 @@ class ApolloGrammarDefinition extends ApolloGrammarLexer {
 
   Parser<ASTExpressionMapLiteral> expressionMapEmptyLiteral() =>
       ((char('<').trimHidden() &
-                      simpleType() &
+                      typeNonFunction() &
                       char(',').trimHidden() &
-                      simpleType() &
+                      typeNonFunction() &
                       char('>').trimHidden())
                   .optional() &
               char('{').trimHidden() &
               char('}').trimHidden())
           .map((v) {
+            // The `<K, V>` group is `['<', key, ',', value, '>']`, so the value
+            // type is at index 3 — index 2 is the comma.
             var keyType = (v[0]?[1] as ASTType?) ?? ASTTypeDynamic.instance;
-            var valueType = (v[0]?[2] as ASTType?) ?? ASTTypeDynamic.instance;
+            var valueType = (v[0]?[3] as ASTType?) ?? ASTTypeDynamic.instance;
             return ASTExpressionMapLiteral(keyType, valueType, []);
           });
 
   Parser<ASTExpressionMapLiteral> expressionMapLiteral() =>
       ((char('<').trimHidden() &
-                      simpleType() &
+                      typeNonFunction() &
                       char(',').trimHidden() &
-                      simpleType() &
+                      typeNonFunction() &
                       char('>').trimHidden())
                   .optional() &
               char('{').trimHidden() &
@@ -2132,7 +2225,9 @@ class ApolloGrammarDefinition extends ApolloGrammarLexer {
               char('>') &
               char('>'))
           .map((v) {
-            var t = v[4] as ASTType;
+            // `List` `<` `List` `<` `List` `<` <type> — the element type is the
+            // 7th element, not the 5th (which is the innermost `List`).
+            var t = v[6] as ASTType;
             return ASTTypeArray3D.fromElementType(t);
           });
 

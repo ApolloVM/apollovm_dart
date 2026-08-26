@@ -870,6 +870,57 @@ run() {
       expect(output, equals([7, 8]));
     });
 
+    test('a method call on a field calls the method', () async {
+      // `o.inner.twice()` used to parse as the field `o.inner` with the call
+      // dropped, so it evaluated to the field itself.
+      var output = await _run(r'''
+class Inner {
+  Int n
+  Inner(this.n)
+  Int twice() { return n * 2 }
+}
+
+class Outer {
+  Inner inner
+  Outer(this.inner)
+}
+
+class Holder {
+  Inner inner
+  Holder(this.inner)
+  Int viaThis() { return this.inner.twice() }
+}
+
+run() {
+  var o = new Outer(new Inner(5))
+  print(o.inner.twice())
+  print(o.inner.n)
+  print(new Holder(new Inner(4)).viaThis())
+}
+''');
+      expect(output, equals([10, 5, 8]));
+    });
+
+    test('named constructors', () async {
+      var output = await _run(r'''
+class Point {
+  Int x
+  Int y
+  Point(this.x, this.y)
+  Point.origin() { x = 0 y = 0 }
+  Point.square(Int n) { x = n y = n }
+  Int sum() { return x + y }
+}
+
+run() {
+  print(new Point(1, 2).sum())
+  print(Point.origin().sum())
+  print(Point.square(4).sum())
+}
+''');
+      expect(output, equals([3, 0, 8]));
+    });
+
     test('invocations chain across returned instances', () async {
       var output = await _run(r'''
 class B {
@@ -885,6 +936,97 @@ run() {
 }
 ''');
       expect(output, equals([6]));
+    });
+  });
+
+  group('Apollo regeneration: literals that carry their type', () {
+    /// Generates Apollo from [source], then runs both and compares.
+    Future<String> roundTrip(String source) async {
+      var apollo = _extractCodeUnit(await _translate(source, 'apollo'));
+      expect(
+        await _run(apollo),
+        equals(await _run(source)),
+        reason: 'Regenerated Apollo behaves differently:\n$apollo',
+      );
+      return apollo;
+    }
+
+    test('an empty map literal', () async {
+      // The literal regenerates carrying its inferred `<K, V>`, so the type
+      // prefix has to parse back — `<dynamic, dynamic>{}` included.
+      var apollo = await roundTrip(r'''
+run() {
+  var m = {}
+  m["k"] = 1
+  print(m["k"])
+}
+''');
+
+      expect(apollo, contains('<dynamic,dynamic>{}'));
+    });
+
+    test('an empty list literal', () async {
+      var apollo = await roundTrip(r'''
+run() {
+  var xs = []
+  print(xs)
+}
+''');
+
+      expect(apollo, contains('<dynamic>[]'));
+    });
+
+    test('a 2D list literal', () async {
+      var apollo = await roundTrip(r'''
+run() {
+  List<List<Int>> grid = [[1, 2], [3, 4]]
+  print(grid[0][1])
+}
+''');
+
+      expect(apollo, contains('<List<Int>>[<Int>[1, 2], <Int>[3, 4]]'));
+    });
+
+    test('a 3D list literal', () async {
+      var apollo = await roundTrip(r'''
+run() {
+  List<List<List<Int>>> cube = [[[1]], [[2]]]
+  print(cube[1][0][0])
+}
+''');
+
+      expect(apollo, contains('List<List<List<Int>>> cube'));
+    });
+
+    test('a typed map literal', () async {
+      var apollo = await roundTrip(r'''
+run() {
+  Map<String, Int> m = {"k": 1}
+  print(m["k"])
+}
+''');
+
+      expect(apollo, contains("{'k': 1}"));
+    });
+
+    test('named constructors survive regeneration', () async {
+      var apollo = await roundTrip(r'''
+class Point {
+  Int x
+  Int y
+  Point(this.x, this.y)
+  Point.origin() { x = 0 y = 0 }
+  Int sum() { return x + y }
+}
+
+run() {
+  print(Point.origin().sum())
+  print(new Point(1, 2).sum())
+}
+''');
+
+      expect(apollo, contains('Point.origin() {'));
+      expect(apollo, contains('Point(this.x, this.y);'));
     });
   });
 

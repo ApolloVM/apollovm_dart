@@ -38,6 +38,34 @@ void main() {
     });
   });
 
+  group('apollo language', () {
+    test('parses and executes through the MCP tools', () async {
+      const source = r'''
+class Greeter {
+  String name
+  Greeter(this.name)
+  String hello() { return "hi $name" }
+}
+
+main(List a) {
+  print(new Greeter("world").hello())
+}
+''';
+
+      final parsed = await computeTool('apollovm.parse', {
+        'language': 'apollo',
+        'source': source,
+      }, const McpLimits());
+      expect(parsed['ok'], isTrue);
+
+      final executed = await computeTool('apollovm.execute', {
+        'language': 'apollo',
+        'source': source,
+      }, const McpLimits());
+      expect(executed['output'], equals(['hi world']));
+    });
+  });
+
   group('in-process execution', () {
     test('captured output is truncated at maxOutputChars', () async {
       final limits = const McpLimits(maxOutputChars: 10);

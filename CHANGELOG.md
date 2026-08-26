@@ -56,6 +56,44 @@ something else — both found by covering the generator's emit methods directly:
   decided per operand: the string side still sheds its redundant parentheses,
   the other side keeps them.
 
+#### Parse fixes
+
+- **A method call on a field calls the method.** `o.inner.twice()` parsed as the
+  field read `o.inner` with the call silently dropped, so it evaluated to the
+  *field* — `Inner{n: int}` where `10` was expected. Apollo now folds a
+  multi-segment member chain (`a.b.c`, `a.b.m()`) left-to-right, each segment
+  becoming the receiver of the next, matching what the Dart grammar already did.
+
+- **Literals that carry their inferred type parse back.** The generator emits a
+  literal's type (`<dynamic, dynamic>{}`, `<List<Int>>[<Int>[1, 2]]`), but the
+  literal rules accepted only a *simple* type name there, and the empty-map rule
+  read its value type from the position of the comma. An empty map and a nested
+  list therefore generated source that Apollo could not re-parse — an internal
+  cast error, not even a syntax error. Both round-trip now, as does a 3D list
+  (`array3DTyped` was reading the innermost `List` token as the element type).
+
+- **`typedef` no longer requires a semicolon**, matching the rest of the
+  language. `typedef Id = List<Int>` without one failed with an internal cast
+  error.
+
+#### Named constructors (all languages)
+
+`Point.origin()` could not be declared or called in *any* ApolloVM language —
+the parser rejected the declaration, so the `.name` the generators already emit
+was unreachable. Constructors may now be named, in the Dart grammar as well as
+Apollo's, and `Foo.named(...)` resolves against the class: a receiver that names
+a class already reaches the invocation path used by `static` methods, so the
+named-constructor lookup is a single fallback there. `Point.origin()` runs,
+translates between languages, and survives regeneration.
+
+#### Apollo in the LSP and MCP tools
+
+Apollo was registered for parsing, running and generating, but not in the
+language lists the LSP analyzer and the MCP tools consult, so `.apollo` worked
+through the VM and CLI while those tools rejected it. `apollo` is now in the
+analyzer's extension map, `LspRuntime.supportedLanguages`, and
+`mcpSupportedLanguages`.
+
 ## 2.30.0
 
 ### Dart: multiple variables per declaration

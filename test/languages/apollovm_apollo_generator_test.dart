@@ -97,6 +97,23 @@ run() { print(1) }
       expect(apollo, contains('typedef Names = List<String>;'));
     });
 
+    test('typedef without a trailing semicolon', () async {
+      // Apollo semicolons are optional; `typedef` used to require one, and a
+      // generic target type failed with an internal cast error rather than a
+      // syntax error.
+      var apollo = await _gen(r'''
+typedef Id = Int
+typedef Names = List<String>
+typedef Mapper = Int Function(Int)
+
+run() { print(1) }
+''');
+
+      expect(apollo, contains('typedef Id = Int;'));
+      expect(apollo, contains('typedef Names = List<String>;'));
+      expect(apollo, contains('typedef Mapper = Int Function(Int);'));
+    });
+
     test('typedef of function types', () async {
       var apollo = await _gen(r'''
 typedef Mapper = Int Function(Int);
