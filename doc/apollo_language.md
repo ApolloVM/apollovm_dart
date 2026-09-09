@@ -257,6 +257,38 @@ throw "boom"
 
 ---
 
+## Cascades
+
+`..` applies a sequence of operations to one receiver, exactly as in Dart. Each
+section may be a method call, a setter assignment, or a getter:
+
+```apollo
+buffer
+  ..add(1)
+  ..add(2)
+  ..label = "totals"
+  ..flush()
+```
+
+A cascade **evaluates to its receiver**, not to the last section, so it can be
+assigned:
+
+```apollo
+var b = Buffer()..add(1)..add(2)
+```
+
+The null-aware form `?..` skips the whole cascade when the receiver is `null`:
+
+```apollo
+maybeBuffer?..add(1)..flush()
+```
+
+Note the deliberate spelling split: `..` is *always* the cascade operator, and
+the inclusive range bound in a [range `for`](#range-based-for) is `...`. This is
+the one place Apollo departs from Dart purely to keep two features apart.
+
+---
+
 ## Types
 
 Primitive types are **capitalized**: `Int`, `Double`, `Bool`, `Num`, `Void`,
@@ -485,6 +517,7 @@ A runnable example lives at
 - Named and factory constructors
 - Getters and setters, with block or arrow bodies
 - Dart's nullability surface: `T?`, `??`, `??=`, `?.` and postfix `!`
+- Cascades (`..`, `?..`); the inclusive range bound is `...` to keep them apart
 - Logical imports
 - Semicolons optional
 - Familiar syntax inspired by Dart, Kotlin, Swift, TypeScript, Java and C#

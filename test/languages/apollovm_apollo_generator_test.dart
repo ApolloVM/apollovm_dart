@@ -794,6 +794,34 @@ Int f(A a) { return a?.b?.c.d }
     });
   });
 
+  group('Apollo generator: cascades', () {
+    test('cascade sections round-trip', () async {
+      var apollo = await _gen(r'''
+Void f(B b) {
+  b..add(1)..add(2)
+  b..x = 1
+  b?..add(3)
+}
+''');
+
+      expect(apollo, contains('b..add(1)..add(2)'));
+      expect(apollo, contains('b..x = 1'));
+      expect(apollo, contains('b?..add(3)'));
+    });
+
+    // Previously Apollo emitted `..` that its own grammar could not re-read.
+    test('Dart cascades translate to Apollo and back', () async {
+      var apollo = await _gen(
+        'void f(B b) { b..add(1)..add(2); }',
+        language: 'dart',
+      );
+      expect(apollo, contains('b..add(1)..add(2)'));
+
+      // And the generated Apollo re-parses.
+      expect(await _gen(apollo), contains('b..add(1)..add(2)'));
+    });
+  });
+
   group('Apollo generator: direct emit API', () {
     late ApolloCodeGeneratorApollo generator;
 

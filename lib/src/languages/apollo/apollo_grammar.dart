@@ -1571,8 +1571,91 @@ class ApolloGrammarDefinition extends ApolloGrammarLexer {
       (awaitToken() & (ref0(expressionNoOperation) | ref0(expressionGroup)))
           .map((v) => ASTExpressionAwait(v[1] as ASTExpression));
 
+  /// Synthetic variable name the cascade sections operate on. Stripped again
+  /// when the cascade is rendered back to source (see [ASTExpressionCascade]).
+  static const String cascadeTargetName = r'$cascadeTarget';
+
+  /// A cascade expression: `receiver..sel..sel` (and null-aware `receiver?..`).
+  /// Requires at least one `..`/`?..` section, so it never matches a plain
+  /// primary and can safely be tried first.
+  ///
+  /// A bare `..` is unambiguously a cascade in Apollo: the inclusive range
+  /// bound is spelled `...` (see [rangeOperator]).
+  Parser<ASTExpression> expressionCascade() =>
+      ((expressionFunctionInvocation() |
+                      variable().map((v) => ASTExpressionVariableAccess(v)))
+                  .cast<ASTExpression>() &
+              cascadeSection().plus())
+          .map((v) {
+            var receiver = v[0] as ASTExpression;
+            var sectionsRaw = v[1] as List;
+            var isNullAware = false;
+            var sections = <ASTExpression>[];
+            for (var i = 0; i < sectionsRaw.length; i++) {
+              var rec =
+                  sectionsRaw[i]
+                      as ({bool isNullAware, ASTExpression selector});
+              if (i == 0) isNullAware = rec.isNullAware;
+              sections.add(rec.selector);
+            }
+            return ASTExpressionCascade(
+              receiver,
+              cascadeTargetName,
+              sections,
+              isNullAware: isNullAware,
+            );
+          });
+
+  /// One cascade section. `?..` (null-aware) is tried first: it is longer, and
+  /// `..` would otherwise match its tail.
+  Parser<({bool isNullAware, ASTExpression selector})> cascadeSection() =>
+      ((string('?..') | string('..')) & cascadeSelector()).map((v) {
+        return (isNullAware: v[0] == '?..', selector: v[1] as ASTExpression);
+      });
+
+  /// A single cascade selector applied to the implicit target: a method call
+  /// (`m(args)`), a setter (`f = v`, `f += v`), or a getter (`g`).
+  Parser<ASTExpression> cascadeSelector() =>
+      (identifier() &
+              ((char('(').trimHidden() &
+                          ref0(callArguments).optional() &
+                          char(')').trimHidden()) |
+                      (assigmentOperator() & ref0(expression)))
+                  .optional())
+          .map((v) {
+            var name = v[0] as String;
+            var rest = v[1];
+            var target = ASTScopeVariable(cascadeTargetName);
+
+            if (rest is List && rest.isNotEmpty && rest[0] == '(') {
+              var argsRec =
+                  rest[1]
+                      as ({
+                        List<ASTExpression> positional,
+                        Map<String, ASTExpression>? named,
+                      })?;
+              return ASTExpressionObjectFunctionInvocation(
+                target,
+                name,
+                argsRec?.positional ?? <ASTExpression>[],
+                const [],
+                false,
+              )..namedArguments = argsRec?.named;
+            } else if (rest is List && rest[0] is ASTAssignmentOperator) {
+              return ASTExpressionObjectSetterAssignment(
+                target,
+                name,
+                rest[0] as ASTAssignmentOperator,
+                rest[1] as ASTExpression,
+              );
+            } else {
+              return ASTExpressionObjectGetterAccess(target, name);
+            }
+          });
+
   Parser<ASTExpression> expressionNoOperation() =>
-      (expressionAwait() |
+      (expressionCascade() |
+              expressionAwait() |
               expressionAnonymousFunction() |
               expressionNegate() |
               expressionBitwiseNot() |

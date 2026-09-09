@@ -148,6 +148,20 @@ postfix `!` is guarded by `char('=').not()` so `a != b` is untouched. The
 assignment operators are now ordered longest-first, since `??=` and `~/=` must
 be matched before the bare `=` they end with.
 
+#### Apollo cascades (`..`, `?..`)
+
+Apollo now parses Dart's cascade operator — method calls (`b..add(1)`), setter
+assignments (`b..x = 1`), getters, and the null-aware `?..` — chained over a
+single receiver, with the cascade evaluating to that receiver so
+`var b = Buffer()..add(1)` works. `ASTExpressionCascade` and the generators
+already supported this; only the Apollo grammar was missing, which meant Apollo
+*emitted* `..` it could not read back. Cascades now round-trip and translate
+both ways with Dart.
+
+This is what the `...` range spelling above buys: `..` is now unambiguously the
+cascade operator in every position, with no context-sensitive rule and no
+restriction on where a cascade may appear.
+
 ## 2.30.0
 
 ### Dart: multiple variables per declaration

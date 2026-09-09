@@ -789,6 +789,75 @@ run() {
     );
   });
 
+  group('Apollo cascades', () {
+    test('a cascade applies every section to the receiver', () async {
+      var output = await _run(r'''
+class Box {
+  Int a = 0
+  Int b = 0
+  setA(Int v) { this.a = v }
+  setB(Int v) { this.b = v }
+}
+
+run() {
+  var x = Box()
+  x..setA(1)..setB(2)
+  print(x.a)
+  print(x.b)
+}
+''');
+      expect(output, equals([1, 2]));
+    });
+
+    test('a cascade evaluates to its receiver, not the last section', () async {
+      var output = await _run(r'''
+class Box {
+  Int a = 0
+  setA(Int v) { this.a = v }
+}
+
+run() {
+  var x = Box()
+  var y = x..setA(7)
+  print(y.a)
+}
+''');
+      expect(output, equals([7]));
+    });
+
+    test('a setter section assigns through the cascade', () async {
+      var output = await _run(r'''
+class Box { Int a = 0 }
+
+run() {
+  var x = Box()
+  x..a = 5
+  print(x.a)
+}
+''');
+      expect(output, equals([5]));
+    });
+
+    // `..` is only unambiguous because the inclusive range is `...`.
+    test('cascades and range loops coexist', () async {
+      var output = await _run(r'''
+class Box {
+  Int n = 0
+  add(Int v) { this.n = this.n + v }
+}
+
+run() {
+  var x = Box()
+  for i++ from 1...3 {
+    x..add(i)
+  }
+  print(x.n)
+}
+''');
+      expect(output, equals([6]));
+    });
+  });
+
   group('Apollo async spellings (Dart-compatibility)', () {
     // The canonical form is a leading `async` with the unwrapped return type;
     // the two Dart-flavoured spellings are accepted and normalized to it.
