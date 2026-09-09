@@ -1477,9 +1477,19 @@ class ApolloGrammarDefinition extends ApolloGrammarLexer {
             );
           });
 
+  /// A primary expression optionally followed by the postfix null-assertion
+  /// operator (`expr!`). The `!` is only consumed when it is not the start of
+  /// `!=` (guarded by `char('=').not()`).
+  Parser<ASTExpression> expressionUnaryPostfix() =>
+      (ref0(expressionNoOperation) & (char('!') & char('=').not()).optional())
+          .map((v) {
+            var exp = v[0] as ASTExpression;
+            return v[1] != null ? ASTExpressionNullAssertion(exp) : exp;
+          });
+
   Parser<ASTExpression> expressionOperationChain() =>
-      (ref0(expressionNoOperation) &
-              (expressionOperator() & ref0(expressionNoOperation)).star())
+      (ref0(expressionUnaryPostfix) &
+              (expressionOperator() & ref0(expressionUnaryPostfix)).star())
           .map((v) {
             var exp1 = v[0];
 
@@ -1511,6 +1521,10 @@ class ApolloGrammarDefinition extends ApolloGrammarLexer {
               char('%') |
               string('&&') |
               string('||') |
+              // Before the ternary `?` is ever reached: `expressionOperationChain`
+              // runs first, so `a ?? b` binds here while `a ? b : c` falls
+              // through to [expression]'s conditional.
+              string('??') |
               char('&') |
               char('|') |
               char('^'))
@@ -1623,7 +1637,8 @@ class ApolloGrammarDefinition extends ApolloGrammarLexer {
       // keyword is consumed and discarded — `new User()` and `User()` both
       // resolve to the class constructor via `ASTRoot.getFunction`.
       (newToken().optional() &
-              (identifier() & char('.')).optional() &
+              (identifier() & char('!').optional() & (string('?.') | char('.')))
+                  .optional() &
               identifier() &
               ref0(typeArguments).optional() &
               char('(').trimHidden() &
@@ -1633,6 +1648,8 @@ class ApolloGrammarDefinition extends ApolloGrammarLexer {
           .map((v) {
             var objOpt = v[1] as List?;
             var obj = objOpt != null ? objOpt[0] as String : null;
+            var assertReceiver = objOpt != null && objOpt[1] == '!';
+            var isNullAware = objOpt != null && objOpt[2] == '?.';
             var name = v[2] as String;
             // v[3]: optional generic type arguments (`<int>`), discarded — the
             // constructor/function resolves by name.
@@ -1655,6 +1672,8 @@ class ApolloGrammarDefinition extends ApolloGrammarLexer {
                 name,
                 args,
                 chainFunctions,
+                isNullAware,
+                assertReceiver,
               )..namedArguments = named;
             } else {
               return ASTExpressionLocalFunctionInvocation(
@@ -1666,13 +1685,15 @@ class ApolloGrammarDefinition extends ApolloGrammarLexer {
           });
 
   Parser<ASTExpressionGetterAccess> expressionGetterAccess() =>
-      ((identifier() & char('.')) &
+      ((identifier() & char('!').optional() & (string('?.') | char('.'))) &
               identifier().trimHidden() &
               expressionChainFunctionInvocation().star())
           .map((v) {
             var obj = v[0] as String?;
-            var name = v[2] as String;
-            var chainFunctions = (v[3] as List)
+            var assertReceiver = v[1] == '!';
+            var isNullAware = v[2] == '?.';
+            var name = v[3] as String;
+            var chainFunctions = (v[4] as List)
                 .whereType<ASTExpressionChainFunctionInvocation>()
                 .toList();
 
@@ -1685,6 +1706,8 @@ class ApolloGrammarDefinition extends ApolloGrammarLexer {
               variable,
               name,
               chainFunctions,
+              isNullAware,
+              assertReceiver,
             );
           });
 
@@ -1712,21 +1735,26 @@ class ApolloGrammarDefinition extends ApolloGrammarLexer {
 
   Parser<ASTExpressionVariableEntryAccess> expressionVariableEntryAccess() =>
       (variable() &
-              char('[') &
+              char('!').optional() &
+              (string('?[') | char('[')) &
               ref0(expression) &
               char(']') &
               (char('[').trimHidden() & ref0(expression) & char(']')).star())
           .map((v) {
             var variable = v[0];
-            var expression = v[2];
+            var assertReceiver = v[1] == '!';
+            var isNullAware = v[2] == '?[';
+            var expression = v[3];
             // Chained `[..]` accesses for nested indexing (`m[0][1]`).
-            var extra = (v[4] as List)
+            var extra = (v[5] as List)
                 .map((e) => (e as List)[1] as ASTExpression)
                 .toList();
             return ASTExpressionVariableEntryAccess(
               variable,
               expression,
               extra,
+              isNullAware,
+              assertReceiver,
             );
           });
 
@@ -1767,16 +1795,18 @@ class ApolloGrammarDefinition extends ApolloGrammarLexer {
             )..namedArguments = named;
           });
 
-  /// One `.name` or `.name(args)` step of a member chain.
+  /// One `.name`, `?.name`, `.name(args)` or `?.name(args)` step of a member
+  /// chain.
   Parser<
     ({
       String name,
+      bool isNullAware,
       ({List<ASTExpression> positional, Map<String, ASTExpression>? named})?
       args,
     })
   >
   memberChainSegment() =>
-      (char('.').trimHidden() &
+      ((string('?.') | char('.')).trimHidden() &
               identifier() &
               (char('(').trimHidden() &
                       ref0(callArguments).optional() &
@@ -1786,6 +1816,7 @@ class ApolloGrammarDefinition extends ApolloGrammarLexer {
             var call = v[2] as List?;
             return (
               name: v[1] as String,
+              isNullAware: v[0] == '?.',
               args: call == null
                   ? null
                   : (call[1]
@@ -1811,6 +1842,7 @@ class ApolloGrammarDefinition extends ApolloGrammarLexer {
               v[1]
                   as ({
                     String name,
+                    bool isNullAware,
                     ({
                       List<ASTExpression> positional,
                       Map<String, ASTExpression>? named,
@@ -1835,9 +1867,16 @@ class ApolloGrammarDefinition extends ApolloGrammarLexer {
                   variable,
                   seg.name,
                   args.positional,
+                  null,
+                  seg.isNullAware,
                 )..namedArguments = args.named;
               } else {
-                current = ASTExpressionObjectGetterAccess(variable, seg.name);
+                current = ASTExpressionObjectGetterAccess(
+                  variable,
+                  seg.name,
+                  null,
+                  seg.isNullAware,
+                );
               }
             }
 
@@ -2041,13 +2080,16 @@ class ApolloGrammarDefinition extends ApolloGrammarLexer {
             );
           });
 
+  /// Longest-first: every multi-character form must be tried before the bare
+  /// `=` it ends with.
   Parser<ASTAssignmentOperator> assigmentOperator() =>
-      (char('=') |
+      (string('??=') |
+              string('~/=') |
               string('+=') |
               string('-=') |
               string('*=') |
               string('/=') |
-              string('~/='))
+              char('='))
           .trimHidden()
           .map((v) {
             return getASTAssignmentOperator(v);
@@ -2164,7 +2206,14 @@ class ApolloGrammarDefinition extends ApolloGrammarLexer {
           });
 
   Parser<ASTType> type() =>
-      (functionType() | typeNonFunction()).cast<ASTType>();
+      ((functionType() | typeNonFunction()).cast<ASTType>() &
+              char('?').trimHidden().optional())
+          .map((v) {
+            var t = v[0] as ASTType;
+            // A trailing `?` marks the whole type nullable (`String?`,
+            // `List<Int>?`, `Void Function()?`).
+            return v[1] != null ? t.asNullable() : t;
+          });
 
   /// Any type except a function type (used as the return type of a function
   /// type, and as the fallback when there is no trailing `Function(...)`).

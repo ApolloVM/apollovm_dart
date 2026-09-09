@@ -119,6 +119,32 @@ already did. Both stay *contextual*, not reserved: a method may still be named
 (`get value { … }`), which the non-backtracking `type().optional()` had made
 unparseable.
 
+#### Apollo null safety: `T?`, `??`, `??=`, `?.`, `?[` and postfix `!`
+
+Apollo had **none** of Dart's nullability surface, even though the AST nodes
+(`ASTExpressionNullCoalesce`, `NullCheck`, `NullAssertion`) and every generator
+already supported it — only the Apollo grammar was missing, and the Apollo
+generator never opted in. The failures were asymmetric and mostly silent:
+
+- `a ?? b` was **emitted but not parseable** — the generator wrote `??` while
+  the grammar had no rule for it, so Apollo could not re-read its own output.
+- `a?.b` was emitted as `a.b` and `a!` as `a`, **silently dropping the null
+  semantics** rather than failing.
+- A nullable type `String?` was flattened to `String`, so the null-safety
+  analyzer never saw Apollo's nullability at all.
+
+Apollo now takes Dart's surface verbatim: a trailing `?` on any type, the
+null-coalescing `??` and `??=`, null-aware access `?.` and index `?[`, and the
+postfix null assertion `!` — all round-tripping through Apollo and translating
+both ways with Dart. `?.` chains, so `a?.b?.c` short-circuits at the first null
+link.
+
+The neighbouring tokens stay unambiguous: `??` is tried inside the operation
+chain so the ternary `a ? b : c` still falls through to the conditional, and the
+postfix `!` is guarded by `char('=').not()` so `a != b` is untouched. The
+assignment operators are now ordered longest-first, since `??=` and `~/=` must
+be matched before the bare `=` they end with.
+
 ## 2.30.0
 
 ### Dart: multiple variables per declaration

@@ -270,6 +270,25 @@ var total = add(2, 3)   // inferred Int
 Generic containers (`List<Int>`, `Map<String, Int>`), `dynamic`, and
 `Future<T>` follow Dart.
 
+### Nullability
+
+A trailing `?` marks a type nullable, and the null-aware operators are Dart's:
+
+```apollo
+String greet(String? name, User? user) {
+  var who  = name ?? "anon"     // fallback when null
+  var size = user?.name         // null when `user` is null
+  var sure = name!              // assert non-null
+
+  var n = name
+  n ??= "anon"                  // assign only when null
+
+  return who
+}
+```
+
+`?.` chains, so `a?.b?.c` short-circuits to `null` at the first null link.
+
 ---
 
 ## Functions
@@ -461,6 +480,7 @@ A runnable example lives at
 - Rich enums with associated values
 - Named and factory constructors
 - Getters and setters, with block or arrow bodies
+- Dart's nullability surface: `T?`, `??`, `??=`, `?.` and postfix `!`
 - Logical imports
 - Semicolons optional
 - Familiar syntax inspired by Dart, Kotlin, Swift, TypeScript, Java and C#

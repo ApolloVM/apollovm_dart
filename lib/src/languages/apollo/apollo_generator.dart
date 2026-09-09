@@ -18,6 +18,16 @@ class ApolloCodeGeneratorApollo extends ApolloCodeGenerator {
   ApolloCodeGeneratorApollo(ApolloSourceCodeStorage codeStorage)
     : super('apollo', codeStorage);
 
+  /// Apollo takes Dart's nullability surface verbatim: `T?`, `??`, `??=`, `?.`
+  /// and the postfix `!`. Without these the base class desugars or drops them —
+  /// `a ?? b` was emitted unparseable, and `a?.b` / `a!` silently lost their
+  /// null semantics on the way through.
+  @override
+  bool get supportsNullableTypeSuffix => true;
+
+  @override
+  bool get supportsNullAwareOperators => true;
+
   /// Emits the concise range-based `for` (`for i++ from 0..n { … }`) when the
   /// loop matches the canonical counting shape; otherwise falls back to the
   /// classic parenthesized form. This is the inverse of the range-`for`

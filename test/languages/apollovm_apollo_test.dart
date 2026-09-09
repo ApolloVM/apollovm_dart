@@ -655,6 +655,114 @@ enum Planet {
     });
   });
 
+  group('Apollo null-aware surface', () {
+    test('`??` yields the fallback only when null', () async {
+      var output = await _run(r'''
+run() {
+  String? a = null
+  print(a ?? "anon")
+  String? b = "bob"
+  print(b ?? "anon")
+}
+''');
+      expect(output, equals(['anon', 'bob']));
+    });
+
+    test('`?.` short-circuits to null', () async {
+      var output = await _run(r'''
+class B { Int size = 5 }
+
+run() {
+  B? a = null
+  print(a?.size)
+  B? b = B()
+  print(b?.size)
+}
+''');
+      expect(output, equals([null, 5]));
+    });
+
+    test('`??=` assigns only when null', () async {
+      var output = await _run(r'''
+run() {
+  Int? a = null
+  a ??= 7
+  print(a)
+  Int? b = 3
+  b ??= 9
+  print(b)
+}
+''');
+      expect(output, equals([7, 3]));
+    });
+
+    test('`?[` short-circuits to null', () async {
+      var output = await _run(r'''
+run() {
+  Map<String, Int>? a = null
+  print(a?["k"])
+  Map<String, Int>? b = {"k": 9}
+  print(b?["k"])
+}
+''');
+      expect(output, equals([null, 9]));
+    });
+
+    test('plain and nested indexing are unaffected', () async {
+      var output = await _run(r'''
+run() {
+  var l = [[1, 2], [3, 4]]
+  print(l[1][0])
+  var m = {"k": 9}
+  print(m["k"])
+}
+''');
+      expect(output, equals([3, 9]));
+    });
+
+    test('postfix `!` passes a non-null value through', () async {
+      var ret = await _call(
+        r'''
+Int unwrap(Int? a) { return a! }
+''',
+        'unwrap',
+        positionalParameters: [7],
+      );
+      expect(ret.getValueNoContext(), equals(7));
+    });
+
+    test('`?.` chains across several segments', () async {
+      var output = await _run(r'''
+class Inner { Int n = 3 }
+class Outer { Inner? inner = Inner() }
+
+run() {
+  Outer? o = Outer()
+  print(o?.inner?.n)
+  Outer? z = null
+  print(z?.inner?.n)
+}
+''');
+      expect(output, equals([3, null]));
+    });
+
+    // Regressions for the tokens the null-aware operators sit next to: the
+    // ternary `?` must not be eaten by `??`, and `!=` not by the postfix `!`.
+    test(
+      'ternary and `!=` still parse alongside the null-aware forms',
+      () async {
+        var output = await _run(r'''
+run() {
+  Int a = 5
+  print(a > 1 ? 10 : 20)
+  print(a != 3)
+}
+''');
+        expect(output, equals([10, true]));
+      },
+    );
+  });
+
   group('Apollo async spellings (Dart-compatibility)', () {
     // The canonical form is a leading `async` with the unwrapped return type;
     // the two Dart-flavoured spellings are accepted and normalized to it.

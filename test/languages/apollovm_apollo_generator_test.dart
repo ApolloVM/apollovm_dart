@@ -736,6 +736,64 @@ run() {
   // Emit methods reached by driving the generator directly, for AST shapes the
   // Apollo grammar has no surface syntax for (array values) or that the parser
   // never builds on its own (a hand-assembled string concatenation).
+  group('Apollo generator: null-aware operators', () {
+    // Previously: `??` was emitted but could not be re-parsed, and `?.`, `!`
+    // and the `?` type suffix were dropped on the way out — silently changing
+    // meaning rather than failing.
+    test('the null-aware surface round-trips', () async {
+      var apollo = await _gen(r'''
+String label(String? name, Foo? f) {
+  var a = name ?? "anon"
+  var b = f?.size
+  var c = name!
+  return a
+}
+''');
+
+      expect(apollo, contains('String? name'));
+      expect(apollo, contains('Foo? f'));
+      expect(apollo, contains("name ?? 'anon'"));
+      expect(apollo, contains('f?.size'));
+      expect(apollo, contains('name!'));
+    });
+
+    test('`??=` round-trips', () async {
+      var apollo = await _gen(r'''
+Int f(Int? a) {
+  var x = a
+  x ??= 7
+  return x
+}
+''');
+
+      expect(apollo, contains('x ??= 7'));
+    });
+
+    test('Dart null-aware code translates to Apollo intact', () async {
+      var apollo = await _gen(r'''
+String label(String? name, Foo? f) {
+  var a = name ?? 'anon';
+  var b = f?.size;
+  var c = name!;
+  return a;
+}
+''', language: 'dart');
+
+      expect(apollo, contains('String? name'));
+      expect(apollo, contains("name ?? 'anon'"));
+      expect(apollo, contains('f?.size'));
+      expect(apollo, contains('name!'));
+    });
+
+    test('a null-aware member chain keeps every `?.`', () async {
+      var apollo = await _gen(r'''
+Int f(A a) { return a?.b?.c.d }
+''');
+
+      expect(apollo, contains('a?.b?.c.d'));
+    });
+  });
+
   group('Apollo generator: direct emit API', () {
     late ApolloCodeGeneratorApollo generator;
 
