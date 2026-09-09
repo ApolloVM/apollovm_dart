@@ -128,6 +128,9 @@ class ASTTypeEntryKind {
 
   /// An [ASTTypeGenericWildcard].
   static const int genericWildcard = 0x16;
+
+  /// An [ASTTypeSet], by element type.
+  static const int set = 0x17;
 }
 
 /// Identifiers for the [ASTType] singletons that must decode back to the very
@@ -304,6 +307,8 @@ class ASTTypePoolWriter {
         b.write('|c:${intern((type as ASTTypeArray).componentType)}');
       case ASTTypeMap():
         b.write('|k:${intern(type.keyType)}|v:${intern(type.valueType)}');
+      case ASTTypeSet():
+        b.write('|e:${intern(type.elementType)}');
       case ASTTypeNum():
         b.write('|b:${type.bits}');
       case ASTTypeVar():
@@ -360,6 +365,9 @@ class ASTTypePoolWriter {
         out.writeByte(ASTTypeEntryKind.map);
         out.writeLeb128UnsignedInt(intern(type.keyType));
         out.writeLeb128UnsignedInt(intern(type.valueType));
+      case ASTTypeSet():
+        out.writeByte(ASTTypeEntryKind.set);
+        out.writeLeb128UnsignedInt(intern(type.elementType));
       case ASTTypeFuture():
         out.writeByte(ASTTypeEntryKind.future);
         out.writeLeb128UnsignedInt(intern(type.futureValueType));
@@ -585,6 +593,8 @@ class ASTTypePoolReader {
         var k = ref();
         var v = ref();
         type = ASTTypeMap(k, v);
+      case ASTTypeEntryKind.set:
+        type = ASTTypeSet(ref());
       case ASTTypeEntryKind.future:
         type = ASTTypeFuture(ref());
       case ASTTypeEntryKind.function:

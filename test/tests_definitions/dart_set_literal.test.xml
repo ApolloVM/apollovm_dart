@@ -1,0 +1,103 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="Set literals (Dart 2.2)">
+    <source language="dart">
+        <![CDATA[
+class Bag {
+  Set<int> ids = {1, 2, 3};
+
+  int size() {
+    return this.ids.length;
+  }
+}
+
+int run() {
+  var s = {1, 2, 2, 3};
+  var empty = <int>{};
+
+  empty.add(9);
+  s.add(3);
+  s.add(4);
+  s.remove(1);
+
+  var total = 0;
+  for (var e in s) {
+    total = total + e;
+  }
+
+  var bag = Bag();
+
+  return s.length + total + empty.length + bag.size();
+}
+
+bool contains() {
+  Set<String> names = {'a', 'b'};
+  return names.contains('b') && !names.contains('c') && names.isNotEmpty;
+}
+
+int mapIsStillAMap() {
+  var m = {'a': 1};
+  var em = {};
+  return m['a'] + em.length;
+}
+        ]]>
+    </source>
+    <call function="run" return="16">
+        []
+    </call>
+    <output>
+        []
+    </output>
+    <call function="contains" return="true">
+        []
+    </call>
+    <output>
+        []
+    </output>
+    <call function="mapIsStillAMap" return="1">
+        []
+    </call>
+    <output>
+        []
+    </output>
+    <source-generated language="dart"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+  int run() {
+    var s = <int>{1, 2, 2, 3};
+    var empty = <int>{};
+    empty.add(9);
+    s.add(3);
+    s.add(4);
+    s.remove(1);
+    var total = 0;
+    for (var e in s) {
+      total = total + e;
+    }
+    var bag = Bag();
+    return ((s.length + total) + empty.length) + bag.size();
+  }
+
+  bool contains() {
+    Set<String> names = <String>{'a', 'b'};
+    return (names.contains('b') && (!names.contains('c'))) && names.isNotEmpty;
+  }
+
+  int mapIsStillAMap() {
+    var m = {'a': 1};
+    var em = <dynamic,dynamic>{};
+    return m['a'] + em.length;
+  }
+
+class Bag {
+
+  Set<int> ids = <int>{1, 2, 3};
+
+  int size() {
+    return this.ids.length;
+  }
+
+}
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+</test>

@@ -18,9 +18,16 @@ class ApolloVMCore {
       case 'Double':
         return CoreClassDouble.instance as ASTClass<V>;
       case 'List':
-        return CoreClassList.fromType(V) as ASTClass<V>;
+        // `fromType` only answers for the element types it interns, and `V` is
+        // often `dynamic` (a `List` named in source carries no element type
+        // here). Falling back keeps a plain `List.…` call resolving instead of
+        // failing the *parse* with a null cast.
+        return (CoreClassList.fromType(V) ?? CoreClassList.instanceOfDynamic)
+            as ASTClass<V>;
       case 'Map':
         return CoreClassMap.instance as ASTClass<V>;
+      case 'Set':
+        return CoreClassSet.instance as ASTClass<V>;
       default:
         return null;
     }
@@ -2031,6 +2038,313 @@ class CoreClassMap extends CoreClassBase<Map<dynamic, dynamic>> {
     VMContext context,
     ASTRunStatus runStatus,
     ASTValue<Map<dynamic, dynamic>> instance,
+    String fieldName,
+    ASTValue<dynamic> value, {
+    bool caseInsensitive = false,
+  }) => throw UnimplementedError();
+
+  @override
+  List<ASTConstructorSet> get constructors => [];
+
+  @override
+  List<String> get constructorsNames => [];
+
+  @override
+  ASTClassConstructorDeclaration? getConstructor(
+    String fName,
+    ASTFunctionSignature? parametersSignature,
+    VMContext context, {
+    bool caseInsensitive = false,
+  }) => null;
+
+  @override
+  void resolveNodeConstructors(ASTNode? parentNode) {}
+}
+
+/// The core `Set` class: the members a set literal's value answers to.
+class CoreClassSet extends CoreClassBase<Set<dynamic>> {
+  static final CoreClassSet instance = CoreClassSet._();
+
+  late final ASTExternalClassGetter _getterLength;
+  late final ASTExternalClassGetter _getterIsEmpty;
+  late final ASTExternalClassGetter _getterIsNotEmpty;
+  late final ASTExternalClassGetter _getterFirst;
+  late final ASTExternalClassGetter _getterLast;
+
+  late final ASTExternalClassFunction _functionContains;
+  late final ASTExternalClassFunction _functionAdd;
+  late final ASTExternalClassFunction _functionAddAll;
+  late final ASTExternalClassFunction _functionRemove;
+  late final ASTExternalClassFunction _functionClear;
+  late final ASTExternalClassFunction _functionToList;
+  late final ASTExternalClassFunction _functionLength;
+  late final ASTExternalClassFunction _functionIsEmpty;
+  late final ASTExternalClassFunction _functionIsNotEmpty;
+
+  /// The element type of the actual set, so `.first` / `.last` are typed.
+  FutureOr<ASTType> _resolveElementType(VMContext? context, ASTNode? node) {
+    if (node is ASTValueSet) {
+      var typeAsync = context != null
+          ? node.resolveRuntimeType(context, null)
+          : node.resolveType(null);
+      return typeAsync.resolveMapped(
+        (t) => t is ASTTypeSet ? t.elementType : ASTTypeDynamic.instance,
+      );
+    }
+    return ASTTypeDynamic.instance;
+  }
+
+  CoreClassSet._() : super(ASTTypeSet.instanceOfDynamic, 'Set') {
+    _getterLength = _externalClassGetter(
+      'length',
+      ASTTypeInt.instance,
+      (Object? o) => o is Set ? o.length : null,
+    );
+
+    _getterIsEmpty = _externalClassGetter(
+      'isEmpty',
+      ASTTypeBool.instance,
+      (Object? o) => o is Set ? o.isEmpty : null,
+    );
+
+    _getterIsNotEmpty = _externalClassGetter(
+      'isNotEmpty',
+      ASTTypeBool.instance,
+      (Object? o) => o is Set ? o.isNotEmpty : null,
+    );
+
+    _getterFirst = _externalClassGetter(
+      'first',
+      ASTTypeDynamic.instance,
+      (Object? o) => o is Set ? o.first : null,
+      _resolveElementType,
+    );
+
+    _getterLast = _externalClassGetter(
+      'last',
+      ASTTypeDynamic.instance,
+      (Object? o) => o is Set ? o.last : null,
+      _resolveElementType,
+    );
+
+    _functionContains = _externalClassFunctionArgs1(
+      'contains',
+      ASTTypeBool.instance,
+      ASTFunctionParameterDeclaration(
+        ASTTypeDynamic.instance,
+        'value',
+        0,
+        false,
+      ),
+      (Set o, dynamic v) => o.contains(v),
+    );
+
+    _functionAdd = _externalClassFunctionArgs1(
+      'add',
+      ASTTypeBool.instance,
+      ASTFunctionParameterDeclaration(
+        ASTTypeDynamic.instance,
+        'value',
+        0,
+        false,
+      ),
+      (Set o, dynamic v) => o.add(v),
+    );
+
+    _functionAddAll = _externalClassFunctionArgs1(
+      'addAll',
+      ASTTypeVoid.instance,
+      ASTFunctionParameterDeclaration(
+        ASTTypeDynamic.instance,
+        'values',
+        0,
+        false,
+      ),
+      (Set o, dynamic vs) {
+        if (vs is Iterable) o.addAll(vs);
+        return null;
+      },
+    );
+
+    _functionRemove = _externalClassFunctionArgs1(
+      'remove',
+      ASTTypeBool.instance,
+      ASTFunctionParameterDeclaration(
+        ASTTypeDynamic.instance,
+        'value',
+        0,
+        false,
+      ),
+      (Set o, dynamic v) => o.remove(v),
+    );
+
+    _functionClear = _externalClassFunctionArgs0(
+      'clear',
+      ASTTypeVoid.instance,
+      (Set o) {
+        o.clear();
+        return null;
+      },
+    );
+
+    _functionToList = _externalClassFunctionArgs0(
+      'toList',
+      ASTTypeArray.instanceOfObject,
+      (Set o) => o.toList(),
+    );
+
+    _functionLength = _externalClassFunctionArgs0(
+      'length',
+      ASTTypeInt.instance,
+      (Set o) => o.length,
+    );
+
+    _functionIsEmpty = _externalClassFunctionArgs0(
+      'isEmpty',
+      ASTTypeBool.instance,
+      (Set o) => o.isEmpty,
+    );
+
+    _functionIsNotEmpty = _externalClassFunctionArgs0(
+      'isNotEmpty',
+      ASTTypeBool.instance,
+      (Set o) => o.isNotEmpty,
+    );
+  }
+
+  @override
+  ASTGetterDeclaration? getGetter(
+    String fName,
+    VMContext context, {
+    bool caseInsensitive = false,
+  }) {
+    switch (fName) {
+      case 'length':
+        return _getterLength;
+      case 'isEmpty':
+        return _getterIsEmpty;
+      case 'isNotEmpty':
+        return _getterIsNotEmpty;
+      case 'first':
+        return _getterFirst;
+      case 'last':
+        return _getterLast;
+    }
+
+    throw StateError("Can't find core getter: $coreName.$fName");
+  }
+
+  @override
+  ASTFunctionDeclaration? getFunction(
+    String fName,
+    ASTFunctionSignature parametersSignature,
+    VMContext context, {
+    bool caseInsensitive = false,
+  }) {
+    switch (fName) {
+      case 'contains':
+        return _functionContains;
+      case 'add':
+        return _functionAdd;
+      case 'addAll':
+        return _functionAddAll;
+      case 'remove':
+        return _functionRemove;
+      case 'clear':
+        return _functionClear;
+      case 'toList':
+        return _functionToList;
+      case 'length':
+        return _functionLength;
+      case 'isEmpty':
+        return _functionIsEmpty;
+      case 'isNotEmpty':
+        return _functionIsNotEmpty;
+      case 'toString':
+        return _functionToString;
+    }
+
+    throw StateError(
+      "Can't find core function: $coreName.$fName( $parametersSignature )",
+    );
+  }
+
+  @override
+  FutureOr<ASTValue<Set<dynamic>>?> createInstance(
+    VMClassContext<dynamic> context,
+    ASTRunStatus runStatus,
+  ) => throw UnimplementedError();
+
+  @override
+  List<ASTClassField<dynamic>> get fields => throw UnimplementedError();
+
+  @override
+  List<String> get fieldsNames => throw UnimplementedError();
+
+  @override
+  FutureOr<Map<String, Object>> getFieldsMap({
+    VMContext? context,
+    Map<String, ASTValue<dynamic>>? fieldOverwrite,
+  }) => throw UnimplementedError();
+
+  @override
+  FutureOr<ASTValue<dynamic>?> getInstanceFieldValue(
+    VMContext context,
+    ASTRunStatus runStatus,
+    ASTValue<Set<dynamic>> instance,
+    String fieldName, {
+    bool caseInsensitive = false,
+  }) => throw UnimplementedError();
+
+  @override
+  FutureOr<void> initializeInstance(
+    VMClassContext<dynamic> context,
+    ASTRunStatus runStatus,
+    ASTValue<Set<dynamic>> instance,
+  ) => throw UnimplementedError();
+
+  @override
+  FutureOr<ASTValue<dynamic>?> removeInstanceFieldValue(
+    VMContext context,
+    ASTRunStatus runStatus,
+    ASTValue<Set<dynamic>> instance,
+    String fieldName, {
+    bool caseInsensitive = false,
+  }) => throw UnimplementedError();
+
+  @override
+  void resolveNodeFields(ASTNode? parentNode) {}
+
+  @override
+  FutureOr<void> setInstanceByMap(
+    VMClassContext<dynamic> context,
+    ASTRunStatus runStatus,
+    ASTValue<Set<dynamic>> instance,
+    Map<String, ASTValue<dynamic>> value, {
+    bool caseInsensitive = false,
+  }) => throw UnimplementedError();
+
+  @override
+  FutureOr<void> setInstanceByVMObject(
+    VMClassContext<dynamic> context,
+    ASTRunStatus runStatus,
+    ASTValue<Set<dynamic>> instance,
+    VMObject value,
+  ) => throw UnimplementedError();
+
+  @override
+  FutureOr<void> setInstanceByValue(
+    VMClassContext<dynamic> context,
+    ASTRunStatus runStatus,
+    ASTValue<Set<dynamic>> instance,
+    ASTValue<Set<dynamic>> value,
+  ) => throw UnimplementedError();
+
+  @override
+  FutureOr<ASTValue<dynamic>?> setInstanceFieldValue(
+    VMContext context,
+    ASTRunStatus runStatus,
+    ASTValue<Set<dynamic>> instance,
     String fieldName,
     ASTValue<dynamic> value, {
     bool caseInsensitive = false,

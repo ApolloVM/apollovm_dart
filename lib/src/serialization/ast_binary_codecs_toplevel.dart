@@ -37,10 +37,15 @@ ASTConstructorParametersDeclaration _readConstructorParameters(
 ) {
   var positional = r.nodes<ASTConstructorParameterDeclaration>();
   var optional = r.nodes<ASTConstructorParameterDeclaration>();
+  // Only a named parameter has a name the call site spells, so the private
+  // named parameter rule is re-applied here, on the named group alone.
+  var named = r.nodes<ASTConstructorParameterDeclaration>();
   return ASTConstructorParametersDeclaration(
     positional,
     optional,
-    r.nodes<ASTConstructorParameterDeclaration>(),
+    named == null
+        ? null
+        : ASTConstructorParameterDeclaration.publicizeNamedParameters(named),
   );
 }
 
@@ -396,7 +401,12 @@ final List<ASTNodeCodec> toplevelCodecs = [
     'ASTConstructorParameterDeclaration',
     encode: (w, n) {
       w.type(n.type);
-      w.str(n.name);
+      // The name as *declared*: for a private named parameter that is the
+      // private one (`_x`), and the public name callers use is derived again
+      // by [_readConstructorParameters] — the same rule the parser applies. It
+      // keeps this node's layout unchanged, so an image stays readable by a
+      // build that predates the feature (it simply reads the pre-3.12 form).
+      w.str(n.fieldName);
       w.uint(n.index);
       w.boolean(n.optional);
       w.boolean(n.thisParameter);

@@ -136,6 +136,11 @@ class ASTNodeTag {
   static const int importCombinator = 119;
   static const int importedSymbol = 120;
 
+  // --- Appended after the numbers above shipped -----------------------------
+
+  static const int valueSet = 121;
+  static const int expressionSetLiteral = 122;
+
   /// Tags that once existed and must never be handed out again.
   ///
   /// Empty today. When a node kind is removed, its number moves here rather

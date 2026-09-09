@@ -453,6 +453,33 @@ class ApolloCodeGeneratorJavaScript extends ApolloCodeGenerator {
   }
 
   @override
+  /// JavaScript has no set literal: `{…}` is an object, so a set is built from
+  /// the elements — `new Set([1, 2])`.
+  @override
+  StringBuffer generateASTExpressionSetLiteral(
+    ASTExpressionSetLiteral expression, {
+    StringBuffer? out,
+    String indent = '',
+    bool headIndented = true,
+  }) {
+    out ??= newOutput();
+
+    if (headIndented) out.write(indent);
+
+    out.write('new Set([');
+
+    var values = expression.valuesExpressions;
+    for (var i = 0; i < values.length; ++i) {
+      if (i > 0) out.write(', ');
+      generateASTExpression(values[i], out: out, headIndented: false);
+    }
+
+    out.write('])');
+
+    return out;
+  }
+
+  @override
   StringBuffer generateASTExpressionMapLiteral(
     ASTExpressionMapLiteral expression, {
     StringBuffer? out,

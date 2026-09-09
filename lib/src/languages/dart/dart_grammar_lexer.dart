@@ -132,6 +132,10 @@ abstract class DartGrammarLexer extends BaseGrammarLexer {
   // as `const Value` and `lateBinding` as `late Binding`.
   Parser constKeyword() => _keywordToken('const');
 
+  Parser finalKeyword() => _keywordToken('final');
+
+  Parser varKeyword() => _keywordToken('var');
+
   Parser lateKeyword() => _keywordToken('late');
 
   Parser requiredKeyword() => _keywordToken('required');

@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="Private named parameters (Dart 3.12): `this._x` is passed as `x:`">
+    <source language="dart">
+        <![CDATA[
+class Point {
+  final int _x;
+  final int _y;
+  final String label;
+  int _scale;
+
+  Point({required this._x, required this._y, this.label = 'p', this._scale = 1});
+
+  int get x => this._x;
+
+  int get area => this._x * this._y * this._scale;
+}
+
+int run() {
+  var a = Point(x: 3, y: 4);
+  var b = Point(x: 2, y: 5, scale: 10, label: 'b');
+  return a.area + b.area + a.x;
+}
+
+String label() {
+  var p = Point(x: 1, y: 1);
+  return p.label;
+}
+        ]]>
+    </source>
+    <call function="run" return="115">
+        []
+    </call>
+    <output>
+        []
+    </output>
+    <call function="label" return="p">
+        []
+    </call>
+    <output>
+        []
+    </output>
+    <source-generated language="dart"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+  int run() {
+    var a = Point(x: 3, y: 4);
+    var b = Point(x: 2, y: 5, scale: 10, label: 'b');
+    return (a.area + b.area) + a.x;
+  }
+
+  String label() {
+    var p = Point(x: 1, y: 1);
+    return p.label;
+  }
+
+class Point {
+
+  final int _x;
+  final int _y;
+  final String label;
+  int _scale;
+
+  Point({required this._x, required this._y, this.label = 'p', this._scale = 1});
+
+  int get x {
+    return this._x;
+  }
+
+  int get area {
+    return (this._x * this._y) * this._scale;
+  }
+
+}
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+</test>

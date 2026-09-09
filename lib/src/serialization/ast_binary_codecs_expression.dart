@@ -244,6 +244,19 @@ final List<ASTNodeCodec> expressionCodecs = [
     },
   ),
 
+  ASTNodeCodec<ASTExpressionSetLiteral>(
+    ASTNodeTag.expressionSetLiteral,
+    'ASTExpressionSetLiteral',
+    encode: (w, n) {
+      w.typeOrNull(n.type);
+      w.nodes(n.valuesExpressions);
+    },
+    decode: (r) => ASTExpressionSetLiteral(
+      r.typeOrNull(),
+      r.nodes<ASTExpression>() ?? <ASTExpression>[],
+    ),
+  ),
+
   ASTNodeCodec<ASTExpressionLiteralFunction>(
     ASTNodeTag.expressionLiteralFunction,
     'ASTExpressionLiteralFunction',

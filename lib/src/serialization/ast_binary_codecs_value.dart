@@ -174,6 +174,23 @@ final List<ASTNodeCodec> valueCodecs = [
     },
   ),
 
+  ASTNodeCodec<ASTValueSet>(
+    ASTNodeTag.valueSet,
+    'ASTValueSet',
+    encode: (w, n) {
+      var type = n.type as ASTTypeSet;
+      w.type(type.elementType);
+      // Written as a list: a set is not a native-value shape, and the order is
+      // the set's own iteration order, which the decode below restores.
+      w.nativeValue(n.value.toList());
+    },
+    decode: (r) {
+      var elementType = r.type();
+      var raw = r.nativeValue() as List;
+      return ASTValueSet(elementType, raw.toSet());
+    },
+  ),
+
   // --- Loosely typed statics ------------------------------------------------
   ASTNodeCodec<ASTValueVar>(
     ASTNodeTag.valueVar,

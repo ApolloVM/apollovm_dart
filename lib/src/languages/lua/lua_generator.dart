@@ -1109,6 +1109,36 @@ class ApolloCodeGeneratorLua extends ApolloCodeGenerator {
   }
 
   @override
+  /// Lua has no set type: the idiom is a table used as a lookup, so
+  /// `{1, 2}` becomes `{ [1] = true, [2] = true }`.
+  @override
+  StringBuffer generateASTExpressionSetLiteral(
+    ASTExpressionSetLiteral expression, {
+    StringBuffer? out,
+    String indent = '',
+    bool headIndented = true,
+  }) {
+    out ??= newOutput();
+
+    if (headIndented) out.write(indent);
+
+    out.write('{');
+
+    var values = expression.valuesExpressions;
+    for (var i = 0; i < values.length; ++i) {
+      if (i > 0) out.write(',');
+      out.write(' [');
+      generateASTExpression(values[i], out: out, headIndented: false);
+      out.write('] = true');
+    }
+    if (values.isNotEmpty) out.write(' ');
+
+    out.write('}');
+
+    return out;
+  }
+
+  @override
   StringBuffer generateASTExpressionMapLiteral(
     ASTExpressionMapLiteral expression, {
     StringBuffer? out,
