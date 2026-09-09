@@ -249,7 +249,26 @@ try {
 ```
 
 The parenthesized forms `catch (error)` and `catch (IOException error)` are also
-accepted. `throw` works as in Dart:
+accepted.
+
+### Stack trace
+
+A second catch variable receives the stack trace, as in Dart:
+
+```apollo
+try {
+  process()
+} catch (IOException error, stackTrace) {
+  print(stackTrace)
+}
+```
+
+The paren-less form `catch error, stackTrace` works too. ApolloVM does not
+capture real stack traces, so the variable is bound to an empty string — but the
+binding survives translation, so `catch (e, st)` round-trips to Dart's
+`on T catch (e, st)` and back.
+
+`throw` works as in Dart:
 
 ```apollo
 throw "boom"

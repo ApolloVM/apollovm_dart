@@ -162,6 +162,32 @@ This is what the `...` range spelling above buys: `..` is now unambiguously the
 cascade operator in every position, with no context-sensitive rule and no
 restriction on where a cascade may appear.
 
+#### Fixed: Apollo dropped the `catch` stack-trace variable, then emitted `let`
+
+Apollo mishandled the second `catch` variable (Dart's `catch (e, st)`) at both
+ends:
+
+- **Parsing** matched the optional `, name` but discarded it, so
+  `catch (Exception e, st) { print(st) }` loaded with no `stackTraceName` and
+  the handler referred to a variable that was never bound.
+- **Generating** fell through to the base implementation, which is documented as
+  suiting JavaScript: `let $name = '';`. `let` is not an Apollo keyword, so the
+  emitted line did not fail — it parsed as a variable of a type *named* `let`
+  (the same misparse class as `set` above) and propagated onward as invalid
+  Dart.
+
+Apollo now keeps the name and declares it in the `catch` header, as Dart does,
+so `renderCatchStackTraceBinding` returns `null` and no statement is synthesised.
+`catch (e, st)`, `catch (Exception e, st)` and the paren-less `catch e, st` all
+parse, and a stack trace survives `Dart → Apollo → Dart` bound in the header.
+Clauses without one are unchanged. The runtime already declared the variable
+(as the empty string — ApolloVM has no real stack traces), so only the grammar
+and generator needed fixing.
+
+Other targets were unaffected: Dart, Java, Kotlin and C# already override the
+binding, JavaScript and TypeScript are correct as-is, and Python overrides the
+whole `try`/`catch` statement.
+
 ## 2.30.0
 
 ### Dart: multiple variables per declaration
