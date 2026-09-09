@@ -189,6 +189,31 @@ class Tags {
 }
 '''),
 
+  // Core static conversions (`int.parse`, `double.parse`) behind a prefixed
+  // import, and a string built by concatenation then embedded in an
+  // interpolation. Drives `normalizeTypeFunction` (each target spells the
+  // conversions its own way), the prefixed-import branch of
+  // `generateASTStatementImport`, and the concatenation branch of the
+  // template/interpolation emitters.
+  _Program('conversions', 'Conv', r'''
+import 'dart:math' as math;
+
+class Conv {
+  int parseInt(String s) {
+    return int.parse(s);
+  }
+
+  double parseDouble(String s) {
+    return double.parse(s);
+  }
+
+  String describe(int a, String b) {
+    var joined = b + '-' + b;
+    return 'a=$a j=$joined n=${a + 1}';
+  }
+}
+'''),
+
   // Import statements plus a class holding a Map<String, List<int>> and a 2D
   // array field. Drives `generateASTStatementImport` alongside more
   // generic-type and nested-collection emission.

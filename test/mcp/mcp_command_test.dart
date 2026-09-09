@@ -131,6 +131,113 @@ void main() {
     });
   });
 
+  group('mcp with no subcommand', () {
+    test('is a usage error that lists every subcommand', () async {
+      await expectLater(
+        runMcp([]),
+        throwsA(
+          isA<UsageException>().having(
+            (e) => e.toString(),
+            'usage',
+            allOf([
+              contains('Available subcommands:'),
+              for (final sub in ['serve', 'list', 'call', 'info', 'schema'])
+                contains(sub),
+            ]),
+          ),
+        ),
+      );
+    });
+
+    test('the command itself falls back to printing its usage', () {
+      // `args` rejects a bare parent command before dispatching, so this
+      // fallback is only reachable by invoking the command directly.
+      final runner = CommandRunner<bool>('apollovm', 'test')
+        ..addCommand(CommandMcp());
+      final mcp = runner.commands['mcp'] as CommandMcp;
+
+      final out = StringBuffer();
+      final ok = runZoned(
+        mcp.run,
+        zoneSpecification: ZoneSpecification(
+          print: (_, _, _, line) => out.writeln(line),
+        ),
+      );
+
+      expect(ok, isTrue);
+      expect(out.toString(), contains('Available subcommands:'));
+    });
+  });
+
+  group('mcp schema without a tool name', () {
+    test('prints every tool schema, keyed by tool name', () async {
+      final schemas = jsonDecode(await runMcp(['schema'])) as Map;
+      expect(schemas.keys, containsAll(allToolNames));
+      for (final schema in schemas.values) {
+        expect((schema as Map)['properties'], isA<Map>());
+      }
+    });
+
+    test('includes the repository tools with --workspace', () async {
+      final schemas =
+          jsonDecode(await runMcp(['schema', '--workspace', '.'])) as Map;
+      expect(schemas.keys, containsAll(repoToolNames));
+    });
+  });
+
+  group('mcp info as text', () {
+    test(
+      'prints the server, protocol, transports, languages and limits',
+      () async {
+        final out = await runMcp(['info']);
+        expect(out, contains('server:     apollovm-mcp ${ApolloVM.VERSION}'));
+        expect(out, contains('protocol:   '));
+        expect(out, contains('transports: stdio, http-sse'));
+        expect(out, contains('languages:  '));
+        expect(out, contains('limits:     timeoutMs='));
+        // Without a workspace, the repo tools are only advertised as available.
+        expect(out, contains('available with --workspace'));
+      },
+    );
+
+    test('lists the repository tools when a workspace is given', () async {
+      final out = await runMcp(['info', '--workspace', '.']);
+      expect(out, contains('repo tools: '));
+      expect(out, contains(repoToolNames.first));
+    });
+
+    test('the JSON form names the repository tools too', () async {
+      final info =
+          jsonDecode(await runMcp(['info', '--json', '--workspace', '.']))
+              as Map;
+      expect(info['repositoryTools'], containsAll(repoToolNames));
+    });
+  });
+
+  group('resource-limit options', () {
+    test('a non-integer limit is rejected, naming the option', () {
+      expect(
+        runMcp([
+          'call',
+          'parse',
+          '-l',
+          'dart',
+          '-s',
+          'x',
+          '--timeout-ms',
+          'abc',
+        ]),
+        throwsA(
+          isA<StateError>().having(
+            (e) => e.message,
+            'message',
+            contains('Invalid integer for --timeout-ms'),
+          ),
+        ),
+      );
+    });
+  });
+
   group('mcp call --null-safety', () {
     // The flag is the same server default the serve path applies; `call` builds
     // its own args map, so it has to set it explicitly.
