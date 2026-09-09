@@ -2365,16 +2365,15 @@ class DartGrammarDefinition extends DartGrammarLexer {
             ];
 
             // Same inference as a list literal: without an explicit `<T>`, the
-            // element type is the common type of the elements.
+            // element type is the common type of the elements. There is always
+            // at least one — an empty set is [expressionSetEmptyLiteral].
             if (type == null) {
               var resolving = values.map((e) => e.resolveType(null)).toList();
               var types = resolving.whereType<ASTType>().toList();
               if (types.length == resolving.length) {
-                type = types.isEmpty
-                    ? ASTTypeDynamic.instance
-                    : types.reduce(
-                        (a, b) => a.commonType(b) ?? ASTTypeDynamic.instance,
-                      );
+                type = types.reduce(
+                  (a, b) => a.commonType(b) ?? ASTTypeDynamic.instance,
+                );
               }
             }
 

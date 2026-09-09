@@ -113,6 +113,34 @@ void main() {
     });
   });
 
+  group('The private → public name rule', () {
+    String? publicOf(String name) =>
+        ASTConstructorParameterDeclaration.publicNameOfPrivate(name);
+
+    test('a private name loses its leading underscore', () {
+      expect(publicOf('_x'), equals('x'));
+      expect(publicOf('_someName'), equals('someName'));
+      expect(publicOf(r'_$a'), equals(r'$a'));
+    });
+
+    test('a name with no public form is left alone', () {
+      expect(publicOf('x'), isNull, reason: 'already public');
+      expect(publicOf('__x'), isNull, reason: 'still private');
+      expect(publicOf('_'), isNull, reason: 'nothing left');
+      expect(publicOf('_1'), isNull, reason: 'would start with a digit');
+    });
+
+    test('a parameter with no public form keeps its private name', () async {
+      expect(
+        await _run(
+          'class P { final int _1; P({required this._1}); int get v => this._1; }\n'
+          'int run() { var p = P(_1: 8); return p.v; }',
+        ),
+        equals(8),
+      );
+    });
+  });
+
   group('Private named parameters', () {
     const point =
         'class Point {\n'

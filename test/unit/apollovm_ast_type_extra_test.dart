@@ -141,6 +141,148 @@ void main() {
     });
   });
 
+  group('ASTTypeSet', () {
+    test('static instances name and element type', () {
+      expect(ASTTypeSet.instanceOfString.name, equals('Set'));
+      expect(ASTTypeSet.instanceOfInt.name, equals('Set'));
+      expect(ASTTypeSet.instanceOfDouble.name, equals('Set'));
+      expect(ASTTypeSet.instanceOfBool.name, equals('Set'));
+      expect(ASTTypeSet.instanceOfObject.name, equals('Set'));
+      expect(ASTTypeSet.instanceOfDynamic.name, equals('Set'));
+
+      expect(ASTTypeSet.instanceOfString.generics, hasLength(1));
+      expect(
+        ASTTypeSet.instanceOfString.elementType,
+        equals(ASTTypeString.instance),
+      );
+      expect(ASTTypeSet.instanceOfInt.toString(), equals('Set<int>'));
+    });
+
+    test('fromType maps Set<T> to the shared instances', () {
+      expect(
+        ASTTypeSet.fromType(Set<String>),
+        same(ASTTypeSet.instanceOfString),
+      );
+      expect(ASTTypeSet.fromType(Set<int>), same(ASTTypeSet.instanceOfInt));
+      expect(
+        ASTTypeSet.fromType(Set<double>),
+        same(ASTTypeSet.instanceOfDouble),
+      );
+      expect(ASTTypeSet.fromType(Set<bool>), same(ASTTypeSet.instanceOfBool));
+      expect(
+        ASTTypeSet.fromType(Set<Object>),
+        same(ASTTypeSet.instanceOfObject),
+      );
+      expect(
+        ASTTypeSet.fromType(Set<dynamic>),
+        same(ASTTypeSet.instanceOfDynamic),
+      );
+      expect(ASTTypeSet.fromType(List<int>), isNull);
+
+      expect(ASTType.fromType(Set<int>), same(ASTTypeSet.instanceOfInt));
+    });
+
+    test('cloneType keeps the element type', () {
+      var clone = ASTTypeSet.instanceOfInt.cloneType();
+      expect(clone, isA<ASTTypeSet>());
+      expect((clone as ASTTypeSet).elementType, equals(ASTTypeInt.instance));
+      expect(identical(clone, ASTTypeSet.instanceOfInt), isFalse);
+    });
+
+    test('acceptsType treats `dynamic` as a wildcard', () {
+      var typed = ASTTypeSet<ASTTypeInt, int>(ASTTypeInt.instance);
+      expect(typed.acceptsType(ASTTypeSet.instanceOfDynamic), isTrue);
+      expect(ASTTypeSet.instanceOfDynamic.acceptsType(typed), isTrue);
+      expect(typed.acceptsType(ASTTypeSet.instanceOfInt), isTrue);
+      expect(typed.acceptsType(ASTTypeSet.instanceOfString), isFalse);
+      expect(typed.acceptsType(ASTTypeArray.instanceOfInt), isFalse);
+    });
+
+    test('toValue from a native Set, and from any Iterable', () async {
+      ASTValue? v = await ASTTypeSet.instanceOfInt.toValue(context, {1, 2});
+      expect(await v!.getValue(context), equals({1, 2}));
+
+      // A list is accepted and de-duplicated.
+      ASTValue? fromList = await ASTTypeSet.instanceOfInt.toValue(context, [
+        1,
+        2,
+        1,
+      ]);
+      expect(await fromList!.getValue(context), equals({1, 2}));
+    });
+
+    test('toValue filters elements of the wrong type', () async {
+      ASTValue? v = await ASTTypeSet.instanceOfInt.toValue(context, {
+        1,
+        'a',
+        2,
+      });
+      expect(await v!.getValue(context), equals({1, 2}));
+    });
+
+    test(
+      'toValue passes an ASTValueSet through, and unwraps an ASTValue',
+      () async {
+        var set = ASTValueSet(ASTTypeInt.instance, {1, 2});
+        expect(
+          identical(await ASTTypeSet.instanceOfInt.toValue(context, set), set),
+          isTrue,
+        );
+
+        ASTValue? unwrapped = await ASTTypeSet.instanceOfInt.toValue(
+          context,
+          ASTValueArray(ASTTypeInt.instance, [3, 3, 4]),
+        );
+        expect(await unwrapped!.getValue(context), equals({3, 4}));
+      },
+    );
+
+    test(
+      'toValue/toASTValue of null is null; a non-iterable is empty',
+      () async {
+        expect(await ASTTypeSet.instanceOfInt.toValue(context, null), isNull);
+        expect(ASTTypeSet.instanceOfInt.toASTValue(null), isNull);
+
+        var v = ASTTypeSet.instanceOfInt.toASTValue(7);
+        expect(v!.getValueNoContext(), isEmpty);
+      },
+    );
+
+    test('toASTValue from a Set', () {
+      var v = ASTTypeSet.instanceOfString.toASTValue({'a', 'b'});
+      expect(v!.getValueNoContext(), equals({'a', 'b'}));
+    });
+
+    test('ASTType.fromNativeValue infers the element type of a Set', () {
+      expect(ASTType.fromNativeValue({'a'}), same(ASTTypeSet.instanceOfString));
+      expect(ASTType.fromNativeValue({1}), same(ASTTypeSet.instanceOfInt));
+      expect(ASTType.fromNativeValue({1.5}), same(ASTTypeSet.instanceOfDouble));
+      expect(ASTType.fromNativeValue({true}), same(ASTTypeSet.instanceOfBool));
+
+      var emptySet = ASTType.fromNativeValue(<dynamic>{});
+      expect(emptySet, isA<ASTTypeSet>());
+      expect((emptySet as ASTTypeSet).elementType, isA<ASTTypeDynamic>());
+
+      var dynamicSet = ASTType.fromNativeValue(<dynamic>{1, 'a'});
+      expect(dynamicSet, isA<ASTTypeSet>());
+      expect((dynamicSet as ASTTypeSet).elementType, isA<ASTTypeDynamic>());
+    });
+
+    test('ASTValueSet equality is set equality, order-insensitive', () async {
+      var a = ASTValueSet(ASTTypeInt.instance, {1, 2});
+      var b = ASTValueSet(ASTTypeInt.instance, {2, 1});
+      var c = ASTValueSet(ASTTypeInt.instance, {1, 3});
+
+      expect(await a.equals(a), isTrue);
+      expect(await a.equals(b), isTrue);
+      expect(await a.equals(c), isFalse);
+      expect(
+        await a.equals(ASTValueArray(ASTTypeInt.instance, [1, 2])),
+        isFalse,
+      );
+    });
+  });
+
   group('ASTTypeArray2D / Array3D', () {
     test('fromElementType 2D', () {
       var a2 = ASTTypeArray2D<ASTTypeInt, int>.fromElementType(
