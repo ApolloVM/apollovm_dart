@@ -314,12 +314,12 @@ Int f(Int n) {
       return ret.getValueNoContext() as int;
     }
 
-    test('ascending inclusive `for i++ from 0..n`', () async {
-      expect(await sum('for i++ from 0..n', n: 3), equals(0 + 1 + 2 + 3));
+    test('ascending inclusive `for i++ from 0...n`', () async {
+      expect(await sum('for i++ from 0...n', n: 3), equals(0 + 1 + 2 + 3));
     });
 
-    test('descending inclusive `for i-- from n..0`', () async {
-      expect(await sum('for i-- from n..0', n: 3), equals(3 + 2 + 1 + 0));
+    test('descending inclusive `for i-- from n...0`', () async {
+      expect(await sum('for i-- from n...0', n: 3), equals(3 + 2 + 1 + 0));
     });
 
     test('ascending exclusive upper `for i++ from 0..<n`', () async {
@@ -330,12 +330,38 @@ Int f(Int n) {
       expect(await sum('for i-- from n..>0', n: 3), equals(3 + 2 + 1));
     });
 
-    test('ascending custom step `for i += 2 from 0..n`', () async {
-      expect(await sum('for i += 2 from 0..n', n: 6), equals(0 + 2 + 4 + 6));
+    // Both bounds identifier-shaped: this is the form that would be ambiguous
+    // if the inclusive range were still spelled `..` (see the cascade tests).
+    test('both bounds are variables `for i++ from lo...hi`', () async {
+      var ret = await _call(
+        r'''
+Int f(Int lo, Int hi) {
+  var s = 0
+  for i++ from lo...hi {
+    s = s + i
+  }
+  return s
+}
+''',
+        'f',
+        positionalParameters: [1, 4],
+      );
+      expect(ret.getValueNoContext(), equals(1 + 2 + 3 + 4));
     });
 
-    test('descending custom step `for i -= 2 from n..0`', () async {
-      expect(await sum('for i -= 2 from n..0', n: 6), equals(6 + 4 + 2 + 0));
+    test('the old `..` inclusive spelling gives a migration error', () async {
+      expect(
+        await _loads('Int f(Int n) { for i++ from 0..n { } return 0 }'),
+        isFalse,
+      );
+    });
+
+    test('ascending custom step `for i += 2 from 0...n`', () async {
+      expect(await sum('for i += 2 from 0...n', n: 6), equals(0 + 2 + 4 + 6));
+    });
+
+    test('descending custom step `for i -= 2 from n...0`', () async {
+      expect(await sum('for i -= 2 from n...0', n: 6), equals(6 + 4 + 2 + 0));
     });
 
     test('classic `for` with parentheses still works', () async {
@@ -363,11 +389,11 @@ Int f(Int n) {
       var apollo = _extractCodeUnit(
         await _translate(r'''
 run(Int n) {
-  for i++ from 0..n { print(i) }
+  for i++ from 0...n { print(i) }
 }
 ''', 'apollo'),
       );
-      expect(apollo, contains('for i++ from 0..n'));
+      expect(apollo, contains('for i++ from 0...n'));
       expect(apollo, isNot(contains('for (')));
     });
 
@@ -411,7 +437,7 @@ run(Int n) {
         r'''
 Int f(Int n) {
   var s = 0
-  for i++ from 0..n {
+  for i++ from 0...n {
     if i == 2 { continue }
     if i == 5 { break }
     s = s + i
@@ -430,8 +456,8 @@ Int f(Int n) {
       var ret = await _call(r'''
 Int f() {
   var s = 0
-  for i++ from 1..3 {
-    for j++ from 1..3 {
+  for i++ from 1...3 {
+    for j++ from 1...3 {
       s = s + i * j
     }
   }

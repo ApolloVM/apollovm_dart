@@ -862,6 +862,7 @@ class ApolloGrammarDefinition extends ApolloGrammarLexer {
               statementForEach() |
               statementForRange() |
               statementForLoop() |
+              statementForRangeOperatorError() |
               statementForParensError() |
               statementWhileLoop() |
               statementReturn() |
@@ -1084,10 +1085,16 @@ class ApolloGrammarDefinition extends ApolloGrammarLexer {
                   .map((v) => <dynamic>[v[0], v[1]]))
           .cast<List>();
 
-  /// A range operator: `..` (inclusive), `..<` (exclusive upper) or `..>`
-  /// (exclusive lower). Longer operators are tried first.
+  /// A range operator: `...` (inclusive), `..<` (exclusive upper) or `..>`
+  /// (exclusive lower).
+  ///
+  /// The inclusive form is `...`, not `..`, so that `..` is unambiguously the
+  /// cascade operator. Both spellings are three characters and differ only in
+  /// the last, so the order among them is irrelevant — but a bare `..` must
+  /// *not* match here: it belongs to [expressionCascade].
+  /// See [statementForRangeOperatorError] for the migration message.
   Parser<String> rangeOperator() =>
-      (string('..<') | string('..>') | string('..'))
+      (string('...') | string('..<') | string('..>'))
           .trimHidden()
           .cast<String>();
 
@@ -1163,6 +1170,29 @@ class ApolloGrammarDefinition extends ApolloGrammarLexer {
           .map<ASTStatement>(
             (v) => throw SyntaxError(
               'Classic for loops require parentheses:\nfor (...)',
+            ),
+          );
+
+  /// Emits a helpful error when a range `for` uses the old inclusive spelling
+  /// `..` instead of `...` (e.g. `for i++ from 0..n { … }`).
+  ///
+  /// It is reached only after [statementForRange] has failed. Note it cannot
+  /// catch *every* stale loop: once both bounds are identifier-shaped
+  /// (`from lo..hi`), the leading `..` is claimed by [expressionCascade] before
+  /// this rule sees it, and the loop fails with a plain syntax error instead.
+  /// It does catch the canonical literal-bound form, which is what existing
+  /// sources and generated output overwhelmingly use.
+  Parser<ASTStatement> statementForRangeOperatorError() =>
+      (string('for').trimHidden() &
+              identifier().trimHidden() &
+              rangeStep() &
+              rangeFromToken() &
+              ref0(expression) &
+              string('..'))
+          .map<ASTStatement>(
+            (v) => throw SyntaxError(
+              'Range loops use `...` for the inclusive bound:\n'
+              'for i++ from 0...n',
             ),
           );
 

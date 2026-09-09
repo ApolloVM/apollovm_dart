@@ -12,9 +12,12 @@
   - **Parentheses are optional** in control-flow conditions (`if`, `else if`,
     `while`, `do`/`while`, `switch`, `catch`). Both `if age >= 18 { … }`
     and `if (age >= 18) { … }` parse.
-  - **Concise range-based `for`** — `for i++ from 0..limit { … }` with ascending
+  - **Concise range-based `for`** — `for i++ from 0...limit { … }` with ascending
     (`++`/`+=`) and descending (`--`/`-=`) steps, custom steps, and inclusive
-    (`..`) / exclusive (`..<`, `..>`) bounds. It is equivalent to a classic
+    (`...`) / exclusive (`..<`, `..>`) bounds. The inclusive bound is `...`
+    (Swift-style), leaving a bare `..` to mean the cascade operator; a range
+    written with `..` is a syntax error naming the fix. It is equivalent to a
+    classic
     `for (var i = …; …; …)`, and Apollo regenerates the range sugar for any loop
     with this canonical counting shape (so a matching classic loop also comes
     back as range sugar). The classic C-style loop stays available but now

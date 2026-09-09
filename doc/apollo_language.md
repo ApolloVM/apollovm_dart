@@ -175,19 +175,23 @@ The range form is the concise, readable way to write a counting loop. The step
 operator selects the bound:
 
 ```apollo
-for i++ from 0..limit   { ... }   // ascending, inclusive     (i <= limit)
-for i-- from limit..0   { ... }   // descending, inclusive    (i >= 0)
-for i++ from 0..<limit  { ... }   // ascending, exclusive up  (i <  limit)
-for i-- from limit..>0  { ... }   // descending, exclusive lo (i >  0)
-for i += 2 from 0..limit { ... }  // custom step, ascending   (i += 2)
-for i -= 2 from limit..0 { ... }  // custom step, descending  (i -= 2)
+for i++ from 0...limit   { ... }  // ascending, inclusive     (i <= limit)
+for i-- from limit...0   { ... }  // descending, inclusive    (i >= 0)
+for i++ from 0..<limit   { ... }  // ascending, exclusive up  (i <  limit)
+for i-- from limit..>0   { ... }  // descending, exclusive lo (i >  0)
+for i += 2 from 0...limit { ... } // custom step, ascending   (i += 2)
+for i -= 2 from limit...0 { ... } // custom step, descending  (i -= 2)
 ```
 
+The inclusive bound is `...` (three dots, as in Swift), **not** `..` — a bare
+`..` is the [cascade operator](#cascades). Using `..` for a range is a syntax
+error that names the fix.
+
 Each range loop is exactly equivalent to the classic form — e.g.
-`for i++ from 0..limit` ≡ `for (var i = 0; i <= limit; i++)`. The two are the
+`for i++ from 0...limit` ≡ `for (var i = 0; i <= limit; i++)`. The two are the
 same after parsing, and Apollo **regenerates the range sugar whenever a loop has
 this canonical counting shape** (so a classic `for (var i = 0; i <= n; i++)` also
-comes back as `for i++ from 0..n`). Loops that can't be expressed as a range —
+comes back as `for i++ from 0...n`). Loops that can't be expressed as a range —
 a typed loop variable (`for (Int i = …)`), a non-additive step (`i = i * 2`), or
 a direction that doesn't match its comparison — regenerate as the classic form.
 

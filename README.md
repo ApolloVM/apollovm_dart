@@ -66,8 +66,9 @@ table below — while diverging in a few deliberate ways:
 - **Parentheses are optional** in control-flow conditions — `if age >= 18 { … }`
   and `if (age >= 18) { … }` both parse (`if`, `else if`, `while`, `do`/`while`,
   `switch`, `catch`).
-- **Concise range-based `for`** — `for i++ from 0..limit { … }` (ascending,
+- **Concise range-based `for`** — `for i++ from 0...limit { … }` (ascending,
   descending, exclusive bounds `..<`/`..>`, and custom steps `i += 2`). The
+  inclusive bound is `...`, so a bare `..` stays free for cascades. The
   classic C-style loop stays available but **requires parentheses**:
   `for (var i = 0; i <= limit; i++) { … }`.
 - **`async` is a leading declaration modifier** — `async User loadUser(…) { … }`,

@@ -128,7 +128,7 @@ class ApolloCodeGeneratorApollo extends ApolloCodeGenerator {
     String rangeOp;
     if (ascending) {
       if (cmp == ASTExpressionOperator.lowerOrEq) {
-        rangeOp = '..';
+        rangeOp = '...';
       } else if (cmp == ASTExpressionOperator.lower) {
         rangeOp = '..<';
       } else {
@@ -136,7 +136,7 @@ class ApolloCodeGeneratorApollo extends ApolloCodeGenerator {
       }
     } else {
       if (cmp == ASTExpressionOperator.greaterOrEq) {
-        rangeOp = '..';
+        rangeOp = '...';
       } else if (cmp == ASTExpressionOperator.greater) {
         rangeOp = '..>';
       } else {

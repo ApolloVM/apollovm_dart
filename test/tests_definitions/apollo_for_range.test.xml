@@ -4,7 +4,7 @@
         <![CDATA[
 run() {
   var total = 0
-  for i++ from 1..5 {
+  for i++ from 1...5 {
     total = total + i
   }
   print("sum=" + total)
@@ -27,7 +27,7 @@ run() {
 <<<< CODE_UNIT_START="/test" >>>>
   dynamic run() {
     var total = 0;
-    for i++ from 1..5 {
+    for i++ from 1...5 {
       total = total + i;
     }
     print('sum=$total');
