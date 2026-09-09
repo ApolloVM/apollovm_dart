@@ -168,6 +168,13 @@ constants, initializer lists).
 
 ### Fixed
 
+- `List.valueOf(x)` — the static conversion Java-shaped source uses — failed the
+  *parse* with `type 'Null' is not a subtype of type 'ASTClass'`. Resolving the
+  core `List` class asked for the element type, and a `List` named in source
+  carries none, so the lookup returned `null` into a cast. It now falls back to
+  the element-type-less `List` class and the call resolves (`List.valueOf(5)` →
+  `[5]`, a list passes through, `null` becomes `[]`).
+
 - An empty map literal with explicit type arguments (`<K,V>{}`) threw
   `type 'String' is not a subtype of type 'ASTType?'` while parsing, because the
   value type was read from the comma's position. That is the form an empty `{}`

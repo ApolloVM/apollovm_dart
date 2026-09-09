@@ -18,7 +18,12 @@ class ApolloVMCore {
       case 'Double':
         return CoreClassDouble.instance as ASTClass<V>;
       case 'List':
-        return CoreClassList.fromType(V) as ASTClass<V>;
+        // `fromType` only answers for the element types it interns, and `V` is
+        // often `dynamic` (a `List` named in source carries no element type
+        // here). Falling back keeps a plain `List.…` call resolving instead of
+        // failing the *parse* with a null cast.
+        return (CoreClassList.fromType(V) ?? CoreClassList.instanceOfDynamic)
+            as ASTClass<V>;
       case 'Map':
         return CoreClassMap.instance as ASTClass<V>;
       case 'Set':
