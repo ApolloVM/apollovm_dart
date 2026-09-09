@@ -538,6 +538,70 @@ class C {
       expect(output, equals([20]));
     });
 
+    test('setter', () async {
+      var output = await _run(r'''
+class C {
+  Int _x = 0
+  set x(Int v) { this._x = v * 2 }
+  Int get x => this._x
+  static run() {
+    var c = C()
+    c.x = 21
+    print(c.x)
+  }
+}
+''', className: 'C');
+      expect(output, equals([42]));
+    });
+
+    test('setter with arrow body and untyped parameter', () async {
+      var output = await _run(r'''
+class C {
+  Int _x = 0
+  set x(v) => this._x = v + 1
+  Int get x => this._x
+  static run() {
+    var c = C()
+    c.x = 41
+    print(c.x)
+  }
+}
+''', className: 'C');
+      expect(output, equals([42]));
+    });
+
+    // `set` is contextual, not reserved: a method may still be named `set`.
+    // Before the setter rule existed, `set x(Int v)` was silently claimed by
+    // the method rule as a method `x` returning a type named `set`.
+    test('method named `set` is still a method', () async {
+      var output = await _run(r'''
+class C {
+  Int set(Int v) { return v * 2 }
+  static run() {
+    var c = C()
+    print(c.set(21))
+  }
+}
+''', className: 'C');
+      expect(output, equals([42]));
+    });
+
+    // The `get`/`set` type-position guards must not reject identifiers that
+    // merely start with those words.
+    test('types and members prefixed `get`/`set`', () async {
+      var output = await _run(r'''
+class C {
+  Int settings = 40
+  Int getaway() { return 2 }
+  static run() {
+    var c = C()
+    print(c.settings + c.getaway())
+  }
+}
+''', className: 'C');
+      expect(output, equals([42]));
+    });
+
     test('named / default parameters', () async {
       var ret = await _call(
         'Int area({Int w = 2, Int h = 3}) { return w * h }\n',

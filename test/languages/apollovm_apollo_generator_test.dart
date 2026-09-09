@@ -201,6 +201,71 @@ run() { print(1) }
       },
     );
 
+    test('setter declaration round-trips', () async {
+      var apollo = await _roundTrip(r'''
+class Box {
+  Int _v = 0
+  set value(Int v) { this._v = v }
+  Int get value { return this._v }
+}
+
+run() {
+  var b = Box()
+  b.value = 42
+  print(b.value)
+}
+''');
+
+      expect(apollo, contains('set value(Int v) {'));
+      expect(apollo, contains('Int get value {'));
+    });
+
+    test('arrow-bodied setter is emitted as an arrow, not a block', () async {
+      // `set x(v) { return … }` is invalid: a setter has no return value.
+      var apollo = await _roundTrip(r'''
+class Box {
+  Int _v = 0
+  set value(Int v) => this._v = v
+  Int get value { return this._v }
+}
+
+run() {
+  var b = Box()
+  b.value = 42
+  print(b.value)
+}
+''');
+
+      expect(apollo, contains('set value(Int v) =>'));
+      expect(apollo, isNot(contains('set value(Int v) { return')));
+    });
+
+    test('setter in an extension body', () async {
+      var apollo = await _gen(r'''
+extension Boxer on Box {
+  set value(Int v) { this._v = v }
+}
+
+run() { print(1) }
+''');
+
+      expect(apollo, contains('set value(Int v) {'));
+    });
+
+    // Regression: translating a Dart class with a setter threw
+    // `Language 'apollo' has no setter declaration`.
+    test('Dart setter translates to Apollo', () async {
+      var apollo = await _gen(r'''
+class Box {
+  int _v = 0;
+  set value(int v) { this._v = v; }
+  int get value { return this._v; }
+}
+''', language: 'dart');
+
+      expect(apollo, contains('set value(Int v) {'));
+    });
+
     test('named and anonymous extensions', () async {
       var apollo = await _gen(r'''
 extension Doubler on Int {

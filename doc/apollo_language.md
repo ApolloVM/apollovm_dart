@@ -361,9 +361,25 @@ the leading form.
 ## Classes
 
 Classes support fields, named and default constructors, instance and `static`
-methods, and getters — as in Dart. Because return types are optional, a method
-without a return type (e.g. `run()`) is distinguished from a constructor by the
-class name.
+methods, and getters and setters — as in Dart. Because return types are
+optional, a method without a return type (e.g. `run()`) is distinguished from a
+constructor by the class name.
+
+Accessors use Dart's spelling, with either a block or an arrow body, and the
+setter's parameter type may be omitted:
+
+```apollo
+class Box {
+  Int _v = 0
+
+  Int get value => this._v
+
+  set value(Int v) { this._v = v }
+}
+```
+
+`get` and `set` are contextual, not reserved: a method may still be named
+`set(…)`, and a type or member may be named `settings` or `getaway`.
 
 ```apollo
 class Account {
@@ -444,6 +460,7 @@ A runnable example lives at
 - `async` is a declaration modifier; `await` only inside `async` functions
 - Rich enums with associated values
 - Named and factory constructors
+- Getters and setters, with block or arrow bodies
 - Logical imports
 - Semicolons optional
 - Familiar syntax inspired by Dart, Kotlin, Swift, TypeScript, Java and C#

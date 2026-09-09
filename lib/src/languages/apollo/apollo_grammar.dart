@@ -290,7 +290,9 @@ class ApolloGrammarDefinition extends ApolloGrammarLexer {
               onToken().trimHidden() &
               type() &
               char('{').trimHidden() &
-              (ref0(classFunctionDeclaration) | ref0(getterDeclaration))
+              (ref0(classFunctionDeclaration) |
+                      ref0(getterDeclaration) |
+                      ref0(setterDeclaration))
                   .star() &
               char('}').trimHidden())
           .map((v) {
@@ -302,6 +304,8 @@ class ApolloGrammarDefinition extends ApolloGrammarLexer {
             for (var member in (v[5] as List)) {
               if (member is ASTClassGetterDeclaration) {
                 extension.addGetter(member);
+              } else if (member is ASTClassSetterDeclaration) {
+                extension.addSetter(member);
               } else if (member is ASTFunctionDeclaration) {
                 extension.addFunction(member);
               }
@@ -317,8 +321,9 @@ class ApolloGrammarDefinition extends ApolloGrammarLexer {
           .map((v) => v[0] as String)
           .optional();
 
-  /// An instance getter: `int get twice => this * 2;` or `int get twice { … }`.
-  /// Valid in a class body and in an extension body. Setters are not supported.
+  /// An instance getter: `Int get twice => this * 2` or `Int get twice { … }`.
+  /// Valid in a class body and in an extension body. See [setterDeclaration]
+  /// for the writing half.
   Parser<ASTClassGetterDeclaration> getterDeclaration() =>
       (type().optional() &
               getToken().trimHidden() &
@@ -335,6 +340,50 @@ class ApolloGrammarDefinition extends ApolloGrammarLexer {
               block: block,
             );
           });
+
+  /// An instance setter: `set value(Int v) { … }` or `set value(Int v) => …`.
+  /// Valid in a class body and in an extension body.
+  ///
+  /// A leading return type is accepted and dropped: a setter has no return
+  /// value. The declared parameter is mandatory and single, as in Dart.
+  ///
+  /// [simpleType] rejects `set` in a type position, so this rule is still
+  /// reached even though the class body tries [classFunctionDeclaration]
+  /// first — that rule cannot consume `set` as a return type.
+  Parser<ASTClassSetterDeclaration> setterDeclaration() =>
+      (type().optional() &
+              setToken().trimHidden() &
+              identifier() &
+              char('(').trimHidden() &
+              ref0(setterParameter) &
+              char(')').trimHidden() &
+              (arrowBody() | codeBlock()))
+          .map((v) {
+            var name = v[2] as String;
+            var (parameterType, parameterName) = v[4] as (ASTType, String);
+            var block = v[6] as ASTBlock;
+            return ASTClassSetterDeclaration(
+              null,
+              name,
+              parameterType,
+              parameterName,
+              block: block,
+            );
+          });
+
+  /// The single parameter of a setter, typed (`Int v`) or untyped (`v`).
+  ///
+  /// An ordered choice rather than `type().optional() & identifier()`: for an
+  /// untyped parameter `type()` would match the *name* and petitparser's
+  /// `optional()` cannot backtrack, so the rule would fail.
+  Parser<(ASTType, String)> setterParameter() =>
+      ((type().trimHidden() & identifier().trimHidden()).map(
+                (v) => (v[0] as ASTType, v[1] as String),
+              ) |
+              identifier().trimHidden().map(
+                (v) => (ASTTypeDynamic.instance as ASTType, v),
+              ))
+          .cast<(ASTType, String)>();
 
   /// Type-parameter names of the class currently being parsed (e.g. `T` in
   /// `class Wrapper<T>`). Used by [simpleType] to erase them to `dynamic`.
@@ -512,6 +561,7 @@ class ApolloGrammarDefinition extends ApolloGrammarLexer {
               (ref0(classConstructorDefaultDeclaration) |
                       ref0(classFunctionDeclaration) |
                       ref0(getterDeclaration) |
+                      ref0(setterDeclaration) |
                       // With-value tried before the bare field: since a field's
                       // terminating `;` is optional in Apollo, the bare-field
                       // rule would otherwise claim `Int x` from `Int x = 5`.
@@ -526,6 +576,7 @@ class ApolloGrammarDefinition extends ApolloGrammarLexer {
                 .whereType<ASTClassConstructorDeclaration>()
                 .toList();
             var getters = list.whereType<ASTClassGetterDeclaration>().toList();
+            var setters = list.whereType<ASTClassSetterDeclaration>().toList();
             var functions = list.whereType<ASTFunctionDeclaration>().toList();
 
             var block = ASTClassNormal('?', ASTType<VMObject>('?'), null);
@@ -534,6 +585,9 @@ class ApolloGrammarDefinition extends ApolloGrammarLexer {
             block.addAllConstructors(constructors);
             block.addAllFunctions(functions);
             block.addAllGetters(getters);
+            for (var s in setters) {
+              block.addSetter(s);
+            }
 
             return block;
           });
@@ -2179,17 +2233,31 @@ class ApolloGrammarDefinition extends ApolloGrammarLexer {
           });
 
   Parser<ASTType> simpleType() =>
-      // Guard against the `await` contextual keyword being read as a type name
-      // (so `await x;` parses as an await expression, not a `await x` variable
-      // declaration).
-      (awaitToken().not() & identifier()).map((v) {
-        var name = v[1] as String;
-        // A class type parameter (`T`) is erased to `dynamic`.
-        if (_classTypeParameters.contains(name)) {
-          return ASTTypeDynamic.instance;
-        }
-        return getTypeByName(name);
-      });
+      // Guard against contextual keywords being read as type names.
+      //
+      // `await`: so `await x` parses as an await expression, not a `await x`
+      // variable declaration.
+      //
+      // `get`/`set`: both accessor rules start with `type().optional()`, and
+      // petitparser's `optional()` cannot backtrack — so without these guards
+      // `type()` eats the accessor keyword and the rule fails. For `set` the
+      // damage is silent rather than fatal: `set value(Int v) {}` is claimed by
+      // [classFunctionDeclaration] as a *method* named `value` returning a type
+      // named `set`, which then generates invalid code in every target
+      // language.
+      //
+      // `var`/`final`/`const`/`void`/`dynamic` must stay accepted here:
+      // [getTypeByName] maps them, and rules like `for (final e in l)` depend
+      // on it.
+      (awaitToken().not() & getToken().not() & setToken().not() & identifier())
+          .map((v) {
+            var name = v[3] as String;
+            // A class type parameter (`T`) is erased to `dynamic`.
+            if (_classTypeParameters.contains(name)) {
+              return ASTTypeDynamic.instance;
+            }
+            return getTypeByName(name);
+          });
 
   Parser<ASTTypeArray> arrayTyped() =>
       (array3DTyped() | array2DTyped() | array1DTyped()).cast<ASTTypeArray>();

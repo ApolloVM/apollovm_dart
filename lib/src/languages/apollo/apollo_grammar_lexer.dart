@@ -121,7 +121,7 @@ abstract class ApolloGrammarLexer extends BaseGrammarLexer {
 
   Parser partToken() => ref1(token, 'part');
 
-  Parser setToken() => ref1(token, 'set');
+  Parser setToken() => _keywordToken('set');
 
   Parser showToken() => ref1(token, 'show');
 

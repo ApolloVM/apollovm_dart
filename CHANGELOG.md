@@ -94,6 +94,31 @@ through the VM and CLI while those tools rejected it. `apollo` is now in the
 analyzer's extension map, `LspRuntime.supportedLanguages`, and
 `mcpSupportedLanguages`.
 
+#### Apollo setters
+
+Apollo parsed getters but had no setter rule, and `set` was not guarded in a
+type position — so `set value(Int v) { … }` was silently claimed by the method
+rule as a **method named `value` returning a type named `set`**. It was not a
+syntax error: the misparse round-tripped through Apollo unchanged and only
+surfaced downstream, where it emitted `set value(int v)` as a return type into
+targets that have no such type (invalid Java, Go, C#, …). In the other
+direction, translating any Dart class with a setter to Apollo failed outright
+with `Language 'apollo' has no setter declaration`.
+
+Apollo now has a real setter, matching Dart's: `set name(T v) { … }` and
+`set name(v) => …`, with an optional (and dropped) leading return type and a
+typed or untyped parameter, in class bodies and extension bodies alike. The
+Apollo generator emits them — an arrow-bodied setter comes back as an arrow,
+since `set x(v) { return … }` is not valid — so setters survive regeneration
+and `Dart ↔ Apollo` translation.
+
+`simpleType` now rejects `get` and `set` in a type position, as the Dart grammar
+already did. Both stay *contextual*, not reserved: a method may still be named
+`set(…)`, and identifiers that merely begin with those words (`settings`,
+`getaway`) are unaffected. The `get` guard also fixes untyped getters
+(`get value { … }`), which the non-backtracking `type().optional()` had made
+unparseable.
+
 ## 2.30.0
 
 ### Dart: multiple variables per declaration

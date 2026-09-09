@@ -390,7 +390,7 @@ setter runs on `obj.x = v`, `this.x = v`, an unqualified `x = v` inside the
 class, and on compound forms (`+=`, `??=`, …), which read through the getter
 when there is one; `??=` short-circuits, so the setter does not run when the
 current value is non-null. Inherited and overridden accessors resolve through
-the superclass chain. **Only Dart generates them** — Kotlin emits getters
+the superclass chain. **Only Dart and Apollo generate them** — Kotlin emits getters
 (`val x: T get() { … }`) but not setters, and every other target refuses an
 accessor with `UnsupportedSyntaxError` rather than dropping it. Not yet
 supported, for getters and setters alike: `static` accessors, top-level
