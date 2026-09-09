@@ -5,9 +5,11 @@ import 'package:apollovm/apollovm.dart';
 import 'package:apollovm/apollovm_serialization.dart';
 import 'package:test/test.dart';
 
-/// Primary constructors (Dart 3.13) and private named parameters (Dart 3.12):
-/// the cases the XML corpus can't express — a *refused* call site, and what the
-/// desugared class looks like from the outside.
+/// The constructor-parameter forms: primary constructors (Dart 3.13), private
+/// named parameters (Dart 3.12) and super parameters (Dart 2.17) — the cases
+/// the XML corpus can't express, such as a *refused* call site, what the
+/// desugared class looks like from the outside, and how each form is spelled
+/// after a binary AST round-trip.
 
 Future<ApolloVM> _load(String src) async {
   var vm = ApolloVM();
@@ -110,6 +112,129 @@ void main() {
       expect(await vm2.loadCodeUnitAST(image), isTrue);
       var res = await vm2.createRunner('dart')!.executeFunction('', 'run');
       expect(res.getValueNoContext(), equals(7));
+    });
+  });
+
+  group('Super parameters', () {
+    const shape =
+        'class Shape {\n'
+        '  final int x;\n'
+        '  Shape(this.x);\n'
+        '}\n';
+
+    test(
+      'a positional super parameter initializes the inherited field',
+      () async {
+        expect(
+          await _run(
+            '${shape}class Box extends Shape { final int y; Box(super.x, this.y); }\n'
+            'int run() { var b = Box(1, 2); return b.x + b.y; }',
+          ),
+          equals(3),
+        );
+      },
+    );
+
+    test('named, with `required` and with a default', () async {
+      expect(
+        await _run(
+          'class A { final int x; A({required this.x}); }\n'
+          'class B extends A { B({required super.x}); }\n'
+          'int run() { var b = B(x: 5); return b.x; }',
+        ),
+        equals(5),
+      );
+      expect(
+        await _run(
+          '${shape}class Box extends Shape { Box([super.x = 9]); }\n'
+          'int run() { var b = Box(); return b.x; }',
+        ),
+        equals(9),
+      );
+    });
+
+    test('it reaches a field two levels up', () async {
+      expect(
+        await _run(
+          '${shape}class Mid extends Shape { Mid(super.x); }\n'
+          'class Leaf extends Mid { final int z; Leaf(super.x, this.z); }\n'
+          'int run() { var l = Leaf(2, 5); return l.x + l.z; }',
+        ),
+        equals(7),
+      );
+    });
+
+    test('it combines with a private named parameter', () async {
+      expect(
+        await _run(
+          'class A { final int _x; A({required this._x}); int get x => this._x; }\n'
+          'class B extends A { B({required super._x}); }\n'
+          'int run() { var b = B(x: 6); return b.x; }',
+        ),
+        equals(6),
+      );
+    });
+
+    test('a primary constructor takes one too', () async {
+      expect(
+        await _run(
+          '${shape}class Box(super.x, final int y) extends Shape {}\n'
+          'int run() { var b = Box(1, 2); return b.x + b.y; }',
+        ),
+        equals(3),
+      );
+    });
+
+    test(
+      'Dart output spells it `super.`, and `this.` for an own field',
+      () async {
+        var vm = await _load(
+          '${shape}class Box extends Shape { final int y; Box(super.x, this.y); }',
+        );
+        var code = (await vm.generateAllCodeIn('dart').writeAllSources())
+            .toString();
+
+        expect(code, contains('Box(super.x, this.y);'));
+        expect(code, contains('Shape(this.x);'));
+      },
+    );
+
+    test('the spelling survives the binary AST', () async {
+      var vm = await _load(
+        '${shape}class Box extends Shape { final int y; Box(super.x, this.y); }\n'
+        'int run() { var b = Box(3, 4); return b.x + b.y; }',
+      );
+
+      var image = vm.saveCodeUnitAST(vm.allCodeUnitsAllLanguages().single);
+
+      var vm2 = ApolloVM();
+      expect(await vm2.loadCodeUnitAST(image), isTrue);
+
+      var res = await vm2.createRunner('dart')!.executeFunction('', 'run');
+      expect(res.getValueNoContext(), equals(7));
+
+      // The `super.` spelling is re-derived from the class hierarchy on decode
+      // — an initializing formal may only name a field of its own class.
+      var code = (await vm2.generateAllCodeIn('dart').writeAllSources())
+          .toString();
+      expect(code, contains('Box(super.x, this.y);'));
+    });
+
+    test('a target without the concept drops the qualifier', () async {
+      var vm = await _load(
+        '${shape}class Box extends Shape { final int y; Box(super.x, this.y); }',
+      );
+
+      // Kotlin/TypeScript/Python name the parameter, not the field.
+      for (var lang in ['kotlin', 'typescript', 'python']) {
+        var code = (await vm.generateAllCodeIn(lang).writeAllSources())
+            .toString();
+        expect(
+          code,
+          isNot(contains('super.x')),
+          reason: '$lang has no super parameter',
+        );
+      }
     });
   });
 

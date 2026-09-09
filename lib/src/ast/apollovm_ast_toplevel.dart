@@ -1918,26 +1918,51 @@ class ASTConstructorParameterDeclaration<T> extends ASTParameterDeclaration {
   /// Whether the field written differs from the parameter name.
   bool get isFieldRenamed => _fieldName != null && _fieldName != name;
 
+  /// Whether the declaration wrote `super.x` instead of `this.x` — a **super
+  /// parameter** (Dart 2.17), which initializes a field the class *inherits*.
+  ///
+  /// Both forms write a field of the instance being built, so this only decides
+  /// how the parameter is spelled when generating source. It is set by the
+  /// parser and re-derived by [resolveNode] from the class hierarchy, which is
+  /// what lets it survive a binary AST round-trip without a format change: an
+  /// initializing formal may only name a field of its *own* class, so one that
+  /// names an inherited field is a super parameter by construction.
+  bool _superParameter;
+
+  /// Whether this parameter initializes an inherited field (`super.x`).
+  bool get superParameter => _superParameter;
+
   ASTConstructorParameterDeclaration(
     super.type,
     super.name,
     this.index,
     this.optional, {
     this.thisParameter = false,
+    bool superParameter = false,
     String? fieldName,
     super.isRequired,
-  }) : _fieldName = fieldName;
+  }) : _fieldName = fieldName,
+       _superParameter = superParameter;
 
   @override
   void resolveNode(ASTNode? parentNode) {
     super.resolveNode(parentNode);
 
-    if (identical(type, ASTTypeConstructorThis.instance) &&
-        parentNode is ASTClassConstructorDeclaration) {
+    // Keyed on `thisParameter`, not on the marker type: the type is replaced by
+    // the field's the first time this resolves, so a re-resolved (or decoded)
+    // parameter no longer carries the marker.
+    if (thisParameter && parentNode is ASTClassConstructorDeclaration) {
       var parentClass = parentNode.parentClass;
       var field = parentClass?.getField(fieldName);
       if (field != null) {
-        _type = field.type;
+        if (identical(type, ASTTypeConstructorThis.instance)) {
+          _type = field.type;
+        }
+
+        // Declared by an ancestor rather than by this class: `super.x`.
+        if (!parentClass!.fieldsNames.contains(fieldName)) {
+          _superParameter = true;
+        }
       }
     }
   }
@@ -1986,6 +2011,7 @@ class ASTConstructorParameterDeclaration<T> extends ASTParameterDeclaration {
       p.index,
       p.optional,
       thisParameter: true,
+      superParameter: p.superParameter,
       fieldName: p.name,
       isRequired: p.isRequired,
     )..defaultValue = p.defaultValue;

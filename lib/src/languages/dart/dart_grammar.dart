@@ -514,6 +514,35 @@ class DartGrammarDefinition extends DartGrammarLexer {
   /// One primary-constructor parameter: `final int x`, `var y`, `int z`,
   /// `required final String label = 'l'`.
   Parser<DartPrimaryParameter> primaryConstructorParameter() =>
+      (primaryConstructorSuperParameter() |
+              primaryConstructorDeclaringParameter())
+          .cast<DartPrimaryParameter>();
+
+  /// `super.x` in a primary constructor header — an inherited field, so it
+  /// declares no field of its own.
+  Parser<DartPrimaryParameter> primaryConstructorSuperParameter() =>
+      (ref0(metadata).star() &
+              requiredKeyword().optional() &
+              superToken().trim() &
+              char('.') &
+              identifier() &
+              parameterDefaultValue().optional())
+          .map((v) {
+            return DartPrimaryParameter(
+              ASTConstructorParameterDeclaration(
+                ASTTypeConstructorThis.instance,
+                v[4] as String,
+                -1,
+                false,
+                thisParameter: true,
+                superParameter: true,
+                isRequired: v[1] != null,
+              )..defaultValue = v[5] as ASTExpression?,
+              null,
+            );
+          });
+
+  Parser<DartPrimaryParameter> primaryConstructorDeclaringParameter() =>
       (ref0(metadata).star() &
               requiredKeyword().optional() &
               (finalKeyword() | varKeyword()).optional() &
@@ -877,6 +906,7 @@ class DartGrammarDefinition extends DartGrammarLexer {
   Parser<ASTConstructorParameterDeclaration>
   constructorParameterDeclaration() =>
       (constructorThisParameterDeclaration() |
+              constructorSuperParameterDeclaration() |
               constructorTypedParameterDeclaration())
           .map((v) => v);
 
@@ -895,6 +925,32 @@ class DartGrammarDefinition extends DartGrammarLexer {
               -1,
               false,
               thisParameter: true,
+              isRequired: v[1] != null,
+            )..defaultValue = v[5] as ASTExpression?;
+          });
+
+  /// A **super parameter** (Dart 2.17): `B(super.x)` / `B({required super.x})`.
+  ///
+  /// It initializes a field the class *inherits* — which is exactly what an
+  /// initializing formal may not do — so it is modelled as a `this.`-style
+  /// parameter whose field lookup walks the superclass chain, and it is spelled
+  /// `super.x` again when Dart is generated.
+  Parser<ASTConstructorParameterDeclaration>
+  constructorSuperParameterDeclaration() =>
+      (ref0(metadata).star() &
+              requiredKeyword().optional() &
+              superToken().trim() &
+              char('.') &
+              identifier() &
+              parameterDefaultValue().optional())
+          .map((v) {
+            return ASTConstructorParameterDeclaration(
+              ASTTypeConstructorThis.instance,
+              v[4],
+              -1,
+              false,
+              thisParameter: true,
+              superParameter: true,
               isRequired: v[1] != null,
             )..defaultValue = v[5] as ASTExpression?;
           });

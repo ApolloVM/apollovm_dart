@@ -322,6 +322,7 @@ Same legend and **Wasm** column semantics as the table above.
 | `required` named parameters                                   | ✅ | 🚫  | 🧩¹⁶ | 🚫  | 🧩¹⁶ | 🚫  | 🚫  | 🚫  | 🧩¹⁶ | ✅ |
 | Primary constructors (class header)¹⁷                         | ✅ | 🚫  | 🚧 | 🚫  | 🚧 | 🚫  | 🚫  | 🚫  | 🚫  | ✅¹⁷ |
 | Private named parameters (`this._x` → `x:`)¹⁸                 | ✅ | 🚫  | 🚫  | 🚫  | 🚫  | 🚫  | 🚫  | 🚫  | 🚫  | ✅¹⁸ |
+| Super parameters (`B(super.x)`)¹⁹                             | ✅ | 🚫  | 🚫  | 🚫  | 🚫  | 🚫  | 🚫  | 🚫  | 🚫  | ✅¹⁹ |
 
 ¹ Lua is table-based: "fields" are table entries (`obj.x`), "constructors" are factory/`setmetatable`
 idioms, methods are `function Obj:method`. &nbsp;
@@ -364,8 +365,9 @@ subclass override wins. Works for the languages that record their base class:
 Dart, Java (`extends`), C# / TS / JS (`: Base` / `extends`), Python. Kotlin's
 `class B : A()` base clause and Go embedding aren't parsed yet (`🚧`), and the
 Wasm backend doesn't compile inheritance yet. Constructor initializer lists with
-an explicit `: super(v)` call are not parsed yet — set inherited fields from the
-constructor body or a `this.param`. &nbsp;
+an explicit `: super(v)` call are not parsed yet — set an inherited field with a
+**super parameter** (`B(super.x)`, footnote 19) or from the constructor
+body. &nbsp;
 ¹⁴ **Getters and setters** are parsed and executed on classes, extensions and
 enum bodies (an enum member declares them like any other class member):
 `get name => …` / `get name { … }` (with or without an explicit return type) and
@@ -410,7 +412,19 @@ private: `Point({required this._x})` writes `_x` but is passed as `x:` at the
 call site, with the leading `_` stripped (a name with no valid public form —
 `__x`, `_` — is left alone). Only a *named* parameter is renamed, and only Dart
 has the rule, so the parameter keeps writing its private field everywhere else,
-and the declaration keeps `this._x` in Dart output.
+and the declaration keeps `this._x` in Dart output. &nbsp;
+¹⁹ A **super parameter** initializes a field the class *inherits* —
+`B(super.x)`, `B({required super.x})`, `B([super.x = 9])`, and in a primary
+constructor header — reaching through the whole superclass chain. An
+initializing formal may only name a field of its own class, so `super.x` is how
+an inherited one is written; ApolloVM assigns that field on the instance being
+built. Dart output spells it `super.` again (and `this.` for an own field), and
+the distinction is re-derived from the class hierarchy when a binary AST is
+decoded, so it needs no format change. The targets with no equivalent name the
+parameter and drop the qualifier. What is *not* supported is the rest of the
+initializer list: an explicit `: super(v)` call, and running the superclass
+constructor's **body** — no subclass instantiation does that yet, so a
+superclass constructor that computes rather than assigns is not reproduced.
 
 > Per-language behavior is normalized to a shared AST, so types and constructs map
 > cleanly when translating between languages (e.g. C# `string` ⇄ Dart `String`,

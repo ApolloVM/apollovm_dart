@@ -45,7 +45,7 @@ that version, or a static-analysis-only change).
 | 2.15 | Constructor tear-offs (`A.new`, `A.named`) | ❌ | `var c = A.new;` fails (`Can't find class[A] getter[new]`). Plain function tear-offs are missing too — see table 2. |
 | 2.16 | — | ➖ | No language features. |
 | 2.17 | Enhanced enums (fields, constructors, methods) | ✅ | Constructor arguments, fields, methods and accessors (`int get i => …`, `set x(v) { … }`), plus `.index`, `.name`, `E.values`. |
-| 2.17 | Super-initializer parameters (`B(super.x)`) | ❌ | Does not parse (no constructor initializer list at all). |
+| 2.17 | Super-initializer parameters (`B(super.x)`) | ✅ | Positional, named (with `required`), defaulted, and in a primary constructor header; the value is assigned to the inherited field, through any depth of superclass. The rest of the initializer list — an explicit `: super(v)` — is still missing (see table 2), as is running the superclass constructor's *body*. |
 | 2.17 | Named arguments anywhere in the argument list | ✅ | `g(b: 1, 2)` runs. |
 | 2.18 | Inference flowing between arguments of a generic call | ❌ | No generic inference engine; generics are erased at runtime. |
 | 2.19 | Unnamed libraries (`library;`) | ❌ | Does not parse. `library foo;` *appears* to parse only because it matches a top-level variable declaration (type `library`, name `foo`) — a false positive, not support. |
@@ -81,7 +81,7 @@ above, but they are the largest part of the gap.
 | Factory constructors (`factory A.zero()`) | ❌ | The `factory` token exists in the lexer but is never used by the grammar. |
 | Constructor initializer lists (`A(int v) : x = v`) | ❌ | Use `this.x` parameters or a constructor body instead. |
 | Redirecting constructors (`A.zero() : this(0)`) | ❌ | Follows from the two rows above. |
-| `super(…)` constructor calls | ❌ | A subclass cannot initialize inherited fields through the superclass constructor. |
+| `super(…)` constructor calls | ❌ | The superclass constructor is never invoked, so its *body* never runs. An inherited **field** can be initialized with a super parameter (`B(super.x)`, Dart 2.17) instead. |
 | `const` constructors / canonicalization | ⚠️ | `const` is parsed and discarded; `const A(1)` builds an ordinary instance, with no compile-time constant evaluation or identity canonicalization. |
 | Mixins (`mixin M { … }`, `class A with M`) | ❌ | Neither the declaration nor the `with` clause parses. |
 | Operator overloading (`A operator +(A o)`) | ❌ | The `operator` token exists in the lexer but is unused. |
@@ -110,8 +110,8 @@ above, but they are the largest part of the gap.
 
 For contrast, the Dart constructs verified as parsing **and** running:
 classes, fields (with initializers), unnamed constructors with `this.x` /
-`required` / named / optional-positional / defaulted / **private named**
-parameters, **primary constructors** in the class header, methods,
+`required` / named / optional-positional / defaulted / **private named** /
+**super** parameters, **primary constructors** in the class header, methods,
 `static` members, `abstract`, `extends` with inherited members and
 `super.method()`, generic **classes** and instantiation, enums (including rich
 enums with constructor args, fields, methods and accessors), extensions, getters

@@ -448,7 +448,9 @@ abstract class ApolloCodeGenerator
       // An initializing formal names the *field*: for a private named
       // parameter (`A({required this._x})`) that is the private name, and the
       // public name callers use is derived from it by the language itself.
-      out.write('this.');
+      // A field the class inherits is `super.x` — `this.x` would not be legal
+      // Dart for it.
+      out.write(parameter.superParameter ? 'super.' : 'this.');
       out.write(parameter.fieldName);
     } else {
       var typeStr = generateASTType(parameter.type);

@@ -1,7 +1,7 @@
 ## 2.31.0
 
-Four features from the [Dart language evolution](https://dart.dev/resources/language/evolution)
-that the Dart front end did not support yet. All four are parsed, interpreted
+Five features from the [Dart language evolution](https://dart.dev/resources/language/evolution)
+that the Dart front end did not support yet. All five are parsed, interpreted
 and translated; see [`doc/dart_language_gaps.md`](doc/dart_language_gaps.md)
 for what is still missing.
 
@@ -72,6 +72,40 @@ An enum body now takes the same members a class body does. Dart round-trips
 them, Kotlin emits `val doubled: Int get() { … }`, and every other target
 refuses an enum accessor exactly as it refuses a class accessor, instead of
 dropping it.
+
+### Dart 2.17: super parameters
+
+A constructor could not initialize a field it inherits: `this.x` is only legal
+for a field of the class itself, and `super.x` — the form Dart 2.17 added for
+exactly this — was a syntax error.
+
+```dart
+class Shape {
+  final int x;
+  Shape(this.x);
+}
+
+class Square extends Shape {
+  final int border;
+  Square(super.x, this.border);   // was: [SyntaxError] "$" expected
+}
+```
+
+Super parameters now parse and run, positionally, named (with `required`), with
+a default, in a primary constructor header, and through however many levels of
+inheritance the field is declared at. The value is assigned to the inherited
+field on the instance being built.
+
+Dart output spells it `super.` again, and `this.` for a field the class owns.
+The distinction is re-derived from the class hierarchy when a binary AST is
+decoded — an initializing formal may only name a field of its own class, so one
+that names an inherited field is a super parameter by construction — which is
+why the image format is unchanged. Targets with no equivalent name the
+parameter and drop the qualifier.
+
+Still missing, and unchanged by this: the rest of the initializer list (an
+explicit `: super(v)` call), and running the superclass constructor's **body**
+— no subclass instantiation does that yet.
 
 ### Dart 3.12: private named parameters
 
