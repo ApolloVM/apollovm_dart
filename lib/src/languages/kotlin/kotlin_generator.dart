@@ -313,7 +313,10 @@ class ApolloCodeGeneratorKotlin extends ApolloCodeGenerator {
     var bodyFields = fields
         .where((f) => !ctorParamNames.contains(f.name))
         .toList();
-    var hasMembers = bodyFields.isNotEmpty || functions.isNotEmpty;
+    var hasMembers =
+        bodyFields.isNotEmpty ||
+        functions.isNotEmpty ||
+        enumHasAccessors(clazz);
 
     var entries = clazz.entries;
     for (var i = 0; i < entries.length; ++i) {
@@ -339,6 +342,8 @@ class ApolloCodeGeneratorKotlin extends ApolloCodeGenerator {
           }
         }
       }
+
+      generateEnumAccessors(clazz, out: out, indent: indent2);
     }
 
     out.write('$indent}\n');
@@ -892,6 +897,41 @@ class ApolloCodeGeneratorKotlin extends ApolloCodeGenerator {
       var e = valuesExpressions[i];
       if (i > 0) out.write(', ');
       generateASTExpression(e, out: out, headIndented: false);
+    }
+
+    out.write(')');
+
+    return out;
+  }
+
+  @override
+  StringBuffer generateASTExpressionSetLiteral(
+    ASTExpressionSetLiteral expression, {
+    StringBuffer? out,
+    String indent = '',
+    bool headIndented = true,
+  }) {
+    out ??= newOutput();
+
+    if (headIndented) out.write(indent);
+
+    out.write('mutableSetOf');
+
+    // Kotlin can't infer the element type of an empty `mutableSetOf()`, so the
+    // type argument is written whenever the literal knows it.
+    final type = expression.type;
+    if (type != null) {
+      out.write('<');
+      generateASTType(type, out: out);
+      out.write('>');
+    }
+
+    out.write('(');
+
+    var values = expression.valuesExpressions;
+    for (var i = 0; i < values.length; ++i) {
+      if (i > 0) out.write(', ');
+      generateASTExpression(values[i], out: out, headIndented: false);
     }
 
     out.write(')');

@@ -1902,14 +1902,31 @@ class ASTConstructorParameterDeclaration<T> extends ASTParameterDeclaration {
 
   final bool thisParameter;
 
+  /// The field an initializing formal (`this.x`) writes, when it differs from
+  /// the parameter [name].
+  ///
+  /// They differ only for a **private named parameter** (Dart 3.12):
+  /// `A({required this._x})` writes the field `_x` while callers pass `x:`.
+  /// The leading underscore is stripped from the *parameter* name, so the
+  /// private field stays private and the call site stays public.
+  final String? _fieldName;
+
+  /// The instance field this parameter initializes — [name] unless the
+  /// declaration renamed it (see [_fieldName]).
+  String get fieldName => _fieldName ?? name;
+
+  /// Whether the field written differs from the parameter name.
+  bool get isFieldRenamed => _fieldName != null && _fieldName != name;
+
   ASTConstructorParameterDeclaration(
     super.type,
     super.name,
     this.index,
     this.optional, {
     this.thisParameter = false,
+    String? fieldName,
     super.isRequired,
-  });
+  }) : _fieldName = fieldName;
 
   @override
   void resolveNode(ASTNode? parentNode) {
@@ -1918,7 +1935,7 @@ class ASTConstructorParameterDeclaration<T> extends ASTParameterDeclaration {
     if (identical(type, ASTTypeConstructorThis.instance) &&
         parentNode is ASTClassConstructorDeclaration) {
       var parentClass = parentNode.parentClass;
-      var field = parentClass?.getField(name);
+      var field = parentClass?.getField(fieldName);
       if (field != null) {
         _type = field.type;
       }
@@ -1927,6 +1944,52 @@ class ASTConstructorParameterDeclaration<T> extends ASTParameterDeclaration {
 
   ASTFunctionParameterDeclaration toASTFunctionParameterDeclaration() =>
       ASTFunctionParameterDeclaration(type, name, index, optional);
+
+  /// The public name of the private name [name], or `null` when it has none:
+  /// not private, or nothing usable left once the leading `_` is dropped
+  /// (`_x` → `x`, but `__x` and `_` have no public name).
+  static String? publicNameOfPrivate(String name) {
+    if (!name.startsWith('_')) return null;
+
+    var publicName = name.substring(1);
+    if (publicName.isEmpty || publicName.startsWith('_')) return null;
+
+    // `_1` is not a rename of `1`: a name can't start with a digit.
+    var first = publicName.codeUnitAt(0);
+    var isLetter =
+        (first >= 0x41 && first <= 0x5A) || (first >= 0x61 && first <= 0x7A);
+    if (!isLetter && first != 0x24 /* $ */ ) return null;
+
+    return publicName;
+  }
+
+  /// Applies the **private named parameter** rule to a `{named}` group: an
+  /// initializing formal `this._x` keeps writing the private field `_x`, while
+  /// callers pass it as `x:` (Dart 3.12).
+  ///
+  /// The rule belongs to the group rather than to the parameter, because only
+  /// a *named* parameter has a name callers spell — and it is applied both when
+  /// parsing source and when decoding a binary AST, which is why it lives here
+  /// instead of in the Dart grammar. Parameters that are not initializing
+  /// formals, and private names with no public form, are returned untouched.
+  static List<ASTConstructorParameterDeclaration> publicizeNamedParameters(
+    List<ASTConstructorParameterDeclaration> named,
+  ) => named.map((p) {
+    if (!p.thisParameter || p.isFieldRenamed) return p;
+
+    var publicName = publicNameOfPrivate(p.name);
+    if (publicName == null) return p;
+
+    return ASTConstructorParameterDeclaration(
+      p.type,
+      publicName,
+      p.index,
+      p.optional,
+      thisParameter: true,
+      fieldName: p.name,
+      isRequired: p.isRequired,
+    )..defaultValue = p.defaultValue;
+  }).toList();
 }
 
 extension IterableASTConstructorParameterDeclarationExtension
@@ -3290,7 +3353,7 @@ class ASTClassConstructorDeclaration<T>
           var variable = await context.getVariable(p.name, false);
           if (variable != null) {
             var v = await variable.getValue(context);
-            await obj.setField(classContext, p.name, v);
+            await obj.setField(classContext, p.fieldName, v);
           } else if (!p.optional) {
             throw ApolloVMNullPointerException(
               "Missing required constructor parameter: $p\n"

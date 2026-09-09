@@ -8,8 +8,8 @@ The feature list follows the official
 version by version, plus a second table for core constructs that predate the
 versioned evolution list (Dart 1.x / 2.0 baseline).
 
-- **Measured against:** ApolloVM `2.30.0` (`lib/src/languages/dart/`), Dart SDK `3.13.3`.
-- **Date:** 2026-09-08.
+- **Measured against:** ApolloVM `2.31.0` (`lib/src/languages/dart/`), Dart SDK `3.13.3`.
+- **Date:** 2026-09-09.
 - **Method:** every row was probed by loading a minimal source unit through
   `ApolloVM.loadCodeUnit('dart', …)` and, when it parsed, executing it with the
   Dart runner — so a ✅ means *parsed and ran*, not "the grammar mentions it".
@@ -28,7 +28,7 @@ that version, or a static-analysis-only change).
 |:--|:--|:--:|:--|
 | 2.0  | Sound type system (subtyping) | ⚠️ | Declared types are enforced at runtime by **exact match**: `A a = B();` and passing a `B` to an `A` parameter both fail (`Can't cast value type (B) to variable type (A)`). Polymorphism works through `dynamic` and through element types (`List<A> l = [B()]`). |
 | 2.1  | `int` literal where a `double` is expected | ✅ | `double d = 1;` runs. |
-| 2.2  | Set literals (`{1, 2}`) | ❌ | `{ … }` is parsed as a map literal only; there is no `Set` type or literal. |
+| 2.2  | Set literals (`{1, 2}`) | ✅ | `{1, 2}`, `<T>{}` and `Set<T>` as a type, with `length` / `contains` / `add` / `remove` / `for-in`; a bare `{}` stays an empty map. Generated for every target (Go and Lua through their idioms); the Wasm backend refuses one. |
 | 2.3  | Spread operator (`...`, `...?`) | ❌ | Not parsed in list or map literals. |
 | 2.3  | Collection `if` | ❌ | `[1, if (c) 2]` does not parse. |
 | 2.3  | Collection `for` | ❌ | `[for (var e in l) e]` does not parse. |
@@ -44,7 +44,7 @@ that version, or a static-analysis-only change).
 | 2.14 | Type arguments in annotations (`@Foo<int>()`) | ❌ | Fails to parse. Annotations in general are parsed and then discarded (they do not survive a round-trip). |
 | 2.15 | Constructor tear-offs (`A.new`, `A.named`) | ❌ | `var c = A.new;` fails (`Can't find class[A] getter[new]`). Plain function tear-offs are missing too — see table 2. |
 | 2.16 | — | ➖ | No language features. |
-| 2.17 | Enhanced enums (fields, constructors, methods) | ⚠️ | Constructor arguments, fields and methods work (`enum E { a(1); final int v; const E(this.v); int twice() => …}`), plus `.index`, `.name`, `E.values`. A **getter inside an enum body** (`int get i => index;`) does not parse. |
+| 2.17 | Enhanced enums (fields, constructors, methods) | ✅ | Constructor arguments, fields, methods and accessors (`int get i => …`, `set x(v) { … }`), plus `.index`, `.name`, `E.values`. |
 | 2.17 | Super-initializer parameters (`B(super.x)`) | ❌ | Does not parse (no constructor initializer list at all). |
 | 2.17 | Named arguments anywhere in the argument list | ✅ | `g(b: 1, 2)` runs. |
 | 2.18 | Inference flowing between arguments of a generic call | ❌ | No generic inference engine; generics are erased at runtime. |
@@ -65,8 +65,8 @@ that version, or a static-analysis-only change).
 | 3.9  | Null-safety assumptions for promotion/reachability | ➖ | Analyzer behaviour. |
 | 3.10 | Dot shorthands (`E e = .a;`) | ❌ | Does not parse. |
 | 3.11 | — | ➖ | No language features. |
-| 3.12 | Private named parameters (`A({required this._x})`) | ❌ | The declaration parses, but the leading underscore is **not** stripped: callers must write `A(_x: 3)`; the Dart-correct `A(x: 3)` fails to resolve the constructor. |
-| 3.13 | Primary constructors (`class A(final int x) {}`) | ❌ | Only *appears* to parse — it matches a top-level **function** declaration whose return type is `class` — and instantiation then fails. |
+| 3.12 | Private named parameters (`A({required this._x})`) | ✅ | The leading `_` is stripped from the parameter name, so callers write `A(x: 3)` while the field stays `_x`. A name with no valid public form (`__x`, `_`) is left alone. |
+| 3.13 | Primary constructors (`class A(final int x) {}`) | ⚠️ | The class-header form is supported — declaring (`var`/`final`) and plain parameters, named/optional groups, `required`, defaults, a `;` body — and is desugared into fields plus an ordinary constructor. A *named* primary constructor (`class A.custom(…)`), `class const A(…)` and the in-body `this : …` form are not: they need named constructors, compile-time constants and initializer lists (see table 2). |
 
 -----------------------------
 
@@ -110,17 +110,18 @@ above, but they are the largest part of the gap.
 
 For contrast, the Dart constructs verified as parsing **and** running:
 classes, fields (with initializers), unnamed constructors with `this.x` /
-`required` / named / optional-positional / defaulted parameters, methods,
+`required` / named / optional-positional / defaulted / **private named**
+parameters, **primary constructors** in the class header, methods,
 `static` members, `abstract`, `extends` with inherited members and
 `super.method()`, generic **classes** and instantiation, enums (including rich
-enums with constructor args, fields and methods), extensions, getters and
-setters, closures and `Function`-typed parameters, `async` / `await`,
+enums with constructor args, fields, methods and accessors), extensions, getters
+and setters, closures and `Function`-typed parameters, `async` / `await`,
 cascades, `try` / `on` / `catch` / `finally` / `throw` / `rethrow`, `assert`,
 all control flow (`if`, `for`, `for-in`, `while`, `do-while`, `switch` on
 `int` / `String`, `break`, `continue`), ternary and null-aware operators,
-list & map literals (including `const` ones and nested generic types), string
-interpolation, raw and triple-quoted strings, and `final` / `const` / `var`
-locals.
+list, map & **set** literals (including `const` ones and nested generic types),
+string interpolation, raw and triple-quoted strings, and `final` / `const` /
+`var` locals.
 
 -----------------------------
 

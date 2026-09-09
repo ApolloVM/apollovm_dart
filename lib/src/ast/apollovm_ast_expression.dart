@@ -602,6 +602,76 @@ class ASTExpressionListLiteral extends ASTExpression {
   }
 }
 
+/// [ASTExpression] that declares a [Set] literal: `{1, 2}` / `<int>{}`.
+class ASTExpressionSetLiteral extends ASTExpression {
+  final ASTType? type;
+
+  final List<ASTExpression> valuesExpressions;
+
+  ASTExpressionSetLiteral(this.type, this.valuesExpressions);
+
+  @override
+  bool get isComplex => false;
+
+  @override
+  Iterable<ASTNode> get children => [?type, ...valuesExpressions];
+
+  @override
+  FutureOr<ASTType> resolveType(VMContext? context) {
+    final type = this.type;
+    if (type != null) {
+      return ASTTypeSet(type);
+    }
+
+    return ASTExpression.typeFromExpressions(
+      valuesExpressions,
+    ).resolveMapped((elementsType) => ASTTypeSet(elementsType));
+  }
+
+  @override
+  ASTNode? getNodeIdentifier(String name, {ASTNode? requester}) =>
+      parentNode?.getNodeIdentifier(name, requester: requester);
+
+  @override
+  FutureOr<ASTValue> run(VMContext parentContext, ASTRunStatus runStatus) {
+    var type =
+        this.type ?? ASTExpression.typeFromExpressions(valuesExpressions);
+
+    return type.resolveMapped((type) {
+      if (valuesExpressions.isEmpty) {
+        return ASTValueSet(type, {});
+      }
+
+      var astValues = valuesExpressions
+          .map((e) => e.run(parentContext, runStatus))
+          .toList()
+          .resolveAll();
+
+      return astValues.resolveMapped((astValues) {
+        return astValues
+            .map((v) => v.getValue(parentContext))
+            .toList()
+            .resolveAll()
+            .resolveMapped((values) {
+              // A literal keeps the first occurrence of a repeated element,
+              // exactly as `Set.of` does.
+              return ASTValueSet(type, values.toSet());
+            });
+      });
+    });
+  }
+
+  @override
+  FutureOr<Object?> getHashcodeValue(VMContext? context) {
+    return valuesExpressions.map((e) => e.getHashcodeValue(context)).toList();
+  }
+
+  @override
+  String toString({bool asGroup = false}) {
+    return '{${valuesExpressions.join(', ')}}';
+  }
+}
+
 /// [ASTExpression] that declares a [Map] literal.
 class ASTExpressionMapLiteral extends ASTExpression {
   final ASTType? keyType;

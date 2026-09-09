@@ -249,7 +249,8 @@ class ApolloCodeGeneratorCSharp extends ApolloCodeGenerator {
       clazz.entries.any((e) => e.arguments != null) ||
       clazz.fields.isNotEmpty ||
       clazz.constructors.isNotEmpty ||
-      clazz.functions.isNotEmpty;
+      clazz.functions.isNotEmpty ||
+      enumHasAccessors(clazz);
 
   /// Generates a C# `enum` declaration (with optional `= value` entries).
   ///
@@ -344,7 +345,7 @@ class ApolloCodeGeneratorCSharp extends ApolloCodeGenerator {
       out.write(') {\n');
       for (var p in params) {
         if (p.thisParameter) {
-          out.write('$i2  this.${p.name} = ${p.name};\n');
+          out.write('$i2  this.${p.fieldName} = ${p.name};\n');
         }
       }
       out.write(generateASTBlock(ctor, indent: i2, withBrackets: false));
@@ -370,6 +371,8 @@ class ApolloCodeGeneratorCSharp extends ApolloCodeGenerator {
         out.write('$i2}\n\n');
       }
     }
+
+    generateEnumAccessors(clazz, out: out, indent: i2);
 
     // Static singleton instances (one per entry).
     for (var e in clazz.entries) {
@@ -637,6 +640,42 @@ class ApolloCodeGeneratorCSharp extends ApolloCodeGenerator {
       var e = valuesExpressions[i];
       if (i > 0) out.write(', ');
       generateASTExpression(e, out: out, headIndented: false);
+    }
+
+    out.write('}');
+
+    return out;
+  }
+
+  @override
+  StringBuffer generateASTExpressionSetLiteral(
+    ASTExpressionSetLiteral expression, {
+    StringBuffer? out,
+    String indent = '',
+    bool headIndented = true,
+  }) {
+    out ??= newOutput();
+
+    if (headIndented) out.write(indent);
+
+    final type = expression.type;
+
+    out.write('new HashSet');
+
+    if (type != null) {
+      out.write('<');
+      generateASTType(type, out: out);
+      out.write('>');
+    } else {
+      out.write('<object>');
+    }
+
+    out.write('(){');
+
+    var values = expression.valuesExpressions;
+    for (var i = 0; i < values.length; ++i) {
+      if (i > 0) out.write(', ');
+      generateASTExpression(values[i], out: out, headIndented: false);
     }
 
     out.write('}');

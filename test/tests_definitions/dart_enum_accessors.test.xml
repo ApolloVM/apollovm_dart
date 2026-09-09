@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="Enum body with getters and setters (Dart 2.17 enhanced enums)">
+    <source language="dart">
+        <![CDATA[
+enum Planet {
+  earth(5972, 6371),
+  mars(642, 3389);
+
+  final int mass;
+  final int radius;
+
+  const Planet(this.mass, this.radius);
+
+  int get diameter => this.radius * 2;
+
+  int get density {
+    return this.mass ~/ this.radius;
+  }
+
+  String describe() {
+    return '${this.name}:${this.diameter}';
+  }
+}
+
+int run() {
+  var p = Planet.mars;
+  return p.diameter + Planet.earth.density + Planet.values.length;
+}
+
+String describe() {
+  return Planet.earth.describe();
+}
+        ]]>
+    </source>
+    <call function="run" return="6780">
+        []
+    </call>
+    <output>
+        []
+    </output>
+    <call function="describe" return="earth:12742">
+        []
+    </call>
+    <output>
+        []
+    </output>
+    <source-generated language="dart"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+  int run() {
+    var p = Planet.mars;
+    return (p.diameter + Planet.earth.density) + Planet.values.length;
+  }
+
+  String describe() {
+    return Planet.earth.describe();
+  }
+
+enum Planet {
+  earth(5972, 6371),
+  mars(642, 3389)
+  ;
+  final int mass;
+  final int radius;
+  const Planet(this.mass, this.radius);
+
+  String describe() {
+    return '${this.name}:${this.diameter}';
+  }
+
+  int get diameter {
+    return this.radius * 2;
+  }
+
+  int get density {
+    return this.mass ~/ this.radius;
+  }
+
+}
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+</test>

@@ -312,7 +312,7 @@ class DartGrammarDefinition extends DartGrammarLexer {
               setKeyword() &
               identifier() &
               char('(').trimHidden() &
-              ref0(setterParameter) &
+              ref0(optionallyTypedParameter) &
               char(')').trimHidden() &
               (arrowBody() | codeBlock()))
           .map((v) {
@@ -328,12 +328,13 @@ class DartGrammarDefinition extends DartGrammarLexer {
             );
           });
 
-  /// The single parameter of a setter, typed (`int v`) or untyped (`v`).
+  /// A parameter that may omit its type: `int v` or just `v`. Used by a setter
+  /// and by a primary constructor's declaring parameters (`var x`).
   ///
   /// An ordered choice rather than `type().optional() & identifier()`: for an
   /// untyped parameter `type()` would match the *name* and petitparser's
   /// `optional()` cannot backtrack, so the rule would fail.
-  Parser<(ASTType, String)> setterParameter() =>
+  Parser<(ASTType, String)> optionallyTypedParameter() =>
       ((type().trimHidden() & identifier().trimHidden()).map(
                 (v) => (v[0] as ASTType, v[1] as String),
               ) |
@@ -356,20 +357,23 @@ class DartGrammarDefinition extends DartGrammarLexer {
               }) &
               identifier() &
               typeParameters().optional() &
+              ref0(primaryConstructor).optional() &
               (extendsToken().trimHidden() & identifier()).optional() &
               (implementsToken().trimHidden() &
                       identifier() &
                       (char(',').trimHidden() & identifier()).star())
                   .optional() &
-              classCodeBlock())
+              (classCodeBlock() | classEmptyBody()))
           .map((v) {
             var isAbstract = v[0] != null;
             var name = v[2] as String;
 
-            var extendsOpt = v[4] as List?;
+            var primary = v[4] as DartPrimaryConstructor?;
+
+            var extendsOpt = v[5] as List?;
             var superName = extendsOpt != null ? extendsOpt[1] as String : null;
 
-            var implementsOpt = v[5] as List?;
+            var implementsOpt = v[6] as List?;
             var interfaces = <String>[];
             if (implementsOpt != null) {
               interfaces.add(implementsOpt[1] as String);
@@ -378,7 +382,22 @@ class DartGrammarDefinition extends DartGrammarLexer {
               }
             }
 
-            var block = v[6];
+            var block = v[7] as ASTClassNormal;
+
+            if (primary != null) {
+              // A primary constructor is desugared into what every stage
+              // already handles: the induced fields, plus an ordinary
+              // constructor whose declaring parameters are `this.x` formals.
+              block.addAllFields(primary.fields);
+              block.addAllConstructors([
+                ASTClassConstructorDeclaration(
+                  ASTType(name),
+                  '',
+                  primary.parameters,
+                ),
+              ]);
+            }
+
             var clazz = ASTClassNormal(
               name,
               ASTType<VMObject>(name),
@@ -392,6 +411,154 @@ class DartGrammarDefinition extends DartGrammarLexer {
             clazz.set(block);
             _classTypeParameters.clear();
             return clazz;
+          });
+
+  /// The body of a class declared with only a header: `class Point(final int x);`
+  ///
+  /// A primary constructor makes a body optional, so the `;` form gets the same
+  /// empty carrier block [classCodeBlock] builds for `{}`. It is accepted
+  /// without a primary constructor too (`class A;`, which Dart rejects): the
+  /// grammar is permissive, and the result — an empty class — is the only
+  /// thing that declaration could mean.
+  Parser<ASTBlock> classEmptyBody() => char(
+    ';',
+  ).trimHidden().map((_) => ASTClassNormal('?', ASTType<VMObject>('?'), null));
+
+  /// A **primary constructor** (Dart 3.13): the parameter list written in the
+  /// class header, `class Point(final int x, var int y)`.
+  ///
+  /// A parameter marked `var` or `final` is a *declaring* parameter: it induces
+  /// an instance field (mutable for `var`, `final` for `final`) which the
+  /// constructor initializes. A parameter without either declares no field, and
+  /// is passed to the constructor like any other.
+  ///
+  /// Not supported: a named primary constructor (`class Point.custom(…)`), the
+  /// `class const Point(…)` form, and the in-body `this : …` form — all three
+  /// need constructor features ApolloVM does not have yet (named constructors,
+  /// compile-time constants, initializer lists).
+  Parser<DartPrimaryConstructor> primaryConstructor() =>
+      (char('(').trimHidden() &
+              primaryConstructorParametersList().optional() &
+              (char(',').trimHidden().optional() &
+                      primaryConstructorParameterGroup())
+                  .optional() &
+              char(',').trimHidden().optional() &
+              char(')').trimHidden())
+          .map((v) {
+            var positional = (v[1] as List<DartPrimaryParameter>?) ?? const [];
+
+            var groupOpt = v[2] as List?;
+            var group = groupOpt?[1] as DartPrimaryParameterGroup?;
+
+            var named = group != null && group.isNamed ? group.params : null;
+            var optional = group != null && !group.isNamed
+                ? group.params
+                : null;
+
+            var namedParams = named?.map((e) => e.parameter).toList();
+
+            return DartPrimaryConstructor(
+              ASTConstructorParametersDeclaration(
+                positional.map((e) => e.parameter).toList(),
+                optional?.map((e) => e.parameter).toList(),
+                // A named declaring parameter follows the same rule as a named
+                // initializing formal: `{required final int _x}` is passed as
+                // `x:` and keeps writing the private field.
+                namedParams == null
+                    ? null
+                    : ASTConstructorParameterDeclaration.publicizeNamedParameters(
+                        namedParams,
+                      ),
+              ),
+              [
+                ...positional,
+                ...?optional,
+                ...?named,
+              ].map((e) => e.field).nonNulls.toList(),
+            );
+          });
+
+  /// A trailing primary-constructor parameter group: `{named}` or `[optional]`.
+  Parser<DartPrimaryParameterGroup> primaryConstructorParameterGroup() =>
+      ((char('{').trimHidden() &
+                      primaryConstructorParametersList() &
+                      char('}').trimHidden())
+                  .map(
+                    (v) => DartPrimaryParameterGroup(
+                      true,
+                      v[1] as List<DartPrimaryParameter>,
+                    ),
+                  ) |
+              (char('[').trimHidden() &
+                      primaryConstructorParametersList() &
+                      char(']').trimHidden())
+                  .map(
+                    (v) => DartPrimaryParameterGroup(
+                      false,
+                      v[1] as List<DartPrimaryParameter>,
+                    ),
+                  ))
+          .cast<DartPrimaryParameterGroup>();
+
+  Parser<List<DartPrimaryParameter>> primaryConstructorParametersList() =>
+      (primaryConstructorParameter() &
+              (char(',').trimHidden() & primaryConstructorParameter()).star())
+          .map((v) {
+            var params = <DartPrimaryParameter>[v[0] as DartPrimaryParameter];
+            for (var e in (v[1] as List)) {
+              params.add((e as List)[1] as DartPrimaryParameter);
+            }
+            return params;
+          });
+
+  /// One primary-constructor parameter: `final int x`, `var y`, `int z`,
+  /// `required final String label = 'l'`.
+  Parser<DartPrimaryParameter> primaryConstructorParameter() =>
+      (ref0(metadata).star() &
+              requiredKeyword().optional() &
+              (finalKeyword() | varKeyword()).optional() &
+              ref0(optionallyTypedParameter) &
+              parameterDefaultValue().optional())
+          .map((v) {
+            var isRequired = v[1] != null;
+            var modifier = v[2] as String?;
+            var (type, name) = v[3] as (ASTType, String);
+            var defaultValue = v[4] as ASTExpression?;
+
+            // No `var`/`final`: an ordinary parameter, declaring no field.
+            if (modifier == null) {
+              return DartPrimaryParameter(
+                ASTConstructorParameterDeclaration(
+                  type,
+                  name,
+                  -1,
+                  false,
+                  isRequired: isRequired,
+                )..defaultValue = defaultValue,
+                null,
+              );
+            }
+
+            var isFinal = modifier == 'final';
+
+            return DartPrimaryParameter(
+              // Declaring parameters initialize their field exactly as a
+              // `this.x` formal does, so they reuse that node.
+              ASTConstructorParameterDeclaration(
+                ASTTypeConstructorThis.instance,
+                name,
+                -1,
+                false,
+                thisParameter: true,
+                isRequired: isRequired,
+              )..defaultValue = defaultValue,
+              ASTClassField(
+                type,
+                name,
+                isFinal,
+                modifiers: ASTModifiers(isFinal: isFinal),
+              ),
+            );
           });
 
   /// Generic type parameters in a declaration: `<T>`, `<K, V>` (names only;
@@ -438,11 +605,14 @@ class DartGrammarDefinition extends DartGrammarLexer {
               (char(',').trimHidden() & enumEntry()).star() &
               char(',').trimHidden().optional() &
               // Enhanced/rich enum body: `;` then class members (fields, a
-              // `const` constructor, methods) — reusing class-member parsing.
+              // `const` constructor, methods, getters and setters) — reusing
+              // class-member parsing.
               (char(';').trimHidden() &
                       (ref0(metadata).star() &
                               (ref0(classConstructorDefaultDeclaration) |
                                   ref0(classFunctionDeclaration) |
+                                  ref0(getterDeclaration) |
+                                  ref0(setterDeclaration) |
                                   ref0(classFieldDeclaration) |
                                   ref0(classFieldDeclarationWithValue)))
                           .map((v) => v[1])
@@ -472,6 +642,12 @@ class DartGrammarDefinition extends DartGrammarLexer {
               );
               enumClass.addAllFunctions(
                 members.whereType<ASTFunctionDeclaration>().toList(),
+              );
+              enumClass.addAllGetters(
+                members.whereType<ASTClassGetterDeclaration>().toList(),
+              );
+              enumClass.addAllSetters(
+                members.whereType<ASTClassSetterDeclaration>().toList(),
               );
             }
             return enumClass;
@@ -666,7 +842,11 @@ class DartGrammarDefinition extends DartGrammarLexer {
           .map((v) {
             return (
               isNamed: true,
-              params: v[1] as List<ASTConstructorParameterDeclaration>,
+              // Dart 3.12: `A({required this._x})` is passed as `x:`.
+              params:
+                  ASTConstructorParameterDeclaration.publicizeNamedParameters(
+                    v[1] as List<ASTConstructorParameterDeclaration>,
+                  ),
             );
           });
 
@@ -1548,7 +1728,9 @@ class DartGrammarDefinition extends DartGrammarLexer {
               (expressionListEmptyLiteral() |
                       expressionListLiteral() |
                       expressionMapEmptyLiteral() |
-                      expressionMapLiteral())
+                      expressionMapLiteral() |
+                      expressionSetEmptyLiteral() |
+                      expressionSetLiteral())
                   .cast<ASTExpression>())
           .map((v) => v[1] as ASTExpression);
 
@@ -1583,6 +1765,10 @@ class DartGrammarDefinition extends DartGrammarLexer {
               expressionListLiteral() |
               expressionMapEmptyLiteral() |
               expressionMapLiteral() |
+              // After the map rules: `{}` stays a map, and `{k: v}` is claimed
+              // by `expressionMapLiteral` before a set can match it.
+              expressionSetEmptyLiteral() |
+              expressionSetLiteral() |
               expressionVariableDirectOperation() |
               expressionVariableEntryAssignment() |
               expressionObjectFieldChainAssignment() |
@@ -2104,8 +2290,12 @@ class DartGrammarDefinition extends DartGrammarLexer {
               char('{').trimHidden() &
               char('}').trimHidden())
           .map((v) {
+            // The prefix parses as `['<', keyType, ',', valueType, '>']`, so
+            // the value type is at index 3 — index 2 is the comma, which used
+            // to make `<K,V>{}` (the form an empty map is *generated* as) throw
+            // a cast error instead of parsing.
             var keyType = (v[0]?[1] as ASTType?) ?? ASTTypeDynamic.instance;
-            var valueType = (v[0]?[2] as ASTType?) ?? ASTTypeDynamic.instance;
+            var valueType = (v[0]?[3] as ASTType?) ?? ASTTypeDynamic.instance;
             return ASTExpressionMapLiteral(keyType, valueType, []);
           });
 
@@ -2142,6 +2332,53 @@ class DartGrammarDefinition extends DartGrammarLexer {
             ];
 
             return ASTExpressionMapLiteral(keyType, valueType, entries);
+          });
+
+  /// An empty **set** literal. Only the typed form: a bare `{}` is a `Map`,
+  /// as in Dart, so `<int>{}` is the only way to write an empty set.
+  Parser<ASTExpressionSetLiteral> expressionSetEmptyLiteral() =>
+      (char('<').trimHidden() &
+              simpleType() &
+              char('>').trimHidden() &
+              char('{').trimHidden() &
+              char('}').trimHidden())
+          .map((v) => ASTExpressionSetLiteral(v[1] as ASTType, []));
+
+  /// A set literal: `{1, 2}`, `<String>{'a'}`.
+  ///
+  /// Tried after the map rules, which claim `{}` and any `key: value` body, so
+  /// what reaches here is a braced list of plain expressions.
+  Parser<ASTExpressionSetLiteral> expressionSetLiteral() =>
+      ((char('<').trimHidden() & simpleType() & char('>').trimHidden())
+                  .optional() &
+              char('{').trimHidden() &
+              ref0(expression) &
+              (char(',').trimHidden() & ref0(expression)).star() &
+              char(',').trimHidden().optional() &
+              char('}').trimHidden())
+          .map((v) {
+            var type = v[0]?[1] as ASTType?;
+
+            var values = <ASTExpression>[
+              v[2] as ASTExpression,
+              ...(v[3] as List).expand((e) => e).whereType<ASTExpression>(),
+            ];
+
+            // Same inference as a list literal: without an explicit `<T>`, the
+            // element type is the common type of the elements.
+            if (type == null) {
+              var resolving = values.map((e) => e.resolveType(null)).toList();
+              var types = resolving.whereType<ASTType>().toList();
+              if (types.length == resolving.length) {
+                type = types.isEmpty
+                    ? ASTTypeDynamic.instance
+                    : types.reduce(
+                        (a, b) => a.commonType(b) ?? ASTTypeDynamic.instance,
+                      );
+              }
+            }
+
+            return ASTExpressionSetLiteral(type, values);
           });
 
   Parser<ASTExpressionVariableDirectOperation>
@@ -2449,6 +2686,8 @@ class DartGrammarDefinition extends DartGrammarLexer {
               arrayTypeDynamic() |
               mapTyped() |
               mapTypeDynamic() |
+              setTyped() |
+              setTypeDynamic() |
               simpleType())
           .cast<ASTType>();
 
@@ -2617,6 +2856,21 @@ class DartGrammarDefinition extends DartGrammarLexer {
     return ASTTypeMap.instanceOfDynamicOfDynamic;
   });
 
+  /// `Set` as a type name, matched as a whole word so a class called
+  /// `Settings` is not read as `Set` followed by `tings`.
+  Parser _setTypeName() =>
+      (string('Set') & ref0(identifierPartLexicalToken).not()).map((v) => v[0]);
+
+  Parser<ASTTypeSet> setTyped() =>
+      (_setTypeName() &
+              char('<').trim() &
+              (arrayTyped() | mapTyped() | simpleType()).cast<ASTType>() &
+              char('>').trim())
+          .map((v) => ASTTypeSet(v[2] as ASTType));
+
+  Parser<ASTTypeSet> setTypeDynamic() =>
+      _setTypeName().map((v) => ASTTypeSet.instanceOfDynamic);
+
   Parser<ASTValue> literal() => (literalBool() | literalNum() | literalString())
       .trimHidden()
       .cast<ASTValue>();
@@ -2662,4 +2916,31 @@ class DartGrammarDefinition extends DartGrammarLexer {
       }
     }
   }
+}
+
+/// One parsed primary-constructor parameter: the constructor parameter it
+/// becomes, and the instance field it declares — `null` for a parameter
+/// without `var`/`final`, which declares none.
+class DartPrimaryParameter {
+  final ASTConstructorParameterDeclaration parameter;
+  final ASTClassField? field;
+
+  DartPrimaryParameter(this.parameter, this.field);
+}
+
+/// A trailing `{named}` (`isNamed`) or `[optional]` primary-constructor group.
+class DartPrimaryParameterGroup {
+  final bool isNamed;
+  final List<DartPrimaryParameter> params;
+
+  DartPrimaryParameterGroup(this.isNamed, this.params);
+}
+
+/// A primary constructor, desugared: the constructor's parameters and the
+/// fields its declaring parameters introduce.
+class DartPrimaryConstructor {
+  final ASTConstructorParametersDeclaration parameters;
+  final List<ASTClassField> fields;
+
+  DartPrimaryConstructor(this.parameters, this.fields);
 }

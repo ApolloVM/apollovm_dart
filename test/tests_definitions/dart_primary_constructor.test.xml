@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="Primary constructors (Dart 3.13): declaring parameters in the class header">
+    <source language="dart">
+        <![CDATA[
+class Point(final int x, var int y) {
+  int sum() {
+    return this.x + this.y;
+  }
+}
+
+class Tag(final String name, {required final int weight, final String kind = 'k'}) {
+  String describe() {
+    return '${this.name}/${this.kind}/${this.weight}';
+  }
+}
+
+class Counter(var count);
+
+int run() {
+  var p = Point(3, 4);
+  p.y = 10;
+
+  var c = Counter(1);
+  c.count = c.count + 5;
+
+  return p.sum() + c.count;
+}
+
+String describe() {
+  var t = Tag('t', weight: 7);
+  return t.describe();
+}
+        ]]>
+    </source>
+    <call function="run" return="19">
+        []
+    </call>
+    <output>
+        []
+    </output>
+    <call function="describe" return="t/k/7">
+        []
+    </call>
+    <output>
+        []
+    </output>
+    <!-- A primary constructor is desugared at parse time, so what comes back is
+         the classic form: the induced fields plus an ordinary constructor. -->
+    <source-generated language="dart"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+  int run() {
+    var p = Point(3, 4);
+    p.y = 10;
+    var c = Counter(1);
+    c.count = c.count + 5;
+    return p.sum() + c.count;
+  }
+
+  String describe() {
+    var t = Tag('t', weight: 7);
+    return t.describe();
+  }
+
+class Point {
+
+  final int x;
+  int y;
+
+  Point(this.x, this.y);
+
+  int sum() {
+    return this.x + this.y;
+  }
+
+}
+class Tag {
+
+  final String name;
+  final int weight;
+  final String kind;
+
+  Tag(this.name, {required this.weight, this.kind = 'k'});
+
+  String describe() {
+    return '${this.name}/${this.kind}/${this.weight}';
+  }
+
+}
+class Counter {
+
+  dynamic count;
+
+  Counter(this.count);
+
+}
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+</test>

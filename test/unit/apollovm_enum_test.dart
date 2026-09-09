@@ -113,6 +113,87 @@ enum Planet {
     });
   });
 
+  group('Enum accessors (getters/setters in the enum body)', () {
+    const level = '''
+enum Level {
+  low(1), high(10);
+  final int weight;
+  int extra = 0;
+  const Level(this.weight);
+  int get doubled => this.weight * 2;
+  set boost(int x) { this.extra = x; }
+}
+''';
+
+    test('a getter declared in the enum body runs on an entry', () async {
+      expect(
+        await _run(
+          '${level}int run() { var h = Level.high; return h.doubled; }',
+        ),
+        equals(20),
+      );
+    });
+
+    test('a setter declared in the enum body runs on an entry', () async {
+      expect(
+        await _run(
+          '${level}int run() { var l = Level.low; l.boost = 7; return l.extra; }',
+        ),
+        equals(7),
+      );
+    });
+
+    test('accessors survive a Dart round-trip', () async {
+      var vm = ApolloVM();
+      expect(
+        await vm.loadCodeUnit(SourceCodeUnit('dart', level, id: 'test')),
+        isTrue,
+      );
+
+      var code = (await vm.generateAllCodeIn('dart').writeAllSources())
+          .toString();
+
+      expect(code, contains('int get doubled {'));
+      expect(code, contains('set boost(int x) {'));
+
+      var vm2 = ApolloVM();
+      var source = code
+          .split('\n')
+          .where((l) => !l.startsWith('<<<<'))
+          .join('\n');
+      expect(
+        await vm2.loadCodeUnit(SourceCodeUnit('dart', source, id: 'test')),
+        isTrue,
+      );
+    });
+
+    test('Kotlin emits the getter; a target without accessors refuses', () async {
+      var vm = ApolloVM();
+      await vm.loadCodeUnit(
+        SourceCodeUnit(
+          'dart',
+          'enum Level { low(1), high(10); final int weight; '
+              'const Level(this.weight); int get doubled => this.weight * 2; }',
+          id: 'test',
+        ),
+      );
+
+      var kotlin = (await vm.generateAllCodeIn('kotlin').writeAllSources())
+          .toString();
+      expect(kotlin, contains('val doubled: Int get()'));
+
+      // Same refusal a *class* getter gets: dropping it would silently change
+      // what the program means.
+      for (var lang in ['java11', 'csharp', 'typescript', 'python']) {
+        expect(
+          () => vm.generateAllCodeIn(lang).writeAllSources(),
+          throwsA(isA<UnsupportedSyntaxError>()),
+          reason: 'Language $lang should refuse an enum getter',
+        );
+      }
+    });
+  });
+
   group('Explicit-value enum (`= N`)', () {
     const head = 'enum Level { Low = 1, Medium = 5, High = 10 }\n';
 

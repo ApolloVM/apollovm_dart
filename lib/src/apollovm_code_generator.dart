@@ -144,6 +144,35 @@ abstract class ApolloCodeGenerator
     );
   }
 
+  /// Whether [clazz] declares accessors in its (rich) enum body.
+  ///
+  /// Each language emits its enums by hand, so this — and
+  /// [generateEnumAccessors] — keep the "an enum body is a class body" rule in
+  /// one place: an enum with only a getter still needs its member separator.
+  bool enumHasAccessors(ASTClassEnum clazz) =>
+      clazz.getter.isNotEmpty || clazz.setter.isNotEmpty;
+
+  /// Emits the getters and setters declared in a rich enum body, through the
+  /// same accessor generators a class body uses — so a language without
+  /// accessor syntax refuses them here too, instead of dropping them.
+  void generateEnumAccessors(
+    ASTClassEnum clazz, {
+    required StringBuffer out,
+    String indent = '',
+  }) {
+    for (var g in clazz.getter) {
+      if (g is ASTClassGetterDeclaration) {
+        generateASTClassGetterDeclaration(g, out: out, indent: indent);
+      }
+    }
+
+    for (var s in clazz.setter) {
+      if (s is ASTClassSetterDeclaration) {
+        generateASTClassSetterDeclaration(s, out: out, indent: indent);
+      }
+    }
+  }
+
   /// Emits an instance getter (`int get twice => …`). Default: unsupported.
   ///
   /// [receiver] is set only when the getter belongs to an extension *and* the
@@ -416,14 +445,17 @@ abstract class ApolloCodeGenerator
 
     if (parameter is ASTConstructorParameterDeclaration &&
         parameter.thisParameter) {
+      // An initializing formal names the *field*: for a private named
+      // parameter (`A({required this._x})`) that is the private name, and the
+      // public name callers use is derived from it by the language itself.
       out.write('this.');
+      out.write(parameter.fieldName);
     } else {
       var typeStr = generateASTType(parameter.type);
       out.write(typeStr);
       out.write(' ');
+      out.write(parameter.name);
     }
-
-    out.write(parameter.name);
 
     appendParameterDefaultValue(parameter, out, indent);
 
@@ -1665,6 +1697,13 @@ abstract class ApolloCodeGenerator
         indent: indent,
         headIndented: headIndented,
       );
+    } else if (expression is ASTExpressionSetLiteral) {
+      return generateASTExpressionSetLiteral(
+        expression,
+        out: out,
+        indent: indent,
+        headIndented: headIndented,
+      );
     } else if (expression is ASTExpressionNullAssertion) {
       return generateASTExpressionNullAssertion(
         expression,
@@ -2178,6 +2217,42 @@ abstract class ApolloCodeGenerator
     }
 
     out.write(']');
+
+    return out;
+  }
+
+  /// Emits a set literal. The default is Dart's `{a, b}` / `<T>{}` form; a
+  /// target whose sets are a library type (`new Set(...)`, `setOf(...)`) or an
+  /// idiom (a map to a unit value) overrides it.
+  @override
+  StringBuffer generateASTExpressionSetLiteral(
+    ASTExpressionSetLiteral expression, {
+    StringBuffer? out,
+    String indent = '',
+    bool headIndented = true,
+  }) {
+    out ??= newOutput();
+
+    if (headIndented) out.write(indent);
+
+    // The type argument is always emitted when known, as for a list literal —
+    // and an empty set *needs* it, since a bare `{}` is an empty map.
+    final type = expression.type;
+    if (type != null) {
+      out.write('<');
+      generateASTType(type, out: out);
+      out.write('>');
+    }
+
+    out.write('{');
+
+    var values = expression.valuesExpressions;
+    for (var i = 0; i < values.length; ++i) {
+      if (i > 0) out.write(', ');
+      generateASTExpression(values[i], out: out, headIndented: false);
+    }
+
+    out.write('}');
 
     return out;
   }
