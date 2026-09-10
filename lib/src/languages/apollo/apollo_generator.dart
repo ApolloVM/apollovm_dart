@@ -178,11 +178,26 @@ class ApolloCodeGeneratorApollo extends ApolloCodeGenerator {
     var name = catchClause.variableName ?? 'e';
     var type = catchClause.exceptionType;
     // Apollo catch: `catch (Type name)` / `catch (name)` (no Dart `on` form).
-    if (type != null) {
-      return 'catch (${generateASTType(type)} $name)';
+    var head = type != null ? '${generateASTType(type)} $name' : name;
+
+    // The stack trace is a second header variable, as in Dart's
+    // `catch (e, st)` — see [renderCatchStackTraceBinding].
+    var stackTraceName = catchClause.stackTraceName;
+    if (stackTraceName != null) {
+      return 'catch ($head, $stackTraceName)';
     }
-    return 'catch ($name)';
+    return 'catch ($head)';
   }
+
+  /// Apollo declares the stack trace in the `catch` header, so there is no
+  /// separate binding statement — `null`, as in Dart.
+  ///
+  /// Without this override Apollo inherited the base (JavaScript) form,
+  /// `let $name = '';`, which is not Apollo: `let` is not a keyword, so it
+  /// parsed as a variable of a type *named* `let` and propagated onwards as
+  /// invalid Dart.
+  @override
+  String? renderCatchStackTraceBinding(String name) => null;
 
   @override
   String normalizeTypeFunction(String typeName, String functionName) {

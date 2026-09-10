@@ -3106,6 +3106,21 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
   }
 
   @override
+  /// Sets are not compiled yet: there is no hashed-container layout in the
+  /// Wasm backend, and lowering a set to a list would silently drop the
+  /// uniqueness the program relies on.
+  @override
+  BytesOutput generateASTExpressionSetLiteral(
+    ASTExpressionSetLiteral expression, {
+    BytesOutput? out,
+    WasmContext? context,
+  }) {
+    throw UnsupportedSyntaxError(
+      "Language 'wasm' can't compile a set literal yet: $expression",
+    );
+  }
+
+  @override
   BytesOutput generateASTExpressionMapLiteral(
     ASTExpressionMapLiteral expression, {
     BytesOutput? out,
@@ -6368,7 +6383,7 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
 
     var thisParamNames = f.ctor.parameters.allParameters
         .where((p) => p.thisParameter)
-        .map((p) => p.name)
+        .map((p) => p.fieldName)
         .toSet();
 
     // Field initializers (e.g. `int y = 5`) for fields not set by a `this.`
@@ -6399,13 +6414,15 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     // `this.field` parameter stores.
     for (var p in f.ctor.parameters.allParameters) {
       if (!p.thisParameter) continue;
-      var offset = layout.offsets[p.name];
+      // The parameter is a local under its own name; the field it writes is
+      // `fieldName` (they differ for a private named parameter).
+      var offset = layout.offsets[p.fieldName];
       if (offset == null) continue;
-      var fieldType = layout.types[p.name]!;
+      var fieldType = layout.types[p.fieldName]!;
       var paramLocal = context.getLocalVariable(p.name)!;
       bodyCode.write(
         Wasm.localGet(thisIndex),
-        description: "[OP] this (store param `${p.name}`)",
+        description: "[OP] this (store param `${p.fieldName}`)",
       );
       bodyCode.write(
         Wasm.localGet(paramLocal.index),
@@ -9713,6 +9730,12 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       );
     } else if (expression is ASTExpressionMapLiteral) {
       return generateASTExpressionMapLiteral(
+        expression,
+        out: out,
+        context: context,
+      );
+    } else if (expression is ASTExpressionSetLiteral) {
+      return generateASTExpressionSetLiteral(
         expression,
         out: out,
         context: context,

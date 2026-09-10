@@ -467,6 +467,60 @@ run() {
       expect(apollo, contains('} catch (e) {'));
       expect(apollo, contains('} catch (String s) {'));
     });
+
+    // Previously the grammar matched the second catch variable and threw it
+    // away, while the generator synthesised JavaScript's `let st = '';` for it.
+    test('the stack-trace variable survives regeneration', () async {
+      var apollo = await _roundTrip(r'''
+run() {
+  try {
+    throw "boom"
+  } catch (Exception e, st) {
+    print(st)
+  }
+}
+''');
+
+      expect(apollo, contains('} catch (Exception e, st) {'));
+      expect(apollo, isNot(contains('let ')));
+    });
+
+    test('a paren-less stack-trace catch is accepted', () async {
+      var apollo = await _gen(r'''
+run() {
+  try { throw "boom" } catch e, st { print(st) }
+}
+''');
+
+      expect(apollo, contains('} catch (e, st) {'));
+    });
+
+    test('Dart `on T catch (e, st)` round-trips through Apollo', () async {
+      const dart =
+          'void f() { try { g(); } on Exception catch (e, st) { print(st); } }';
+
+      var apollo = await _gen(dart, language: 'dart');
+      expect(apollo, contains('catch (Exception e, st)'));
+      expect(apollo, isNot(contains('let ')));
+
+      // …and back to Dart, with the stack trace still bound in the header.
+      var vm = ApolloVM();
+      await vm.loadCodeUnit(SourceCodeUnit('apollo', apollo, id: 'rt'));
+      var back = (await vm.generateAllCodeIn('dart').writeAllSources())
+          .toString();
+      expect(back, contains('on Exception catch (e, st)'));
+    });
+
+    test('a catch without a stack trace is unchanged', () async {
+      var apollo = await _gen(r'''
+run() {
+  try { throw "boom" } catch (Exception e) { print(e) }
+}
+''');
+
+      expect(apollo, contains('} catch (Exception e) {'));
+      expect(apollo, isNot(contains(', ')));
+    });
   });
 
   group('Apollo generator: strings', () {

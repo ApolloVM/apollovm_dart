@@ -1,0 +1,99 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="Super parameters (Dart 2.17): `B(super.x)` initializes an inherited field">
+    <source language="dart">
+        <![CDATA[
+class Shape {
+  final int x;
+  final int y;
+  final String label;
+
+  Shape(this.x, this.y, {required this.label});
+
+  int area() {
+    return this.x * this.y;
+  }
+}
+
+class Square extends Shape {
+  final int border;
+
+  Square(super.x, super.y, this.border, {required super.label});
+
+  int framed() {
+    return this.area() + this.border;
+  }
+}
+
+class Tall extends Square {
+  Tall(super.x, super.border, {required super.label}) ;
+}
+
+int run() {
+  var s = Square(3, 4, 10, label: 'sq');
+  return s.framed();
+}
+
+String describe() {
+  var s = Square(2, 2, 1, label: 'small');
+  return '${s.label}:${s.x}x${s.y}';
+}
+        ]]>
+    </source>
+    <call function="run" return="22">
+        []
+    </call>
+    <output>
+        []
+    </output>
+    <call function="describe" return="small:2x2">
+        []
+    </call>
+    <output>
+        []
+    </output>
+    <source-generated language="dart"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+  int run() {
+    var s = Square(3, 4, 10, label: 'sq');
+    return s.framed();
+  }
+
+  String describe() {
+    var s = Square(2, 2, 1, label: 'small');
+    return '${s.label}:${s.x}x${s.y}';
+  }
+
+class Shape {
+
+  final int x;
+  final int y;
+  final String label;
+
+  Shape(this.x, this.y, {required this.label});
+
+  int area() {
+    return this.x * this.y;
+  }
+
+}
+class Square extends Shape {
+
+  final int border;
+
+  Square(super.x, super.y, this.border, {required super.label});
+
+  int framed() {
+    return area() + this.border;
+  }
+
+}
+class Tall extends Square {
+
+  Tall(super.x, super.border, {required super.label});
+
+}
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+</test>

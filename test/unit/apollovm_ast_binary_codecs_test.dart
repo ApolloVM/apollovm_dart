@@ -151,6 +151,22 @@ void main() {
       expect(identical(type.valueType, ASTTypeInt.instance), isTrue);
     });
 
+    test('set keeps its element type and its elements', () {
+      ASTType elementType = ASTTypeString.instance;
+
+      var s = _roundTrip<ASTValueSet>(ASTValueSet(elementType, {'a', 'b'}));
+
+      expect(s.value, equals({'a', 'b'}));
+      var type = s.type as ASTTypeSet;
+      expect(identical(type.elementType, ASTTypeString.instance), isTrue);
+    });
+
+    test('an empty set survives', () {
+      var s = _roundTrip<ASTValueSet>(ASTValueSet(ASTTypeInt.instance, {}));
+      expect(s.value, isEmpty);
+      expect((s.type as ASTTypeSet).elementType, isA<ASTTypeInt>());
+    });
+
     test('string composition', () {
       var asString = _roundTrip<ASTValueAsString>(
         ASTValueAsString(ASTValueInt(9)),

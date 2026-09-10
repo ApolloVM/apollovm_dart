@@ -209,7 +209,8 @@ class ApolloCodeGeneratorJava11 extends ApolloCodeGenerator {
     var hasMembers =
         clazz.fields.isNotEmpty ||
         clazz.constructors.isNotEmpty ||
-        clazz.functions.isNotEmpty;
+        clazz.functions.isNotEmpty ||
+        enumHasAccessors(clazz);
 
     out.write(indent);
     out.write('enum ');
@@ -249,6 +250,8 @@ class ApolloCodeGeneratorJava11 extends ApolloCodeGenerator {
           }
         }
       }
+
+      generateEnumAccessors(clazz, out: out, indent: indent2);
     }
 
     out.write('$indent}\n');
@@ -469,6 +472,44 @@ class ApolloCodeGeneratorJava11 extends ApolloCodeGenerator {
     for (var i = 0; i < valuesExpressions.length; ++i) {
       var e = valuesExpressions[i];
 
+      out.write('$indent  add(');
+      generateASTExpression(e, out: out);
+      out.write(');\n');
+    }
+
+    out.write('$indent}}');
+
+    return out;
+  }
+
+  /// A set literal becomes a `HashSet`, built with the same double-brace
+  /// initializer the list and map literals use.
+  @override
+  StringBuffer generateASTExpressionSetLiteral(
+    ASTExpressionSetLiteral expression, {
+    StringBuffer? out,
+    String indent = '',
+    bool headIndented = true,
+  }) {
+    out ??= newOutput();
+
+    if (headIndented) out.write(indent);
+
+    final type = expression.type;
+
+    out.write('new HashSet');
+
+    if (type != null) {
+      out.write('<');
+      generateASTType(type, out: out);
+      out.write('>');
+    } else {
+      out.write('<>');
+    }
+
+    out.write('(){{\n');
+
+    for (var e in expression.valuesExpressions) {
       out.write('$indent  add(');
       generateASTExpression(e, out: out);
       out.write(');\n');

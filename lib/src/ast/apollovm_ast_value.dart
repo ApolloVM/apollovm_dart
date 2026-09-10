@@ -4,7 +4,7 @@
 
 import 'package:async_extension/async_extension.dart';
 import 'package:collection/collection.dart'
-    show DeepCollectionEquality, ListEquality, MapEquality;
+    show DeepCollectionEquality, ListEquality, MapEquality, SetEquality;
 import 'package:swiss_knife/swiss_knife.dart';
 
 import '../apollovm_base.dart';
@@ -1062,6 +1062,27 @@ class ASTValueMap<TK extends ASTType<K>, TV extends ASTType<V>, K, V>
       var v1 = await _getValue(context, this);
       var v2 = await _getValue(context, other);
       return _mapEquality.equals(v1, v2);
+    }
+    return super == (other);
+  }
+}
+
+/// [ASTValue] for a [Set] — the value of a Dart set literal (`{1, 2}`).
+class ASTValueSet<T extends ASTType<V>, V> extends ASTValueStatic<Set<V>> {
+  ASTValueSet(T elementType, Set<V> value)
+    : super(ASTTypeSet<T, V>(elementType), value);
+
+  static final SetEquality _setEquality = const SetEquality();
+
+  @override
+  FutureOr<bool> equals(Object other) async {
+    if (identical(this, other)) return true;
+
+    if (other is ASTValueSet) {
+      var context = VMContext.getCurrent();
+      var v1 = await _getValue(context, this);
+      var v2 = await _getValue(context, other);
+      return _setEquality.equals(v1, v2);
     }
     return super == (other);
   }

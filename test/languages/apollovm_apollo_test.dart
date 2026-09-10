@@ -189,6 +189,35 @@ run() {
       expect(output, equals(['c=x']));
     });
 
+    test('catch binds the stack-trace variable', () async {
+      // ApolloVM has no real stack traces, so the value is the empty string —
+      // but the name must be bound, not dropped.
+      var output = await _run(r'''
+run() {
+  try {
+    throw "boom"
+  } catch (e, st) {
+    print(e)
+    print(st == "")
+  }
+}
+''');
+      expect(output, equals(['boom', true]));
+    });
+
+    test('typed catch with a stack trace', () async {
+      var output = await _run(r'''
+run() {
+  try {
+    throw "io"
+  } catch (String e, st) {
+    print("$e/$st")
+  }
+}
+''');
+      expect(output, equals(['io/']));
+    });
+
     test('all Dart string forms', () async {
       var output = await _run(r'''
 run() {

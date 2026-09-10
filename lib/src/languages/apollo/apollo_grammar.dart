@@ -980,25 +980,36 @@ class ApolloGrammarDefinition extends ApolloGrammarLexer {
         var header = v[1] as List;
         var type = header[0] as ASTType?;
         var name = header[1] as String;
+        var stackTraceName = header[2] as String?;
         var block = v[2] as ASTBlock;
-        return ASTCatchClause(type, name, block);
+        return ASTCatchClause(
+          type,
+          name,
+          block,
+          stackTraceName: stackTraceName,
+        );
       });
 
-  /// The catch header, with parentheses optional → `[ASTType? type, String name]`.
+  /// The catch header, with parentheses optional →
+  /// `[ASTType? type, String name, String? stackTraceName]`.
   Parser<List> catchHeader() =>
       (catchHeaderParens() | catchHeaderBare()).cast<List>();
+
+  /// The optional second catch variable — the stack trace, as in Dart's
+  /// `catch (e, st)`. Returns its name, or `null` when absent.
+  String? _stackTraceNameOf(List? group) => group?[1] as String?;
 
   Parser<List> catchHeaderParens() =>
       (char('(').trimHidden() &
               catchTypeAndName() &
               (char(',').trimHidden() & identifier().trimHidden()).optional() &
               char(')').trimHidden())
-          .map((v) => v[1] as List);
+          .map((v) => [...v[1] as List, _stackTraceNameOf(v[2] as List?)]);
 
   Parser<List> catchHeaderBare() =>
       (catchTypeAndName() &
               (char(',').trimHidden() & identifier().trimHidden()).optional())
-          .map((v) => v[0] as List);
+          .map((v) => [...v[0] as List, _stackTraceNameOf(v[1] as List?)]);
 
   /// `Type name` or just `name` → `[ASTType?, String]`. The typed form is tried
   /// first; petitparser backtracks to the bare form for `catch error {`.

@@ -296,7 +296,8 @@ class ApolloCodeGeneratorDart extends ApolloCodeGenerator {
     var hasMembers =
         clazz.fields.isNotEmpty ||
         clazz.constructors.isNotEmpty ||
-        clazz.functions.isNotEmpty;
+        clazz.functions.isNotEmpty ||
+        enumHasAccessors(clazz);
 
     out.write(indent);
     out.write('enum ');
@@ -341,6 +342,8 @@ class ApolloCodeGeneratorDart extends ApolloCodeGenerator {
           }
         }
       }
+
+      generateEnumAccessors(clazz, out: out, indent: indent2);
     }
 
     out.write('$indent}\n');

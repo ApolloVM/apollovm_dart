@@ -401,8 +401,9 @@ class ApolloCodeGeneratorGo extends ApolloCodeGenerator {
   ) {
     for (var p in ctor.parameters.allParameters) {
       if (!p.thisParameter) continue;
+      var field = _goIdent(p.fieldName);
       var name = _goIdent(p.name);
-      out.write('$indent$_receiver.$name = $name\n');
+      out.write('$indent$_receiver.$field = $name\n');
     }
   }
 
@@ -1471,6 +1472,36 @@ class ApolloCodeGeneratorGo extends ApolloCodeGenerator {
   }
 
   @override
+  /// Go has no set type: the idiom is a map to the empty struct, so
+  /// `{1, 2}` becomes `map[int]struct{}{1: {}, 2: {}}`.
+  @override
+  StringBuffer generateASTExpressionSetLiteral(
+    ASTExpressionSetLiteral expression, {
+    StringBuffer? out,
+    String indent = '',
+    bool headIndented = true,
+  }) {
+    out ??= newOutput();
+
+    if (headIndented) out.write(indent);
+
+    out.write('map[');
+    generateASTType(expression.type ?? ASTTypeDynamic.instance, out: out);
+    out.write(']struct{}{');
+
+    var values = expression.valuesExpressions;
+    for (var i = 0; i < values.length; ++i) {
+      if (i > 0) out.write(', ');
+      generateASTExpression(values[i], out: out, headIndented: false);
+      out.write(': {}');
+    }
+
+    out.write('}');
+
+    return out;
+  }
+
+  @override
   StringBuffer generateASTExpressionMapLiteral(
     ASTExpressionMapLiteral expression, {
     String indent = '',
@@ -1531,6 +1562,18 @@ class ApolloCodeGeneratorGo extends ApolloCodeGenerator {
       generateASTType(type.valueType, out: out);
       return out;
     }
+
+    // Go has no set type: the same map-to-empty-struct idiom the set literal
+    // is emitted with.
+    if (type is ASTTypeSet) {
+      out ??= newOutput();
+      out.write(indent);
+      out.write('map[');
+      generateASTType(type.elementType, out: out);
+      out.write(']struct{}');
+      return out;
+    }
+
     return super.generateASTType(type, out: out, indent: indent);
   }
 
