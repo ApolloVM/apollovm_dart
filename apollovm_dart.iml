@@ -6,6 +6,12 @@
       <excludeFolder url="file://$MODULE_DIR$/.dart_tool" />
       <excludeFolder url="file://$MODULE_DIR$/.pub" />
       <excludeFolder url="file://$MODULE_DIR$/build" />
+      <excludeFolder url="file://$MODULE_DIR$/apollovm_wasm/.dart_tool" />
+      <excludeFolder url="file://$MODULE_DIR$/apollovm_wasm/.pub" />
+      <excludeFolder url="file://$MODULE_DIR$/apollovm_wasm/build" />
+      <excludeFolder url="file://$MODULE_DIR$/lsp/benchmark/.dart_tool" />
+      <excludeFolder url="file://$MODULE_DIR$/lsp/benchmark/.pub" />
+      <excludeFolder url="file://$MODULE_DIR$/lsp/benchmark/build" />
     </content>
     <orderEntry type="inheritedJdk" />
     <orderEntry type="sourceFolder" forTests="false" />

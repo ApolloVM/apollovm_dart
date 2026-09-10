@@ -33,6 +33,7 @@ tags:
   wasm-chrome:
     # Must run in a browser (`-p chrome`).
   # Source languages.
+  apollo:
   dart:
   java:
   kotlin:

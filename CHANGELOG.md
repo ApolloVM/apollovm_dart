@@ -1,3 +1,193 @@
+## 2.32.0
+
+### New language: Apollo (`.apollo`)
+
+- **Added the Apollo language**, a Dart-derived language designed for both humans
+  and coding agents. Apollo parses, runs, translates to/from every other
+  supported language, and regenerates back to Apollo source. It uses Dart as its
+  reference, diverging in a few deliberate ways:
+  - **Strings use the exact Dart syntax** — single/double quotes, triple-quoted
+    multiline, raw (`r'...'`), `$var`/`${expr}` interpolation and adjacent-string
+    concatenation.
+  - **Parentheses are optional** in control-flow conditions (`if`, `else if`,
+    `while`, `do`/`while`, `switch`, `catch`). Both `if age >= 18 { … }`
+    and `if (age >= 18) { … }` parse.
+  - **Concise range-based `for`** — `for i++ from 0...limit { … }` with ascending
+    (`++`/`+=`) and descending (`--`/`-=`) steps, custom steps, and inclusive
+    (`...`) / exclusive (`..<`, `..>`) bounds. The inclusive bound is `...`
+    (Swift-style), leaving a bare `..` to mean the cascade operator; a range
+    written with `..` is a syntax error naming the fix. It is equivalent to a
+    classic
+    `for (var i = …; …; …)`, and Apollo regenerates the range sugar for any loop
+    with this canonical counting shape (so a matching classic loop also comes
+    back as range sugar). The classic C-style loop stays available but now
+    **requires parentheses** (a paren-less header is a clear syntax error).
+  - **`async` is a leading declaration modifier** (`async User loadUser(…) { … }`,
+    `async main() { … }`). The canonical/generated form is leading `async` with
+    the unwrapped return type; the Dart spellings (`async Future<User> f()`,
+    `Future<User> f() async`, and trailing `async`) are also parsed and
+    normalized to it.
+  - **Statement-terminating semicolons are optional** — including on class
+    fields and body-less constructors, so an enhanced (`;`-separated) enum body
+    with a `const` constructor parses without any semicolons.
+  - **Primitive types are capitalized-only** (`Int`, `Double`, `Bool`, `Num`,
+    `Void`); translating Apollo to Dart lowercases them, and Dart→Apollo
+    capitalizes them.
+  - **Typed catch** is written `catch IOException error { … }` (parentheses
+    optional).
+- The language is registered as `apollo` (file extension `.apollo`) across the
+  parser/runner/generator dispatch, exported from the public library, and covered
+  by round-trip test fixtures, a dedicated test suite, and an example
+  (`example/apollovm_example_apollo.dart`).
+
+#### Generation fixes
+
+Two ways the Apollo generator could emit source that parsed cleanly but *meant*
+something else — both found by covering the generator's emit methods directly:
+
+- **An interpolation is brace-delimited when the next character would extend
+  it.** Concatenation is flattened into a single literal, so `"a" + n + "b"`
+  joined as `'a$n'` + `'b'`, producing `'a$nb'` — a reference to a variable
+  named `nb`. It is now emitted `'a${n}b'`. The braces are added only where they
+  are needed: `"a" + n`, `"a" + n + "!"` and a hand-written `"hello $name"` all
+  still emit the bare `$name` form, and an escaped `\$` is left alone.
+
+- **A parenthesized operand beside a string keeps its parentheses.** Flattening
+  the string side of a `+` also dropped the grouping on the *other* operand, so
+  `"q " + (n + 1)` came back as `"q " + n + 1`, which re-associates to
+  `("q " + n) + 1` — string concatenation instead of arithmetic. Grouping is now
+  decided per operand: the string side still sheds its redundant parentheses,
+  the other side keeps them.
+
+#### Parse fixes
+
+- **A method call on a field calls the method.** `o.inner.twice()` parsed as the
+  field read `o.inner` with the call silently dropped, so it evaluated to the
+  *field* — `Inner{n: int}` where `10` was expected. Apollo now folds a
+  multi-segment member chain (`a.b.c`, `a.b.m()`) left-to-right, each segment
+  becoming the receiver of the next, matching what the Dart grammar already did.
+
+- **Literals that carry their inferred type parse back.** The generator emits a
+  literal's type (`<dynamic, dynamic>{}`, `<List<Int>>[<Int>[1, 2]]`), but the
+  literal rules accepted only a *simple* type name there, and the empty-map rule
+  read its value type from the position of the comma. An empty map and a nested
+  list therefore generated source that Apollo could not re-parse — an internal
+  cast error, not even a syntax error. Both round-trip now, as does a 3D list
+  (`array3DTyped` was reading the innermost `List` token as the element type).
+
+- **`typedef` no longer requires a semicolon**, matching the rest of the
+  language. `typedef Id = List<Int>` without one failed with an internal cast
+  error.
+
+#### Named constructors (all languages)
+
+`Point.origin()` could not be declared or called in *any* ApolloVM language —
+the parser rejected the declaration, so the `.name` the generators already emit
+was unreachable. Constructors may now be named, in the Dart grammar as well as
+Apollo's, and `Foo.named(...)` resolves against the class: a receiver that names
+a class already reaches the invocation path used by `static` methods, so the
+named-constructor lookup is a single fallback there. `Point.origin()` runs,
+translates between languages, and survives regeneration.
+
+#### Apollo in the LSP and MCP tools
+
+Apollo was registered for parsing, running and generating, but not in the
+language lists the LSP analyzer and the MCP tools consult, so `.apollo` worked
+through the VM and CLI while those tools rejected it. `apollo` is now in the
+analyzer's extension map, `LspRuntime.supportedLanguages`, and
+`mcpSupportedLanguages`.
+
+#### Apollo setters
+
+Apollo parsed getters but had no setter rule, and `set` was not guarded in a
+type position — so `set value(Int v) { … }` was silently claimed by the method
+rule as a **method named `value` returning a type named `set`**. It was not a
+syntax error: the misparse round-tripped through Apollo unchanged and only
+surfaced downstream, where it emitted `set value(int v)` as a return type into
+targets that have no such type (invalid Java, Go, C#, …). In the other
+direction, translating any Dart class with a setter to Apollo failed outright
+with `Language 'apollo' has no setter declaration`.
+
+Apollo now has a real setter, matching Dart's: `set name(T v) { … }` and
+`set name(v) => …`, with an optional (and dropped) leading return type and a
+typed or untyped parameter, in class bodies and extension bodies alike. The
+Apollo generator emits them — an arrow-bodied setter comes back as an arrow,
+since `set x(v) { return … }` is not valid — so setters survive regeneration
+and `Dart ↔ Apollo` translation.
+
+`simpleType` now rejects `get` and `set` in a type position, as the Dart grammar
+already did. Both stay *contextual*, not reserved: a method may still be named
+`set(…)`, and identifiers that merely begin with those words (`settings`,
+`getaway`) are unaffected. The `get` guard also fixes untyped getters
+(`get value { … }`), which the non-backtracking `type().optional()` had made
+unparseable.
+
+#### Apollo null safety: `T?`, `??`, `??=`, `?.`, `?[` and postfix `!`
+
+Apollo had **none** of Dart's nullability surface, even though the AST nodes
+(`ASTExpressionNullCoalesce`, `NullCheck`, `NullAssertion`) and every generator
+already supported it — only the Apollo grammar was missing, and the Apollo
+generator never opted in. The failures were asymmetric and mostly silent:
+
+- `a ?? b` was **emitted but not parseable** — the generator wrote `??` while
+  the grammar had no rule for it, so Apollo could not re-read its own output.
+- `a?.b` was emitted as `a.b` and `a!` as `a`, **silently dropping the null
+  semantics** rather than failing.
+- A nullable type `String?` was flattened to `String`, so the null-safety
+  analyzer never saw Apollo's nullability at all.
+
+Apollo now takes Dart's surface verbatim: a trailing `?` on any type, the
+null-coalescing `??` and `??=`, null-aware access `?.` and index `?[`, and the
+postfix null assertion `!` — all round-tripping through Apollo and translating
+both ways with Dart. `?.` chains, so `a?.b?.c` short-circuits at the first null
+link.
+
+The neighbouring tokens stay unambiguous: `??` is tried inside the operation
+chain so the ternary `a ? b : c` still falls through to the conditional, and the
+postfix `!` is guarded by `char('=').not()` so `a != b` is untouched. The
+assignment operators are now ordered longest-first, since `??=` and `~/=` must
+be matched before the bare `=` they end with.
+
+#### Apollo cascades (`..`, `?..`)
+
+Apollo now parses Dart's cascade operator — method calls (`b..add(1)`), setter
+assignments (`b..x = 1`), getters, and the null-aware `?..` — chained over a
+single receiver, with the cascade evaluating to that receiver so
+`var b = Buffer()..add(1)` works. `ASTExpressionCascade` and the generators
+already supported this; only the Apollo grammar was missing, which meant Apollo
+*emitted* `..` it could not read back. Cascades now round-trip and translate
+both ways with Dart.
+
+This is what the `...` range spelling above buys: `..` is now unambiguously the
+cascade operator in every position, with no context-sensitive rule and no
+restriction on where a cascade may appear.
+
+#### Fixed: Apollo dropped the `catch` stack-trace variable, then emitted `let`
+
+Apollo mishandled the second `catch` variable (Dart's `catch (e, st)`) at both
+ends:
+
+- **Parsing** matched the optional `, name` but discarded it, so
+  `catch (Exception e, st) { print(st) }` loaded with no `stackTraceName` and
+  the handler referred to a variable that was never bound.
+- **Generating** fell through to the base implementation, which is documented as
+  suiting JavaScript: `let $name = '';`. `let` is not an Apollo keyword, so the
+  emitted line did not fail — it parsed as a variable of a type *named* `let`
+  (the same misparse class as `set` above) and propagated onward as invalid
+  Dart.
+
+Apollo now keeps the name and declares it in the `catch` header, as Dart does,
+so `renderCatchStackTraceBinding` returns `null` and no statement is synthesised.
+`catch (e, st)`, `catch (Exception e, st)` and the paren-less `catch e, st` all
+parse, and a stack trace survives `Dart → Apollo → Dart` bound in the header.
+Clauses without one are unchanged. The runtime already declared the variable
+(as the empty string — ApolloVM has no real stack traces), so only the grammar
+and generator needed fixing.
+
+Other targets were unaffected: Dart, Java, Kotlin and C# already override the
+binding, JavaScript and TypeScript are correct as-is, and Python overrides the
+whole `try`/`catch` statement.
+
 ## 2.31.0
 
 Five features from the [Dart language evolution](https://dart.dev/resources/language/evolution)

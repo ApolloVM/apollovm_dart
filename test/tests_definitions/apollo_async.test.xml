@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="Apollo async: leading `async` modifier + await (round-trips to Apollo and Dart)">
+    <source language="apollo">
+        <![CDATA[
+async Int loadUser(Int id) {
+  return id * 2
+}
+
+async run() {
+  var u = await loadUser(21)
+  print("user=" + u)
+}
+        ]]>
+    </source>
+    <call function="run">
+        []
+    </call>
+    <output>
+        ["user=42"]
+    </output>
+
+    <source-generated language="apollo"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+  async Int loadUser(Int id) {
+    return id * 2;
+  }
+
+  async dynamic run() {
+    var u = await loadUser(21);
+    print('user=$u');
+  }
+
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+
+    <source-generated language="dart"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+  int loadUser(int id) async {
+    return id * 2;
+  }
+
+  dynamic run() async {
+    var u = await loadUser(21);
+    print('user=$u');
+  }
+
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+</test>

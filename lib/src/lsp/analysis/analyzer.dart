@@ -56,6 +56,8 @@ class Analyzer {
     final dot = uri.lastIndexOf('.');
     if (dot < 0) return null;
     switch (uri.substring(dot + 1).toLowerCase()) {
+      case 'apollo':
+        return 'apollo';
       case 'dart':
         return 'dart';
       case 'java':

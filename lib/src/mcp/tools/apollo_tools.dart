@@ -37,6 +37,7 @@ const allToolNames = <String>[
 
 /// The source languages the MCP tools accept (canonical names).
 const mcpSupportedLanguages = <String>[
+  'apollo',
   'dart',
   'java',
   'kotlin',

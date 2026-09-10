@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="Apollo operators + collections: list/map literals, indexing, ternary, bitwise">
+    <source language="apollo">
+        <![CDATA[
+run() {
+  var xs = [10, 20, 30]
+  var m = {"a": 1, "b": 2}
+  var pick = xs[0] > 5 ? "big" : "small"
+  var bits = (6 & 3) | (6 ^ 1)
+  var total = xs[0] + xs[2] + m["b"]
+  print(pick)
+  print("bits=" + bits)
+  print("total=" + total)
+}
+        ]]>
+    </source>
+    <call function="run">
+        []
+    </call>
+    <output>
+        ["big", "bits=7", "total=42"]
+    </output>
+
+    <source-generated language="apollo"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+  dynamic run() {
+    var xs = <Int>[10, 20, 30];
+    var m = {'a': 1, 'b': 2};
+    var pick = (xs[0] > 5) ? 'big' : 'small';
+    var bits = (6 & 3) | (6 ^ 1);
+    var total = xs[0] + xs[2] + m['b'];
+    print(pick);
+    print('bits=$bits');
+    print('total=$total');
+  }
+
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+</test>

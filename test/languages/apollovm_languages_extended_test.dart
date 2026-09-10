@@ -1,5 +1,6 @@
 @TestOn('vm')
 @Tags([
+  'apollo',
   'dart',
   'java',
   'javascript',

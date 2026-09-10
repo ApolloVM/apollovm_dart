@@ -49,10 +49,42 @@ source code between all supported languages, and **compile to WebAssembly** on t
 
 ### Languages
 
-`Dart`, `Java 11`, `Kotlin`, `Go`, `C#`, `JavaScript`, `TypeScript`, `Lua` and `Python`.
+`Dart`, `Java 11`, `Kotlin`, `Go`, `C#`, `JavaScript`, `TypeScript`, `Lua`, `Python`
+and `Apollo`.
 
 Any supported language can be translated to any other (e.g. Java → Dart, C# → Python,
 Kotlin → JavaScript, Go → Dart), and code can be regenerated back to its original language.
+
+#### Apollo (`.apollo`)
+
+**Apollo** is a Dart-derived language designed for both humans and coding agents.
+It shares Dart's semantics — and therefore Dart's full feature support in the
+table below — while diverging in a few deliberate ways:
+
+- **Strings use the exact Dart syntax** (quotes, triple-quoted multiline, raw
+  `r'...'`, `$var`/`${expr}` interpolation, adjacent-string concatenation).
+- **Parentheses are optional** in control-flow conditions — `if age >= 18 { … }`
+  and `if (age >= 18) { … }` both parse (`if`, `else if`, `while`, `do`/`while`,
+  `switch`, `catch`).
+- **Concise range-based `for`** — `for i++ from 0...limit { … }` (ascending,
+  descending, exclusive bounds `..<`/`..>`, and custom steps `i += 2`). The
+  inclusive bound is `...`, so a bare `..` stays free for cascades. The
+  classic C-style loop stays available but **requires parentheses**:
+  `for (var i = 0; i <= limit; i++) { … }`.
+- **`async` is a leading declaration modifier** — `async User loadUser(…) { … }`,
+  `async main() { … }`. The Dart spellings (`async Future<User> f()`,
+  `Future<User> f() async`, trailing `async`) are also accepted and normalized
+  to the canonical leading form.
+- **Semicolons are optional** and **primitive types are capitalized** (`Int`,
+  `Double`, `Bool`, `Num`, `Void`). Translating Apollo ↔ Dart converts the type
+  spelling and moves `async` accordingly.
+
+```apollo
+async User loadUser(Int id) {
+  var response = await http.get("/users/$id")
+  return User.fromJson(response.body)
+}
+```
 
 ### Core capabilities
 
@@ -376,7 +408,7 @@ setter runs on `obj.x = v`, `this.x = v`, an unqualified `x = v` inside the
 class, and on compound forms (`+=`, `??=`, …), which read through the getter
 when there is one; `??=` short-circuits, so the setter does not run when the
 current value is non-null. Inherited and overridden accessors resolve through
-the superclass chain. **Only Dart generates them** — Kotlin emits getters
+the superclass chain. **Only Dart and Apollo generate them** — Kotlin emits getters
 (`val x: T get() { … }`) but not setters, and every other target refuses an
 accessor with `UnsupportedSyntaxError` rather than dropping it. Not yet
 supported, for getters and setters alike: `static` accessors, top-level

@@ -43,7 +43,21 @@ void main() {
     test('supported languages exclude wasm', () {
       expect(LspRuntime.supportedLanguages, contains('dart'));
       expect(LspRuntime.supportedLanguages, contains('python'));
+      expect(LspRuntime.supportedLanguages, contains('apollo'));
       expect(LspRuntime.supportedLanguages, isNot(contains('wasm')));
+    });
+
+    test('apollo source analyzes through the LSP runtime', () async {
+      var result = await LspRuntime().diagnostics('apollo', r'''
+class Greeter {
+  String name
+  Greeter(this.name)
+  String hello() { return "hi $name" }
+}
+''');
+
+      expect(result['ok'], isTrue);
+      expect(result['diagnostics'], isEmpty);
     });
   });
 
