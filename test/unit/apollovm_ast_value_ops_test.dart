@@ -246,4 +246,111 @@ void main() {
       expect(v.type, isA<ASTTypeObject>());
     });
   });
+
+  group('ASTValue base contract', () {
+    // `ASTValueAsString` extends `ASTValue` directly, so it inherits every
+    // default the base declares: the container accessors, `size`, the
+    // arithmetic operators and the comparisons.
+    ASTValue<String> composed() => ASTValueAsString(ASTValueInt(9));
+
+    final context = VMScopeContext(ASTBlock(null));
+
+    test('container access is refused, naming the type', () {
+      var v = composed();
+
+      expect(
+        () => v.readIndex<int>(context, 0),
+        throwsA(
+          isA<UnsupportedError>().having(
+            (e) => e.message,
+            'message',
+            contains("Can't read index"),
+          ),
+        ),
+      );
+      expect(
+        () => v.readKey<int>(context, 'k'),
+        throwsA(
+          isA<UnsupportedError>().having(
+            (e) => e.message,
+            'message',
+            contains("Can't read key"),
+          ),
+        ),
+      );
+      expect(
+        () => v.writeIndex<int>(context, 0, 1),
+        throwsA(
+          isA<UnsupportedError>().having(
+            (e) => e.message,
+            'message',
+            contains("Can't write index"),
+          ),
+        ),
+      );
+      expect(
+        () => v.writeKey<int>(context, 'k', 1),
+        throwsA(
+          isA<UnsupportedError>().having(
+            (e) => e.message,
+            'message',
+            contains("Can't write key"),
+          ),
+        ),
+      );
+    });
+
+    test('a value that is not a container has no size', () async {
+      expect(await _await(composed().size(context)), isNull);
+    });
+
+    test('every arithmetic operator is refused', () {
+      var v = composed();
+      var other = ASTValueInt(1);
+
+      expect(() => v + other, throwsA(isA<UnsupportedValueOperationError>()));
+      expect(() => v - other, throwsA(isA<UnsupportedValueOperationError>()));
+      expect(() => v * other, throwsA(isA<UnsupportedValueOperationError>()));
+      expect(() => v / other, throwsA(isA<UnsupportedValueOperationError>()));
+      expect(() => v ~/ other, throwsA(isA<UnsupportedValueOperationError>()));
+      expect(() => v % other, throwsA(isA<UnsupportedValueOperationError>()));
+    });
+
+    test('ordering a non-number reports both values', () async {
+      var a = composed();
+      var b = ASTValueAsString(ASTValueString('x'));
+
+      for (var compare in <Future<bool> Function()>[
+        () => _await(a > b),
+        () => _await(a < b),
+        () => _await(a >= b),
+        () => _await(a <= b),
+      ]) {
+        await expectLater(
+          compare(),
+          throwsA(
+            isA<UnsupportedError>().having(
+              (e) => e.message,
+              'message',
+              contains('non number values'),
+            ),
+          ),
+        );
+      }
+    });
+
+    test('ordering against something that is not a value is false', () async {
+      var v = composed();
+      expect(await _await(v > 1), isFalse);
+      expect(await _await(v < 1), isFalse);
+      expect(await _await(v >= 1), isFalse);
+      expect(await _await(v <= 1), isFalse);
+    });
+
+    test('isInstanceOf answers from the resolved type', () {
+      var v = composed();
+      expect(v.isInstanceOf(ASTTypeString.instance), isTrue);
+      expect(v.isInstanceOf(ASTTypeInt.instance), isFalse);
+    });
+  });
 }

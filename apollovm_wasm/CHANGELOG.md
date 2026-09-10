@@ -1,15 +1,20 @@
 ## 1.2.1
 
-- `flutter_rust_bridge: '>=2.12.0 <2.13.0'` — a new direct constraint on a package this runtime
-  never imports, added because `wasm_run`'s own constraint (`^2.12.0`) is too wide to be safe.
+- `flutter_rust_bridge: '>=2.12.0 <2.13.0'` (new) — `wasm_run 0.2.0+2` ships Rust bindings
+  generated against bridge 2.12.0 but declares `^2.12.0`, so any resolution made after bridge
+  2.13.0 was published paired bindings and runtime that refuse each other:
 
-  `wasm_run` 0.2.0+2 ships FFI bindings stamped with codegen version 2.12.0, and
-  `flutter_rust_bridge` aborts at library-load time when the runtime version differs from the
-  codegen version. So the moment 2.13.0 was published, every Wasm call — in this package and in
-  any consumer — started failing with `Bad state: wasm_run_dart's codegen version (2.12.0)
-  should be the same as runtime version (2.13.0)`, with nothing in either pubspec to prevent it.
+  ```
+  Bad state: wasm_run_dart's codegen version (2.12.0) should be the same as
+  runtime version (2.13.0).
+  ```
 
-  The bound holds the 2.12.x line until `wasm_run` regenerates its bindings.
+  It fires in `RustLib.init`, before any Wasm module is compiled, so *every* call into this
+  runtime fails — a `dart pub upgrade` was enough to break a working checkout.
+
+  The pin lives here, in the package that owns the `wasm_run` dependency, rather than in a
+  `dependency_overrides`: an override is ignored by consumers, and they need the working pair as
+  much as CI does. Lift it when `wasm_run` publishes bindings regenerated for a newer bridge.
 
 ## 1.2.0
 

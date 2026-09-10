@@ -42,6 +42,72 @@ http.Client _clientFor(RepositoryRpc rpc) => MockClient((request) async {
   );
 });
 
+/// An in-memory repository that also answers the git ops, so the client half of
+/// the git contract can be driven end to end. Everything it returns is fixed:
+/// what is under test is the serialization, not a git implementation.
+class _GitRepositoryAdapter extends InMemoryRepositoryAdapter {
+  _GitRepositoryAdapter(super.files);
+
+  @override
+  RepoCapabilities get capabilities =>
+      const RepoCapabilities(canWrite: true, canGitMutate: true);
+
+  @override
+  Future<List<GitStatusEntry>> gitStatus() async => const [
+    GitStatusEntry(path: 'lib/foo.dart', status: 'M ', staged: true),
+    GitStatusEntry(path: 'notes.txt', status: '??', staged: false),
+  ];
+
+  @override
+  Future<String> gitDiff({
+    String? rev,
+    bool staged = false,
+    String? path,
+  }) async => 'diff rev=$rev staged=$staged path=$path';
+
+  @override
+  Future<List<GitCommit>> gitLog({int? limit, String? path}) async => [
+    GitCommit(
+      hash: 'abc123',
+      author: 'me',
+      date: 'today',
+      subject: 'limit=$limit path=$path',
+    ),
+  ];
+
+  @override
+  Future<String> gitShow({required String rev, String? path}) async =>
+      'show $rev $path';
+
+  @override
+  Future<List<GitBlameLine>> gitBlame(String path) async => [
+    GitBlameLine(line: 1, hash: 'abc123', author: 'me', content: path),
+  ];
+
+  @override
+  Future<GitResult> gitAdd(List<String> paths) async =>
+      GitResult(ok: true, output: 'add ${paths.join(',')}');
+
+  @override
+  Future<GitResult> gitCommit(String message, {List<String>? paths}) async =>
+      GitResult(ok: true, output: 'commit $message ${paths?.join(',')}');
+
+  @override
+  Future<GitResult> gitCheckout(String rev) async =>
+      GitResult(ok: true, output: 'checkout $rev');
+
+  @override
+  Future<GitResult> gitRestore(
+    List<String> paths, {
+    bool staged = false,
+  }) async => GitResult(ok: true, output: 'restore ${paths.length} $staged');
+}
+
+/// A [MockClient] that answers every `POST /rpc` with [body] and [status],
+/// for the client's transport and protocol error paths.
+http.Client _cannedClient(String body, {int status = 200}) =>
+    MockClient((_) async => http.Response(body, status));
+
 void main() {
   group('RepositoryRpc.handle', () {
     late RepositoryRpc rpc;
@@ -177,6 +243,256 @@ void main() {
       expect(
         () => readOnly.write('lib/x.dart', 'x'),
         throwsA(isA<RepoPermissionException>()),
+      );
+    });
+  });
+
+  group('RemoteRepositoryAdapter: every filesystem and search op', () {
+    late RemoteRepositoryAdapter adapter;
+
+    setUp(() async {
+      final rpc = RepositoryRpc(
+        RepositoryService(
+          InMemoryRepositoryAdapter(Map.of(_fixture)),
+          config: const RepoConfig(allowWrite: true),
+        ),
+      );
+      // A trailing slash in the base URL must not double up in `<base>/rpc`.
+      adapter = await RemoteRepositoryAdapter.connect(
+        'http://localhost:9999/',
+        client: _clientFor(rpc),
+      );
+    });
+
+    test('read with a line range', () async {
+      final file = await adapter.read(
+        'lib/foo.dart',
+        range: const LineRange(1, 2),
+      );
+      expect(file.path, 'lib/foo.dart');
+      expect(file.startLine, 1);
+      expect(file.endLine, 2);
+    });
+
+    test('list recursively, and find by glob', () async {
+      final entries = await adapter.list('', recursive: true, maxDepth: 3);
+      expect(entries.map((e) => e.path), contains('lib/foo.dart'));
+
+      final paths = await adapter.find(glob: '**.dart', limit: 10);
+      expect(paths, contains('lib/bar.dart'));
+    });
+
+    test('stat reports the file', () async {
+      final stat = await adapter.stat('lib/bar.dart');
+      expect(stat.exists, isTrue);
+      expect(stat.isDir, isFalse);
+      expect(stat.lineCount, greaterThan(0));
+    });
+
+    test('edit replaces text and reports the count', () async {
+      final edit = await adapter.edit('lib/bar.dart', 'add', 'sum');
+      expect(edit.path, 'lib/bar.dart');
+      expect(edit.replacements, 1);
+      expect((await adapter.read('lib/bar.dart')).content, contains('sum'));
+    });
+
+    test('mkdir, move and delete', () async {
+      await adapter.mkdir('lib/sub');
+      await adapter.write('lib/sub/a.dart', 'var a = 1;\n');
+
+      await adapter.move('lib/sub/a.dart', 'lib/sub/b.dart');
+      expect((await adapter.stat('lib/sub/b.dart')).exists, isTrue);
+
+      await adapter.delete('lib/sub/b.dart');
+      expect((await adapter.stat('lib/sub/b.dart')).exists, isFalse);
+    });
+
+    test('searchText returns matches with context', () async {
+      final matches = await adapter.searchText(
+        'Greeter',
+        ignoreCase: true,
+        context: 1,
+        limit: 10,
+      );
+      expect(matches, isNotEmpty);
+      expect(matches.first.text, contains('Greeter'));
+    });
+
+    test('close is a no-op for a client it does not own', () {
+      expect(adapter.close, returnsNormally);
+    });
+  });
+
+  group('RemoteRepositoryAdapter: the git ops', () {
+    late RemoteRepositoryAdapter adapter;
+
+    setUp(() async {
+      final rpc = RepositoryRpc(
+        RepositoryService(
+          _GitRepositoryAdapter(Map.of(_fixture)),
+          config: const RepoConfig(allowWrite: true, allowGitMutation: true),
+        ),
+      );
+      adapter = await RemoteRepositoryAdapter.connect(
+        'http://localhost:9999',
+        client: _clientFor(rpc),
+      );
+    });
+
+    test('status, diff, log, show and blame deserialize', () async {
+      final status = await adapter.gitStatus();
+      expect(status.map((e) => e.path), ['lib/foo.dart', 'notes.txt']);
+      expect(status.first.staged, isTrue);
+
+      expect(
+        await adapter.gitDiff(rev: 'HEAD', staged: true, path: 'lib'),
+        'diff rev=HEAD staged=true path=lib',
+      );
+
+      final log = await adapter.gitLog(limit: 5, path: 'lib');
+      expect(log.single.hash, 'abc123');
+      expect(log.single.subject, 'limit=5 path=lib');
+
+      expect(await adapter.gitShow(rev: 'HEAD', path: 'x'), 'show HEAD x');
+
+      final blame = await adapter.gitBlame('lib/foo.dart');
+      expect(blame.single.content, 'lib/foo.dart');
+    });
+
+    test('add, commit, checkout and restore deserialize', () async {
+      expect((await adapter.gitAdd(['a', 'b'])).output, 'add a,b');
+      expect(
+        (await adapter.gitCommit('msg', paths: ['a'])).output,
+        'commit msg a',
+      );
+      expect((await adapter.gitCheckout('main')).output, 'checkout main');
+      expect(
+        (await adapter.gitRestore(['a'], staged: true)).output,
+        'restore 1 true',
+      );
+    });
+  });
+
+  group('RemoteRepositoryAdapter: transport and protocol failures', () {
+    Future<RemoteRepositoryAdapter> connectWith(http.Client client) =>
+        RemoteRepositoryAdapter.connect(
+          'http://localhost:9999',
+          client: client,
+        );
+
+    /// A client that answers the `capabilities` call `connect` makes, then
+    /// hands every later call to [next].
+    http.Client connectableThen(
+      Future<http.Response> Function(http.Request) next,
+    ) {
+      var first = true;
+      return MockClient((request) async {
+        if (first) {
+          first = false;
+          return http.Response(
+            jsonEncode({
+              'ok': true,
+              'result': const RepoCapabilities(canWrite: true).toJson(),
+            }),
+            200,
+          );
+        }
+        return next(request);
+      });
+    }
+
+    test('an unreachable server is reported with its URL', () async {
+      final adapter = await connectWith(
+        connectableThen((_) async => throw Exception('connection refused')),
+      );
+
+      await expectLater(
+        adapter.stat('a'),
+        throwsA(
+          isA<RepoException>().having(
+            (e) => e.message,
+            'message',
+            allOf(contains('unreachable'), contains('http://localhost:9999')),
+          ),
+        ),
+      );
+    });
+
+    test('a non-200 response carries the status and the body', () async {
+      await expectLater(
+        connectWith(_cannedClient('boom', status: 503)),
+        throwsA(
+          isA<RepoException>().having(
+            (e) => e.message,
+            'message',
+            allOf(contains('503'), contains('boom')),
+          ),
+        ),
+      );
+    });
+
+    test('a body that is not JSON is an invalid response', () async {
+      await expectLater(
+        connectWith(_cannedClient('<html>nope</html>')),
+        throwsA(
+          isA<RepoException>().having(
+            (e) => e.message,
+            'message',
+            contains('Invalid response'),
+          ),
+        ),
+      );
+    });
+
+    test('an error envelope becomes the exception it names', () async {
+      await expectLater(
+        connectWith(
+          _cannedClient(
+            jsonEncode({
+              'ok': false,
+              'error': {'type': 'RepoPermissionException', 'message': 'denied'},
+            }),
+          ),
+        ),
+        throwsA(isA<RepoPermissionException>()),
+      );
+
+      await expectLater(
+        connectWith(
+          _cannedClient(
+            jsonEncode({
+              'ok': false,
+              'error': {'type': 'RepoException', 'message': 'nope'},
+            }),
+          ),
+        ),
+        throwsA(isA<RepoException>()),
+      );
+    });
+
+    test('a malformed error envelope is still reported', () async {
+      await expectLater(
+        connectWith(_cannedClient(jsonEncode({'ok': false, 'error': 'oops'}))),
+        throwsA(
+          isA<RepoException>().having(
+            (e) => e.message,
+            'message',
+            contains('malformed error'),
+          ),
+        ),
+      );
+    });
+
+    test('a result that is not a JSON object is rejected', () async {
+      await expectLater(
+        connectWith(_cannedClient(jsonEncode({'ok': true, 'result': 42}))),
+        throwsA(
+          isA<RepoException>().having(
+            (e) => e.message,
+            'message',
+            contains('Expected a JSON object'),
+          ),
+        ),
       );
     });
   });

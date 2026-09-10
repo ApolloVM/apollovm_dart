@@ -412,7 +412,8 @@ class ApolloCodeGeneratorPython extends ApolloCodeGenerator {
       clazz.entries.any((e) => e.arguments != null) ||
       clazz.fields.isNotEmpty ||
       clazz.constructors.isNotEmpty ||
-      clazz.functions.isNotEmpty;
+      clazz.functions.isNotEmpty ||
+      enumHasAccessors(clazz);
 
   /// Generates a Python enum: `class Name(Enum):` with `NAME = value` members.
   /// Members without an explicit value get their ordinal index.
@@ -494,7 +495,7 @@ class ApolloCodeGeneratorPython extends ApolloCodeGenerator {
       var assigned = false;
       for (var p in params) {
         if (p.thisParameter) {
-          out.write('$bodyIndent${_tab}self.${p.name} = ${p.name}\n');
+          out.write('$bodyIndent${_tab}self.${p.fieldName} = ${p.name}\n');
           assigned = true;
         }
       }
@@ -510,6 +511,8 @@ class ApolloCodeGeneratorPython extends ApolloCodeGenerator {
         _generateFunction(f, out: out, indent: bodyIndent, isMethod: true);
       }
     }
+
+    generateEnumAccessors(clazz, out: out, indent: bodyIndent);
 
     if (out.length == before) {
       out.write(bodyIndent);
@@ -1283,6 +1286,34 @@ class ApolloCodeGeneratorPython extends ApolloCodeGenerator {
       );
     }
     out.write(']');
+
+    return out;
+  }
+
+  @override
+  /// `{1, 2}` — but an *empty* set is `set()`, since `{}` is an empty dict.
+  @override
+  StringBuffer generateASTExpressionSetLiteral(
+    ASTExpressionSetLiteral expression, {
+    StringBuffer? out,
+    String indent = '',
+    bool headIndented = true,
+  }) {
+    out ??= newOutput();
+    if (headIndented) out.write(indent);
+
+    var values = expression.valuesExpressions;
+    if (values.isEmpty) {
+      out.write('set()');
+      return out;
+    }
+
+    out.write('{');
+    for (var i = 0; i < values.length; ++i) {
+      if (i > 0) out.write(', ');
+      generateASTExpression(values[i], out: out, headIndented: false);
+    }
+    out.write('}');
 
     return out;
   }

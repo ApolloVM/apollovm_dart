@@ -195,6 +195,11 @@ abstract class ApolloGenerator<
     O? out,
   });
 
+  O generateASTExpressionSetLiteral(
+    ASTExpressionSetLiteral expression, {
+    O? out,
+  });
+
   O generateASTExpressionNegation(ASTExpressionNegation expression, {O? out});
 
   O generateASTExpressionNegative(ASTExpressionNegative expression, {O? out});

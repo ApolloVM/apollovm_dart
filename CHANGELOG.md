@@ -1,4 +1,4 @@
-## 2.31.0
+## 2.32.0
 
 ### New language: Apollo (`.apollo`)
 
@@ -187,6 +187,189 @@ and generator needed fixing.
 Other targets were unaffected: Dart, Java, Kotlin and C# already override the
 binding, JavaScript and TypeScript are correct as-is, and Python overrides the
 whole `try`/`catch` statement.
+
+## 2.31.0
+
+Five features from the [Dart language evolution](https://dart.dev/resources/language/evolution)
+that the Dart front end did not support yet. All five are parsed, interpreted
+and translated; see [`doc/dart_language_gaps.md`](doc/dart_language_gaps.md)
+for what is still missing.
+
+### Dart 2.2: set literals
+
+`{1, 2}` was a syntax error, and `Set` was not a type ApolloVM knew:
+
+```dart
+var s = {1, 2, 2};   // was: [SyntaxError] ";" expected
+```
+
+Set literals now parse (`{1, 2}`, `<int>{}`, and `Set<T>` as a declared type),
+with the Dart disambiguation kept intact: a bare `{}` is still an empty **map**,
+and `{k: v}` is still a map literal, so an empty set has to be written `<T>{}`.
+
+At run time a set answers to `length`, `isEmpty`/`isNotEmpty`, `first`/`last`,
+`contains`, `add`/`addAll`, `remove`, `clear`, `toList` and `for-in`, and
+duplicate elements collapse to the first occurrence.
+
+Every target can be generated, using each language's own set — or, for the two
+that have none, its idiom:
+
+```dart
+var s = {1, 2};
+```
+
+```java
+new HashSet<int>(){{ add(1); add(2); }}   // Java
+```
+```kotlin
+mutableSetOf<Int>(1, 2)                   // Kotlin
+```
+```csharp
+new HashSet<int>(){1, 2}                  // C#
+```
+```typescript
+new Set<number>([1, 2])                   // TypeScript / JavaScript
+```
+```python
+{1, 2}                                    # Python (`set()` when empty)
+```
+```go
+map[int]struct{}{1: {}, 2: {}}            // Go
+```
+```lua
+{ [1] = true, [2] = true }                -- Lua
+```
+
+Only the Dart grammar *parses* a set literal so far. The Wasm backend refuses to
+compile one (`UnsupportedSyntaxError`) rather than lower it to a list and
+silently drop the uniqueness the program relies on.
+
+### Dart 2.17: getters and setters in an enum body
+
+Rich enums accepted fields, a `const` constructor and methods, but an accessor
+in the body was a syntax error:
+
+```dart
+enum Level {
+  low(1), high(10);
+  final int weight;
+  const Level(this.weight);
+  int get doubled => this.weight * 2;   // was: [SyntaxError] "=" expected
+}
+```
+
+An enum body now takes the same members a class body does. Dart round-trips
+them, Kotlin emits `val doubled: Int get() { … }`, and every other target
+refuses an enum accessor exactly as it refuses a class accessor, instead of
+dropping it.
+
+### Dart 2.17: super parameters
+
+A constructor could not initialize a field it inherits: `this.x` is only legal
+for a field of the class itself, and `super.x` — the form Dart 2.17 added for
+exactly this — was a syntax error.
+
+```dart
+class Shape {
+  final int x;
+  Shape(this.x);
+}
+
+class Square extends Shape {
+  final int border;
+  Square(super.x, this.border);   // was: [SyntaxError] "$" expected
+}
+```
+
+Super parameters now parse and run, positionally, named (with `required`), with
+a default, in a primary constructor header, and through however many levels of
+inheritance the field is declared at. The value is assigned to the inherited
+field on the instance being built.
+
+Dart output spells it `super.` again, and `this.` for a field the class owns.
+The distinction is re-derived from the class hierarchy when a binary AST is
+decoded — an initializing formal may only name a field of its own class, so one
+that names an inherited field is a super parameter by construction — which is
+why the image format is unchanged. Targets with no equivalent name the
+parameter and drop the qualifier.
+
+Still missing, and unchanged by this: the rest of the initializer list (an
+explicit `: super(v)` call), and running the superclass constructor's **body**
+— no subclass instantiation does that yet.
+
+### Dart 3.12: private named parameters
+
+An initializing formal for a private field could only be called by its private
+name, which is not what Dart 3.12 means:
+
+```dart
+class Point {
+  final int _x;
+  Point({required this._x});
+}
+
+Point(x: 1);    // was: Can't find function "Point" ... {namedTypes: [x: int]}
+```
+
+The leading `_` is now stripped from the *parameter* name, so the call site uses
+the public name while the parameter keeps writing the private field. Only named
+parameters are renamed (a positional `this._x` has no call-site name), and only
+when what is left is a valid public name — `__x` and `_` have none and are left
+alone. The declaration keeps `this._x` in generated Dart, and the rename is
+re-derived when a binary AST is decoded, so images stay readable by builds that
+predate the feature.
+
+### Dart 3.13: primary constructors
+
+A constructor can now be declared in the class header:
+
+```dart
+class Point(final int x, var int y) {
+  int sum() => this.x + this.y;
+}
+
+class Counter(var count);
+```
+
+A parameter marked `var` or `final` is a *declaring* parameter: it also declares
+the field it initializes (mutable for `var`, `final` for `final`). A parameter
+with neither is an ordinary constructor parameter and declares no field. Named
+`{…}` and optional `[…]` groups, `required` and default values all work, the
+body may be replaced by `;`, and the class may still declare members, `extends`
+and `implements`.
+
+The header is **desugared as it is parsed** into the classic form — the induced
+fields plus a constructor taking `this.x` formals — so every runner, generator
+and codec sees a shape it already handles, and Dart output comes back classic:
+
+```dart
+class Point {
+  final int x;
+  int y;
+  Point(this.x, this.y);
+  int sum() { return this.x + this.y; }
+}
+```
+
+Not supported yet: a named primary constructor (`class Point.custom(…)`),
+`class const Point(…)`, and the in-body `this : …` form — each needs a
+constructor feature ApolloVM does not have (named constructors, compile-time
+constants, initializer lists).
+
+### Fixed
+
+- `List.valueOf(x)` — the static conversion Java-shaped source uses — failed the
+  *parse* with `type 'Null' is not a subtype of type 'ASTClass'`. Resolving the
+  core `List` class asked for the element type, and a `List` named in source
+  carries none, so the lookup returned `null` into a cast. It now falls back to
+  the element-type-less `List` class and the call resolves (`List.valueOf(5)` →
+  `[5]`, a list passes through, `null` becomes `[]`).
+
+- An empty map literal with explicit type arguments (`<K,V>{}`) threw
+  `type 'String' is not a subtype of type 'ASTType?'` while parsing, because the
+  value type was read from the comma's position. That is the form an empty `{}`
+  is *generated* as, so a program containing one could not re-parse its own
+  translated Dart.
 
 ## 2.30.0
 

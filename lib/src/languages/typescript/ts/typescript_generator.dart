@@ -226,7 +226,8 @@ class ApolloCodeGeneratorTypeScript extends ApolloCodeGenerator {
       clazz.entries.any((e) => e.arguments != null) ||
       clazz.fields.isNotEmpty ||
       clazz.constructors.isNotEmpty ||
-      clazz.functions.isNotEmpty;
+      clazz.functions.isNotEmpty ||
+      enumHasAccessors(clazz);
 
   /// Generates a TypeScript `enum` declaration.
   ///
@@ -293,24 +294,43 @@ class ApolloCodeGeneratorTypeScript extends ApolloCodeGenerator {
 
     if (ctor != null) {
       var params = ctor.parameters.allParameters;
+
+      // A parameter property declares a field named after the parameter, so a
+      // parameter that writes a *differently named* field (a private named
+      // parameter) is emitted as a plain parameter plus an assignment.
+      var renamed = <ASTConstructorParameterDeclaration>[];
+
       out.write(i2);
       out.write('constructor(');
       for (var i = 0; i < params.length; ++i) {
         var p = params[i];
         if (i > 0) out.write(', ');
         if (p.thisParameter) {
-          ctorFieldNames.add(p.name);
-          var field = clazz.getField(p.name);
-          out.write(
-            (field != null && field.finalValue)
-                ? 'public readonly '
-                : 'public ',
-          );
+          if (p.isFieldRenamed) {
+            renamed.add(p);
+          } else {
+            ctorFieldNames.add(p.fieldName);
+            var field = clazz.getField(p.fieldName);
+            out.write(
+              (field != null && field.finalValue)
+                  ? 'public readonly '
+                  : 'public ',
+            );
+          }
         }
         out.write(p.name);
         _writeTypeAnnotation(p.type, out);
       }
-      out.write(') {}\n\n');
+
+      if (renamed.isEmpty) {
+        out.write(') {}\n\n');
+      } else {
+        out.write(') {\n');
+        for (var p in renamed) {
+          out.write('$i2  this.${p.fieldName} = ${p.name};\n');
+        }
+        out.write('$i2}\n\n');
+      }
     }
 
     // Fields not declared via constructor parameter properties.
@@ -339,6 +359,8 @@ class ApolloCodeGeneratorTypeScript extends ApolloCodeGenerator {
         generateASTClassFunctionDeclaration(f, out: out, indent: i2);
       }
     }
+
+    generateEnumAccessors(clazz, out: out, indent: i2);
 
     // Static singleton instances (one per entry).
     for (var e in clazz.entries) {
@@ -722,6 +744,42 @@ class ApolloCodeGeneratorTypeScript extends ApolloCodeGenerator {
     }
 
     out.write(']');
+
+    return out;
+  }
+
+  @override
+  /// TypeScript has no set literal: `{…}` is an object, so a set is built from
+  /// the elements — `new Set<number>([1, 2])`.
+  @override
+  StringBuffer generateASTExpressionSetLiteral(
+    ASTExpressionSetLiteral expression, {
+    StringBuffer? out,
+    String indent = '',
+    bool headIndented = true,
+  }) {
+    out ??= newOutput();
+
+    if (headIndented) out.write(indent);
+
+    out.write('new Set');
+
+    final type = expression.type;
+    if (type != null) {
+      out.write('<');
+      generateASTType(type, out: out);
+      out.write('>');
+    }
+
+    out.write('([');
+
+    var values = expression.valuesExpressions;
+    for (var i = 0; i < values.length; ++i) {
+      if (i > 0) out.write(', ');
+      generateASTExpression(values[i], out: out, headIndented: false);
+    }
+
+    out.write('])');
 
     return out;
   }

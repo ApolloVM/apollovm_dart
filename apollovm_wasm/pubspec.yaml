@@ -22,12 +22,15 @@ dependencies:
   # so it tracks the release it is cut against.
   apollovm: ^2.25.0
   wasm_run: ^0.2.0+2
-  # Not imported directly: `wasm_run` pulls it in, but its constraint (`^2.12.0`)
-  # is wrong. `wasm_run`'s FFI bindings are stamped with codegen version 2.12.0,
-  # and `flutter_rust_bridge` refuses to start when the runtime version differs
-  # ("codegen version (2.12.0) should be the same as runtime version"), so 2.13.0
-  # breaks every Wasm call at library-load time. Hold the 2.12.x line until
-  # `wasm_run` regenerates its bindings.
+  # Held to 2.12.x, not preferred: `wasm_run` 0.2.0+2 ships Rust bindings
+  # generated against `flutter_rust_bridge` 2.12.0 but declares `^2.12.0`, so a
+  # resolution that picks up 2.13.0 makes every Wasm call die in `RustLib.init`
+  # with "codegen version (2.12.0) should be the same as runtime version
+  # (2.13.0)". The bridge's generated code must match its runtime exactly, and
+  # only its minor version moves, so the upper bound is the next minor. It is
+  # declared here rather than in a `dependency_overrides` because an override
+  # would not reach consumers of this package. Widen it when `wasm_run`
+  # publishes bindings regenerated for a newer bridge.
   flutter_rust_bridge: '>=2.12.0 <2.13.0'
   crypto: ^3.0.7
   path: ^1.9.1

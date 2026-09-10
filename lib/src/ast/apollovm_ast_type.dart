@@ -40,6 +40,9 @@ class ASTType<V> with ASTNode implements ASTTypedNode {
     var mapType = ASTTypeMap.fromType(type);
     if (mapType != null) return mapType;
 
+    var setType = ASTTypeSet.fromType(type);
+    if (setType != null) return setType;
+
     return null;
   }
 
@@ -166,6 +169,18 @@ class ASTType<V> with ASTNode implements ASTTypedNode {
         var t = ASTType.from(genericType);
         return ASTTypeArray(t);
       }
+    }
+
+    if (o is Set) {
+      if (o is Set<String>) return ASTTypeSet.instanceOfString;
+      if (o is Set<int>) return ASTTypeSet.instanceOfInt;
+      if (o is Set<double>) return ASTTypeSet.instanceOfDouble;
+      if (o is Set<bool>) return ASTTypeSet.instanceOfBool;
+
+      var genericType = o.genericType;
+      return genericType == dynamic
+          ? ASTTypeSet.instanceOfDynamic
+          : ASTTypeSet(ASTType.from(genericType));
     }
 
     if (o.runtimeType == Object) return ASTTypeObject.instance;
@@ -1529,6 +1544,95 @@ class ASTTypeMap<TK extends ASTType<K>, TV extends ASTType<V>, K, V>
   ASTValueMap<TK, TV, K, V>? toASTValue(Object? value) {
     if (value == null) return null;
     return _toASTValueMap(value);
+  }
+}
+
+/// [ASTType] for a [Set] (Dart's set literal, `{1, 2}`).
+///
+/// The unordered sibling of [ASTTypeArray]: one element type, and the same
+/// `dynamic`-as-wildcard rule in [acceptsType] so an untyped literal is
+/// assignable to a typed set.
+class ASTTypeSet<T extends ASTType<V>, V> extends ASTType<Set<V>> {
+  static final ASTTypeSet<ASTTypeString, String> instanceOfString =
+      ASTTypeSet<ASTTypeString, String>(ASTTypeString.instance);
+
+  static final ASTTypeSet<ASTTypeInt, int> instanceOfInt =
+      ASTTypeSet<ASTTypeInt, int>(ASTTypeInt.instance);
+
+  static final ASTTypeSet<ASTTypeDouble, double> instanceOfDouble =
+      ASTTypeSet<ASTTypeDouble, double>(ASTTypeDouble.instance);
+
+  static final ASTTypeSet<ASTTypeBool, bool> instanceOfBool =
+      ASTTypeSet<ASTTypeBool, bool>(ASTTypeBool.instance);
+
+  static final ASTTypeSet<ASTTypeObject, Object> instanceOfObject =
+      ASTTypeSet<ASTTypeObject, Object>(ASTTypeObject.instance);
+
+  static final ASTTypeSet<ASTTypeDynamic, dynamic> instanceOfDynamic =
+      ASTTypeSet<ASTTypeDynamic, dynamic>(ASTTypeDynamic.instance);
+
+  static ASTTypeSet? fromType(Type type) {
+    if (type == Set<String>) return instanceOfString;
+    if (type == Set<int>) return instanceOfInt;
+    if (type == Set<double>) return instanceOfDouble;
+    if (type == Set<bool>) return instanceOfBool;
+    if (type == Set<Object>) return instanceOfObject;
+    if (type == Set<dynamic>) return instanceOfDynamic;
+    return null;
+  }
+
+  final T elementType;
+
+  ASTTypeSet(this.elementType) : super('Set', generics: [elementType]);
+
+  @override
+  ASTType cloneType() => ASTTypeSet<T, V>(elementType);
+
+  @override
+  Iterable<ASTNode> get children => [elementType];
+
+  @override
+  bool acceptsType(ASTType type) {
+    if (type is ASTTypeSet) {
+      var other = type.elementType;
+      if (elementType is ASTTypeDynamic ||
+          other is ASTTypeDynamic ||
+          elementType.acceptsType(other)) {
+        return true;
+      }
+    }
+    return super.acceptsType(type);
+  }
+
+  @override
+  FutureOr<ASTValue<Set<V>>?> toValue(VMContext context, Object? v) {
+    if (v == null) return null;
+    if (v is ASTValueSet) return v as ASTValueSet<T, V>;
+
+    if (v is ASTValue) {
+      return v.getValue(context).resolveMapped(_toASTValueSet);
+    } else {
+      return _toASTValueSet(v);
+    }
+  }
+
+  ASTValueSet<T, V>? _toASTValueSet(Object? v) {
+    Set? set;
+    if (v is Set) {
+      set = v;
+    } else if (v is Iterable) {
+      set = v.toSet();
+    }
+
+    set ??= {};
+
+    return ASTValueSet<T, V>(elementType, set.whereType<V>().toSet());
+  }
+
+  @override
+  ASTValueSet<T, V>? toASTValue(Object? value) {
+    if (value == null) return null;
+    return _toASTValueSet(value);
   }
 }
 

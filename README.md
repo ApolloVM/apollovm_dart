@@ -133,6 +133,7 @@ The **Wasm** column shows what the on-the-fly WebAssembly compiler currently sup
 | Parameter default values         | ✅ | 🚫  | ✅ | 🚫 | ✅ | 🚫  | 🚫  | 🚫  | ✅ | ✅ |
 | String interpolation / concat    | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | List & map / dict literals       | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Set literals (`{1, 2}`)¹⁷        | ✅ | 🚧 | 🚧 | 🧩¹⁷ | 🚧 | 🚧 | 🚧 | 🧩¹⁷ | 🚧 | 🚧 |
 | Index access (`a[i]`, nested `m[i][j]`)¹² | ✅ | 🧩 | 🧩 | 🧩 | 🧩 | 🧩 | 🧩 | 🧩 | 🧩 | ✅ |
 | `null` / `None` / `nil`¹³        | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 🧩¹³ |
 
@@ -174,7 +175,17 @@ Python `assert c, m`, Kotlin `assert(c) { m }`, C# `Debug.Assert(c, m)`, Lua's
 built-in `assert(c, m)`. JS/TS have no throwing `assert` and Go has none at all,
 so they are lowered to an explicit check (`if (!(c)) throw m;` /
 `if !(c) { panic(m) }`) — `🧩`. A failed assertion throws and is catchable like
-any other exception. Wasm refuses to compile `assert` rather than mis-compile it.
+any other exception. Wasm refuses to compile `assert` rather than mis-compile it. &nbsp;
+¹⁷ A set literal (`{1, 2}`, `<int>{}`, `Set<T>` as a type) is parsed from
+**Dart** source — a bare `{}` stays an empty *map*, as in Dart — and runs with
+`length`, `isEmpty`/`isNotEmpty`, `first`/`last`, `contains`, `add`/`addAll`,
+`remove`, `clear`, `toList` and `for-in`. **Every target can be generated**:
+Java `new HashSet<T>(){{ add(…); }}`, Kotlin `mutableSetOf<T>(…)`, C#
+`new HashSet<T>(){…}`, JS/TS `new Set([…])`, Python `{…}` (`set()` when empty),
+and — for the two languages with no set type (`🧩`) — Go
+`map[T]struct{}{…: {}}` and Lua `{ [e] = true }`. The other grammars do not
+*parse* a set literal yet (`🚧`), and the Wasm backend refuses to compile one
+rather than lower it to a list and lose the uniqueness.
 
 ### Null safety
 
@@ -341,6 +352,9 @@ Same legend and **Wasm** column semantics as the table above.
 | Getters / setters¹⁴                                           | ✅¹⁴ | 🚧 | 🧩¹⁴ | 🚫  | 🚧 | 🚧 | 🚧 | 🚫  | 🚧 | 🚧 |
 | Annotations / metadata (`@…`)¹⁵                               | 🧩¹⁵ | 🚧 | 🚧 | 🚫  | 🚧 | 🚫  | 🚧 | 🚫  | 🚧 | 🚫  |
 | `required` named parameters                                   | ✅ | 🚫  | 🧩¹⁶ | 🚫  | 🧩¹⁶ | 🚫  | 🚫  | 🚫  | 🧩¹⁶ | ✅ |
+| Primary constructors (class header)¹⁷                         | ✅ | 🚫  | 🚧 | 🚫  | 🚧 | 🚫  | 🚫  | 🚫  | 🚫  | ✅¹⁷ |
+| Private named parameters (`this._x` → `x:`)¹⁸                 | ✅ | 🚫  | 🚫  | 🚫  | 🚫  | 🚫  | 🚫  | 🚫  | 🚫  | ✅¹⁸ |
+| Super parameters (`B(super.x)`)¹⁹                             | ✅ | 🚫  | 🚫  | 🚫  | 🚫  | 🚫  | 🚫  | 🚫  | 🚫  | ✅¹⁹ |
 
 ¹ Lua is table-based: "fields" are table entries (`obj.x`), "constructors" are factory/`setmetatable`
 idioms, methods are `function Obj:method`. &nbsp;
@@ -351,7 +365,8 @@ yet; no `static` (uses `companion object`, not yet supported). &nbsp;
 receiver); only static methods are callable as entry points, with no source-level visibility. &nbsp;
 ⁵ Wasm consumes the already type-resolved AST, so `var`/`val`-typed code compiles unchanged. &nbsp;
 ⁶ Each enum entry is a `const` **instance** of the enum's class (Dart enhanced enums): `.index`,
-`.name`, `EnumName.values`, identity `==`, plus rich-enum constructor args, fields and methods.
+`.name`, `EnumName.values`, identity `==`, plus rich-enum constructor args, fields, methods and
+accessors (see footnote 14).
 Java/Kotlin emit native rich enums; C#/TS/Python use a class + `static`-const-instances idiom; Wasm
 compiles entries to heap instances (a method chained directly on an entry needs a variable first).
 **Breaking change**: an entry is no longer an `int` — use `.index` (and `.value` for `= N` entries). &nbsp;
@@ -382,9 +397,11 @@ subclass override wins. Works for the languages that record their base class:
 Dart, Java (`extends`), C# / TS / JS (`: Base` / `extends`), Python. Kotlin's
 `class B : A()` base clause and Go embedding aren't parsed yet (`🚧`), and the
 Wasm backend doesn't compile inheritance yet. Constructor initializer lists with
-an explicit `: super(v)` call are not parsed yet — set inherited fields from the
-constructor body or a `this.param`. &nbsp;
-¹⁴ **Getters and setters** are parsed and executed on classes and extensions:
+an explicit `: super(v)` call are not parsed yet — set an inherited field with a
+**super parameter** (`B(super.x)`, footnote 19) or from the constructor
+body. &nbsp;
+¹⁴ **Getters and setters** are parsed and executed on classes, extensions and
+enum bodies (an enum member declares them like any other class member):
 `get name => …` / `get name { … }` (with or without an explicit return type) and
 `set name(T v) { … }` / `set name(v) => …` (typed or untyped parameter). A
 setter runs on `obj.x = v`, `this.x = v`, an unqualified `x = v` inside the
@@ -406,7 +423,40 @@ annotation using syntax ApolloVM does not model yet still cannot break the
 declaration it precedes. &nbsp;
 ¹⁶ Only Dart spells a mandatory named parameter with a `required` modifier. The
 other targets that have named parameters express it by the absence of a default
-value, so the modifier is dropped when generating for them.
+value, so the modifier is dropped when generating for them. &nbsp;
+¹⁷ A **primary constructor** declares the constructor in the class header:
+`class Point(final int x, var int y) { … }`, with `;` instead of a body when
+there is nothing else to declare. A parameter marked `var` or `final` also
+declares the field it initializes (mutable for `var`, `final` for `final`); one
+without either is an ordinary parameter and declares no field. Named `{…}` and
+optional `[…]` groups, `required` and default values all work, and the class may
+still declare members, `extends` and `implements`. It is **desugared as it is
+parsed** into the classic form — the induced fields plus a constructor whose
+parameters are `this.x` formals — so every runner, generator and codec (Wasm
+included) sees a shape it already handles, and Dart output comes back in the
+classic form. Not supported: a named primary constructor
+(`class Point.custom(…)`), `class const Point(…)`, and the in-body `this : …`
+form, all of which need constructor features ApolloVM does not have yet (named
+constructors, compile-time constants, initializer lists). Kotlin and C# have
+their own header/primary-constructor syntax but do not parse it yet (`🚧`). &nbsp;
+¹⁸ A **private named parameter** is an initializing formal whose field is
+private: `Point({required this._x})` writes `_x` but is passed as `x:` at the
+call site, with the leading `_` stripped (a name with no valid public form —
+`__x`, `_` — is left alone). Only a *named* parameter is renamed, and only Dart
+has the rule, so the parameter keeps writing its private field everywhere else,
+and the declaration keeps `this._x` in Dart output. &nbsp;
+¹⁹ A **super parameter** initializes a field the class *inherits* —
+`B(super.x)`, `B({required super.x})`, `B([super.x = 9])`, and in a primary
+constructor header — reaching through the whole superclass chain. An
+initializing formal may only name a field of its own class, so `super.x` is how
+an inherited one is written; ApolloVM assigns that field on the instance being
+built. Dart output spells it `super.` again (and `this.` for an own field), and
+the distinction is re-derived from the class hierarchy when a binary AST is
+decoded, so it needs no format change. The targets with no equivalent name the
+parameter and drop the qualifier. What is *not* supported is the rest of the
+initializer list: an explicit `: super(v)` call, and running the superclass
+constructor's **body** — no subclass instantiation does that yet, so a
+superclass constructor that computes rather than assigns is not reproduced.
 
 > Per-language behavior is normalized to a shared AST, so types and constructs map
 > cleanly when translating between languages (e.g. C# `string` ⇄ Dart `String`,
