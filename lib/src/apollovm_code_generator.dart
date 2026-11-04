@@ -245,6 +245,22 @@ abstract class ApolloCodeGenerator
       }
     }
 
+    void writeStatements() {
+      for (var stm in block.statements) {
+        generateASTStatement(stm, out: out!, indent: indent2);
+        out.write('\n');
+      }
+    }
+
+    // A module's statements are its top-level variables, and they go first:
+    // a language that binds names in order (a Lua `local`) must declare one
+    // before the functions that use it.
+    var isRoot = block is ASTRoot;
+    if (isRoot && block.statements.isNotEmpty) {
+      writeStatements();
+      out.write('\n');
+    }
+
     // Local function declarations are kept as statements (and emitted in the
     // statements loop below). Executing the block also registers them in
     // `block.functions` for resolution, so skip those here to avoid emitting
@@ -277,10 +293,7 @@ abstract class ApolloCodeGenerator
       }
     }
 
-    for (var stm in block.statements) {
-      generateASTStatement(stm, out: out, indent: indent2);
-      out.write('\n');
-    }
+    if (!isRoot) writeStatements();
 
     if (withBrackets) out.write('$indent}\n');
 

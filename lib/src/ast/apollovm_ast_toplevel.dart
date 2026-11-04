@@ -210,6 +210,16 @@ class ASTEntryPointBlock extends ASTBlock {
     VMTypeResolver? typeResolver,
   ) async {
     if (_rootContext == null) {
+      // A class entry point (`executeClassMethod`) runs its module first, so
+      // its members see the module's top-level variables.
+      if (this case ASTClass(:var ownerRoot?)) {
+        await ownerRoot._initializeEntryPointBlock(
+          importManager,
+          externalFunctionMapper,
+          typeResolver,
+        );
+      }
+
       var rootContext = createContext(typeResolver);
       var rootStatus = ASTRunStatus();
       _rootContext = rootContext;
@@ -268,6 +278,28 @@ class ASTEntryPointBlock extends ASTBlock {
   }
 }
 
+/// The context a class or extension [member] runs in against a receiver:
+/// a [VMClassContext] of [clazz], called from [parent], whose names resolve
+/// lexically through the module that declares [member] (see
+/// [VMContext.scopeParent]). For an extension member [clazz] is the
+/// *target* class, which may be a core one, so the module is looked up from
+/// the member, not from [clazz].
+VMClassContext _memberContext(
+  ASTNode member,
+  ASTClass clazz,
+  VMContext parent,
+) {
+  var context = VMClassContext(clazz, parent: parent);
+  for (ASTNode? n = member; n != null; n = n.parentNode) {
+    if (n is ASTRoot) {
+      var moduleContext = n.moduleContext;
+      if (moduleContext != null) context.scopeParent = moduleContext;
+      break;
+    }
+  }
+  return context;
+}
+
 /// AST base of a Class.
 abstract class ASTClass<T> extends ASTEntryPointBlock {
   final String name;
@@ -280,11 +312,39 @@ abstract class ASTClass<T> extends ASTEntryPointBlock {
     staticAccessor = ASTClassStaticAccessor(this);
   }
 
+  /// Creates the context a member of this class runs in.
+  ///
+  /// [parentContext] — the caller — stays the [VMContext.parent], but names
+  /// resolve lexically: the class's module context (its top-level variables)
+  /// is the [VMContext.scopeParent], so a member never sees its caller's
+  /// locals, or its caller's `this`. Before the module has run (no module
+  /// context yet), the caller is the lexical parent, as before.
   @override
   VMClassContext createContext(
     VMTypeResolver? typeResolver, [
     VMContext? parentContext,
-  ]) => VMClassContext(this, parent: parentContext, typeResolver: typeResolver);
+  ]) {
+    var context = VMClassContext(
+      this,
+      parent: parentContext,
+      typeResolver: typeResolver,
+    );
+    var moduleContext = ownerRoot?.moduleContext;
+    if (moduleContext != null) context.scopeParent = moduleContext;
+    return context;
+  }
+
+  ASTRoot? _ownerRoot;
+
+  /// The module ([ASTRoot]) that declares this class, once resolved.
+  ASTRoot? get ownerRoot {
+    var root = _ownerRoot;
+    if (root != null) return root;
+    for (ASTNode? n = parentNode; n != null; n = n.parentNode) {
+      if (n is ASTRoot) return _ownerRoot = n;
+    }
+    return null;
+  }
 
   /// The resolved superclass this class `extends`, or `null` if none. Overridden
   /// by [ASTClassNormal] (which carries the `extends` name).
@@ -1804,6 +1864,7 @@ class ASTRoot extends ASTEntryPointBlock {
     ..._classes.keys,
     ..._typeAliases.keys,
     ..._extensions.map((e) => e.name).nonNulls,
+    ...topLevelVariables.map((v) => v.name),
   };
 
   /// Own top-level symbol names that are NOT declared (used by the resolver to
@@ -1922,6 +1983,72 @@ class ASTRoot extends ASTEntryPointBlock {
   ASTClassNormal? getClassWithMethod(String methodName) => _classes.values
       .firstWhereOrNull((c) => c.containsFunctionWithName(methodName));
 
+  /// The module's top-level variable declarations, in source order.
+  Iterable<ASTStatementVariableDeclaration> get topLevelVariables =>
+      statements.whereType<ASTStatementVariableDeclaration>();
+
+  /// The module's runtime context — where its top-level variables live —
+  /// or `null` before the module has run.
+  VMContext? get moduleContext => _rootContext;
+
+  /// The module's runtime context, running the module (its top-level
+  /// variable initializers, in order) the first time it is needed.
+  ///
+  /// A module that was the entry point already has one. An imported module is
+  /// initialized here, on first use from [requester]: its context hangs off
+  /// the top of [requester]'s chain — so the external function mapper and the
+  /// type resolver are reachable — but its lexical chain ends at itself, so
+  /// none of the importer's names leak in.
+  FutureOr<VMContext> ensureModuleContext(VMContext requester) =>
+      _rootContext ?? _initializeModule(requester);
+
+  Future<VMContext> _initializeModule(VMContext requester) async {
+    var top = requester;
+    for (var p = top.parent; p != null; p = p.parent) {
+      top = p;
+    }
+
+    var context = VMScopeContext(
+      this,
+      parent: top,
+      typeResolver: requester.typeResolver,
+    );
+    context.scopeParent = null;
+    context.importScope = importScope;
+
+    // Registered before running, so a cycle of modules reaching each other's
+    // variables during initialization finds this context instead of
+    // recursing.
+    _rootContext = context;
+
+    var prevContext = VMContext.setCurrent(context);
+    try {
+      await run(context, ASTRunStatus());
+    } finally {
+      VMContext.setCurrent(prevContext);
+    }
+    return context;
+  }
+
+  /// Initializes every module this one imports from (see
+  /// [ensureModuleContext]), so that a function or class reached through an
+  /// import finds its own module's top-level variables.
+  Future<void> _initializeImportedModules(VMContext context) async {
+    var scope = importScope;
+    if (scope == null) return;
+
+    var modules = <ASTRoot>{
+      for (var s in scope.named.values) ?s.module,
+      for (var t in scope.prefixed.values)
+        for (var name in t.names) ?t.lookupFirst(name)?.module,
+    };
+    modules.remove(this);
+
+    for (var m in modules) {
+      await m.ensureModuleContext(context);
+    }
+  }
+
   @override
   FutureOr<ASTValue> run(
     VMContext parentContext,
@@ -1934,6 +2061,8 @@ class ASTRoot extends ASTEntryPointBlock {
         await import.run(parentContext, runStatus);
       }
     }
+
+    await _initializeImportedModules(parentContext);
 
     return super.run(parentContext, runStatus);
   }
@@ -2798,7 +2927,7 @@ class ASTClassFunctionDeclaration<T> extends ASTFunctionDeclaration<T> {
     List? positionalParameters,
     Map? namedParameters,
   }) {
-    var objContext = VMClassContext(clazz!, parent: parent);
+    var objContext = _memberContext(this, clazz!, parent);
     objContext.setClassInstance(classInstance);
     return call(
       objContext,
@@ -2948,12 +3077,36 @@ abstract class ASTInvocableDeclaration<
     return _callBody(parent, positionalParameters, namedParameters);
   }
 
+  /// The context a call of this function runs in.
+  ///
+  /// Its [VMContext.parent] is the caller, but a **top-level** function's
+  /// names resolve lexically: through its own module's context (its
+  /// top-level variables), never the caller's locals. Other functions — class
+  /// members, local functions — keep the caller as their lexical parent: a
+  /// class context sets its own lexical parent (see [ASTClass.createContext]),
+  /// and a local function is only called from inside its enclosing scope.
+  FutureOr<VMScopeContext> _callContext(VMContext parent) {
+    var context = VMScopeContext(this, parent: parent);
+
+    var root = parentBlock;
+    if (root is! ASTRoot) return context;
+
+    if (root.importScope case var scope?) {
+      context.importScope = scope;
+    }
+
+    return root.ensureModuleContext(parent).resolveMapped((moduleContext) {
+      context.scopeParent = moduleContext;
+      return context;
+    });
+  }
+
   Future<ASTValue<T>> _callBody(
     VMContext parent,
     List? positionalParameters,
     Map? namedParameters,
   ) async {
-    var context = VMScopeContext(this, parent: parent);
+    var context = await _callContext(parent);
 
     var prevContext = VMContext.setCurrent(context);
     try {
@@ -2978,10 +3131,9 @@ abstract class ASTInvocableDeclaration<
     List? positionalParameters,
     Map? namedParameters,
   ) {
-    var context = VMScopeContext(this, parent: parent);
     var innerType = _asyncInnerReturnType;
     var bodyFuture = _runAsyncBody(
-      context,
+      parent,
       positionalParameters,
       namedParameters,
       innerType,
@@ -2990,11 +3142,12 @@ abstract class ASTInvocableDeclaration<
   }
 
   Future<dynamic> _runAsyncBody(
-    VMContext context,
+    VMContext parent,
     List? positionalParameters,
     Map? namedParameters,
     ASTType innerType,
   ) async {
+    var context = await _callContext(parent);
     var prevContext = VMContext.setCurrent(context);
     try {
       await initializeVariables(context, positionalParameters, namedParameters);
@@ -4162,7 +4315,7 @@ class ASTClassGetterDeclaration<T> extends ASTGetterDeclaration<T> {
     List? positionalParameters,
     Map? namedParameters,
   }) {
-    var objContext = VMClassContext(clazz!, parent: parent);
+    var objContext = _memberContext(this, clazz!, parent);
     objContext.setClassInstance(classInstance);
     return call(objContext);
   }
@@ -4294,7 +4447,7 @@ class ASTClassSetterDeclaration<T> extends ASTSetterDeclaration<T> {
     ASTValue classInstance,
     ASTValue value,
   ) {
-    var objContext = VMClassContext(clazz!, parent: parent);
+    var objContext = _memberContext(this, clazz!, parent);
     objContext.setClassInstance(classInstance);
     return call(objContext, value);
   }

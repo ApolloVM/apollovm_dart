@@ -4,6 +4,7 @@
 
 import '../../apollovm_code_generator.dart';
 import '../../apollovm_code_storage.dart';
+import '../../ast/apollovm_ast_base.dart';
 import '../../ast/apollovm_ast_expression.dart';
 import '../../ast/apollovm_ast_statement.dart';
 import '../../ast/apollovm_ast_toplevel.dart';
@@ -207,6 +208,17 @@ class ApolloCodeGeneratorPython extends ApolloCodeGenerator {
   }) {
     out ??= newOutput();
 
+    void writeStatements() {
+      for (var stm in block.statements) {
+        generateASTStatement(stm, out: out!, indent: indent);
+      }
+    }
+
+    // A module's statements (its top-level variables) go first, before the
+    // functions that use them — see the base generator.
+    var isRoot = block is ASTRoot;
+    if (isRoot) writeStatements();
+
     for (var set in block.functions) {
       for (var f in set.functions) {
         if (f is ASTClassFunctionDeclaration) {
@@ -233,9 +245,7 @@ class ApolloCodeGeneratorPython extends ApolloCodeGenerator {
       }
     }
 
-    for (var stm in block.statements) {
-      generateASTStatement(stm, out: out, indent: indent);
-    }
+    if (!isRoot) writeStatements();
 
     return out;
   }
@@ -302,10 +312,57 @@ class ApolloCodeGeneratorPython extends ApolloCodeGenerator {
 
     out.write(':\n');
 
+    var globals = _assignedModuleVariables(f);
+    if (globals.isNotEmpty) {
+      out.write('$indent$_tab');
+      out.write('global ${globals.join(', ')}\n');
+    }
+
     _writeSuite(f, out, '$indent$_tab');
     out.write('\n');
 
     return out;
+  }
+
+  /// The module-level variables [f] assigns, in first-assignment order.
+  ///
+  /// Python reads a module variable from a function freely, but assigning
+  /// one — `x = …`, `x += …`, a translated `x++` — would bind a new local
+  /// instead (and make every earlier read in the function an
+  /// `UnboundLocalError`), so each needs a `global` declaration. A name the
+  /// function declares itself, as a parameter or a local, is its own.
+  static List<String> _assignedModuleVariables(ASTFunctionDeclaration f) {
+    ASTRoot? root;
+    for (ASTNode? n = f.parentNode; n != null; n = n.parentNode) {
+      if (n is ASTRoot) {
+        root = n;
+        break;
+      }
+    }
+    if (root == null) return const [];
+
+    var moduleNames = {for (var v in root.topLevelVariables) v.name};
+    if (moduleNames.isEmpty) return const [];
+
+    var locals = {for (var p in f.parameters.allParameters) p.name};
+    var assigned = <String>{};
+
+    for (var n in f.descendantChildren) {
+      if (n is ASTStatementVariableDeclaration) {
+        locals.add(n.name);
+      } else if (n is ASTExpressionVariableAssignment) {
+        var v = n.variable;
+        if (v is ASTScopeVariable) assigned.add(v.name);
+      } else if (n is ASTExpressionVariableDirectOperation) {
+        var v = n.variable;
+        if (v is ASTScopeVariable) assigned.add(v.name);
+      }
+    }
+
+    return [
+      for (var name in assigned)
+        if (moduleNames.contains(name) && !locals.contains(name)) name,
+    ];
   }
 
   @override

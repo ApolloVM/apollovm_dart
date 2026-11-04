@@ -34,12 +34,17 @@ class ResolvedSymbol {
   /// The whole-module import prefix this symbol was reached through (if any).
   final String? importPrefix;
 
+  /// The root of the declaring module, when known. A top-level variable is
+  /// read from that module's runtime context.
+  final ASTRoot? module;
+
   const ResolvedSymbol({
     required this.name,
     required this.kind,
     required this.moduleId,
     required this.declaration,
     this.importPrefix,
+    this.module,
   });
 
   ResolvedSymbol withName(String newName) => ResolvedSymbol(
@@ -48,6 +53,7 @@ class ResolvedSymbol {
     moduleId: moduleId,
     declaration: declaration,
     importPrefix: importPrefix,
+    module: module,
   );
 
   @override
@@ -154,6 +160,25 @@ class ImportScope {
     }
     var d = s.declaration;
     return d is ASTClassNormal ? d : null;
+  }
+
+  /// The imported top-level variable [name], or `null`. Its value lives in
+  /// the declaring module's runtime context ([ResolvedSymbol.module]).
+  ResolvedSymbol? resolveVariable(String name) {
+    var s = named[name];
+    if (s == null || s.kind != SymbolKind.variable || s.module == null) {
+      return null;
+    }
+    return s;
+  }
+
+  /// The imported top-level variable `prefix.name`, or `null`.
+  ResolvedSymbol? resolvePrefixedVariable(String prefix, String name) {
+    var s = resolvePrefixed(prefix, name);
+    if (s == null || s.kind != SymbolKind.variable || s.module == null) {
+      return null;
+    }
+    return s;
   }
 
   /// The imported type alias for [name], or `null`.

@@ -449,7 +449,8 @@ class PythonGrammarDefinition extends PythonGrammarLexer {
   /// A simple statement: one that cannot contain a suite. Shared by
   /// [simpleStatementLine] and [inlineSuite].
   Parser<ASTStatement> simpleStatement() =>
-      (statementBreak() |
+      (statementGlobal() |
+              statementBreak() |
               statementContinue() |
               statementReturn() |
               statementRaise() |
@@ -460,6 +461,21 @@ class PythonGrammarDefinition extends PythonGrammarLexer {
   /// A simple (single-line) statement terminated by NEWLINE.
   Parser<ASTStatement> simpleStatementLine() =>
       (ref0(simpleStatement) & newlineToken()).map((v) => v[0] as ASTStatement);
+
+  /// `global a, b`: the names are the module's variables, so a later binding
+  /// of one in this scope assigns it rather than declaring a local. Consumed
+  /// by [resolveScopeBindings]; it leaves no statement behind (the Python
+  /// generator writes it back from the assignments).
+  Parser<PythonGlobalDeclaration> statementGlobal() =>
+      (globalToken().trimHidden() &
+              identifier() &
+              (char(',').trimHidden() & identifier()).star())
+          .map(
+            (v) => PythonGlobalDeclaration([
+              v[1] as String,
+              for (var e in v[2] as List) e[1] as String,
+            ]),
+          );
 
   Parser<ASTStatementBreak> statementBreak() =>
       breakToken().trimHidden().map((_) => ASTStatementBreak());
@@ -1339,6 +1355,13 @@ class PythonGrammarDefinition extends PythonGrammarLexer {
     var result = <ASTStatement>[];
 
     for (var stm in statements) {
+      if (stm is PythonGlobalDeclaration) {
+        // Already bound — at module level — so every binding is an
+        // assignment.
+        declared.addAll(stm.names);
+        continue;
+      }
+
       if (stm is ASTStatementVariableDeclaration) {
         var name = stm.name;
         var value = stm.value;
@@ -1397,4 +1420,26 @@ class PythonGrammarDefinition extends PythonGrammarLexer {
       }
     }
   }
+}
+
+/// A parsed Python `global a, b`. A parse-time marker only:
+/// [PythonGrammarDefinition.resolveScopeBindings] consumes it, so it never
+/// reaches the AST that runs.
+class PythonGlobalDeclaration extends ASTStatement {
+  final List<String> names;
+
+  PythonGlobalDeclaration(this.names);
+
+  @override
+  Iterable<ASTNode> get children => const [];
+
+  @override
+  ASTValue run(VMContext parentContext, ASTRunStatus runStatus) =>
+      ASTValueVoid.instance;
+
+  @override
+  ASTType resolveType(VMContext? context) => ASTTypeVoid.instance;
+
+  @override
+  String toString() => 'global ${names.join(', ')}';
 }

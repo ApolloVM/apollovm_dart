@@ -322,6 +322,13 @@ class ASTScopeVariable<T> extends ASTVariable {
           }
         }
 
+        // A top-level variable imported from another module: it lives in
+        // that module's context, which runs on first use.
+        var imported = context.importScope?.resolveVariable(name);
+        if (imported != null) {
+          return _resolveImportedVariable(context, imported.module!);
+        }
+
         var typeResolver = context.typeResolver;
         var resolveType = typeResolver.resolveType(name);
         return resolveType.resolveMapped((t) {
@@ -335,6 +342,19 @@ class ASTScopeVariable<T> extends ASTVariable {
       return v;
     });
   }
+
+  FutureOr<ASTVariable> _resolveImportedVariable(
+    VMContext context,
+    ASTRoot module,
+  ) => module
+      .ensureModuleContext(context)
+      .resolveMapped(
+        (moduleContext) => moduleContext
+            .getVariable(name, false)
+            .resolveMapped(
+              (v) => v ?? (throw StateError("Can't find variable: '$name'")),
+            ),
+      );
 
   bool _noBareGetter = false;
 

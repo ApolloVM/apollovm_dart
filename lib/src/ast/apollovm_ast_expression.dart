@@ -3206,13 +3206,38 @@ abstract class ASTExpressionFunctionInvocation extends ASTExpression
   @override
   FutureOr<ASTType> resolveType(VMContext? context) {
     if (context != null) {
-      return _getFunction(context).resolveMapped((f) => f.resolveType(context));
+      var type = _getFunction(context)
+          .resolveMapped((f) => f.resolveType(context));
+      if (!hasChainFunctionInvocation) return type;
+      return type.resolveMapped((t) => _chainResultType(context, t));
     }
 
     final associatedNode = _associatedNode;
     return associatedNode == null
         ? ASTTypeDynamic.instance
         : associatedNode.resolveType(context);
+  }
+
+  /// The type of a chained call (`C().peek()`): the return type of the
+  /// *last* call, found link by link from [type], the first call's. `dynamic`
+  /// when a link can't be resolved statically.
+  ASTType _chainResultType(VMContext context, ASTType type) {
+    for (var call in chainFunctionInvocation!) {
+      try {
+        var f = _resolveFunctionOrExtension(
+          call,
+          type.getClass(),
+          call.name,
+          call._getASTFunctionSignature(),
+          context,
+        );
+        if (f == null) return ASTTypeDynamic.instance;
+        type = f.resolveType(context);
+      } on StateError {
+        return ASTTypeDynamic.instance;
+      }
+    }
+    return type;
   }
 
   ASTTypedNode? _associatedNode;
