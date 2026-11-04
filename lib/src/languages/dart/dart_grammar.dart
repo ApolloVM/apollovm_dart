@@ -420,9 +420,10 @@ class DartGrammarDefinition extends DartGrammarLexer {
   /// without a primary constructor too (`class A;`, which Dart rejects): the
   /// grammar is permissive, and the result — an empty class — is the only
   /// thing that declaration could mean.
-  Parser<ASTBlock> classEmptyBody() => char(
-    ';',
-  ).trimHidden().map((_) => ASTClassNormal('?', ASTType<VMObject>('?'), null));
+  Parser<ASTBlock> classEmptyBody() =>
+      char(';')
+          .trimHidden()
+          .map((_) => ASTClassNormal('?', ASTType<VMObject>('?'), null));
 
   /// A **primary constructor** (Dart 3.13): the parameter list written in the
   /// class header, `class Point(final int x, var int y)`.
@@ -1429,9 +1430,9 @@ class DartGrammarDefinition extends DartGrammarLexer {
   /// declarations of the multi form: unlike a block, it can't hold a statement
   /// list, and the comma-separated form doesn't exist in every target language.
   Parser<ASTStatementVariableDeclaration>
-  statementVariableDeclarationSingle() => _variableDeclaration(
-    multipleDeclarators: false,
-  ).cast<ASTStatementVariableDeclaration>();
+  statementVariableDeclarationSingle() =>
+      _variableDeclaration(multipleDeclarators: false)
+          .cast<ASTStatementVariableDeclaration>();
 
   Parser<ASTStatement> _variableDeclaration({
     required bool multipleDeclarators,

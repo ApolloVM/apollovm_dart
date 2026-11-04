@@ -145,14 +145,12 @@ void main() {
     });
 
     test('function type keeps its whole signature', () {
-      var t =
-          _one(
-                ASTTypeFunction(ASTTypeInt.instance, [
-                  ASTTypeString.instance,
-                  ASTType('Foo'),
-                ]),
-              )
-              as ASTTypeFunction;
+      var t = _one(
+        ASTTypeFunction(ASTTypeInt.instance, [
+          ASTTypeString.instance,
+          ASTType('Foo'),
+        ]),
+      ) as ASTTypeFunction;
 
       expect(t.generics!.length, equals(3));
       expect(identical(t.generics![0], ASTTypeInt.instance), isTrue);
@@ -179,17 +177,17 @@ void main() {
       expect(bare.variableName, equals('T'));
       expect(bare.type, isNull);
 
-      var bound =
-          _one(ASTTypeGenericVariable('T', ASTType('Base')))
-              as ASTTypeGenericVariable;
+      var bound = _one(
+        ASTTypeGenericVariable('T', ASTType('Base')),
+      ) as ASTTypeGenericVariable;
       expect(bound.variableName, equals('T'));
       expect(bound.type!.name, equals('Base'));
     });
 
     test('interface type keeps its class and super interface', () {
-      var t =
-          _one(ASTTypeInterface('Iface', superInterface: ASTType('Base')))
-              as ASTTypeInterface;
+      var t = _one(
+        ASTTypeInterface('Iface', superInterface: ASTType('Base')),
+      ) as ASTTypeInterface;
       expect(t.name, equals('Iface'));
       expect(t.superType!.name, equals('Base'));
     });

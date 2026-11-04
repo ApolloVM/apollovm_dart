@@ -3,6 +3,7 @@
 // Please refer to the LICENSE and AUTHORS files for details.
 
 import 'package:petitparser/petitparser.dart';
+
 import '../../grammar.dart';
 
 abstract class Java11GrammarLexer extends BaseGrammarLexer {

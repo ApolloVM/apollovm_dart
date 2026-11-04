@@ -79,15 +79,13 @@ type Id = number;
       expect(out, contains('import helpers as h'));
     });
 
-    test(
-      'base no-op export/typedef generation for a language without support',
-      () async {
-        // Generating a program that has a typedef + export as Java exercises the
-        // base generator's default no-op export/type-alias emission (Java has no
-        // such concept) without crashing.
-        var vm = ApolloVM();
-        await vm.loadCodeUnit(
-          SourceCodeUnit('dart', '''
+    test('base no-op export/typedef generation for a language without support', () async {
+      // Generating a program that has a typedef + export as Java exercises the
+      // base generator's default no-op export/type-alias emission (Java has no
+      // such concept) without crashing.
+      var vm = ApolloVM();
+      await vm.loadCodeUnit(
+        SourceCodeUnit('dart', '''
 export 'other.dart';
 typedef Id = int;
 class Foo {
@@ -95,13 +93,12 @@ class Foo {
   int f(int x) { return x; }
 }
 ''', id: 'main.dart'),
-        );
-        var out = (await vm.generateAllCodeIn('java11').writeAllSources())
-            .toString();
-        expect(out, contains('class Foo'));
-        // Java output omits the Dart-only export/typedef directives.
-        expect(out, isNot(contains('typedef')));
-      },
-    );
+      );
+      var out = (await vm.generateAllCodeIn('java11').writeAllSources())
+          .toString();
+      expect(out, contains('class Foo'));
+      // Java output omits the Dart-only export/typedef directives.
+      expect(out, isNot(contains('typedef')));
+    });
   });
 }

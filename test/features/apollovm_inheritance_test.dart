@@ -370,26 +370,23 @@ void main() {
   });
 
   group('Known limitations', () {
-    test(
-      'a constructor initializer list (`: super(v)`) does not parse yet',
-      () async {
-        // Documents a current parser gap: explicit super-constructor calls in an
-        // initializer list are not supported. Inherited fields are still set via
-        // the constructor body or `this.param`.
-        var vm = ApolloVM();
-        await expectLater(
-          vm.loadCodeUnit(
-            SourceCodeUnit(
-              'dart',
-              'class A { int x = 0; A(int v) { x = v; } }'
-                  ' class B extends A { B(int v) : super(v); }',
-              id: 'test',
-            ),
+    test('a constructor initializer list (`: super(v)`) does not parse yet', () async {
+      // Documents a current parser gap: explicit super-constructor calls in an
+      // initializer list are not supported. Inherited fields are still set via
+      // the constructor body or `this.param`.
+      var vm = ApolloVM();
+      await expectLater(
+        vm.loadCodeUnit(
+          SourceCodeUnit(
+            'dart',
+            'class A { int x = 0; A(int v) { x = v; } }'
+                ' class B extends A { B(int v) : super(v); }',
+            id: 'test',
           ),
-          throwsA(isA<SyntaxError>()),
-        );
-      },
-    );
+        ),
+        throwsA(isA<SyntaxError>()),
+      );
+    });
   });
 
   group('Cross-language inheritance', () {

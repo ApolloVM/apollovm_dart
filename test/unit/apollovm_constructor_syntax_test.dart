@@ -122,18 +122,15 @@ void main() {
         '  Shape(this.x);\n'
         '}\n';
 
-    test(
-      'a positional super parameter initializes the inherited field',
-      () async {
-        expect(
-          await _run(
-            '${shape}class Box extends Shape { final int y; Box(super.x, this.y); }\n'
-            'int run() { var b = Box(1, 2); return b.x + b.y; }',
-          ),
-          equals(3),
-        );
-      },
-    );
+    test('a positional super parameter initializes the inherited field', () async {
+      expect(
+        await _run(
+          '${shape}class Box extends Shape { final int y; Box(super.x, this.y); }\n'
+          'int run() { var b = Box(1, 2); return b.x + b.y; }',
+        ),
+        equals(3),
+      );
+    });
 
     test('named, with `required` and with a default', () async {
       expect(
@@ -185,19 +182,16 @@ void main() {
       );
     });
 
-    test(
-      'Dart output spells it `super.`, and `this.` for an own field',
-      () async {
-        var vm = await _load(
-          '${shape}class Box extends Shape { final int y; Box(super.x, this.y); }',
-        );
-        var code = (await vm.generateAllCodeIn('dart').writeAllSources())
-            .toString();
+    test('Dart output spells it `super.`, and `this.` for an own field', () async {
+      var vm = await _load(
+        '${shape}class Box extends Shape { final int y; Box(super.x, this.y); }',
+      );
+      var code = (await vm.generateAllCodeIn('dart').writeAllSources())
+          .toString();
 
-        expect(code, contains('Box(super.x, this.y);'));
-        expect(code, contains('Shape(this.x);'));
-      },
-    );
+      expect(code, contains('Box(super.x, this.y);'));
+      expect(code, contains('Shape(this.x);'));
+    });
 
     test('the spelling survives the binary AST', () async {
       var vm = await _load(

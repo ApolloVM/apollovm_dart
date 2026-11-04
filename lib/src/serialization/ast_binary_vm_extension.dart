@@ -34,9 +34,8 @@ extension ApolloVMBinaryAST on ApolloVM {
     String? id,
     String? namespace,
   }) {
-    var codeUnit = ASTBinaryReader(
-      verifier: verifier,
-    ).readCodeUnit(image, id: id, namespace: namespace);
+    var codeUnit = ASTBinaryReader(verifier: verifier)
+        .readCodeUnit(image, id: id, namespace: namespace);
 
     return loadCodeUnit(codeUnit);
   }

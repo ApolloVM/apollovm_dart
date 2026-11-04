@@ -117,8 +117,7 @@ mixin _WorkspaceOptions on Command<bool> {
       )
       ..addFlag(
         'allow-write',
-        help:
-            'Permit mutating filesystem tools (fs.write/edit/mkdir/move/delete).',
+        help: 'Permit mutating filesystem tools (fs.write/edit/mkdir/move/delete).',
         negatable: false,
       )
       ..addFlag(

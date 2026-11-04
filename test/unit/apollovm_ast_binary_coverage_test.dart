@@ -115,8 +115,7 @@ const Map<String, String> _notTagged = {
       'an overload bucket rebuilt by addConstructor from the declarations',
   'ASTConstructorSetMultiple':
       'an overload bucket rebuilt by addConstructor from the declarations',
-  'ASTFunctionSignature':
-      'an overload-resolution key derived from a call site, not part of the tree',
+  'ASTFunctionSignature': 'an overload-resolution key derived from a call site, not part of the tree',
 };
 
 void main() {

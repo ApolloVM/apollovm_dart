@@ -100,9 +100,8 @@ void main() {
     });
 
     test('git.blame attributes lines', () async {
-      final r = await _runtime(
-        adapter,
-      ).call('apollovm.git.blame', {'path': 'lib/bar.dart'});
+      final r = await _runtime(adapter)
+          .call('apollovm.git.blame', {'path': 'lib/bar.dart'});
       expect(r['isError'], isFalse);
       final lines = (r['lines'] as List).cast<Map>();
       expect(lines, isNotEmpty);
@@ -170,9 +169,8 @@ void main() {
     );
 
     test('fs.list returns directory entries', () async {
-      final r = await _runtime(
-        adapter,
-      ).call('apollovm.fs.list', {'path': 'lib'});
+      final r = await _runtime(adapter)
+          .call('apollovm.fs.list', {'path': 'lib'});
       expect(r['isError'], isFalse);
       final names = (r['entries'] as List).map((e) => (e as Map)['name']);
       expect(names, contains('calc.dart'));
@@ -201,9 +199,8 @@ void main() {
     });
 
     test('code.diagnostics / definition / hover / references', () async {
-      final diag = await _runtime(
-        adapter,
-      ).call('apollovm.code.diagnostics', {'path': 'lib/calc.dart'});
+      final diag = await _runtime(adapter)
+          .call('apollovm.code.diagnostics', {'path': 'lib/calc.dart'});
       expect(diag['isError'], isFalse);
       expect(diag['ok'], isTrue);
 
@@ -230,9 +227,8 @@ void main() {
     });
 
     test('code.workspaceSymbols auto-loads the repo', () async {
-      final r = await _runtime(
-        adapter,
-      ).call('apollovm.code.workspaceSymbols', {'query': 'Foo'});
+      final r = await _runtime(adapter)
+          .call('apollovm.code.workspaceSymbols', {'query': 'Foo'});
       expect(r['isError'], isFalse);
       expect(
         (r['symbols'] as List).map((s) => (s as Map)['name']),
@@ -245,9 +241,8 @@ void main() {
       final diff = await _runtime(adapter).call('apollovm.git.diff', {});
       expect(diff['diff'], contains('int add() => 0;'));
 
-      final show = await _runtime(
-        adapter,
-      ).call('apollovm.git.show', {'rev': 'HEAD', 'path': 'lib/calc.dart'});
+      final show = await _runtime(adapter)
+          .call('apollovm.git.show', {'rev': 'HEAD', 'path': 'lib/calc.dart'});
       expect(show['content'], contains('static int calc'));
     });
 
@@ -302,27 +297,24 @@ void _contractTests(
     });
 
     test('fs.find matches a glob', () async {
-      final r = await _runtime(
-        adapter,
-      ).call('apollovm.fs.find', {'glob': 'lib/**/*.dart'});
+      final r = await _runtime(adapter)
+          .call('apollovm.fs.find', {'glob': 'lib/**/*.dart'});
       final paths = (r['paths'] as List).cast<String>();
       expect(paths, containsAll(['lib/bar.dart', 'lib/foo.dart']));
       expect(paths, isNot(contains('notes.txt')));
     });
 
     test('fs.stat reports metadata', () async {
-      final r = await _runtime(
-        adapter,
-      ).call('apollovm.fs.stat', {'path': 'lib/bar.dart'});
+      final r = await _runtime(adapter)
+          .call('apollovm.fs.stat', {'path': 'lib/bar.dart'});
       expect(r['exists'], isTrue);
       expect(r['isDir'], isFalse);
       expect(r['lineCount'], 1);
     });
 
     test('path traversal is rejected', () async {
-      final r = await _runtime(
-        adapter,
-      ).call('apollovm.fs.read', {'path': '../../etc/passwd'});
+      final r = await _runtime(adapter)
+          .call('apollovm.fs.read', {'path': '../../etc/passwd'});
       expect(r['isError'], isTrue);
     });
 
@@ -351,9 +343,8 @@ void _contractTests(
     });
 
     test('code.outline lists the class (language-aware)', () async {
-      final r = await _runtime(
-        adapter,
-      ).call('apollovm.code.outline', {'path': 'lib/foo.dart'});
+      final r = await _runtime(adapter)
+          .call('apollovm.code.outline', {'path': 'lib/foo.dart'});
       expect(r['isError'], isFalse);
       final names = (r['symbols'] as List)
           .cast<Map>()
@@ -363,9 +354,8 @@ void _contractTests(
     });
 
     test('writes are blocked read-only, allowed when permitted', () async {
-      final blocked = await _runtime(
-        adapter,
-      ).call('apollovm.fs.write', {'path': 'new.txt', 'content': 'hi'});
+      final blocked = await _runtime(adapter)
+          .call('apollovm.fs.write', {'path': 'new.txt', 'content': 'hi'});
       expect(blocked['isError'], isTrue);
 
       final ok = await _runtime(

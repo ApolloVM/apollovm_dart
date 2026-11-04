@@ -3,7 +3,7 @@ description: >-
   Portable multi-language VM: parse, run and translate Dart, Java, Kotlin, Go,
   C#, JavaScript, TypeScript, Lua and Python — with on-the-fly Wasm compilation
   and MCP/LSP servers.
-version: 2.31.0
+version: 2.31.1
 repository: https://github.com/ApolloVM/apollovm_dart
 issue_tracker: https://github.com/ApolloVM/apollovm_dart/issues
 
@@ -19,7 +19,7 @@ screenshots:
     path: example/apollovm-logo.png
 
 environment:
-  sdk: '>=3.10.0 <4.0.0'
+  sdk: '>=3.13.0 <4.0.0'
 
 dependencies:
   swiss_knife: ^3.3.14
@@ -30,21 +30,21 @@ dependencies:
   data_serializer: ^1.2.3
   # Built-in HMAC-SHA256 signing for binary AST files (`HmacSha256Signer`).
   # Pure Dart and web-safe; signing itself is optional and pluggable.
-  crypto: ^3.0.6
-  petitparser: ^7.0.2
+  crypto: ^3.0.8
+  petitparser: ^7.1.0
   collection: ^1.19.1
   args: ^2.7.0
   wasm_interop: ^2.0.1
   path: ^1.9.1
-  web: ^1.1.1
+  web: ^1.1.2
   dart_mcp: ^0.5.2
   stream_channel: ^2.1.4
   # Optional Dart package importer (`PubDevProvider`) only — all web-safe.
   # The default `PackageConfigProvider` uses none of these.
   http: ^1.6.0
-  archive: ^4.0.9
-  pub_semver: ^2.2.0
-  yaml: ^3.1.3
+  archive: ^4.6.0
+  pub_semver: ^2.2.1
+  yaml: ^3.1.4
 
 dev_dependencies:
   # The native (VM) Wasm engine lives outside this package (see `apollovm_wasm`),
@@ -52,12 +52,12 @@ dev_dependencies:
   apollovm_wasm:
     path: apollovm_wasm
   lints: ^6.1.0
-  dependency_validator: ^5.0.5
-  test: ^1.31.1
+  dependency_validator: ^5.1.0
+  test: ^1.33.0
   pubspec: ^2.3.0
   xml: ^6.6.1
-  build_web_compilers: ^4.8.5
-  build_runner: ^2.15.1
+  build_web_compilers: ^4.8.12
+  build_runner: ^2.16.2
 
 executables:
   apollovm:

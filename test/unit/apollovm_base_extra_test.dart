@@ -176,23 +176,20 @@ void main() {
       expect(vm.loadedCodeLanguages, containsAll(['dart', 'java11']));
     });
 
-    test(
-      'no-parser language with explicit namespace loads as opaque unit',
-      () async {
-        // With no parser, the unit is stored as-is when a namespace is provided.
-        var vm = ApolloVM();
-        var ok = await vm.loadCodeUnit(
-          SourceCodeUnit(
-            'cobol',
-            'IDENTIFICATION DIVISION.',
-            id: 'x',
-            namespace: 'pkg',
-          ),
-        );
-        expect(ok, isTrue);
-        expect(vm.loadedCodeLanguages, contains('cobol'));
-      },
-    );
+    test('no-parser language with explicit namespace loads as opaque unit', () async {
+      // With no parser, the unit is stored as-is when a namespace is provided.
+      var vm = ApolloVM();
+      var ok = await vm.loadCodeUnit(
+        SourceCodeUnit(
+          'cobol',
+          'IDENTIFICATION DIVISION.',
+          id: 'x',
+          namespace: 'pkg',
+        ),
+      );
+      expect(ok, isTrue);
+      expect(vm.loadedCodeLanguages, contains('cobol'));
+    });
 
     test('no-parser language without namespace throws StateError', () async {
       var vm = ApolloVM();

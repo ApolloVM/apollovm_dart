@@ -61,7 +61,7 @@ import 'resolution/symbol_table.dart';
 /// The Apollo VM.
 class ApolloVM implements VMTypeResolver {
   // ignore: non_constant_identifier_names
-  static final String VERSION = '2.31.0';
+  static final String VERSION = '2.31.1';
 
   static int _idCount = 0;
 
@@ -1270,12 +1270,7 @@ sealed class VMContext {
   /// The runtime block of this context.
   final ASTBlock block;
 
-  VMContext(
-    this.block, {
-    this.parent,
-    VMTypeResolver? typeResolver,
-    this.importManager,
-  }) : _typeResolver = typeResolver;
+  VMContext(this.block, {this.parent, this._typeResolver, this.importManager});
 
   FutureOr<bool> import(String path) {
     final parent = this.parent;

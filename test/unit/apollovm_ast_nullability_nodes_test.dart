@@ -39,35 +39,29 @@ void main() {
     });
 
     test('`x == null` / `x != null` become an ASTExpressionNullCheck', () {
-      var eq =
-          astExpressionOperation(
-                _lit(1),
-                ASTExpressionOperator.equals,
-                ASTExpressionNullValue(),
-              )
-              as ASTExpressionNullCheck;
+      var eq = astExpressionOperation(
+        _lit(1),
+        ASTExpressionOperator.equals,
+        ASTExpressionNullValue(),
+      ) as ASTExpressionNullCheck;
       expect(eq.negated, isFalse);
       expect(eq.nullFirst, isFalse);
 
-      var ne =
-          astExpressionOperation(
-                _lit(1),
-                ASTExpressionOperator.notEquals,
-                ASTExpressionNullValue(),
-              )
-              as ASTExpressionNullCheck;
+      var ne = astExpressionOperation(
+        _lit(1),
+        ASTExpressionOperator.notEquals,
+        ASTExpressionNullValue(),
+      ) as ASTExpressionNullCheck;
       expect(ne.negated, isTrue);
     });
 
     test('`null == x` records nullFirst so the operand order round-trips', () {
       var operand = _lit(1);
-      var e =
-          astExpressionOperation(
-                ASTExpressionNullValue(),
-                ASTExpressionOperator.equals,
-                operand,
-              )
-              as ASTExpressionNullCheck;
+      var e = astExpressionOperation(
+        ASTExpressionNullValue(),
+        ASTExpressionOperator.equals,
+        operand,
+      ) as ASTExpressionNullCheck;
 
       expect(e.nullFirst, isTrue);
       expect(e.expression, same(operand));

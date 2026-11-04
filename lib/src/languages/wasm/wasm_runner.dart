@@ -402,9 +402,8 @@ class ApolloRunnerWasm extends ApolloRunner {
       }
     }
 
-    final isAsyncFn = _signatures(
-      codeUnit.code,
-    ).asyncFns.contains(functionName);
+    final isAsyncFn = _signatures(codeUnit.code).asyncFns
+        .contains(functionName);
 
     dynamic res;
     if (!isAsyncFn) {
@@ -425,9 +424,8 @@ class ApolloRunnerWasm extends ApolloRunner {
       {
         var mem0 = module.readMemory();
         if (mem0 != null) {
-          ByteData.sublistView(
-            mem0,
-          ).setInt32(asyStackPointerOff, asyStackBase, Endian.little);
+          ByteData.sublistView(mem0)
+              .setInt32(asyStackPointerOff, asyStackBase, Endian.little);
         }
       }
 

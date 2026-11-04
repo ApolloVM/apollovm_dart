@@ -34,8 +34,10 @@ class ResponseError implements Exception {
 }
 
 /// Handles an incoming request; returns the result or throws [ResponseError].
-typedef RequestHandler =
-    FutureOr<Object?> Function(String method, Object? params);
+typedef RequestHandler = FutureOr<Object?> Function(
+  String method,
+  Object? params,
+);
 
 /// Handles an incoming notification (no reply).
 typedef NotificationHandler = void Function(String method, Object? params);

@@ -1,3 +1,19 @@
+## 2.31.1
+
+Dependency refresh only; no API or behavior changes.
+
+**Minimum Dart SDK is now 3.13.0** (was 3.10.0): `petitparser 7.1.0` and
+`web 1.1.2` require it, so the old floor could no longer resolve.
+
+- `crypto: ^3.0.8`
+- `petitparser: ^7.1.0`
+- `web: ^1.1.2`
+- `archive: ^4.6.0`
+- `pub_semver: ^2.2.1`
+- `yaml: ^3.1.4`
+- dev: `dependency_validator: ^5.1.0`, `test: ^1.33.0`,
+  `build_web_compilers: ^4.8.12`, `build_runner: ^2.16.2`
+
 ## 2.31.0
 
 Five features from the [Dart language evolution](https://dart.dev/resources/language/evolution)
