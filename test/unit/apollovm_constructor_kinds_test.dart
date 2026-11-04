@@ -271,6 +271,52 @@ void main() {
       },
     );
 
+    test('an omitted optional super parameter leaves the superclass default', () async {
+      expect(
+        await _run(
+          'class A { int x; A({this.x = 5}); }\n'
+          'class B extends A { B({super.x}) : super(); }\n'
+          'int run() { var b = B(); var c = B(x: 2); return b.x * 10 + c.x; }',
+        ),
+        equals(52),
+      );
+      expect(
+        await _run(
+          'class A { int x; A([this.x = 5]); }\n'
+          'class B extends A { B([super.x]) : super(); }\n'
+          'int run() { var b = B(); var c = B(2); return b.x * 10 + c.x; }',
+        ),
+        equals(52),
+      );
+      // A default of the subclass's own wins over the superclass one.
+      expect(
+        await _run(
+          'class A { int x; A({this.x = 5}); }\n'
+          'class B extends A { B({super.x = 7}) : super(); }\n'
+          'int run() { var b = B(); return b.x; }',
+        ),
+        equals(7),
+      );
+    });
+
+    test(
+      'a super parameter naming a superclass parameter adds no field',
+      () async {
+        var vm = await _load(
+          'class A { int y = 0; A(int v) { this.y = v * 2; } }\n'
+          'class B extends A { B(super.v) : super(); }\n'
+          'int run() { var b = B(4); return b.y; }\n'
+          'B make() { return B(4); }',
+        );
+        expect(await _runVM(vm), equals(8));
+
+        var b = await vm.createRunner('dart')!.executeFunction('', 'make');
+        var fields = (b.getValueNoContext() as VMObject).getFieldsValues();
+        expect(fields.keys, isNot(contains('v')));
+        expect(fields.keys, contains('y'));
+      },
+    );
+
     test('a missing superclass constructor is an error', () async {
       var vm = await _load(
         'class A { A.only(); }\nclass B extends A { B() : super.other(); }\n'
@@ -309,6 +355,41 @@ void main() {
       );
     });
 
+    test('a redirect cycle is an error, not a stack overflow', () async {
+      var vm = await _load(
+        'class C { C.a() : this.b(); C.b() : this.a(); }\n'
+        'int run() { C.a(); return 0; }',
+      );
+      await expectLater(
+        _runVM(vm),
+        throwsA(
+          isA<ApolloVMRuntimeError>().having(
+            (e) => e.toString(),
+            'message',
+            contains('redirects to itself'),
+          ),
+        ),
+      );
+    });
+
+    test('a redirect with other initializers or a body is an error', () async {
+      // An *empty* body (`{ }`) can't be told apart from `;` once parsed, so
+      // only a body with statements is caught.
+      for (var ctor in [
+        'C.r() : x = 1, this(2);',
+        'C.r() : this(2) { this.x = 3; }',
+      ]) {
+        var vm = await _load(
+          'class C { int x = 0; C(this.x); $ctor }\nint run() { C.r(); return 0; }',
+        );
+        await expectLater(
+          _runVM(vm),
+          throwsA(isA<ApolloVMRuntimeError>()),
+          reason: ctor,
+        );
+      }
+    });
+
     test('a redirect to a factory is an error', () async {
       var vm = await _load(
         'class C { C._(); factory C.f() { return C._(); } C.g() : this.f(); }\n'
@@ -343,6 +424,33 @@ void main() {
         'class C { C._(); factory C() { var x = 1; } }\nint run() { C(); return 0; }',
       );
       await expectLater(_runVM(vm), throwsA(isA<ApolloVMRuntimeError>()));
+    });
+
+    test('an untyped arrow method is not read as a constructor', () async {
+      // Only a factory takes `=>`: the constructor rule doesn't check the
+      // class name, so a generative `=>` form silently turned this method into
+      // a second constructor. An untyped method doesn't parse at all (the
+      // optional return type swallows its name), so it must stay an error.
+      var vm = ApolloVM();
+      await expectLater(
+        vm.loadCodeUnit(
+          SourceCodeUnit(
+            'dart',
+            'class A { int v = 1; A(); describe() => "d"; }',
+            id: 'test',
+          ),
+        ),
+        throwsA(isA<SyntaxError>()),
+      );
+
+      // Typed, it is an ordinary method.
+      expect(
+        await _run(
+          'class A { int v = 1; A(); String describe() => "d"; }\n'
+          'String run() { var a = A(); return a.describe(); }',
+        ),
+        equals('d'),
+      );
     });
 
     test(

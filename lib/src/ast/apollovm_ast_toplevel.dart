@@ -3278,12 +3278,15 @@ sealed class ASTConstructorInitializer with ASTNode {
   ///
   /// [context] is the constructor's own scope (its parameters are declared
   /// there); [callerContext] is the scope the constructor was invoked from, the
-  /// parent a delegated constructor runs in.
+  /// parent a delegated constructor runs in. [suppliedParameters] names the
+  /// parameters the call actually passed — the rest hold their default or
+  /// `null`.
   FutureOr<void> initialize(
     ASTClassConstructorDeclaration constructor,
     VMContext callerContext,
     VMContext context,
     ASTClassInstance instance,
+    Set<String> suppliedParameters,
   );
 }
 
@@ -3306,6 +3309,7 @@ class ASTConstructorFieldInitializer extends ASTConstructorInitializer {
     VMContext callerContext,
     VMContext context,
     ASTClassInstance instance,
+    Set<String> suppliedParameters,
   ) async {
     var v = await value.run(context, ASTRunStatus());
     await instance.setField(instance.createContext(context), fieldName, v);
@@ -3336,6 +3340,7 @@ class ASTConstructorAssertInitializer extends ASTConstructorInitializer {
     VMContext callerContext,
     VMContext context,
     ASTClassInstance instance,
+    Set<String> suppliedParameters,
   ) => assertion.run(context, ASTRunStatus());
 
   @override
@@ -3379,6 +3384,7 @@ sealed class ASTConstructorInvocationInitializer
   FutureOr<(List<ASTValue>, Map<String, ASTValue>)> implicitArguments(
     ASTClassConstructorDeclaration constructor,
     VMContext context,
+    Set<String> suppliedParameters,
   ) => (<ASTValue>[], <String, ASTValue>{});
 
   @override
@@ -3387,6 +3393,7 @@ sealed class ASTConstructorInvocationInitializer
     VMContext callerContext,
     VMContext context,
     ASTClassInstance instance,
+    Set<String> suppliedParameters,
   ) async {
     var clazz = targetClass(constructor);
     if (clazz is! ASTClassNormal) {
@@ -3414,7 +3421,11 @@ sealed class ASTConstructorInvocationInitializer
     }
 
     var runStatus = ASTRunStatus();
-    var (positional, named) = await implicitArguments(constructor, context);
+    var (positional, named) = await implicitArguments(
+      constructor,
+      context,
+      suppliedParameters,
+    );
     for (var a in arguments) {
       positional.add(await a.run(context, runStatus));
     }
@@ -3451,7 +3462,9 @@ sealed class ASTConstructorInvocationInitializer
 ///
 /// The constructor's **super parameters** (`B(super.x)`) are passed to it too,
 /// as Dart does: the positional ones first, in declaration order, then the
-/// explicit arguments; the named ones under their names.
+/// explicit arguments; the named ones under their names. An optional super
+/// parameter the call omitted, with no default of its own, is not passed, so
+/// the superclass parameter's own default applies.
 class ASTConstructorSuperInitializer
     extends ASTConstructorInvocationInitializer {
   ASTConstructorSuperInitializer(
@@ -3471,28 +3484,42 @@ class ASTConstructorSuperInitializer
   Future<(List<ASTValue>, Map<String, ASTValue>)> implicitArguments(
     ASTClassConstructorDeclaration constructor,
     VMContext context,
+    Set<String> suppliedParameters,
   ) async {
     var positional = <ASTValue>[];
     var named = <String, ASTValue>{};
 
+    // Every parameter is declared in [context] — an omitted one as its default
+    // or `null` — so "was it passed?" has to come from the call itself.
+    bool forwards(ASTConstructorParameterDeclaration p) =>
+        suppliedParameters.contains(p.name) || p.defaultValue != null;
+
     var parameters = constructor.parameters;
-    for (var p in [
-      ...?parameters.positionalParameters,
-      ...?parameters.optionalParameters,
-    ]) {
+    for (var p in [...?parameters.positionalParameters]) {
       if (!p.superParameter) continue;
-      var v = await context.getVariable(p.name, false);
-      positional.add(await v?.getValue(context) ?? ASTValueNull.instance);
+      positional.add(await _value(context, p));
+    }
+    for (var p in [...?parameters.optionalParameters]) {
+      if (!p.superParameter) continue;
+      // Positions must stay aligned: once one is left out, so are the rest.
+      if (!forwards(p)) break;
+      positional.add(await _value(context, p));
     }
 
     for (var p in [...?parameters.namedParameters]) {
-      if (!p.superParameter) continue;
-      var v = await context.getVariable(p.name, false);
-      // An omitted named parameter is left for the target's own default.
-      if (v != null) named[p.name] = await v.getValue(context);
+      if (!p.superParameter || !forwards(p)) continue;
+      named[p.name] = await _value(context, p);
     }
 
     return (positional, named);
+  }
+
+  static Future<ASTValue> _value(
+    VMContext context,
+    ASTConstructorParameterDeclaration p,
+  ) async {
+    var v = await context.getVariable(p.name, false);
+    return await v?.getValue(context) ?? ASTValueNull.instance;
   }
 }
 
@@ -3670,6 +3697,12 @@ class ASTClassConstructorDeclaration<T>
       if (constructorParameters.isNotEmpty) {
         var classContext = instance.createContext(context);
         for (var p in constructorParameters) {
+          // A super parameter may name a *parameter* of the superclass
+          // constructor rather than a field; it is only passed along then
+          // (see [ASTConstructorSuperInitializer]), never stored.
+          if (p.superParameter && parentClass.getField(p.fieldName) == null) {
+            continue;
+          }
           var variable = await context.getVariable(p.name, false);
           if (variable != null) {
             var v = await variable.getValue(context);
@@ -3683,13 +3716,57 @@ class ASTClassConstructorDeclaration<T>
         }
       }
 
-      for (var initializer in initializers) {
-        await initializer.initialize(this, parent, context, instance);
+      if (initializers.isNotEmpty) {
+        var supplied = _suppliedParameterNames(namedParameters).toSet();
+        var passed = positionalParameters?.length ?? 0;
+        supplied.addAll(
+          [
+            ...?parameters.positionalParameters,
+            ...?parameters.optionalParameters,
+          ].take(passed).map((p) => p.name),
+        );
+
+        if (isRedirecting) _checkRedirect(instance);
+        try {
+          for (var initializer in initializers) {
+            await initializer.initialize(
+              this,
+              parent,
+              context,
+              instance,
+              supplied,
+            );
+          }
+        } finally {
+          if (isRedirecting) _redirectChains[instance]?.remove(this);
+        }
       }
 
       await run(context, ASTRunStatus());
     } finally {
       VMContext.setCurrent(prevContext);
+    }
+  }
+
+  /// The redirecting constructors currently running on each instance, to stop
+  /// a redirect cycle (`A.a() : this.b(); A.b() : this.a();`) — a compile-time
+  /// error in Dart — before it exhausts the stack.
+  static final Expando<Set<ASTClassConstructorDeclaration>> _redirectChains =
+      Expando('redirect chain');
+
+  void _checkRedirect(ASTClassInstance instance) {
+    if (initializers.length != 1 || statements.isNotEmpty) {
+      throw ApolloVMRuntimeError(
+        "Redirecting constructor `$signatureName` may have no other "
+        "initializer and no body.",
+      );
+    }
+    var chain = _redirectChains[instance] ??= {};
+    if (!chain.add(this)) {
+      throw ApolloVMRuntimeError(
+        "Redirecting constructor `$signatureName` redirects to itself, "
+        "through: ${chain.map((c) => c.signatureName).join(' -> ')}.",
+      );
     }
   }
 

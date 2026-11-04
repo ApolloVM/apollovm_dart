@@ -133,8 +133,31 @@ class NullSafetyAnalyzer {
     for (final p in decl.parameters.allParameters) {
       scope.declare(p.name, p.type.nullable);
     }
+    // A constructor's initializer list runs before its body, with the same
+    // parameters in scope.
+    if (decl is ASTClassConstructorDeclaration) {
+      for (final initializer in decl.initializers) {
+        for (final expr in _initializerExpressions(initializer)) {
+          _analyzeExpression(expr, scope);
+        }
+      }
+    }
     _analyzeBlock(decl, scope);
   }
+
+  static Iterable<ASTExpression> _initializerExpressions(
+    ASTConstructorInitializer initializer,
+  ) => switch (initializer) {
+    ASTConstructorFieldInitializer() => [initializer.value],
+    ASTConstructorAssertInitializer() => [
+      initializer.condition,
+      ?initializer.message,
+    ],
+    ASTConstructorInvocationInitializer() => [
+      ...initializer.arguments,
+      ...?initializer.namedArguments?.values,
+    ],
+  };
 
   void _analyzeBlock(ASTBlock block, _Scope parent) {
     final scope = parent.child();

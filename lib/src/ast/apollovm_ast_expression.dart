@@ -3515,6 +3515,8 @@ class ASTExpressionObjectFunctionInvocation
     return null;
   }
 
+  bool _receiverIsNotClass = false;
+
   /// If the receiver names a class (`A.zero(…)`, not `a.zero(…)`) that declares
   /// a constructor called [name], returns that **named constructor**.
   ///
@@ -3523,10 +3525,18 @@ class ASTExpressionObjectFunctionInvocation
   FutureOr<ASTClassConstructorDeclaration?> _resolveNamedConstructor(
     VMContext parentContext,
   ) {
-    if (_isSuper) return null;
+    // Only a bare name can denote a class, and what a name denotes at a call
+    // site doesn't change between runs: once the receiver turned out not to
+    // be a class, ordinary method calls skip this extra receiver evaluation.
+    if (_isSuper || _receiverIsNotClass || variable is! ASTScopeVariable) {
+      return null;
+    }
 
     return _getVariableValue(parentContext).resolveMapped((obj) {
-      if (obj is! ASTClassStaticAccessor) return null;
+      if (obj is! ASTClassStaticAccessor) {
+        _receiverIsNotClass = true;
+        return null;
+      }
 
       var clazz = obj.clazz;
       if (clazz is! ASTClassNormal) return null;

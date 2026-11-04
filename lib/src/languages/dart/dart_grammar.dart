@@ -790,35 +790,74 @@ class DartGrammarDefinition extends DartGrammarLexer {
             );
           });
 
-  /// A constructor: `A(…)`, a **named** one `A.zero(…)`, a `factory` one, each
-  /// optionally `const`, then an optional initializer list and a body — `;`,
-  /// a block, or (for a factory) `=> expr;`.
+  /// A constructor: `A(…)` or a **named** one `A.zero(…)`, generative or
+  /// `factory`, each optionally `const`.
   Parser<ASTClassConstructorDeclaration> classConstructorDefaultDeclaration() =>
+      (ref0(classFactoryConstructorDeclaration) |
+              ref0(classGenerativeConstructorDeclaration))
+          .cast<ASTClassConstructorDeclaration>();
+
+  /// `[const] factory A[.name](…)` with a `;`, block or `=> expr;` body.
+  ///
+  /// Only a factory takes `=>`: this rule is tried before the method rules and
+  /// does not check the class name, so accepting `=>` on a generative
+  /// constructor would read an untyped arrow method (`describe() => …;`) as
+  /// one. A factory has no initializer list.
+  Parser<ASTClassConstructorDeclaration> classFactoryConstructorDeclaration() =>
       (constKeyword().trimHidden().optional() &
-              factoryToken().trimHidden().optional() &
+              factoryToken().trimHidden() &
+              identifier() &
+              (char('.') & identifier()).optional() &
+              constructorParametersDeclaration() &
+              (char(';').trim() | ref0(arrowBody) | ref0(codeBlock)))
+          .map((v) {
+            return _constructorDeclaration(
+              v[2] as String,
+              v[3] as List?,
+              v[4] as ASTConstructorParametersDeclaration,
+              null,
+              v[5],
+              isFactory: true,
+            );
+          });
+
+  /// `[const] A[.name](…) [: initializers]` with a `;` or block body.
+  Parser<ASTClassConstructorDeclaration>
+  classGenerativeConstructorDeclaration() =>
+      (constKeyword().trimHidden().optional() &
               identifier() &
               (char('.') & identifier()).optional() &
               constructorParametersDeclaration() &
               ref0(constructorInitializerList).optional() &
-              (char(';').trim() | ref0(arrowBody) | ref0(codeBlock)))
+              (char(';').trim() | ref0(codeBlock)))
           .map((v) {
-            var isFactory = v[1] != null;
-            var className = v[2] as String;
-            var nameOpt = v[3] as List?;
-            var name = nameOpt != null ? nameOpt[1] as String : '';
-            var parameters = v[4] as ASTConstructorParametersDeclaration;
-            var initializers = v[5] as List<ASTConstructorInitializer>?;
-            var optionalBlock = v[6];
-            var block = optionalBlock is ASTBlock ? optionalBlock : null;
-            return ASTClassConstructorDeclaration(
-              ASTType(className),
-              name,
-              parameters,
-              block: block,
-              isFactory: isFactory,
-              initializers: initializers,
+            return _constructorDeclaration(
+              v[1] as String,
+              v[2] as List?,
+              v[3] as ASTConstructorParametersDeclaration,
+              v[4] as List<ASTConstructorInitializer>?,
+              v[5],
+              isFactory: false,
             );
           });
+
+  ASTClassConstructorDeclaration _constructorDeclaration(
+    String className,
+    List? nameOpt,
+    ASTConstructorParametersDeclaration parameters,
+    List<ASTConstructorInitializer>? initializers,
+    Object? body, {
+    required bool isFactory,
+  }) {
+    return ASTClassConstructorDeclaration(
+      ASTType(className),
+      nameOpt != null ? nameOpt[1] as String : '',
+      parameters,
+      block: body is ASTBlock ? body : null,
+      isFactory: isFactory,
+      initializers: initializers,
+    );
+  }
 
   /// `: entry, entry, …` after a constructor's parameters.
   Parser<List<ASTConstructorInitializer>> constructorInitializerList() =>
@@ -843,45 +882,44 @@ class DartGrammarDefinition extends DartGrammarLexer {
 
   /// `super(…)` / `super.named(…)`.
   Parser<ASTConstructorSuperInitializer> constructorSuperInitializer() =>
-      (superToken().trimHidden() &
-              (char('.') & identifier()).optional() &
-              char('(').trimHidden() &
-              ref0(callArguments).optional() &
-              char(')').trimHidden())
-          .map((v) {
-            var (name, args, named) = _delegationParts(v);
-            return ASTConstructorSuperInitializer(name, args, named);
-          });
+      _delegationInitializer(superToken(), ASTConstructorSuperInitializer.new);
 
   /// `this(…)` / `this.named(…)`: a redirecting constructor.
   Parser<ASTConstructorRedirectInitializer> constructorRedirectInitializer() =>
-      (thisToken().trimHidden() &
+      _delegationInitializer(
+        thisToken(),
+        ASTConstructorRedirectInitializer.new,
+      );
+
+  /// `<keyword>[.name](arguments)`, built into an initializer by [build].
+  Parser<I> _delegationInitializer<I extends ASTConstructorInitializer>(
+    Parser keyword,
+    I Function(
+      String name,
+      List<ASTExpression> arguments, [
+      Map<String, ASTExpression>? namedArguments,
+    ])
+    build,
+  ) =>
+      (keyword.trimHidden() &
               (char('.') & identifier()).optional() &
               char('(').trimHidden() &
               ref0(callArguments).optional() &
               char(')').trimHidden())
           .map((v) {
-            var (name, args, named) = _delegationParts(v);
-            return ASTConstructorRedirectInitializer(name, args, named);
+            var nameOpt = v[1] as List?;
+            var argsRec =
+                v[3]
+                    as ({
+                      List<ASTExpression> positional,
+                      Map<String, ASTExpression>? named,
+                    })?;
+            return build(
+              nameOpt != null ? nameOpt[1] as String : '',
+              argsRec?.positional ?? <ASTExpression>[],
+              argsRec?.named,
+            );
           });
-
-  /// The target name and arguments of a `super(…)` / `this(…)` entry.
-  (String, List<ASTExpression>, Map<String, ASTExpression>?) _delegationParts(
-    List v,
-  ) {
-    var nameOpt = v[1] as List?;
-    var argsRec =
-        v[3]
-            as ({
-              List<ASTExpression> positional,
-              Map<String, ASTExpression>? named,
-            })?;
-    return (
-      nameOpt != null ? nameOpt[1] as String : '',
-      argsRec?.positional ?? <ASTExpression>[],
-      argsRec?.named,
-    );
-  }
 
   /// `assert(condition[, message])`.
   Parser<ASTConstructorAssertInitializer> constructorAssertInitializer() =>
