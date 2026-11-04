@@ -127,6 +127,8 @@ abstract class PythonGrammarLexer extends BaseGrammarLexer {
 
   Parser passToken() => ref1(keyword, 'pass');
 
+  Parser globalToken() => ref1(keyword, 'global');
+
   Parser raiseToken() => ref1(keyword, 'raise');
 
   Parser returnToken() => ref1(keyword, 'return');

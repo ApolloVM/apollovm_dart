@@ -102,6 +102,8 @@ The **Wasm** column shows what the on-the-fly WebAssembly compiler currently sup
 | String interpolation / concat    | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | List & map / dict literals       | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Set literals (`{1, 2}`)¹⁷        | ✅ | 🚧 | 🚧 | 🧩¹⁷ | 🚧 | 🚧 | 🚧 | 🧩¹⁷ | 🚧 | 🚧 |
+| Top-level variables¹⁸            | ✅ | 🚫 | ✅ | ✅ | 🚫 | ✅ | ✅ | ✅ | ✅ | 🚧 |
+| Records (`(1, 'a')`, `r.$1`)¹⁹   | ✅ | 🚫 | 🚫 | 🚫 | 🚧 | 🚫 | 🚧 | 🚫 | 🚧 | 🚧 |
 | Index access (`a[i]`, nested `m[i][j]`)¹² | ✅ | 🧩 | 🧩 | 🧩 | 🧩 | 🧩 | 🧩 | 🧩 | 🧩 | ✅ |
 | `null` / `None` / `nil`¹³        | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 🧩¹³ |
 
@@ -153,7 +155,28 @@ Java `new HashSet<T>(){{ add(…); }}`, Kotlin `mutableSetOf<T>(…)`, C#
 and — for the two languages with no set type (`🧩`) — Go
 `map[T]struct{}{…: {}}` and Lua `{ [e] = true }`. The other grammars do not
 *parse* a set literal yet (`🚧`), and the Wasm backend refuses to compile one
-rather than lower it to a list and lose the uniqueness.
+rather than lower it to a list and lose the uniqueness. &nbsp;
+¹⁸ A **top-level variable** is readable and writable from any function or
+method of its module, from a class-method entry point, and — through `import` —
+from another module; an imported function or class uses its own module's
+variables. Names resolve **lexically**: a function sees the module it is
+declared in, never its caller's locals or `this`. Initialization is eager, in
+declaration order, when the module first runs (Dart initializes lazily, so a
+forward reference in an initializer fails here). Generated code declares the
+variables before the functions, which Lua's `local` needs, and Python output
+adds the `global x` a function assigning one needs. Java and C# have no
+top-level variables (`🚫`), and the Wasm backend doesn't compile them yet. &nbsp;
+¹⁹ A **record** is parsed from **Dart** source: literals `(1, 'a')`,
+`(x: 1, y: 2)`, `(1, name: 'n', 2)` and `(1,)`, and types `(int, String)`,
+`({int x, int y})`, `(int, {String name})`, `(int,)` and `(int, int)?`, also as
+collection type arguments (`List<(int, int)>`, `<(int, int)>{}`). Fields read as `r.$1` / `r.name`,
+`==` and `hashCode` are structural (records work as set elements and map keys),
+`'$r'` renders as Dart does, and `r is (int, int)` tests the shape and field
+types. A record reaches the host as a `VMRecord`. Only Dart output can express
+one, and every other target refuses it with `UnsupportedSyntaxError`. C#,
+TypeScript and Python have tuples (`🚧`), but no named fields with the same
+equality. Destructuring and `switch` on records need patterns, which aren't
+supported yet.
 
 ### Null safety
 

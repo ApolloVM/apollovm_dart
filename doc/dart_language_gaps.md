@@ -8,8 +8,8 @@ The feature list follows the official
 version by version, plus a second table for core constructs that predate the
 versioned evolution list (Dart 1.x / 2.0 baseline).
 
-- **Measured against:** ApolloVM `2.33.0` (`lib/src/languages/dart/`), Dart SDK `3.13.5`.
-- **Date:** 2026-11-04 (the constructor, subtyping, type-test and getter rows; the rest was last probed on 2026-09-09 against `2.31.0`).
+- **Measured against:** ApolloVM `2.34.0` (`lib/src/languages/dart/`), Dart SDK `3.13.5`.
+- **Date:** 2026-11-04 (the records, top-level variable, constructor, subtyping, type-test and getter rows; the rest was last probed on 2026-09-09 against `2.31.0`).
 - **Method:** every row was probed by loading a minimal source unit through
   `ApolloVM.loadCodeUnit('dart', …)` and, when it parsed, executing it with the
   Dart runner — so a ✅ means *parsed and ran*, not "the grammar mentions it".
@@ -49,7 +49,7 @@ that version, or a static-analysis-only change).
 | 2.17 | Named arguments anywhere in the argument list | ✅ | `g(b: 1, 2)` runs. |
 | 2.18 | Inference flowing between arguments of a generic call | ❌ | No generic inference engine; generics are erased at runtime. |
 | 2.19 | Unnamed libraries (`library;`) | ❌ | Does not parse. `library foo;` *appears* to parse only because it matches a top-level variable declaration (type `library`, name `foo`) — a false positive, not support. |
-| 3.0  | **Records** (`(1, 'a')`, `(int, String)`) | ❌ | Neither record literals nor record types parse. |
+| 3.0  | **Records** (`(1, 'a')`, `(int, String)`) | ✅ | Literals (positional, named, interleaved, `(1,)`) and types (`(int, String)`, `({int x})`, `(int, {String s})`, `(int,)`, nullable, inside collection types). Fields read as `r.$1` / `r.name`; structural `==` / `hashCode`; Dart's `toString`; `is` by shape and field types. Destructuring needs patterns (next row). Calling a method on a record (`r.toString()`) isn't supported — `'$r'` is. |
 | 3.0  | **Patterns** (declaration, list/map/object/record patterns, `case` patterns, `when` guards) | ❌ | None parse. `switch` supports constant `case` labels only. |
 | 3.0  | Switch expressions (`switch (x) { 1 => … }`) | ❌ | Statement form only. |
 | 3.0  | If-case (`if (x case int n)`) | ❌ | Does not parse. |
@@ -97,7 +97,7 @@ above, but they are the largest part of the gap.
 | Generic methods / generic functions (`T first<T>(List<T> l)`) | ❌ | Type parameters are parsed on **classes** only. |
 | Old-style function typedefs (`typedef int F(int a);`) | ❌ | Only the `typedef Name = Type;` form parses (see the 2.13 row). |
 | `library` / `part` / `part of` directives | ❌ | Only `import` and `export` (with `show` / `hide` / `as`) are directives. |
-| Top-level variables | ⚠️ | `int gx = 4;` parses and is recorded on the AST root, but the name does not resolve at runtime from either a function or a static method (`Can't find variable: 'gx'`). |
+| Top-level variables | ⚠️ | Read and written from any function or method, from a class-method entry point, and across `import`. Names resolve lexically (a function never sees its caller's locals). Initialization is eager and in order, not lazy: an initializer reading a variable declared after it fails. |
 | Top-level getters/setters, `static` getters/setters | ❌ | Accessors are parsed on class and extension bodies only. |
 | Unqualified getter read inside a class (`return value;`) | ✅ | Own, inherited and extension getters; dispatches on the receiver like `this.value`; a local or parameter of the same name shadows it. |
 | Function tear-offs (`var f = g;`) | ❌ | A top-level function is not a value: `Can't find variable: 'g'`. |
@@ -124,8 +124,9 @@ cascades, `try` / `on` / `catch` / `finally` / `throw` / `rethrow`, `assert`,
 all control flow (`if`, `for`, `for-in`, `while`, `do-while`, `switch` on
 `int` / `String`, `break`, `continue`), ternary and null-aware operators,
 list, map & **set** literals (including `const` ones and nested generic types),
-string interpolation, raw and triple-quoted strings, and `final` / `const` /
-`var` locals.
+string interpolation, raw and triple-quoted strings, `final` / `const` /
+`var` locals, **top-level variables** (lexically scoped, across `import`),
+and **records** (literals, types, `r.$1` / `r.name`, structural equality).
 
 -----------------------------
 

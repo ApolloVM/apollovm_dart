@@ -40,6 +40,9 @@ abstract class ASTValue<T> with ASTNode implements ASTTypedNode {
       return ASTValueArray2D(type, value as dynamic) as ASTValue<T>;
     } else if (type is ASTTypeArray) {
       return ASTValueArray(type, value as dynamic) as ASTValue<T>;
+    } else if (value is VMRecord) {
+      // A record keeps its own (runtime) record type, not a wider slot type.
+      return ASTValueStatic<VMRecord>(value.type, value) as ASTValue<T>;
     } else {
       return ASTValueStatic<T>(type, value);
     }
@@ -1085,6 +1088,101 @@ class ASTValueSet<T extends ASTType<V>, V> extends ASTValueStatic<Set<V>> {
       return _setEquality.equals(v1, v2);
     }
     return super == (other);
+  }
+}
+
+/// A record value at run time: `(1, 'a')`, `(x: 1, y: 2)`.
+///
+/// Fields hold VM values ([ASTValue]), so a class instance in a field keeps
+/// its identity and class. Equality is Dart's: two records are equal when
+/// they have the same shape and equal fields, in order for the positional
+/// ones. [toString] renders Dart's form — `(1, a, x: 2)`, `(1,)`.
+class VMRecord {
+  /// The positional fields, `$1`, `$2`, … in order.
+  final List<ASTValue> positional;
+
+  /// The named fields, sorted by name.
+  final Map<String, ASTValue> named;
+
+  VMRecord(List<ASTValue> positional, [Map<String, ASTValue>? named])
+    : positional = List.unmodifiable(positional),
+      named = Map.unmodifiable({
+        for (var name in (named?.keys.toList() ?? <String>[])..sort())
+          name: named![name]!,
+      });
+
+  /// The 0-based index a positional getter name (`$1`, `$2`, …) refers to,
+  /// or `null` when [name] isn't one.
+  static int? positionalIndexOf(String name) {
+    if (name.length < 2 || !name.startsWith(r'$')) return null;
+    var n = int.tryParse(name.substring(1));
+    if (n == null || n < 1 || name.substring(1) != '$n') return null;
+    return n - 1;
+  }
+
+  /// The field [name] — `$1`, `$2`, … or a named field — or `null` when
+  /// this record has no such field.
+  ASTValue? field(String name) {
+    var index = positionalIndexOf(name);
+    if (index != null) {
+      return index < positional.length ? positional[index] : null;
+    }
+    return named[name];
+  }
+
+  /// The record type of this value, from its fields' runtime types.
+  ASTTypeRecord get type => ASTTypeRecord(
+    [for (var v in positional) v.type],
+    {for (var e in named.entries) e.key: e.value.type},
+  );
+
+  @override
+  bool operator ==(Object other) {
+    if (identical(this, other)) return true;
+    if (other is! VMRecord ||
+        other.positional.length != positional.length ||
+        other.named.length != named.length) {
+      return false;
+    }
+    for (var i = 0; i < positional.length; ++i) {
+      if (positional[i] != other.positional[i]) return false;
+    }
+    for (var e in named.entries) {
+      var o = other.named[e.key];
+      if (o == null || e.value != o) return false;
+    }
+    return true;
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    Object.hashAll(positional),
+    Object.hashAll(named.keys),
+    Object.hashAll(named.values),
+  );
+
+  static String _fieldToString(ASTValue v) {
+    if (v is ASTValueNull) return 'null';
+    if (v is ASTValueStatic) return '${v.value}';
+    return '${v.getValueNoContext()}';
+  }
+
+  @override
+  String toString() {
+    var s = StringBuffer('(');
+    s.write(positional.map(_fieldToString).join(', '));
+    if (named.isNotEmpty) {
+      if (positional.isNotEmpty) s.write(', ');
+      s.write(
+        named.entries
+            .map((e) => '${e.key}: ${_fieldToString(e.value)}')
+            .join(', '),
+      );
+    } else if (positional.length == 1) {
+      s.write(',');
+    }
+    s.write(')');
+    return s.toString();
   }
 }
 

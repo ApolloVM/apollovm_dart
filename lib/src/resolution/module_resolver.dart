@@ -77,6 +77,7 @@ class ModuleResolver {
             kind: SymbolKind.function,
             moduleId: moduleId,
             declaration: set,
+            module: root,
           ),
         );
       }
@@ -91,6 +92,7 @@ class ModuleResolver {
               : (clazz.isInterface ? SymbolKind.interface : SymbolKind.klass),
           moduleId: moduleId,
           declaration: clazz,
+          module: root,
         ),
       );
     }
@@ -102,6 +104,19 @@ class ModuleResolver {
           kind: SymbolKind.typeAlias,
           moduleId: moduleId,
           declaration: alias,
+          module: root,
+        ),
+      );
+    }
+
+    for (var variable in root.topLevelVariables) {
+      table.define(
+        ResolvedSymbol(
+          name: variable.name,
+          kind: SymbolKind.variable,
+          moduleId: moduleId,
+          declaration: variable,
+          module: root,
         ),
       );
     }

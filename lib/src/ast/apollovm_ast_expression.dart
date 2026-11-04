@@ -693,6 +693,104 @@ class ASTExpressionSetLiteral extends ASTExpression {
   }
 }
 
+/// One field of a record literal: positional when [name] is `null`.
+typedef ASTRecordLiteralField = ({String? name, ASTExpression value});
+
+/// [ASTExpression] for a Dart **record literal**: `(1, 'a')`, `(x: 1, y: 2)`,
+/// `(1, label: 'a')`, `(1,)`.
+///
+/// [fields] keeps source order — positional and named fields may be
+/// interleaved, and are evaluated in the order written, as in Dart.
+class ASTExpressionRecordLiteral extends ASTExpression {
+  final List<ASTRecordLiteralField> fields;
+
+  ASTExpressionRecordLiteral(List<ASTRecordLiteralField> fields)
+    : fields = List.unmodifiable(fields) {
+    var names = <String>{};
+    for (var f in fields) {
+      var name = f.name;
+      if (name != null && !names.add(name)) {
+        throw ArgumentError("Duplicate record field name: '$name'");
+      }
+    }
+  }
+
+  /// The positional field expressions, in order.
+  Iterable<ASTExpression> get positionalExpressions =>
+      fields.where((f) => f.name == null).map((f) => f.value);
+
+  /// The named field expressions, in source order.
+  Iterable<MapEntry<String, ASTExpression>> get namedExpressions => fields
+      .where((f) => f.name != null)
+      .map((f) => MapEntry(f.name!, f.value));
+
+  /// Written in its own parentheses, so it never needs another pair.
+  @override
+  bool get isComplex => false;
+
+  @override
+  Iterable<ASTNode> get children => fields.map((f) => f.value);
+
+  @override
+  void resolveNode(ASTNode? parentNode) {
+    super.resolveNode(parentNode);
+    for (var f in fields) {
+      f.value.resolveNode(this);
+    }
+  }
+
+  @override
+  FutureOr<ASTType> resolveType(VMContext? context) {
+    var types = [for (var f in fields) f.value.resolveType(context)]
+        .resolveAll();
+    return types.resolveMapped((types) {
+      var positional = <ASTType>[];
+      var named = <String, ASTType>{};
+      for (var i = 0; i < fields.length; ++i) {
+        var name = fields[i].name;
+        if (name == null) {
+          positional.add(types[i]);
+        } else {
+          named[name] = types[i];
+        }
+      }
+      return ASTTypeRecord(positional, named);
+    });
+  }
+
+  @override
+  ASTNode? getNodeIdentifier(String name, {ASTNode? requester}) =>
+      parentNode?.getNodeIdentifier(name, requester: requester);
+
+  @override
+  Future<ASTValue> run(VMContext parentContext, ASTRunStatus runStatus) async {
+    var positional = <ASTValue>[];
+    var named = <String, ASTValue>{};
+    // In source order, one at a time: a field's side effects happen before
+    // the next field is evaluated.
+    for (var f in fields) {
+      var value = await f.value.run(parentContext, runStatus);
+      var name = f.name;
+      if (name == null) {
+        positional.add(value);
+      } else {
+        named[name] = value;
+      }
+    }
+    var record = VMRecord(positional, named);
+    return ASTValueStatic<VMRecord>(record.type, record);
+  }
+
+  @override
+  String toString({bool asGroup = false}) {
+    var s = fields
+        .map((f) => f.name == null ? '${f.value}' : '${f.name}: ${f.value}')
+        .join(', ');
+    var single = fields.length == 1 && fields.single.name == null;
+    return single ? '($s,)' : '($s)';
+  }
+}
+
 /// [ASTExpression] that declares a [Map] literal.
 class ASTExpressionMapLiteral extends ASTExpression {
   final ASTType? keyType;
@@ -3206,13 +3304,38 @@ abstract class ASTExpressionFunctionInvocation extends ASTExpression
   @override
   FutureOr<ASTType> resolveType(VMContext? context) {
     if (context != null) {
-      return _getFunction(context).resolveMapped((f) => f.resolveType(context));
+      var type = _getFunction(context)
+          .resolveMapped((f) => f.resolveType(context));
+      if (!hasChainFunctionInvocation) return type;
+      return type.resolveMapped((t) => _chainResultType(context, t));
     }
 
     final associatedNode = _associatedNode;
     return associatedNode == null
         ? ASTTypeDynamic.instance
         : associatedNode.resolveType(context);
+  }
+
+  /// The type of a chained call (`C().peek()`): the return type of the
+  /// *last* call, found link by link from [type], the first call's. `dynamic`
+  /// when a link can't be resolved statically.
+  ASTType _chainResultType(VMContext context, ASTType type) {
+    for (var call in chainFunctionInvocation!) {
+      try {
+        var f = _resolveFunctionOrExtension(
+          call,
+          type.getClass(),
+          call.name,
+          call._getASTFunctionSignature(),
+          context,
+        );
+        if (f == null) return ASTTypeDynamic.instance;
+        type = f.resolveType(context);
+      } on StateError {
+        return ASTTypeDynamic.instance;
+      }
+    }
+    return type;
   }
 
   ASTTypedNode? _associatedNode;
@@ -4208,7 +4331,20 @@ class ASTExpressionObjectGetterAccess extends ASTExpressionGetterAccess
       }
       return obj;
     }
-    return variable.getValue(parentContext);
+    return variable.getValue(parentContext).resolveMapped(_asClassInstance);
+  }
+
+  /// A collection keeps an instance's bare [VMObject] (`l[0]`), which has
+  /// no class-instance behaviour of its own: wrap it back into its
+  /// [ASTClassInstance], so `l[0].field` reads the field like `a.field`.
+  static ASTValue _asClassInstance(ASTValue value) {
+    if (value is VMObject) {
+      var clazz = value.type.getClass();
+      if (clazz is ASTClass<VMObject>) {
+        return ASTClassInstance<VMObject>(clazz, value);
+      }
+    }
+    return value;
   }
 
   FutureOr<ASTClass> _getObjectClass(VMContext parentContext) {
@@ -4338,6 +4474,9 @@ class ASTExpressionObjectGetterAccess extends ASTExpressionGetterAccess
         return ASTTypeNull.instance;
       }
 
+      var recordFieldType = _recordFieldType(obj);
+      if (recordFieldType != null) return recordFieldType;
+
       if (obj is ASTClassInstance) {
         var classContext = obj.createContext(context);
         return obj.getField(classContext, name).resolveMapped((fieldValue) {
@@ -4355,6 +4494,22 @@ class ASTExpressionObjectGetterAccess extends ASTExpressionGetterAccess
   /// A null-aware access can always evaluate to `null`, so its static type is
   /// the nullable form of the accessed member's type.
   ASTType _nullableIf(ASTType type) => isNullAware ? type.asNullable() : type;
+
+  /// The record [obj] holds, or `null` when it isn't one.
+  static VMRecord? _recordOf(ASTValue obj) =>
+      obj is ASTValueStatic && obj.value is VMRecord
+      ? obj.value as VMRecord
+      : null;
+
+  /// The type of this access when the receiver is a record: the field's
+  /// type, `dynamic` when the record has no such field (the read then fails
+  /// at run time).
+  ASTType? _recordFieldType(ASTValue obj) {
+    var type = obj.type;
+    if (type is! ASTTypeRecord && _recordOf(obj) == null) return null;
+    var recordType = type is ASTTypeRecord ? type : _recordOf(obj)!.type;
+    return _nullableIf(recordType.fieldType(name) ?? ASTTypeDynamic.instance);
+  }
 
   @override
   FutureOr<ASTType<dynamic>> resolveRuntimeType(
@@ -4376,6 +4531,9 @@ class ASTExpressionObjectGetterAccess extends ASTExpressionGetterAccess
       if (isNullAware && obj is ASTValueNull) {
         return ASTTypeNull.instance;
       }
+
+      var recordFieldType = _recordFieldType(obj);
+      if (recordFieldType != null) return recordFieldType;
 
       if (obj is ASTClassInstance) {
         var classContext = obj.createContext(context);
@@ -4427,6 +4585,16 @@ class ASTExpressionObjectGetterAccess extends ASTExpressionGetterAccess
       // Null-aware access (`obj?.field`): short-circuit to `null`.
       if (isNullAware && obj is ASTValueNull) {
         return ASTValueNull.instance;
+      }
+
+      // A record field: `r.$1`, `r.name`.
+      if (_recordOf(obj) case var record?) {
+        var field =
+            record.field(name) ??
+            (throw ApolloVMRuntimeError(
+              "The record `$record` has no field `$name`.",
+            ));
+        return _callChainFunction(parentContext, runStatus, field);
       }
 
       if (obj is ASTClassInstance) {

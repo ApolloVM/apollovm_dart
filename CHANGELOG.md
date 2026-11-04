@@ -1,3 +1,85 @@
+## 2.34.0
+
+Two gaps from [`doc/dart_language_gaps.md`](doc/dart_language_gaps.md):
+top-level variables, and records.
+
+### Top-level variables and lexical scope
+
+Names now resolve **lexically**: a function or method sees the module it is
+declared in, not its caller.
+
+```dart
+int count = 0;
+int next() { count++; return count; }
+
+int run() {
+  var count = 100; // a local: `next()` still uses the top-level `count`
+  next();
+  return next();   // 2
+}
+```
+
+- **A function no longer sees its caller's locals, or its caller's `this`.**
+  Before, a call resolved names through the caller's scope (dynamic scoping).
+  So a caller's local shadowed a top-level variable inside the callee, and a
+  function could read a variable that only its caller declared.
+- **A class-method entry point sees the top-level variables.**
+  `executeClassMethod` failed with `Can't find variable` when a member read
+  one.
+- **Imported top-level variables:** `import 'lib.dart';` makes `lib`'s
+  variables readable and writable. An imported function or class uses its
+  own module's variables. An imported module runs its variable initializers
+  on first use.
+- **Generated code declares top-level variables before the functions.** This
+  makes generated Lua valid: a `local` declared after the functions that use
+  it is invisible to them.
+- **Python output declares `global x`** in a function that assigns a
+  module-level variable, which Python requires. The Python parser reads
+  `global` back.
+- Initialization is eager and in order: a variable whose initializer reads a
+  variable declared *after* it fails, where Dart initializes lazily.
+
+### Records
+
+```dart
+(int, {String name}) make(int n) => (n, name: 'r$n');
+
+var r = make(3);
+print('${r.$1} ${r.name}');  // 3 r3
+print((1, x: 2) == (1, x: 2)); // true
+```
+
+- **Literals:** `(1, 'a')`, `(x: 1, y: 2)`, positional and named fields
+  interleaved, and `(1,)`. Fields are evaluated in source order.
+- **Types:** `(int, String)`, `({int x, int y})`, `(int, {String name})`,
+  `(int,)`, nullable `(int, int)?`, and inside collection types
+  (`List<(int, int)>`, `<(int, int)>{}`, `<String, (int, int)>{}`). A record type accepts a record of the same shape whose
+  fields it accepts, so `(num, num)` accepts `(1, 2.5)`.
+- **Field access:** `r.$1`, `r.name`. A missing field is a runtime error.
+- **Equality and `toString` are Dart's:** structural `==` and `hashCode`, so
+  records work as set elements and map keys, and `'$r'` renders as
+  `(1, a, x: 2)`.
+- **`is`:** `r is (int, int)` tests the shape and the field types.
+- A record reaches the host as a `VMRecord`.
+- Records survive the binary AST (node tag 130, type-table kind `0x18`) and
+  are generated as Dart. The other targets, and Wasm, refuse them. The
+  rest of Dart 3's record features need patterns, which aren't supported yet:
+  destructuring, and `switch` on records.
+
+### Other fixes
+
+- **`return null` from a nullable function returned the wrong value.** From a
+  `String?` function or getter it gave `void`, and from a `List<int>?`
+  function a non-null value. It now returns `null`.
+- **`var x = C().m()` was typed as `C`** (the receiver), so the first
+  assignment failed. It now has the call's return type.
+- **`var x = f([a, 2])` failed** when `f` takes a `List<int>` and `a` has no
+  static type, because inferring `x` matched `List<dynamic>` against
+  `List<int>` strictly. An argument whose type arguments are unknown now
+  matches; the call is still checked against the actual values when it runs.
+- **`l[0].field` didn't parse,** and a field read off an instance kept in a
+  collection failed. Both work now, including `pairs[i].$2`.
+
 ## 2.33.1
 
 Fixes from a review of 2.33.0.

@@ -153,6 +153,9 @@ class ASTNodeTag {
   static const int expressionTypeTest = 128;
   static const int expressionTypeCast = 129;
 
+  // Records (2.34.0).
+  static const int expressionRecordLiteral = 130;
+
   /// Tags that once existed and must never be handed out again.
   ///
   /// Empty today. When a node kind is removed, its number moves here rather

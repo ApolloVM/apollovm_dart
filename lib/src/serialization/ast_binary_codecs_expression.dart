@@ -287,6 +287,33 @@ final List<ASTNodeCodec> expressionCodecs = [
     ),
   ),
 
+  // Fields in source order: a field name, or the empty string for a
+  // positional field (a record field name is never empty).
+  ASTNodeCodec<ASTExpressionRecordLiteral>(
+    ASTNodeTag.expressionRecordLiteral,
+    'ASTExpressionRecordLiteral',
+    encode: (w, n) {
+      w.uint(n.fields.length);
+      for (var f in n.fields) {
+        w.str(f.name ?? '');
+        w.node(f.value);
+      }
+    },
+    decode: (r) {
+      var count = r.uint();
+      return ASTExpressionRecordLiteral([
+        for (var i = 0; i < count; ++i)
+          (
+            name: switch (r.str()) {
+              '' => null,
+              var name => name,
+            },
+            value: r.node<ASTExpression>(),
+          ),
+      ]);
+    },
+  ),
+
   ASTNodeCodec<ASTExpressionLiteralFunction>(
     ASTNodeTag.expressionLiteralFunction,
     'ASTExpressionLiteralFunction',

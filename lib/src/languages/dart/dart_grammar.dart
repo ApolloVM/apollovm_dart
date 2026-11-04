@@ -2045,6 +2045,9 @@ class DartGrammarDefinition extends DartGrammarLexer {
               // (it requires two or more segments, so it can't shadow them).
               expressionMemberChain() |
               expressionFunctionInvocation() |
+              // `l[0].field` — before the two entry rules below, which would
+              // otherwise take `l[0]` and leave `.field` unparsed.
+              expressionEntryMemberChain() |
               expressionObjectEntryFunctionInvocation() |
               expressionVariableEntryAccess() |
               expressionGetterAccess() |
@@ -2077,10 +2080,49 @@ class DartGrammarDefinition extends DartGrammarLexer {
             return ASTExpressionBitwiseNot(exp);
           });
 
+  /// A parenthesized expression — or a **record literal**, which is spelled
+  /// the same way plus a comma or a field name: `(1, 2)`, `(1,)`,
+  /// `(x: 1, y: 2)`. One rule for both, so every rule that takes a group
+  /// (`(e).m()`, `(e).field`) takes a record too (`(1, 2).$1`), and a
+  /// parenthesized expression is still parsed only once.
   Parser<ASTExpression> expressionGroup() =>
-      (char('(').trimHidden() & ref0(expression) & char(')').trimHidden()).map(
-        (v) => v[1] as ASTExpression,
-      );
+      (char('(').trimHidden() &
+              ref0(recordLiteralField) &
+              (char(',').trimHidden() & ref0(recordLiteralField)).star() &
+              char(',').trimHidden().optional() &
+              char(')').trimHidden())
+          .where((v) {
+            var first = v[1] as ASTRecordLiteralField;
+            var rest = v[2] as List;
+            // A plain group is a single unnamed expression: allow it. Any
+            // record must have unique field names.
+            if (rest.isEmpty && v[3] == null && first.name == null) return true;
+            var names = <String>{};
+            for (var f in [first, for (var e in rest) e[1]]) {
+              var name = (f as ASTRecordLiteralField).name;
+              if (name != null && !names.add(name)) return false;
+            }
+            return true;
+          })
+          .map((v) {
+            var first = v[1] as ASTRecordLiteralField;
+            var rest = v[2] as List;
+            if (rest.isEmpty && v[3] == null && first.name == null) {
+              return first.value;
+            }
+            return ASTExpressionRecordLiteral([
+              first,
+              for (var e in rest) e[1] as ASTRecordLiteralField,
+            ]);
+          });
+
+  /// A record literal field: `name: expr` or a positional `expr`.
+  Parser<ASTRecordLiteralField> recordLiteralField() =>
+      ((identifier() & char(':').trimHidden() & ref0(expression)).map(
+                (v) => (name: v[0] as String, value: v[2] as ASTExpression),
+              ) |
+              ref0(expression).map((e) => (name: null as String?, value: e)))
+          .cast<ASTRecordLiteralField>();
 
   Parser<ASTExpressionGroupFunctionInvocation>
   expressionGroupFunctionInvocation() =>
@@ -2330,6 +2372,65 @@ class DartGrammarDefinition extends DartGrammarLexer {
             )..namedArguments = named;
           });
 
+  /// A member chain on an index access whose first segment is a field:
+  /// `l[0].x`, `pairs[i].$2`, `m['k'].name.length`.
+  ///
+  /// A *call* first (`l[0].m()`) is left to
+  /// [expressionObjectEntryFunctionInvocation], so that form keeps its AST.
+  Parser<ASTExpression> expressionEntryMemberChain() =>
+      (ref0(expressionVariableEntryAccess) & ref0(memberChainSegment).plus())
+          .where((v) {
+            var first =
+                (v[1] as List).first
+                    as ({
+                      bool assertReceiver,
+                      bool isNullAware,
+                      String name,
+                      ({
+                        List<ASTExpression> positional,
+                        Map<String, ASTExpression>? named,
+                      })?
+                      args,
+                    });
+            return first.args == null;
+          })
+          .map((v) {
+            var current = v[0] as ASTExpression;
+            for (var seg in (v[1] as List)) {
+              var s =
+                  seg
+                      as ({
+                        bool assertReceiver,
+                        bool isNullAware,
+                        String name,
+                        ({
+                          List<ASTExpression> positional,
+                          Map<String, ASTExpression>? named,
+                        })?
+                        args,
+                      });
+              var variable = ASTExpressionVariable(current);
+              var args = s.args;
+              current = args != null
+                  ? (ASTExpressionObjectFunctionInvocation(
+                      variable,
+                      s.name,
+                      args.positional,
+                      null,
+                      s.isNullAware,
+                      s.assertReceiver,
+                    )..namedArguments = args.named)
+                  : ASTExpressionObjectGetterAccess(
+                      variable,
+                      s.name,
+                      null,
+                      s.isNullAware,
+                      s.assertReceiver,
+                    );
+            }
+            return current;
+          });
+
   /// One segment of a member-access chain: an optional `!` asserting the
   /// *preceding* value, the `.` or `?.` accessor, the member name, and — when
   /// it is a method call — its argument list.
@@ -2502,7 +2603,7 @@ class DartGrammarDefinition extends DartGrammarLexer {
           });
 
   Parser<ASTExpressionListLiteral> expressionListEmptyLiteral() =>
-      ((char('<').trimHidden() & simpleType() & char('>').trimHidden())
+      ((char('<').trimHidden() & simpleOrRecordType() & char('>').trimHidden())
                   .optional() &
               char('[').trimHidden() &
               char(']').trimHidden())
@@ -2512,7 +2613,7 @@ class DartGrammarDefinition extends DartGrammarLexer {
           });
 
   Parser<ASTExpressionListLiteral> expressionListLiteral() =>
-      ((char('<').trimHidden() & simpleType() & char('>').trimHidden())
+      ((char('<').trimHidden() & simpleOrRecordType() & char('>').trimHidden())
                   .optional() &
               char('[').trimHidden() &
               ref0(expression) &
@@ -2547,9 +2648,9 @@ class DartGrammarDefinition extends DartGrammarLexer {
 
   Parser<ASTExpressionMapLiteral> expressionMapEmptyLiteral() =>
       ((char('<').trimHidden() &
-                      simpleType() &
+                      simpleOrRecordType() &
                       char(',').trimHidden() &
-                      simpleType() &
+                      simpleOrRecordType() &
                       char('>').trimHidden())
                   .optional() &
               char('{').trimHidden() &
@@ -2566,9 +2667,9 @@ class DartGrammarDefinition extends DartGrammarLexer {
 
   Parser<ASTExpressionMapLiteral> expressionMapLiteral() =>
       ((char('<').trimHidden() &
-                      simpleType() &
+                      simpleOrRecordType() &
                       char(',').trimHidden() &
-                      simpleType() &
+                      simpleOrRecordType() &
                       char('>').trimHidden())
                   .optional() &
               char('{').trimHidden() &
@@ -2603,7 +2704,7 @@ class DartGrammarDefinition extends DartGrammarLexer {
   /// as in Dart, so `<int>{}` is the only way to write an empty set.
   Parser<ASTExpressionSetLiteral> expressionSetEmptyLiteral() =>
       (char('<').trimHidden() &
-              simpleType() &
+              simpleOrRecordType() &
               char('>').trimHidden() &
               char('{').trimHidden() &
               char('}').trimHidden())
@@ -2614,7 +2715,7 @@ class DartGrammarDefinition extends DartGrammarLexer {
   /// Tried after the map rules, which claim `{}` and any `key: value` body, so
   /// what reaches here is a braced list of plain expressions.
   Parser<ASTExpressionSetLiteral> expressionSetLiteral() =>
-      ((char('<').trimHidden() & simpleType() & char('>').trimHidden())
+      ((char('<').trimHidden() & simpleOrRecordType() & char('>').trimHidden())
                   .optional() &
               char('{').trimHidden() &
               ref0(expression) &
@@ -2945,7 +3046,8 @@ class DartGrammarDefinition extends DartGrammarLexer {
   /// Any type except a function type (used as the return type of a function
   /// type, and as the fallback when there is no trailing `Function(...)`).
   Parser<ASTType> typeNonFunction() =>
-      (futureTyped() |
+      (recordType() |
+              futureTyped() |
               arrayTyped() |
               arrayTypeDynamic() |
               mapTyped() |
@@ -3003,6 +3105,75 @@ class DartGrammarDefinition extends DartGrammarLexer {
   Parser<ASTType> functionTypeParameter() =>
       (ref0(type) & identifier().trim().optional()).map((v) => v[0] as ASTType);
 
+  /// A record type: `(int, String)`, `(int,)`, `({int x, int y})`,
+  /// `(int, {String name})`. A positional field may carry a name, which is
+  /// documentation only (`(int x, int y)`). A single positional field needs
+  /// the trailing comma — `(int)` is not a record type.
+  Parser<ASTTypeRecord> recordType() =>
+      (char('(').trimHidden() &
+              (ref0(recordTypeNamedFields)
+                      .map((named) => (positional: <ASTType>[], named: named)) |
+                  (ref0(recordTypePositionalField) &
+                          (char(',').trimHidden() &
+                                  ref0(recordTypePositionalField))
+                              .star() &
+                          (char(',').trimHidden() &
+                                  ref0(recordTypeNamedFields).optional())
+                              .optional())
+                      .where((v) {
+                        // `(int)` is a parenthesized type, not a record.
+                        return (v[1] as List).isNotEmpty || v[2] != null;
+                      })
+                      .map(
+                        (v) => (
+                          positional: <ASTType>[
+                            v[0] as ASTType,
+                            for (var e in v[1] as List) e[1] as ASTType,
+                          ],
+                          named:
+                              (v[2] as List?)?[1] as Map<String, ASTType>? ??
+                              <String, ASTType>{},
+                        ),
+                      )) &
+              char(')').trimHidden())
+          .map((v) {
+            var fields =
+                v[1]
+                    as ({List<ASTType> positional, Map<String, ASTType> named});
+            return ASTTypeRecord(fields.positional, fields.named);
+          });
+
+  /// A positional record type field: a type, with an optional name.
+  Parser<ASTType> recordTypePositionalField() =>
+      (ref0(type) & identifier().optional()).map((v) => v[0] as ASTType);
+
+  /// The `{T name, …}` section of a record type.
+  Parser<Map<String, ASTType>> recordTypeNamedFields() =>
+      (char('{').trimHidden() &
+              ref0(recordTypeNamedField) &
+              (char(',').trimHidden() & ref0(recordTypeNamedField)).star() &
+              char(',').trimHidden().optional() &
+              char('}').trimHidden())
+          .where((v) {
+            var names = [
+              (v[1] as (String, ASTType)).$1,
+              for (var e in v[2] as List) (e[1] as (String, ASTType)).$1,
+            ];
+            return names.toSet().length == names.length;
+          })
+          .map(
+            (v) => {
+              for (var f in [
+                v[1] as (String, ASTType),
+                for (var e in v[2] as List) e[1] as (String, ASTType),
+              ])
+                f.$1: f.$2,
+            },
+          );
+
+  Parser<(String, ASTType)> recordTypeNamedField() =>
+      (ref0(type) & identifier()).map((v) => (v[1] as String, v[0] as ASTType));
+
   Parser<ASTTypeFuture> futureTyped() =>
       (string('Future') &
               char('<').trimHidden() &
@@ -3042,8 +3213,13 @@ class DartGrammarDefinition extends DartGrammarLexer {
   Parser<ASTTypeArray> arrayTyped() =>
       (array3DTyped() | array2DTyped() | array1DTyped()).cast<ASTTypeArray>();
 
+  /// A simple type or a record type: what a collection type argument may be
+  /// (`List<(int, int)>`, `<(int, String)>[]`).
+  Parser<ASTType> simpleOrRecordType() =>
+      (ref0(recordType) | simpleType()).cast<ASTType>();
+
   Parser<ASTTypeArray> array1DTyped() =>
-      (string('List') & char('<') & simpleType() & char('>')).map((v) {
+      (string('List') & char('<') & simpleOrRecordType() & char('>')).map((v) {
         var t = v[2] as ASTType;
         return ASTTypeArray(t);
       });
@@ -3106,9 +3282,9 @@ class DartGrammarDefinition extends DartGrammarLexer {
   Parser<ASTTypeMap> mapTyped() =>
       (string('Map') &
               char('<').trim() &
-              (arrayTyped() | simpleType()).cast<ASTType>() &
+              (arrayTyped() | simpleOrRecordType()).cast<ASTType>() &
               char(',').trim() &
-              (arrayTyped() | simpleType()).cast<ASTType>() &
+              (arrayTyped() | simpleOrRecordType()).cast<ASTType>() &
               char('>').trim())
           .map((v) {
             var key = v[2] as ASTType;
@@ -3128,7 +3304,8 @@ class DartGrammarDefinition extends DartGrammarLexer {
   Parser<ASTTypeSet> setTyped() =>
       (_setTypeName() &
               char('<').trim() &
-              (arrayTyped() | mapTyped() | simpleType()).cast<ASTType>() &
+              (arrayTyped() | mapTyped() | simpleOrRecordType())
+                  .cast<ASTType>() &
               char('>').trim())
           .map((v) => ASTTypeSet(v[2] as ASTType));
 

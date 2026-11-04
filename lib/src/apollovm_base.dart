@@ -61,7 +61,7 @@ import 'resolution/symbol_table.dart';
 /// The Apollo VM.
 class ApolloVM implements VMTypeResolver {
   // ignore: non_constant_identifier_names
-  static final String VERSION = '2.33.1';
+  static final String VERSION = '2.34.0';
 
   static int _idCount = 0;
 
@@ -1297,6 +1297,29 @@ sealed class VMContext {
 
   final Map<String, ASTTypedVariable> _variables = {};
 
+  VMContext? _scopeParent;
+  bool _hasScopeParent = false;
+
+  /// Where a variable (or `this`) lookup continues after this context: its
+  /// **lexical** parent.
+  ///
+  /// Defaults to [parent], which is the lexical parent for a nested block, a
+  /// loop body or a closure. A call is different: [parent] is the *caller*,
+  /// which is right for services found by walking up (the import manager, the
+  /// external function mapper, the type resolver), but not for names — a
+  /// function must see the scope it was *declared* in, not its caller's
+  /// locals. So a top-level function's context points this at its module's
+  /// context (where the top-level variables live), and a class context at
+  /// the module of the class.
+  ///
+  /// Set to `null` to end the lexical chain here.
+  VMContext? get scopeParent => _hasScopeParent ? _scopeParent : parent;
+
+  set scopeParent(VMContext? scopeParent) {
+    _scopeParent = scopeParent;
+    _hasScopeParent = true;
+  }
+
   /// Returns an [ASTVariable] of [name] in this context.
   ///
   /// - [allowClassFields] if true allows class fields.
@@ -1325,13 +1348,13 @@ sealed class VMContext {
             if (v != null) {
               return ASTRuntimeVariable(v.type, name, v);
             }
-            return parent?.getVariable(name, allowClassFields);
+            return scopeParent?.getVariable(name, allowClassFields);
           });
         }
       }
     }
 
-    return parent?.getVariable(name, allowClassFields);
+    return scopeParent?.getVariable(name, allowClassFields);
   }
 
   /// Sets an already declared variable of [name] with [value] in this context.
@@ -1378,8 +1401,9 @@ sealed class VMContext {
 
   /// The visible object class instance from this context.
   ///
-  /// If [parent] is defined, will also look in the parent context.
-  ASTValue? getClassInstance() => parent?.getClassInstance();
+  /// Looks up the lexical chain ([scopeParent]): `this` inside a top-level
+  /// function is not its caller's `this`.
+  ASTValue? getClassInstance() => scopeParent?.getClassInstance();
 
   /// Returns a getter of [name].
   ///

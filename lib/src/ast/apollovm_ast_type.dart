@@ -183,6 +183,8 @@ class ASTType<V> with ASTNode implements ASTTypedNode {
           : ASTTypeSet(ASTType.from(genericType));
     }
 
+    if (o is VMRecord) return o.type;
+
     if (o.runtimeType == Object) return ASTTypeObject.instance;
 
     return ASTTypeDynamic.instance;
@@ -1639,6 +1641,133 @@ class ASTTypeSet<T extends ASTType<V>, V> extends ASTType<Set<V>> {
   ASTValueSet<T, V>? toASTValue(Object? value) {
     if (value == null) return null;
     return _toASTValueSet(value);
+  }
+}
+
+/// [ASTType] for a Dart **record**: `(int, String)`, `({int x, int y})`,
+/// `(int, {String name})`.
+///
+/// A record type is structural. Two record types are the same type when
+/// they have the same *shape* — the same number of positional fields and
+/// the same set of named fields — and their field types match. One accepts
+/// another of the same shape whose every field it accepts (`(num, num)`
+/// accepts `(int, double)`). Named fields are kept sorted by name, since
+/// their order is not part of the type.
+class ASTTypeRecord extends ASTType<VMRecord> {
+  /// The types of the positional fields, `$1`, `$2`, …, in order.
+  final List<ASTType> positionalTypes;
+
+  /// The types of the named fields, sorted by name.
+  final Map<String, ASTType> namedTypes;
+
+  ASTTypeRecord(
+    List<ASTType> positionalTypes, [
+    Map<String, ASTType>? namedTypes,
+  ]) : positionalTypes = List.unmodifiable(positionalTypes),
+       namedTypes = Map.unmodifiable({
+         for (var name in (namedTypes?.keys.toList() ?? <String>[])..sort())
+           name: namedTypes![name]!,
+       }),
+       super('Record');
+
+  @override
+  ASTType cloneType() => ASTTypeRecord(positionalTypes, namedTypes);
+
+  @override
+  Iterable<ASTNode> get children => [...positionalTypes, ...namedTypes.values];
+
+  /// The type of the field [name] — `$1`, `$2`, … or a named field — or
+  /// `null` when this record type has no such field.
+  ASTType? fieldType(String name) {
+    var index = VMRecord.positionalIndexOf(name);
+    if (index != null) {
+      return index < positionalTypes.length ? positionalTypes[index] : null;
+    }
+    return namedTypes[name];
+  }
+
+  /// Whether [other] has the same shape: as many positional fields, and the
+  /// same named fields.
+  bool sameShape(ASTTypeRecord other) =>
+      positionalTypes.length == other.positionalTypes.length &&
+      namedTypes.length == other.namedTypes.length &&
+      namedTypes.keys.every(other.namedTypes.containsKey);
+
+  @override
+  bool acceptsType(ASTType type) {
+    if (identical(type, this)) return true;
+    if (type is ASTTypeNull) return nullable;
+    if (type is! ASTTypeRecord) {
+      return type == ASTTypeGenericWildcard.instance;
+    }
+    if (!sameShape(type)) return false;
+
+    for (var i = 0; i < positionalTypes.length; ++i) {
+      if (!_acceptsField(positionalTypes[i], type.positionalTypes[i])) {
+        return false;
+      }
+    }
+    for (var e in namedTypes.entries) {
+      if (!_acceptsField(e.value, type.namedTypes[e.key]!)) return false;
+    }
+    return true;
+  }
+
+  @override
+  FutureOr<ASTValue<VMRecord>?> toValue(VMContext context, Object? v) {
+    if (v is ASTValue) {
+      if (v is ASTValueStatic && v.value is VMRecord) {
+        return v as ASTValue<VMRecord>;
+      }
+      return v.getValue(context).resolveMapped(toASTValue);
+    }
+    return toASTValue(v);
+  }
+
+  /// The record [value] as an [ASTValue], or `null` when it isn't a record
+  /// (a `null` for a nullable record type).
+  @override
+  ASTValue<VMRecord>? toASTValue(Object? value) =>
+      value is VMRecord ? ASTValueStatic<VMRecord>(value.type, value) : null;
+
+  static bool _acceptsField(ASTType slot, ASTType value) =>
+      slot is ASTTypeDynamic ||
+      slot is ASTTypeVar ||
+      value is ASTTypeDynamic ||
+      slot.acceptsAssignment(value);
+
+  static final ListEquality<ASTType> _typesEquality = ListEquality();
+  static final MapEquality<String, ASTType> _namedEquality = MapEquality();
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ASTTypeRecord &&
+          nullable == other.nullable &&
+          _typesEquality.equals(positionalTypes, other.positionalTypes) &&
+          _namedEquality.equals(namedTypes, other.namedTypes);
+
+  @override
+  int get hashCode =>
+      _typesEquality.hash(positionalTypes) ^
+      _namedEquality.hash(namedTypes) ^
+      (nullable ? 0x40000000 : 0);
+
+  @override
+  String toString() {
+    var s = StringBuffer('(');
+    s.write(positionalTypes.join(', '));
+    if (namedTypes.isNotEmpty) {
+      if (positionalTypes.isNotEmpty) s.write(', ');
+      s.write('{');
+      s.write(namedTypes.entries.map((e) => '${e.value} ${e.key}').join(', '));
+      s.write('}');
+    } else if (positionalTypes.length == 1) {
+      s.write(',');
+    }
+    s.write(')');
+    if (nullable) s.write('?');
+    return s.toString();
   }
 }
 

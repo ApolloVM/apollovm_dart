@@ -245,6 +245,22 @@ abstract class ApolloCodeGenerator
       }
     }
 
+    void writeStatements() {
+      for (var stm in block.statements) {
+        generateASTStatement(stm, out: out!, indent: indent2);
+        out.write('\n');
+      }
+    }
+
+    // A module's statements are its top-level variables, and they go first:
+    // a language that binds names in order (a Lua `local`) must declare one
+    // before the functions that use it.
+    var isRoot = block is ASTRoot;
+    if (isRoot && block.statements.isNotEmpty) {
+      writeStatements();
+      out.write('\n');
+    }
+
     // Local function declarations are kept as statements (and emitted in the
     // statements loop below). Executing the block also registers them in
     // `block.functions` for resolution, so skip those here to avoid emitting
@@ -277,10 +293,7 @@ abstract class ApolloCodeGenerator
       }
     }
 
-    for (var stm in block.statements) {
-      generateASTStatement(stm, out: out, indent: indent2);
-      out.write('\n');
-    }
+    if (!isRoot) writeStatements();
 
     if (withBrackets) out.write('$indent}\n');
 
@@ -521,7 +534,9 @@ abstract class ApolloCodeGenerator
   }) {
     out ??= newOutput();
 
-    if (type is ASTTypeArray) {
+    if (type is ASTTypeRecord) {
+      generateASTTypeRecord(type, out: out, indent: indent);
+    } else if (type is ASTTypeArray) {
       generateASTTypeArray(type, out: out, indent: indent);
     } else if (type is ASTTypeArray2D) {
       generateASTTypeArray2D(type, out: out, indent: indent);
@@ -540,6 +555,32 @@ abstract class ApolloCodeGenerator
     }
 
     return out;
+  }
+
+  /// Renders a record type. Only Dart has records; every other target refuses
+  /// rather than lower one to a tuple, a list or an object with a different
+  /// equality.
+  StringBuffer generateASTTypeRecord(
+    ASTTypeRecord type, {
+    StringBuffer? out,
+    String indent = '',
+  }) {
+    throw UnsupportedSyntaxError(
+      "Language '$language' has no record type: $type",
+    );
+  }
+
+  /// Emits a record literal. Only Dart has records — see
+  /// [generateASTTypeRecord].
+  StringBuffer generateASTExpressionRecordLiteral(
+    ASTExpressionRecordLiteral expression, {
+    StringBuffer? out,
+    String indent = '',
+    bool headIndented = true,
+  }) {
+    throw UnsupportedSyntaxError(
+      "Language '$language' has no record literal: $expression",
+    );
   }
 
   /// Renders a function type. The default drops the signature generics and
@@ -1710,6 +1751,13 @@ abstract class ApolloCodeGenerator
       );
     } else if (expression is ASTExpressionNullAssertion) {
       return generateASTExpressionNullAssertion(
+        expression,
+        out: out,
+        indent: indent,
+        headIndented: headIndented,
+      );
+    } else if (expression is ASTExpressionRecordLiteral) {
+      return generateASTExpressionRecordLiteral(
         expression,
         out: out,
         indent: indent,
