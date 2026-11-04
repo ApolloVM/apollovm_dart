@@ -9814,6 +9814,13 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
         out: out,
         context: context,
       );
+    } else if (expression is ASTExpressionTypeTest ||
+        expression is ASTExpressionTypeCast) {
+      // Needs runtime type information on heap objects, which compiled
+      // instances don't carry yet.
+      throw UnsupportedSyntaxError(
+        "Language 'wasm' can't compile the type test/cast `$expression` yet.",
+      );
     }
 
     throw UnsupportedError("Can't generate expression: $expression");

@@ -169,6 +169,35 @@ final List<ASTNodeCodec> expressionCodecs = [
     decode: (r) => ASTExpressionNullAssertion(r.node<ASTExpression>()),
   ),
 
+  // --- Type tests -----------------------------------------------------------
+  ASTNodeCodec<ASTExpressionTypeTest>(
+    ASTNodeTag.expressionTypeTest,
+    'ASTExpressionTypeTest',
+    encode: (w, n) {
+      w.node(n.expression);
+      w.type(n.type);
+      w.boolean(n.negated);
+    },
+    decode: (r) {
+      var expression = r.node<ASTExpression>();
+      var type = r.type();
+      return ASTExpressionTypeTest(expression, type, negated: r.boolean());
+    },
+  ),
+
+  ASTNodeCodec<ASTExpressionTypeCast>(
+    ASTNodeTag.expressionTypeCast,
+    'ASTExpressionTypeCast',
+    encode: (w, n) {
+      w.node(n.expression);
+      w.type(n.type);
+    },
+    decode: (r) {
+      var expression = r.node<ASTExpression>();
+      return ASTExpressionTypeCast(expression, r.type());
+    },
+  ),
+
   ASTNodeCodec<ASTExpressionNullCoalesce>(
     ASTNodeTag.expressionNullCoalesce,
     'ASTExpressionNullCoalesce',

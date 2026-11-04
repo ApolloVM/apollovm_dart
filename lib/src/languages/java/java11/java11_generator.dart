@@ -17,6 +17,37 @@ class ApolloCodeGeneratorJava11 extends ApolloCodeGenerator {
   ApolloCodeGeneratorJava11(ApolloSourceCodeStorage codeStorage)
     : super('java11', codeStorage);
 
+  /// `instanceof` takes a reference type without type arguments: the boxed
+  /// form of a primitive, the raw form of a generic.
+  String? _instanceofTypeName(ASTType type) {
+    if (type.nullable) return null;
+    if (type is ASTTypeInt) return 'Integer';
+    if (type is ASTTypeDouble) return 'Double';
+    if (type is ASTTypeNum) return 'Number';
+    if (type is ASTTypeBool) return 'Boolean';
+    if (type is ASTTypeString) return 'String';
+    if (type is ASTTypeArray) return 'List';
+    if (type is ASTTypeMap) return 'Map';
+    if (type is ASTTypeSet) return 'Set';
+    if (isClassType(type)) return type.name;
+    return null;
+  }
+
+  @override
+  String? typeTestCode(String operand, ASTType type, {required bool negated}) {
+    var name = _instanceofTypeName(type);
+    if (name == null) return null;
+    var test = '$operand instanceof $name';
+    return negated ? '!($test)' : test;
+  }
+
+  @override
+  String? typeCastCode(String operand, ASTType type) {
+    if (_instanceofTypeName(type) == null) return null;
+    // No outer parentheses: a parent groups the cast (it is complex).
+    return '(${generateASTType(type)}) $operand';
+  }
+
   @override
   StringBuffer generateASTExpressionLiteralFunction(
     ASTExpressionLiteralFunction expression, {

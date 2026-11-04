@@ -1367,6 +1367,129 @@ class ASTExpressionNullAssertion extends ASTExpression {
   }
 }
 
+/// [ASTExpression] for a **type test**: `expr is T`, or `expr is! T` when
+/// [negated].
+///
+/// True when the value's runtime type is [type] or a subtype — a subclass or
+/// an implementer included. `null` passes only a nullable [type] (`int?`) or
+/// one that accepts `Null` (`dynamic`), as in Dart.
+class ASTExpressionTypeTest extends ASTExpression {
+  ASTExpression expression;
+
+  ASTType type;
+
+  final bool negated;
+
+  ASTExpressionTypeTest(this.expression, this.type, {this.negated = false});
+
+  /// A binary-like form: a parent groups it (`(a is B) == c`).
+  @override
+  bool get isComplex => true;
+
+  @override
+  Iterable<ASTNode> get children => [expression, type];
+
+  @override
+  void resolveNode(ASTNode? parentNode) {
+    super.resolveNode(parentNode);
+    expression.resolveNode(this);
+    type.resolveNode(this);
+  }
+
+  @override
+  ASTType resolveType(VMContext? context) => ASTTypeBool.instance;
+
+  @override
+  FutureOr<ASTValue> run(VMContext parentContext, ASTRunStatus runStatus) {
+    var context = defineRunContext(parentContext);
+    return expression.run(context, runStatus).resolveMapped((value) {
+      return _isInstance(context, value, type).resolveMapped((ok) {
+        return ASTValueBool(negated ? !ok : ok);
+      });
+    });
+  }
+
+  @override
+  String toString({bool asGroup = false}) {
+    var s = '$expression ${negated ? 'is!' : 'is'} $type';
+    return asGroup ? '($s)' : s;
+  }
+}
+
+/// [ASTExpression] for a **type cast**: `expr as T`.
+///
+/// Evaluates to the value unchanged when it is an instance of [type] (see
+/// [ASTExpressionTypeTest]); otherwise throws [ApolloVMCastException], as a
+/// failed Dart cast throws.
+class ASTExpressionTypeCast extends ASTExpression {
+  ASTExpression expression;
+
+  ASTType type;
+
+  ASTExpressionTypeCast(this.expression, this.type);
+
+  /// A parent groups it: `(a as B).m()`.
+  @override
+  bool get isComplex => true;
+
+  @override
+  Iterable<ASTNode> get children => [expression, type];
+
+  @override
+  void resolveNode(ASTNode? parentNode) {
+    super.resolveNode(parentNode);
+    expression.resolveNode(this);
+    type.resolveNode(this);
+  }
+
+  @override
+  FutureOr<ASTType> resolveType(VMContext? context) =>
+      type.resolveType(context);
+
+  @override
+  FutureOr<ASTValue> run(VMContext parentContext, ASTRunStatus runStatus) {
+    var context = defineRunContext(parentContext);
+    return expression.run(context, runStatus).resolveMapped((value) {
+      return _isInstance(context, value, type).resolveMapped((ok) {
+        if (ok) return value;
+        return value.resolveType(context).resolveMapped((valueType) {
+          throw ApolloVMCastException(
+            "Type '$valueType' is not a subtype of type '$type' in type cast.",
+          );
+        });
+      });
+    });
+  }
+
+  @override
+  String toString({bool asGroup = false}) {
+    var s = '$expression as $type';
+    return asGroup ? '($s)' : s;
+  }
+}
+
+/// Whether [value] is an instance of [type] at run time, resolving [type]
+/// first (an alias, a generic parameter).
+///
+/// Stricter than assignability in two ways, as Dart's `is` is: `null` is an
+/// instance only of a nullable type (`null is Object` is false), and an `int`
+/// is not a `double` — the int-to-double rule is for literals, not a runtime
+/// relation.
+FutureOr<bool> _isInstance(VMContext context, ASTValue value, ASTType type) {
+  return type.resolveType(context).resolveMapped((resolved) {
+    return _astValueIsNull(context, value).resolveMapped((isNull) {
+      if (isNull) {
+        return resolved.nullable ||
+            resolved is ASTTypeDynamic ||
+            resolved is ASTTypeVar ||
+            resolved is ASTTypeNull;
+      }
+      if (resolved is ASTTypeDouble && value is ASTValueInt) return false;
+      return value.isInstanceOfAsync(resolved);
+    });
+  });
+}
+
 /// [ASTExpression] for the null-coalescing operation `a ?? b`.
 ///
 /// [expression2] is evaluated only when [expression1] resolves to `null`, so

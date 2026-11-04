@@ -1715,6 +1715,20 @@ abstract class ApolloCodeGenerator
         indent: indent,
         headIndented: headIndented,
       );
+    } else if (expression is ASTExpressionTypeTest) {
+      return generateASTExpressionTypeTest(
+        expression,
+        out: out,
+        indent: indent,
+        headIndented: headIndented,
+      );
+    } else if (expression is ASTExpressionTypeCast) {
+      return generateASTExpressionTypeCast(
+        expression,
+        out: out,
+        indent: indent,
+        headIndented: headIndented,
+      );
     } else if (expression is ASTExpressionCascade) {
       return generateASTExpressionCascade(
         expression,
@@ -2463,6 +2477,122 @@ abstract class ApolloCodeGenerator
     }
 
     out.write(renderNullAwareGuard(receiver, guarded));
+    return out;
+  }
+
+  /// How this target writes the type test of [operand] (already generated, and
+  /// parenthesized when complex) against [type] — `is`, `instanceof`,
+  /// `isinstance`, … — or `null` when it can't express it. [negated] is
+  /// `is!`.
+  String? typeTestCode(String operand, ASTType type, {required bool negated}) =>
+      null;
+
+  /// How this target writes the cast of [operand] to [type], or `null` when it
+  /// can't express it.
+  String? typeCastCode(String operand, ASTType type) => null;
+
+  /// Whether [type] names a user class or interface (`A`, `Box<int>`) rather
+  /// than a built-in type. Spelled out instead of read from `runtimeType`,
+  /// whose names are minified on the web.
+  bool isClassType(ASTType type) =>
+      !(type is ASTTypePrimitive ||
+          type is ASTTypeObject ||
+          type is ASTTypeConstructorThis ||
+          type is ASTTypeVar ||
+          type is ASTTypeDynamic ||
+          type is ASTTypeNull ||
+          type is ASTTypeVoid ||
+          type is ASTTypeGenericVariable ||
+          type is ASTTypeArray ||
+          type is ASTTypeMap ||
+          type is ASTTypeSet ||
+          type is ASTTypeFuture ||
+          type is ASTTypeFunction);
+
+  /// The JavaScript/TypeScript type test, shared by both: `typeof` for the
+  /// primitives, `Array.isArray` for a list, `instanceof` for a class. A Dart
+  /// map is generated as an object literal, so it is tested as one. `null`
+  /// for a nullable or unmapped type.
+  String? jsTypeTest(String operand, ASTType type, {required bool negated}) {
+    if (type.nullable) return null;
+
+    String? test;
+    if (type is ASTTypeInt) {
+      test = 'Number.isInteger($operand)';
+    } else if (type is ASTTypeNum) {
+      test = "typeof $operand === 'number'";
+    } else if (type is ASTTypeString) {
+      test = "typeof $operand === 'string'";
+    } else if (type is ASTTypeBool) {
+      test = "typeof $operand === 'boolean'";
+    } else if (type is ASTTypeArray) {
+      test = 'Array.isArray($operand)';
+    } else if (type is ASTTypeSet) {
+      test = '$operand instanceof Set';
+    } else if (type is ASTTypeMap) {
+      test =
+          "(typeof $operand === 'object' && $operand !== null && "
+          "!Array.isArray($operand))";
+    } else if (isClassType(type)) {
+      test = '$operand instanceof ${type.name}';
+    }
+
+    if (test == null) return null;
+    return negated ? '!($test)' : test;
+  }
+
+  /// [operand], generated, in parentheses when it is a compound expression.
+  String _typeTestOperand(ASTExpression operand, String indent) {
+    var code = generateASTExpression(
+      operand,
+      indent: indent,
+      headIndented: false,
+    ).toString();
+    return operand.isComplex ? '($code)' : code;
+  }
+
+  StringBuffer generateASTExpressionTypeTest(
+    ASTExpressionTypeTest expression, {
+    StringBuffer? out,
+    String indent = '',
+    bool headIndented = true,
+  }) {
+    out ??= newOutput();
+    if (headIndented) out.write(indent);
+
+    var code = typeTestCode(
+      _typeTestOperand(expression.expression, indent),
+      expression.type,
+      negated: expression.negated,
+    );
+    if (code == null) {
+      throw UnsupportedSyntaxError(
+        "Language '$language' can't generate the type test `$expression` yet.",
+      );
+    }
+    out.write(code);
+    return out;
+  }
+
+  StringBuffer generateASTExpressionTypeCast(
+    ASTExpressionTypeCast expression, {
+    StringBuffer? out,
+    String indent = '',
+    bool headIndented = true,
+  }) {
+    out ??= newOutput();
+    if (headIndented) out.write(indent);
+
+    var code = typeCastCode(
+      _typeTestOperand(expression.expression, indent),
+      expression.type,
+    );
+    if (code == null) {
+      throw UnsupportedSyntaxError(
+        "Language '$language' can't generate the type cast `$expression` yet.",
+      );
+    }
+    out.write(code);
     return out;
   }
 

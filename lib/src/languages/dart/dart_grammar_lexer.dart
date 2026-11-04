@@ -142,6 +142,11 @@ abstract class DartGrammarLexer extends BaseGrammarLexer {
 
   Parser requiredKeyword() => _keywordToken('required');
 
+  // Whole words: `isEmpty` and `asList` are ordinary identifiers.
+  Parser isKeyword() => _keywordToken('is');
+
+  Parser asKeyword() => _keywordToken('as');
+
   Parser setKeyword() => _keywordToken('set');
 
   Parser assertKeyword() => _keywordToken('assert');

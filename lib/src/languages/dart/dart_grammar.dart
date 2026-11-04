@@ -1788,20 +1788,86 @@ class DartGrammarDefinition extends DartGrammarLexer {
 
   Parser<ASTExpression> expressionOperationChain() =>
       (ref0(expressionUnaryPostfix) &
-              (expressionOperator() & ref0(expressionUnaryPostfix)).star())
+              ref0(typeTestSuffix).star() &
+              (expressionOperator() &
+                      ref0(expressionUnaryPostfix) &
+                      ref0(typeTestSuffix).star())
+                  .star())
           .map((v) {
-            var exp1 = v[0];
+            var all = _expandListDeeply(v);
+            if (all.length == 1) return all.single as ASTExpression;
 
-            var rest = v[1] as List;
-            if (rest.isEmpty) {
-              return exp1;
-            }
-
-            var extra = _expandListDeeply(rest);
-            var all = <dynamic>[exp1, ...extra];
-
-            return computeFinalExpression(all);
+            return computeFinalExpression(_foldTypeTestSuffixes(all));
           });
+
+  /// `is T`, `is! T` or `as T` after an operand.
+  ///
+  /// A trailing `?` belongs to the type (`x is int?`) unless it starts a
+  /// conditional: `x is int ? a : b` stays a ternary on `x is int`.
+  Parser<DartTypeTestSuffix> typeTestSuffix() =>
+      (((isKeyword() & char('!').optional()) | asKeyword()) &
+              (functionType() | typeNonFunction()).cast<ASTType>() &
+              (char('?').trimHidden() &
+                      (ref0(expression) & char(':').trimHidden()).not())
+                  .optional())
+          .map((v) {
+            var keyword = v[0];
+            var type = v[1] as ASTType;
+            if (v[2] != null) type = type.asNullable();
+
+            if (keyword is List) {
+              return DartTypeTestSuffix.test(type, negated: keyword[1] != null);
+            }
+            return DartTypeTestSuffix.cast(type);
+          });
+
+  /// The operators that bind tighter than `is`/`as` (Dart's relational
+  /// level): a suffix applies to the whole run of them before it.
+  static const _tighterThanTypeTest = {
+    ASTExpressionOperator.multiply,
+    ASTExpressionOperator.divide,
+    ASTExpressionOperator.divideAsInt,
+    ASTExpressionOperator.divideAsDouble,
+    ASTExpressionOperator.remainder,
+    ASTExpressionOperator.add,
+    ASTExpressionOperator.subtract,
+    ASTExpressionOperator.shiftLeft,
+    ASTExpressionOperator.shiftRight,
+    ASTExpressionOperator.bitwiseAnd,
+    ASTExpressionOperator.bitwiseXor,
+    ASTExpressionOperator.bitwiseOr,
+  };
+
+  /// Replaces each [DartTypeTestSuffix] in an `[expr, op, expr, …]` chain with
+  /// the type test or cast of its left operand, so the precedence reduction
+  /// sees plain operands again.
+  ///
+  /// The left operand is the trailing run of operands joined by operators that
+  /// bind tighter than `is`/`as` — `a + b is int` tests `a + b` — and stops at
+  /// a looser one: `x == y is bool` tests `y`, `x is A && y` tests `x`.
+  List _foldTypeTestSuffixes(List all) {
+    var out = <dynamic>[];
+    for (var e in all) {
+      if (e is! DartTypeTestSuffix) {
+        out.add(e);
+        continue;
+      }
+
+      var start = out.length - 1;
+      while (start >= 2 &&
+          _tighterThanTypeTest.contains(out[start - 1] as Object?)) {
+        start -= 2;
+      }
+
+      var operand = out.sublist(start);
+      out.removeRange(start, out.length);
+      var expression = operand.length == 1
+          ? operand.single as ASTExpression
+          : reduceExpressionBlock(operand);
+      out.add(e.apply(expression));
+    }
+    return out;
+  }
 
   Parser<ASTExpressionOperator> expressionOperator() =>
       (char('+') |
@@ -3140,4 +3206,23 @@ class DartPrimaryConstructor {
   final List<ASTClassField> fields;
 
   DartPrimaryConstructor(this.parameters, this.fields);
+}
+
+/// A parsed `is T` / `is! T` / `as T` suffix, before it knows its operand
+/// (see `DartGrammarDefinition._foldTypeTestSuffixes`).
+class DartTypeTestSuffix {
+  final ASTType type;
+
+  /// `true` for `as T`, `false` for `is T` / `is! T`.
+  final bool isCast;
+
+  final bool negated;
+
+  DartTypeTestSuffix.test(this.type, {this.negated = false}) : isCast = false;
+
+  DartTypeTestSuffix.cast(this.type) : isCast = true, negated = false;
+
+  ASTExpression apply(ASTExpression operand) => isCast
+      ? ASTExpressionTypeCast(operand, type)
+      : ASTExpressionTypeTest(operand, type, negated: negated);
 }

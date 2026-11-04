@@ -302,6 +302,12 @@ class ASTType<V> with ASTNode implements ASTTypedNode {
     if (type is ASTTypeNull) return nullable;
 
     if (name != type.name) {
+      // A class type accepts its subclasses and implementers: `A a = B();`.
+      // Type arguments aren't compared across the hierarchy — a subclass
+      // may map them differently, and generics are erased anyway.
+      var typeClass = type._class;
+      if (typeClass != null && typeClass.isSubtypeOfName(name)) return true;
+
       var typeSuperType = type.superType;
       if (typeSuperType == null) return false;
 

@@ -16,6 +16,14 @@ class ApolloCodeGeneratorKotlin extends ApolloCodeGenerator {
   ApolloCodeGeneratorKotlin(ApolloSourceCodeStorage codeStorage)
     : super('kotlin', codeStorage);
 
+  @override
+  String typeTestCode(String operand, ASTType type, {required bool negated}) =>
+      '$operand ${negated ? '!is' : 'is'} ${generateASTType(type)}';
+
+  @override
+  String typeCastCode(String operand, ASTType type) =>
+      '$operand as ${generateASTType(type)}';
+
   /// Kotlin uses `name = value` for named arguments at call sites.
   @override
   String get namedArgumentSeparator => ' = ';

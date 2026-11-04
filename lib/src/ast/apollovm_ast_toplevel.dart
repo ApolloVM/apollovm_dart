@@ -290,6 +290,32 @@ abstract class ASTClass<T> extends ASTEntryPointBlock {
   /// by [ASTClassNormal] (which carries the `extends` name).
   ASTClass? get superClass => null;
 
+  /// The interfaces this class `implements`, resolved. Overridden by
+  /// [ASTClassNormal].
+  Iterable<ASTClass> get interfaceClasses => const [];
+
+  /// Whether this class is the class or interface named [typeName], or extends
+  /// or implements it — through the whole hierarchy, interfaces of
+  /// superclasses and superinterfaces included.
+  ///
+  /// This is what makes a `B` assignable to an `A` slot, and `b is A` true.
+  bool isSubtypeOfName(String typeName) => _isSubtypeOfName(typeName, {});
+
+  bool _isSubtypeOfName(String typeName, Set<ASTClass> visited) {
+    if (!visited.add(this)) return false;
+    if (name == typeName) return true;
+
+    var superClass = this.superClass;
+    if (superClass != null && superClass._isSubtypeOfName(typeName, visited)) {
+      return true;
+    }
+
+    for (var i in interfaceClasses) {
+      if (i._isSubtypeOfName(typeName, visited)) return true;
+    }
+    return false;
+  }
+
   /// How this class's constructors reach the superclass constructor, per the
   /// language of the module declaring it (see [ASTRoot.language]).
   ASTSuperConstructorPolicy get superConstructorPolicy {
@@ -692,6 +718,25 @@ class ASTClassNormal extends ASTClass<VMObject> {
       }
     }
     return _superClass;
+  }
+
+  List<ASTClass>? _interfaceClasses;
+
+  /// The interfaces named by [implementsTypes] that resolve to a class (via
+  /// the enclosing [ASTRoot]), in declaration order.
+  @override
+  List<ASTClass> get interfaceClasses {
+    var resolved = _interfaceClasses;
+    if (resolved != null) return resolved;
+
+    resolved = [
+      for (var name in [...?implementsTypes])
+        if (name != this.name)
+          if (getNodeIdentifier(name) case ASTClass c) c,
+    ];
+    // Cache only once the class is attached: before that nothing resolves.
+    if (parentNode != null) _interfaceClasses = resolved;
+    return resolved;
   }
 
   @override
@@ -3735,13 +3780,12 @@ class ASTClassConstructorDeclaration<T>
 
   @override
   ASTType resolveType(VMContext? context) {
-    // Languages whose constructor syntax omits the class name (Kotlin/TS
-    // `constructor(...)`) create the declaration with an empty [classType];
-    // fall back to the enclosing class so instantiation resolves the real type.
-    if (classType.name.isEmpty) {
-      var parentClass = this.parentClass;
-      if (parentClass != null) return parentClass.type;
-    }
+    // The enclosing class's own type, which is linked to the class — so the
+    // instantiation's static type knows its hierarchy (`A a = B();`). It also
+    // covers the languages whose constructor syntax omits the class name
+    // (Kotlin/TS `constructor(...)`), which leave [classType] empty.
+    var parentClass = this.parentClass;
+    if (parentClass != null) return parentClass.type;
     return classType;
   }
 
@@ -4006,12 +4050,8 @@ class _InheritedConstructor<T> extends ASTClassConstructorDeclaration<T> {
     ASTClassInstance instance,
     List? positionalParameters,
     Map? namedParameters,
-  ) => target.construct(
-    parent,
-    instance,
-    positionalParameters,
-    namedParameters,
-  );
+  ) =>
+      target.construct(parent, instance, positionalParameters, namedParameters);
 }
 
 /// An AST Class Getter Declaration.
