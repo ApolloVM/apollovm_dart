@@ -298,12 +298,17 @@ class ASTScopeVariable<T> extends ASTVariable {
         // `return value;` for `int get value => …`. Members come before
         // top-level names, as in Dart; a local or parameter of the same name
         // was already found above, so it still shadows the getter.
-        var getter = resolveBareGetter(this, context, name);
+        var getter = _noBareGetter
+            ? null
+            : resolveBareGetter(this, context, name);
         if (getter != null) {
           return _readGetter(context, getter).resolveMapped(
             (value) => ASTRuntimeVariable(getter.returnType, name, value),
           );
         }
+        // The enclosing member doesn't change, so neither does the answer:
+        // a bare static field read in a loop skips the lookup next time.
+        _noBareGetter = true;
 
         // A bare reference to a `static` field of the enclosing class (e.g.
         // `count` inside a `static` method of the class that declares it). The
@@ -330,6 +335,8 @@ class ASTScopeVariable<T> extends ASTVariable {
       return v;
     });
   }
+
+  bool _noBareGetter = false;
 
   /// Runs [getter] for a bare read. A class getter runs against the current
   /// instance, and is looked up again on the instance's own class first: a

@@ -1,3 +1,34 @@
+## 2.33.1
+
+Fixes from a review of 2.33.0.
+
+- **Casts as receivers lost their parentheses in generated code.**
+  `(x as A).v` came out as `x as A.v` in Dart, TypeScript and Kotlin, and as
+  `(A) x.v` in Java and C#. A compound receiver is now always parenthesized,
+  which also fixes `(a + b).field`.
+- **`v++` / `--v` on a bare getter/setter pair was silently lost.** It wrote
+  to a temporary. It now goes through the setter, and with a getter but no
+  setter it is an error.
+- **A super argument could go to the wrong parameter.** This happened when an
+  initializing formal for an inherited field came first:
+  `B(this.x, super.y)` passed `x` as `y`. A formal the superclass constructor
+  has no parameter for is no longer passed to it.
+- **Java, JavaScript, TypeScript: `super(v);` as a constructor's first
+  statement now delegates.** It runs on the same instance and replaces the
+  implicit `super()`, which had been added on top of it and failed with an
+  error about arguments the program never omitted. Java `this(v);` redirects,
+  and Java constructor overloads are resolved by argument signature.
+- **`x as int ?? 5` didn't parse.** The `?` of `??` was read as a nullable
+  type.
+- **JavaScript/TypeScript `x is double` was true for integers.** It is now
+  false, matching the VM: an `int` is not a `double`.
+- **Java `instanceof` on a primitive operand didn't compile.** A test against
+  `Integer`, `Double`, `Number` or `Boolean` now boxes the operand:
+  `((Object) (1 + 2)) instanceof Integer`.
+- **Less repeated work.** The superclass-constructor policy and a missing
+  bare-getter lookup are now cached instead of being recomputed on every
+  instantiation or read.
+
 ## 2.33.0
 
 Four gaps from [`doc/dart_language_gaps.md`](doc/dart_language_gaps.md):

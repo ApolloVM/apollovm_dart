@@ -3037,9 +3037,56 @@ class ASTExpressionVariableDirectOperation extends ASTExpression {
         throw UnsupportedError('operator: $operator');
     }
 
-    await variable.setValue(context, await result);
+    var newValue = await result;
+    if (!await _writeBareAccessor(context, newValue)) {
+      await variable.setValue(context, newValue);
+    }
 
     return preOperation ? result : variableValue;
+  }
+
+  bool _isRealVariable = false;
+
+  /// `v++` on a bare name that is no variable but a class accessor pair: the
+  /// read went through the getter, so the write must go through the setter —
+  /// not into the temporary the getter read produced. Returns `false` when
+  /// [variable] is a real variable, so the ordinary write applies.
+  Future<bool> _writeBareAccessor(VMContext context, ASTValue value) async {
+    var v = variable;
+    if (v is! ASTScopeVariable || _isRealVariable) return false;
+    if (await context.getVariable(v.name, true) != null) {
+      // What a name denotes at a site doesn't change: skip this next time
+      // (`i++` in a loop).
+      _isRealVariable = true;
+      return false;
+    }
+
+    ASTSetterDeclaration? setter;
+    try {
+      setter = context.getSetter(v.name);
+    } on StateError {
+      setter = null;
+    }
+
+    if (setter == null) {
+      if (resolveBareGetter(this, context, v.name) == null) return false;
+      throw ApolloVMRuntimeError(
+        "Can't assign to `${v.name}`: it has a getter but no setter.",
+      );
+    }
+
+    var instance = context.getClassInstance();
+    if (setter is ASTClassSetterDeclaration && instance != null) {
+      // Dispatch on the receiver, as the bare getter read does.
+      if (instance is ASTClassInstance) {
+        var override = instance.clazz.getSetter(v.name, context);
+        if (override is ASTClassSetterDeclaration) setter = override;
+      }
+      await setter.objectCall(context, instance, value);
+    } else {
+      await setter.call(context, value);
+    }
+    return true;
   }
 
   @override

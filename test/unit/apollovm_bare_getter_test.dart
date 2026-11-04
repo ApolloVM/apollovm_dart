@@ -90,6 +90,44 @@ void main() {
       );
     });
 
+    test('`v++` / `v--` go through the setter, not a temporary', () async {
+      expect(
+        await _run(
+          'class A { int _v = 0; int get v => _v; set v(int n) { _v = n; } '
+          'void inc() { v++; } void dec() { --v; } }\n'
+          'int run() { var a = A(); a.inc(); a.inc(); a.inc(); a.dec(); return a.v; }',
+        ),
+        equals(2),
+      );
+    });
+
+    test('`v++` on a getter without a setter is an error', () async {
+      var vm = await _load(
+        'class A { int get v => 1; void inc() { v++; } }\n'
+        'int run() { var a = A(); a.inc(); return 0; }',
+      );
+      await expectLater(
+        _runVM(vm),
+        throwsA(
+          isA<ApolloVMRuntimeError>().having(
+            (e) => e.toString(),
+            'message',
+            contains('no setter'),
+          ),
+        ),
+      );
+    });
+
+    test('`i++` on a local and on a field still works', () async {
+      expect(
+        await _run(
+          'class A { int n = 0; int f() { for (var i = 0; i < 3; i++) { n++; } return n; } }\n'
+          'int run() { var a = A(); return a.f(); }',
+        ),
+        equals(3),
+      );
+    });
+
     test('one extension member reads another', () async {
       expect(
         await _run(

@@ -37,7 +37,13 @@ class ApolloCodeGeneratorJava11 extends ApolloCodeGenerator {
   String? typeTestCode(String operand, ASTType type, {required bool negated}) {
     var name = _instanceofTypeName(type);
     if (name == null) return null;
-    var test = '$operand instanceof $name';
+    // `instanceof` rejects a primitive operand (`(1 + 2) instanceof Integer`),
+    // and the operand's static type isn't known here: box it whenever the
+    // test is against a boxed primitive.
+    var boxed = const {'Integer', 'Double', 'Number', 'Boolean'}.contains(name);
+    var test = boxed
+        ? '((Object) $operand) instanceof $name'
+        : '$operand instanceof $name';
     return negated ? '!($test)' : test;
   }
 

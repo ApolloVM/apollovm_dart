@@ -172,6 +172,19 @@ void main() {
       );
     });
 
+    test('a cast followed by `??`', () async {
+      expect(
+        await _run(
+          'int run() { int? x = null; var y = x as int? ?? 5; return y; }',
+        ),
+        equals(5),
+      );
+      var vm = await _load(
+        'int run() { dynamic x = 3; var y = x as int ?? 5; return y; }',
+      );
+      expect(await _runVM(vm), equals(3));
+    });
+
     test('a cast from dynamic', () async {
       expect(
         await _run('num run() { dynamic x = 2; return x as num; }'),
@@ -225,6 +238,43 @@ void main() {
       expect(await code('python'), contains('isinstance(a, B)'));
       expect(await code('python'), contains('not isinstance(x, str)'));
     });
+
+    test('a cast used as a receiver keeps its parentheses', () async {
+      var vm = await _load(
+        'class H { int f = 7; }\n'
+        'class M { static int run() { Object x = H(); if (x is H) { return (x as H).f; } return 0; } }\n',
+      );
+      Future<String> code(String lang) async =>
+          (await vm.generateAllCodeIn(lang).getNamespaceCodeUnit('', 'test'))!;
+
+      expect(await code('dart'), contains('(x as H).f'));
+      expect(await code('typescript'), contains('(x as H).f'));
+      expect(await code('kotlin'), contains('(x as H).f'));
+      expect(await code('java11'), contains('((H) x).f'));
+      expect(await code('csharp'), contains('((H) x).f'));
+    });
+
+    test(
+      'Java boxes a primitive operand; JS/TS keep int and double apart',
+      () async {
+        var vm = await _load(
+          'class M { static int run() { var a = (1 + 2) is int ? 1 : 0; '
+          'var b = (1 + 2) is double ? 1 : 0; return a + b; } }\n',
+        );
+        Future<String> code(String lang) async => (await vm
+            .generateAllCodeIn(lang)
+            .getNamespaceCodeUnit('', 'test'))!;
+
+        expect(
+          await code('java11'),
+          contains('((Object) (1 + 2)) instanceof Integer'),
+        );
+        expect(
+          await code('javascript'),
+          contains('!Number.isInteger((1 + 2))'),
+        );
+      },
+    );
 
     test('Go, Lua and Wasm refuse instead of dropping the test', () async {
       var vm = await _load(program);

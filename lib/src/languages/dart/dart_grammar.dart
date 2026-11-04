@@ -1807,7 +1807,8 @@ class DartGrammarDefinition extends DartGrammarLexer {
   Parser<DartTypeTestSuffix> typeTestSuffix() =>
       (((isKeyword() & char('!').optional()) | asKeyword()) &
               (functionType() | typeNonFunction()).cast<ASTType>() &
-              (char('?').trimHidden() &
+              // Not the first `?` of `??` (`x as int ?? 5`), nor a ternary's.
+              ((char('?') & char('?').not()).trimHidden() &
                       (ref0(expression) & char(':').trimHidden()).not())
                   .optional())
           .map((v) {
