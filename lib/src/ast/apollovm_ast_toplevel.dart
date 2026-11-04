@@ -290,6 +290,15 @@ abstract class ASTClass<T> extends ASTEntryPointBlock {
   /// by [ASTClassNormal] (which carries the `extends` name).
   ASTClass? get superClass => null;
 
+  /// How this class's constructors reach the superclass constructor, per the
+  /// language of the module declaring it (see [ASTRoot.language]).
+  ASTSuperConstructorPolicy get superConstructorPolicy {
+    for (ASTNode? n = parentNode; n != null; n = n.parentNode) {
+      if (n is ASTRoot) return n.superConstructorPolicy;
+    }
+    return ASTSuperConstructorPolicy.none;
+  }
+
   /// Resolves a function/constructor visible from inside this class. Checks this
   /// class's own functions, then the superclass chain (inherited methods), then
   /// falls back to the enclosing [ASTRoot] (reached via the `parentNode` chain
@@ -765,6 +774,30 @@ class ASTClassNormal extends ASTClass<VMObject> {
     return _defaultConstructor = ctor;
   }
 
+  _InheritedConstructor? _inherited;
+
+  /// The superclass's unnamed constructor, wrapped to build an instance of
+  /// *this* class — for a language that [ASTSuperConstructorPolicy.
+  /// inheritConstructors] — or `null` when this class has nothing to inherit.
+  ASTClassConstructorDeclaration? _inheritedConstructor(VMContext context) {
+    if (superConstructorPolicy !=
+        ASTSuperConstructorPolicy.inheritConstructors) {
+      return null;
+    }
+
+    var superClass = this.superClass;
+    if (superClass is! ASTClassNormal) return null;
+
+    var target = superClass.getConstructor('', null, context);
+    if (target == null) return null;
+
+    var inherited = _inherited;
+    if (inherited != null && identical(inherited.target, target)) {
+      return inherited;
+    }
+    return _inherited = _InheritedConstructor(this, target);
+  }
+
   @override
   ASTClassConstructorDeclaration? getConstructor(
     String fName,
@@ -774,10 +807,14 @@ class ASTClassNormal extends ASTClass<VMObject> {
   }) {
     var set = getConstructorWithName(fName, caseInsensitive: caseInsensitive);
     if (set == null) {
-      // A class with no declared constructor gets an implicit default
-      // (zero-arg) constructor for the unnamed (`''`) constructor — matching
-      // Dart/Java semantics (declaring any constructor suppresses it).
       if (fName.isEmpty && _constructors.isEmpty) {
+        // JS/TS/Python: a subclass without a constructor inherits its
+        // parent's.
+        var inherited = _inheritedConstructor(context);
+        if (inherited != null) return inherited;
+
+        // Otherwise an implicit default (zero-arg) constructor — matching
+        // Dart/Java/C# semantics (declaring any constructor suppresses it).
         return _ensureDefaultConstructor();
       }
       return null;
@@ -1504,8 +1541,47 @@ class ASTExtension extends ASTBlock {
 /// An AST Root.
 ///
 /// A parse of a [CodeUnit] generates an [ASTRoot].
+/// How a subclass constructor reaches its superclass constructor when the
+/// source doesn't spell it out — which differs per language.
+enum ASTSuperConstructorPolicy {
+  /// Dart, Java, C#: a constructor without an explicit `super(…)` / `this(…)`
+  /// calls the superclass's unnamed constructor with no arguments (Dart also
+  /// passes its super parameters); a class without a constructor gets a
+  /// default one that does the same.
+  implicitSuperCall,
+
+  /// JavaScript, TypeScript, Python: a subclass without a constructor
+  /// *inherits* its superclass's, with every argument forwarded. A subclass
+  /// that declares one calls the parent only explicitly (JS/TS require it;
+  /// Python leaves the parent's `__init__` uncalled).
+  inheritConstructors,
+
+  /// No implicit behaviour: Kotlin (the superclass call is mandatory and
+  /// explicit), Go and Lua (no class inheritance), and an AST whose language
+  /// is unknown.
+  none;
+
+  /// The policy of the language a code unit was parsed from.
+  static ASTSuperConstructorPolicy forLanguage(String? language) =>
+      switch (language) {
+        'dart' || 'java' || 'java11' || 'csharp' => implicitSuperCall,
+        'javascript' || 'typescript' || 'python' => inheritConstructors,
+        _ => none,
+      };
+}
+
 class ASTRoot extends ASTEntryPointBlock {
   ASTRoot() : super(null);
+
+  /// The language this AST was parsed from (`'dart'`, `'java11'`, …), or
+  /// `null` when unknown. Set when the root is attached to its [CodeUnit], for
+  /// a parsed unit and a binary image alike; the rules that differ per
+  /// language — such as [superConstructorPolicy] — read it.
+  String? language;
+
+  /// How constructors in this module reach superclass constructors.
+  ASTSuperConstructorPolicy get superConstructorPolicy =>
+      ASTSuperConstructorPolicy.forLanguage(language);
 
   @override
   void resolveNode(ASTNode? parentNode) {
@@ -3426,6 +3502,19 @@ sealed class ASTConstructorInvocationInitializer
       context,
       suppliedParameters,
     );
+
+    // A super parameter the target doesn't declare stays field-only: an
+    // initializing formal for an inherited field (`B(this.x)`, which ApolloVM
+    // reads as `super.x`) must keep working when the superclass constructor
+    // takes no such parameter.
+    var targetParameters = target.parameters;
+    var capacity =
+        (targetParameters.positionalParameters?.length ?? 0) +
+        (targetParameters.optionalParameters?.length ?? 0);
+    if (positional.length > capacity) {
+      positional = positional.sublist(0, capacity);
+    }
+    named.removeWhere((name, _) => target.getParameterByName(name) == null);
     for (var a in arguments) {
       positional.add(await a.run(context, runStatus));
     }
@@ -3436,11 +3525,40 @@ sealed class ASTConstructorInvocationInitializer
       }
     }
 
+    _checkArity(constructor, target, positional, named);
+
     await target.construct(
       callerContext,
       instance,
       positional,
       named.isEmpty ? null : named,
+    );
+  }
+
+  /// The target is picked by name alone, so check that the call satisfies its
+  /// required parameters — above all for the implicit `super()`, which would
+  /// otherwise run a constructor that needs arguments with none.
+  void _checkArity(
+    ASTClassConstructorDeclaration constructor,
+    ASTClassConstructorDeclaration target,
+    List<ASTValue> positional,
+    Map<String, ASTValue> named,
+  ) {
+    var parameters = target.parameters;
+    var required = parameters.positionalParameters?.length ?? 0;
+    var missing = [
+      if (positional.length < required)
+        '${required - positional.length} positional argument(s)',
+      for (var p in [...?parameters.namedParameters])
+        if (p.isRequired && !named.containsKey(p.name)) '`${p.name}:`',
+    ];
+    if (missing.isEmpty) return;
+
+    var implicit = arguments.isEmpty && namedArguments == null;
+    throw ApolloVMRuntimeError(
+      "`$this`${implicit ? ' (implicit)' : ''} in constructor "
+      "`${constructor.signatureName}` doesn't pass ${missing.join(', ')} "
+      "required by `${target.signatureName}`.",
     );
   }
 
@@ -3716,7 +3834,12 @@ class ASTClassConstructorDeclaration<T>
         }
       }
 
-      if (initializers.isNotEmpty) {
+      // The explicit initializers, then — in Dart/Java/C# — the implicit
+      // `super()` when none of them delegates.
+      var implicitSuper = _implicitSuperInitializer(parentClass);
+      var entries = [...initializers, ?implicitSuper];
+
+      if (entries.isNotEmpty) {
         var supplied = _suppliedParameterNames(namedParameters).toSet();
         var passed = positionalParameters?.length ?? 0;
         supplied.addAll(
@@ -3728,7 +3851,7 @@ class ASTClassConstructorDeclaration<T>
 
         if (isRedirecting) _checkRedirect(instance);
         try {
-          for (var initializer in initializers) {
+          for (var initializer in entries) {
             await initializer.initialize(
               this,
               parent,
@@ -3747,6 +3870,32 @@ class ASTClassConstructorDeclaration<T>
       VMContext.setCurrent(prevContext);
     }
   }
+
+  /// The `super()` a constructor makes without writing it, or `null`.
+  ///
+  /// Only in a language with [ASTSuperConstructorPolicy.implicitSuperCall],
+  /// only when the class extends another, and only when no initializer
+  /// already delegates (`super(…)` or a `this(…)` redirect, whose target makes
+  /// the call). It passes no explicit arguments: Dart's super parameters are
+  /// added by [ASTConstructorSuperInitializer] itself.
+  ASTConstructorSuperInitializer? _implicitSuperInitializer(
+    ASTClass parentClass,
+  ) {
+    if (parentClass.superClass is! ASTClassNormal) return null;
+    if (initializers.any((e) => e is ASTConstructorInvocationInitializer)) {
+      return null;
+    }
+    if (parentClass.superConstructorPolicy !=
+        ASTSuperConstructorPolicy.implicitSuperCall) {
+      return null;
+    }
+    return _implicitSuper ??= ASTConstructorSuperInitializer(
+      '',
+      <ASTExpression>[],
+    )..resolveNode(this);
+  }
+
+  ASTConstructorSuperInitializer? _implicitSuper;
 
   /// The redirecting constructors currently running on each instance, to stop
   /// a redirect cycle (`A.a() : this.b(); A.b() : this.a();`) — a compile-time
@@ -3828,6 +3977,41 @@ class ASTClassConstructorDeclaration<T>
     var block = super.toString();
     return '$modifiers $classType.$name($_parameters) $block';
   }
+}
+
+/// A superclass constructor as inherited by a subclass that declares none
+/// (JavaScript, TypeScript, Python — see
+/// [ASTSuperConstructorPolicy.inheritConstructors]).
+///
+/// It takes the superclass constructor's parameters, creates an instance of
+/// the *subclass*, and runs the superclass constructor on it. Synthesized at
+/// run time by [ASTClassNormal.getConstructor] and never registered in the
+/// class's constructors, so no generator or codec ever sees it.
+class _InheritedConstructor<T> extends ASTClassConstructorDeclaration<T> {
+  final ASTClassConstructorDeclaration target;
+
+  _InheritedConstructor(ASTClassNormal clazz, this.target)
+    : super(clazz.type as ASTType<T>, '', target.parameters) {
+    _parentClass = clazz;
+    parentBlock = clazz;
+  }
+
+  /// The parameters belong to [target] and are already resolved there.
+  @override
+  void resolveNode(ASTNode? parentNode) {}
+
+  @override
+  Future<void> construct(
+    VMContext parent,
+    ASTClassInstance instance,
+    List? positionalParameters,
+    Map? namedParameters,
+  ) => target.construct(
+    parent,
+    instance,
+    positionalParameters,
+    namedParameters,
+  );
 }
 
 /// An AST Class Getter Declaration.

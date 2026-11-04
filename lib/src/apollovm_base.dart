@@ -857,8 +857,17 @@ abstract class CodeUnit<T> {
 
   CodeUnit(this.language, this.code, {this.id = '', this.namespace});
 
+  ASTRoot? _root;
+
   /// The [ASTRoot] corresponding to the [code].
-  ASTRoot? root;
+  ASTRoot? get root => _root;
+
+  /// Sets the [ASTRoot], recording this unit's [language] on it (unless the
+  /// root already knows its language).
+  set root(ASTRoot? root) {
+    if (root != null) root.language ??= language;
+    _root = root;
+  }
 
   /// The namespace of this code.
   String? namespace;
