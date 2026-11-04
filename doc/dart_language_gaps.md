@@ -8,8 +8,8 @@ The feature list follows the official
 version by version, plus a second table for core constructs that predate the
 versioned evolution list (Dart 1.x / 2.0 baseline).
 
-- **Measured against:** ApolloVM `2.32.0` (`lib/src/languages/dart/`), Dart SDK `3.13.5`.
-- **Date:** 2026-11-04 (constructor rows; the rest was last probed on 2026-09-09 against `2.31.0`).
+- **Measured against:** ApolloVM `2.33.0` (`lib/src/languages/dart/`), Dart SDK `3.13.5`.
+- **Date:** 2026-11-04 (the constructor, subtyping, type-test and getter rows; the rest was last probed on 2026-09-09 against `2.31.0`).
 - **Method:** every row was probed by loading a minimal source unit through
   `ApolloVM.loadCodeUnit('dart', …)` and, when it parsed, executing it with the
   Dart runner — so a ✅ means *parsed and ran*, not "the grammar mentions it".
@@ -26,7 +26,7 @@ that version, or a static-analysis-only change).
 
 | Dart | Feature | ApolloVM | Notes |
 |:--|:--|:--:|:--|
-| 2.0  | Sound type system (subtyping) | ⚠️ | Declared types are enforced at runtime by **exact match**: `A a = B();` and passing a `B` to an `A` parameter both fail (`Can't cast value type (B) to variable type (A)`). Polymorphism works through `dynamic` and through element types (`List<A> l = [B()]`). |
+| 2.0  | Sound type system (subtyping) | ⚠️ | Runtime type checks follow the class hierarchy: a subclass or implementer goes in a variable, parameter, return value or field of its supertype (`A a = B();`), and a supertype is rejected in a subtype slot. What's missing is the *static* side: there is no compile-time subtype checker, and type arguments aren't compared across a hierarchy (generics are erased). |
 | 2.1  | `int` literal where a `double` is expected | ✅ | `double d = 1;` runs. |
 | 2.2  | Set literals (`{1, 2}`) | ✅ | `{1, 2}`, `<T>{}` and `Set<T>` as a type, with `length` / `contains` / `add` / `remove` / `for-in`; a bare `{}` stays an empty map. Generated for every target (Go and Lua through their idioms); the Wasm backend refuses one. |
 | 2.3  | Spread operator (`...`, `...?`) | ❌ | Not parsed in list or map literals. |
@@ -81,12 +81,12 @@ above, but they are the largest part of the gap.
 | Factory constructors (`factory A.zero()`) | ✅ | Unnamed or named, with a block or `=> expr` body; the body runs like a static method and its returned value is the instance (an existing one included). A factory that returns nothing is a runtime error. *Redirecting* factories (`factory A() = B;`) do not parse. |
 | Constructor initializer lists (`A(int v) : x = v`) | ✅ | `x = v` and `this.x = v` field initializers and `assert(cond[, msg])`, run in order after the initializing formals and before the body. |
 | Redirecting constructors (`A.zero() : this(0)`) | ✅ | `this(…)` and `this.named(…)`; the target runs in full — formals, initializer list and body — on the same instance. Redirecting to a factory is a runtime error. |
-| `super(…)` constructor calls | ⚠️ | An **explicit** `: super(…)` / `: super.named(…)` runs the superclass constructor in full, body included, before the subclass body, through any depth; super parameters are passed along. The **implicit** call Dart makes when a subclass constructor has no `super(…)` is not made: the superclass constructor then does not run (inherited field initializers still apply). It is left out because the AST does not record a class's source language, and Python/JS/TS/Kotlin have no implicit superclass call. |
+| `super(…)` constructor calls | ✅ | An explicit `: super(…)` / `: super.named(…)` runs the superclass constructor in full, body included, before the subclass body, through any depth; super parameters are passed along. Without one, the implicit `super()` is made — from a declared constructor and from the default one. The rule is per language (the AST records the language it was parsed from): Java and C# make the same implicit call, while JS/TS/Python inherit a parent constructor instead (see the README, footnote 13). |
 | `const` constructors / canonicalization | ⚠️ | `const` is parsed and discarded; `const A(1)` builds an ordinary instance, with no compile-time constant evaluation or identity canonicalization. |
 | Mixins (`mixin M { … }`, `class A with M`) | ❌ | Neither the declaration nor the `with` clause parses. |
 | Operator overloading (`A operator +(A o)`) | ❌ | The `operator` token exists in the lexer but is unused. |
-| `is` / `is!` type tests | ❌ | Not in the expression grammar. |
-| `as` casts | ❌ | `as` is parsed only as an `import … as prefix` clause. |
+| `is` / `is!` type tests | ✅ | At Dart's relational precedence (`a + b is int`, `x is A && y`, and `x is int ? a : b` stays a conditional). A subclass or implementer passes, `null` passes only a nullable type, an `int` is not a `double`. Generated as each target's idiom (README, footnote 21). Flow-based type promotion isn't modelled, but none is needed at run time: `if (a is B) a.onlyB()` dispatches on the runtime class. |
+| `as` casts | ✅ | Returns the value unchanged when it is an instance, otherwise throws `ApolloVMCastException`. |
 | Generators: `sync*` / `async*`, `yield`, `yield*` | ❌ | Only `async` functions are parsed; there is no `Stream`/`Iterable` generator support. |
 | `await for` (async for-each) | ❌ | Does not parse. |
 | Statement labels, labeled `break`/`continue`, `continue <label>` in `switch` | ❌ | `break`/`continue` are unlabeled only. |
@@ -99,10 +99,10 @@ above, but they are the largest part of the gap.
 | `library` / `part` / `part of` directives | ❌ | Only `import` and `export` (with `show` / `hide` / `as`) are directives. |
 | Top-level variables | ⚠️ | `int gx = 4;` parses and is recorded on the AST root, but the name does not resolve at runtime from either a function or a static method (`Can't find variable: 'gx'`). |
 | Top-level getters/setters, `static` getters/setters | ❌ | Accessors are parsed on class and extension bodies only. |
-| Unqualified getter read inside a class (`return value;`) | ❌ | Known limitation, documented in the README: use `this.value`. |
+| Unqualified getter read inside a class (`return value;`) | ✅ | Own, inherited and extension getters; dispatches on the receiver like `this.value`; a local or parameter of the same name shadows it. |
 | Function tear-offs (`var f = g;`) | ❌ | A top-level function is not a value: `Can't find variable: 'g'`. |
 | Callable objects (`class A { call(…) }`, then `a(1)`) | ❌ | The declaration parses; invoking the instance does not resolve. |
-| Interface polymorphism (`A a = B();` where `B implements A`) | ❌ | Same exact-type restriction as the 2.0 row. |
+| Interface polymorphism (`A a = B();` where `B implements A`) | ✅ | Through any depth of superclasses and superinterfaces (see the 2.0 row). |
 
 -----------------------------
 
@@ -113,11 +113,13 @@ classes, fields (with initializers), unnamed and **named** constructors with
 `this.x` / `required` / named / optional-positional / defaulted / **private
 named** / **super** parameters, **initializer lists** (fields, `assert`,
 `super(…)`, `this(…)`), **factory** constructors, **primary constructors** in
-the class header, methods,
+the class header, the **implicit `super()`**, methods,
 `static` members, `abstract`, `extends` with inherited members and
-`super.method()`, generic **classes** and instantiation, enums (including rich
-enums with constructor args, fields, methods and accessors), extensions, getters
-and setters, closures and `Function`-typed parameters, `async` / `await`,
+`super.method()`, **subtype polymorphism** (`A a = B();`, interfaces included),
+**`is` / `is!` / `as`**, generic **classes** and instantiation, enums (including
+rich enums with constructor args, fields, methods and accessors), extensions,
+getters and setters (including **bare getter reads** inside a member), closures
+and `Function`-typed parameters, `async` / `await`,
 cascades, `try` / `on` / `catch` / `finally` / `throw` / `rethrow`, `assert`,
 all control flow (`if`, `for`, `for-in`, `while`, `do-while`, `switch` on
 `int` / `String`, `break`, `continue`), ternary and null-aware operators,

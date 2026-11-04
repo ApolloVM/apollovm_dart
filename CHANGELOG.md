@@ -1,3 +1,58 @@
+## 2.33.0
+
+Four gaps from [`doc/dart_language_gaps.md`](doc/dart_language_gaps.md):
+subtyping, type tests and casts, the implicit superclass constructor call,
+and bare getter reads.
+
+### Subtype polymorphism
+
+```dart
+A a = B();          // was: Can't cast value type (B) to variable type (A)
+Shape s = Square(); // through `implements` too
+```
+
+Type checks now follow the class hierarchy (superclasses and implemented
+interfaces, at any depth). This covers variables, parameters, return values
+and fields, and `on A catch` now catches a `B`. A supertype is still rejected
+in a subtype slot.
+
+### `is`, `is!` and `as`
+
+`if (a is B) return (a as B).onlyB();` now parses and runs, at Dart's
+relational precedence: `a + b is int` tests the sum, and `x is int ? a : b`
+stays a conditional. The semantics are Dart's:
+- `null` passes only a nullable type.
+- An `int` is not a `double`.
+- A failed `as` throws `ApolloVMCastException`.
+
+Every target generates its own idiom: Kotlin `is`/`!is`/`as`, Java
+`instanceof` and `(T) x`, C# `is` and `(T) x`, JS/TS
+`typeof`/`Array.isArray`/`instanceof`, and Python `isinstance`. Go, Lua and
+Wasm refuse.
+
+### The implicit superclass constructor call — per language
+
+A subclass constructor without `super(…)` never ran its superclass
+constructor. What should happen differs per language, so the AST now records
+the language it was parsed from (`ASTRoot.language`, kept by the binary AST):
+
+- **Dart, Java, C#:** an implicit `super()`, from a declared constructor and
+  from the default one. Dart passes its super parameters to it.
+- **JavaScript, TypeScript, Python:** a subclass without a constructor
+  *inherits* its parent's, every argument forwarded. A declared constructor
+  makes no implicit call; in Python, the parent's `__init__` is not called.
+- **Kotlin, Go, Lua:** nothing implicit.
+
+**Behaviour change:** in Dart, Java and C#, a superclass constructor body now
+runs where it was skipped before. A superclass constructor that requires
+arguments now makes an implicit call an error, as it would be at compile time.
+
+### Bare getter reads
+
+`return value;` for `int get value => …` now works inside a class or extension
+member. Before, only `this.value` did. The read dispatches on the receiver,
+and a local or parameter of the same name still shadows it.
+
 ## 2.32.0
 
 The Dart constructor kinds beyond the plain unnamed one. All four were

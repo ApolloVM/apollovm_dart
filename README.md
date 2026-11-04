@@ -325,6 +325,7 @@ Same legend and **Wasm** column semantics as the table above.
 | Super parameters (`B(super.x)`)¹⁹                             | ✅ | 🚫  | 🚫  | 🚫  | 🚫  | 🚫  | 🚫  | 🚫  | 🚫  | ✅¹⁹ |
 | Named & `factory` constructors (`A.zero()`)²⁰                 | ✅ | 🚧 | 🚧 | 🚧 | 🚧 | 🚧 | 🚧 | 🚧 | 🚧 | 🚧 |
 | Initializer lists (`: x = v`, `super(…)`, `this(…)`)²⁰         | ✅ | 🚧 | 🚧 | 🚧 | 🚧 | 🚧 | 🚧 | 🚧 | 🚧 | 🚧 |
+| Type tests & casts (`is`, `is!`, `as`)²¹                       | ✅ | 🚧 | 🚧 | 🚧 | 🚧 | 🚧 | 🚧 | 🚫  | 🚧 | 🚧 |
 
 ¹ Lua is table-based: "fields" are table entries (`obj.x`), "constructors" are factory/`setmetatable`
 idioms, methods are `function Obj:method`. &nbsp;
@@ -366,10 +367,19 @@ fields; `super.method()` / `super.getter` / `super.field` reach the parent, and 
 subclass override wins. Works for the languages that record their base class:
 Dart, Java (`extends`), C# / TS / JS (`: Base` / `extends`), Python. Kotlin's
 `class B : A()` base clause and Go embedding aren't parsed yet (`🚧`), and the
-Wasm backend doesn't compile inheritance yet. A Dart subclass constructor runs
-its superclass constructor — body included — through an explicit `: super(v)` /
-`: super.named(v)` initializer (footnote 20); the *implicit* superclass call
-Dart makes when there is none is not made yet. &nbsp;
+Wasm backend doesn't compile inheritance yet. **Subtype polymorphism** holds
+everywhere a type is checked: a subclass or an implementer goes in a variable,
+parameter, return value or field of its supertype (`A a = B();`), and
+`on A catch` catches a `B`. How a subclass constructor reaches its superclass
+constructor follows **each language's rule**, read from the language the module
+was parsed from: Dart, Java and C# make an implicit `super()` (from a
+constructor without `super(…)`, and from the default constructor; Dart passes
+its super parameters to it); JavaScript, TypeScript and Python let a subclass
+without a constructor *inherit* its parent's, every argument forwarded, and
+make no implicit call from a declared one (Python's `__init__` doesn't call the
+parent's). Dart's explicit `: super(v)` / `: super.named(v)` is covered in
+footnote 20; explicit `super(v);` statements in Java/JS/TS bodies, C#
+`: base(v)` and Python `super().__init__(…)` aren't parsed yet. &nbsp;
 ¹⁴ **Getters and setters** are parsed and executed on classes, extensions and
 enum bodies (an enum member declares them like any other class member):
 `get name => …` / `get name { … }` (with or without an explicit return type) and
@@ -380,10 +390,11 @@ when there is one; `??=` short-circuits, so the setter does not run when the
 current value is non-null. Inherited and overridden accessors resolve through
 the superclass chain. **Only Dart generates them** — Kotlin emits getters
 (`val x: T get() { … }`) but not setters, and every other target refuses an
-accessor with `UnsupportedSyntaxError` rather than dropping it. Not yet
-supported, for getters and setters alike: `static` accessors, top-level
-accessors, and an *unqualified read* of a getter (`return value;` inside a
-method — use `this.value`). &nbsp;
+accessor with `UnsupportedSyntaxError` rather than dropping it. A getter can be
+read by its bare name inside a class or extension member (`return value;`); it
+dispatches on the receiver like `this.value`, and a local or parameter of the
+same name shadows it. Not yet supported, for getters and setters alike:
+`static` accessors and top-level accessors. &nbsp;
 ¹⁵ Dart annotations (`@override`, `@Deprecated('x')`, `@pragma(...)`,
 `@a.B(1)`) are accepted wherever Dart allows them — top-level declarations,
 class and enum members, enum entries, extension members, parameters and local
@@ -442,7 +453,19 @@ an older build. Every other target — Wasm included — refuses a class using t
 with `UnsupportedSyntaxError` rather than drop a constructor or skip its
 initializers. Not supported yet: the implicit superclass constructor call (see
 footnote 13), redirecting factories (`factory A() = B;`) and `const`
-canonicalization (`const` is accepted and ignored).
+canonicalization (`const` is accepted and ignored). &nbsp;
+²¹ **Type tests and casts** are parsed (from Dart) at Dart's relational
+precedence — `a + b is int` tests the sum, `x is A && y` tests `x`, and
+`x is int ? a : b` stays a conditional — and run with Dart's semantics: a
+subclass or implementer passes, `null` passes only a nullable type, an `int` is
+not a `double`, and a failed `as` throws. Only the Dart front end parses them
+so far (`🚧` elsewhere), but each target generates its own idiom:
+Kotlin `is` / `!is` / `as`; Java `instanceof` (boxed, raw types) and `(T) x`;
+C# `is` and `(T) x`; TypeScript/JavaScript `typeof`, `Array.isArray` and
+`instanceof`, with TS `x as T` and no cast in JS; Python `isinstance` and no
+cast. The JS/TS/Python casts are unchecked, as those languages' own are. Go,
+Lua and Wasm refuse with `UnsupportedSyntaxError`. A nullable target type
+(`x is int?`) is generated for Dart and Kotlin only.
 
 > Per-language behavior is normalized to a shared AST, so types and constructs map
 > cleanly when translating between languages (e.g. C# `string` ⇄ Dart `String`,
