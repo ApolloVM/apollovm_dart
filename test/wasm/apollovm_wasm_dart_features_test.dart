@@ -392,5 +392,115 @@ int f(int a, int b) {
         returns: 2,
       );
     });
+
+    test('a record converts to a declared layout', () async {
+      await _check(
+        r'''
+(double, int) f() { return (1, 2); }
+(int?, int) g() { return (5, 1); }
+int h() {
+  var a = f();
+  var b = g();
+  (double, int) c = (3, 4);
+  print('${a.$1 > 0.5} ${b.$1} ${b.$2} ${c.$1 > 2.5} ${a == (1, 2)}');
+  return b.$2 + c.$2;
+}
+''',
+        'h',
+        [],
+        prints: ['true 5 1 true true'],
+        returns: 5,
+      );
+    });
+
+    test('a set of boxed values compares by value', () async {
+      await _check(
+        r'''
+int f() {
+  var mixed = {1, 'a', 1, 'a'};
+  var objs = <Object>{'x', 'x'};
+  return mixed.length * 10 + objs.length;
+}
+''',
+        'f',
+        [],
+        returns: 21,
+      );
+    });
+  });
+
+  group('Wasm review fixes', () {
+    test('an int into a double global or local converts', () async {
+      await _check(
+        r'''
+double scale = 1;
+double total = 0;
+int f(int x) {
+  total = x;
+  double local = 2;
+  local = x;
+  return (scale + total + local) > 8.5 ? 1 : 0;
+}
+''',
+        'f',
+        [4],
+        returns: 1,
+      );
+    });
+
+    test('a `bool?` return is a box, null included', () async {
+      const src = 'bool? f(int a) { if (a > 0) return a > 5; return null; }';
+      await _check(src, 'f', [1], returns: false);
+      await _check(src, 'f', [9], returns: true);
+      await _check(src, 'f', [-1], returns: null);
+    });
+
+    test('a null `String?` in an `Object?` slot stays null', () async {
+      await _check(
+        r'''
+int f() {
+  String? s = null;
+  Object? o = s;
+  print('${o == null} $o');
+  return 0;
+}
+''',
+        'f',
+        [],
+        prints: ['true null'],
+        returns: 0,
+      );
+    });
+
+    test('a field shadows a top-level variable, `++` included', () async {
+      await _check(
+        r'''
+int count = 100;
+class C {
+  int count = 0;
+  int inc() { count++; ++count; count += 1; return count; }
+}
+int f() {
+  var c = C();
+  return c.inc() * 1000 + count;
+}
+''',
+        'f',
+        [],
+        returns: 3100,
+      );
+    });
+
+    test('a bool literal into an `Object` global is boxed', () async {
+      await _check(
+        r'''
+Object flag = true;
+String f() { return 'flag: $flag'; }
+''',
+        'f',
+        [],
+        returns: 'flag: true',
+      );
+    });
   });
 }

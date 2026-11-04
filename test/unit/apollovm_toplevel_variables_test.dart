@@ -25,6 +25,22 @@ Future<Object?> _run(String src) async => _runVM(await _load(src));
 
 void main() {
   group('Top-level variables', () {
+    test('a field shadows a top-level variable for writes too', () async {
+      // Bare `count = …` / `count++` inside a method wrote the top-level
+      // variable while reads saw the field.
+      expect(
+        await _run(
+          'int count = 100;\n'
+          'class C {\n'
+          '  int count = 0;\n'
+          '  int inc() { count = 7; count++; ++count; count += 1; return count; }\n'
+          '}\n'
+          'int run() { var c = C(); var r = c.inc(); return r * 1000 + count; }',
+        ),
+        equals(10100),
+      );
+    });
+
     test('read and written from a function', () async {
       expect(
         await _run(

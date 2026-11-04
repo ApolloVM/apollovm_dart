@@ -38,7 +38,10 @@ Top-level variables compile to module globals. Before, compilation crashed
 with `Can't find local variable`. A literal number seeds its global. Any
 other initializer (`final List<String> log = [];`) runs in an exported
 `__init_globals`, which the runner calls once per module instance before the
-entry function. Locals shadow them, and `g++`, compound assignment,
+entry function. An exported function also calls it on entry (it runs only
+once), so another host sees the globals initialized. Functions lowered for
+`try`/`catch` or `async` don't make that call yet, and rely on the runner.
+Locals and fields shadow them, and `g++`, compound assignment,
 interpolation and method calls (`log.add(…)`) work on them, and on `static`
 fields too.
 
@@ -62,9 +65,12 @@ calls work. Extension setters and `static` extension members are refused.
 - **A record compiles to a heap struct:** positional fields first, then named
   ones sorted by name. Supported: literals, `r.$1` / `r.name`, structural
   `==` (nested records too), printing in Dart's format (`(1,)`,
-  `(a: 1, b: 2)`), and records as list and set elements.
+  `(a: 1, b: 2)`), and records as list and set elements. A record converts
+  to a declared layout: `return (1, 2);` from a `(double, int)` or an
+  `(int?, int)` function.
 - **A set literal compiles to the list layout,** skipping elements equal to
-  one already in, and keeping insertion order. Supported: `length`,
+  one already in (boxed values compare by value), and keeping insertion
+  order. Supported: `length`,
   `isEmpty` / `isNotEmpty`, printing (`{1, 2}`).
 
 ### Fixes
@@ -85,6 +91,11 @@ calls work. Extension setters and `static` extension members are refused.
 - **A list literal whose element type is unknown statically** (`[a, 5]`,
   where `a` is a parameter) takes its type from the elements. Before, it
   stored boxes that a `List<int>` parameter misread.
+- **Printing a boxed number** (`print(x)` with `Object x = 5`) exports the
+  `__alloc` its host conversion needs. Before, it failed at run time.
+- **Interpreter: a field shadows a top-level variable for writes too.**
+  Inside a method, `count = 7` and `count++` wrote the top-level `count`,
+  while reads used the field `count`.
 
 ## 2.34.0
 

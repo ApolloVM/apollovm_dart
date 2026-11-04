@@ -254,10 +254,30 @@ class ASTScopeVariable<T> extends ASTVariable {
 
   @override
   FutureOr<void> setValue(VMContext context, ASTValue value) {
-    // A local variable (in this or an enclosing scope) is set directly.
+    // A local variable (in this or an enclosing scope) is set directly — but
+    // only when it comes before a field of `this`: a top-level variable found
+    // further out is shadowed by the field, exactly as for a read
+    // (`getVariable(name, true)` puts fields ahead of the outer scopes).
     return context.getVariable(name, false).resolveMapped((local) {
       if (local != null) {
-        return local.setValue(context, value);
+        var obj = context.getClassInstance();
+        if (obj is! ASTClassInstance || obj.clazz.getField(name) == null) {
+          return local.setValue(context, value);
+        }
+        return context.getVariable(name, true).resolveMapped((nearest) {
+          if (identical(nearest, local)) {
+            return local.setValue(context, value);
+          }
+          return obj.clazz
+              .setInstanceFieldValue(
+                context,
+                ASTRunStatus.dummy,
+                obj,
+                name,
+                value,
+              )
+              .resolveMapped((_) {});
+        });
       }
 
       // Otherwise, an unqualified assignment to a class field must write

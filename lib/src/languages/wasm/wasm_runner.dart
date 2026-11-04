@@ -497,8 +497,12 @@ class ApolloRunnerWasm extends ApolloRunner {
           astFunction?.returnType is ASTTypeString ||
           sigReturn?.tag == _tagString;
       // `bool` return: an i32 (0/1).
+      // A `bool?` is a boxed `Object` (tag 5), decoded below — not an i32.
       var returnsBool =
-          astFunction?.returnType is ASTTypeBool || sigReturn?.tag == _tagBool;
+          sigReturn?.tag != _tagObject &&
+          ((astFunction?.returnType is ASTTypeBool &&
+                  !astFunction!.returnType.nullable) ||
+              sigReturn?.tag == _tagBool);
       // `List` return: an i32 pointer to a list header.
       var listReturn = astFunction?.returnType is ASTTypeArray
           ? _elemTagOf((astFunction!.returnType as ASTTypeArray).componentType)
