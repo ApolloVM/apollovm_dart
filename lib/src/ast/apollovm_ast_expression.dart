@@ -107,6 +107,31 @@ ASTInvocableDeclaration? _resolveLocalFunctionOrExtension(
   return null;
 }
 
+/// Resolves a getter named by a **bare identifier** (`return value;` inside a
+/// class or extension member): a getter visible from [context] — the
+/// enclosing class's own and inherited ones — then an extension getter on the
+/// receiver's class, so one extension member can read another. `null` when
+/// there is none.
+///
+/// The core classes signal an unknown member by throwing (see
+/// [_resolveFunctionOrExtension]), so that throw just means "not here".
+ASTGetterDeclaration? resolveBareGetter(
+  ASTNode node,
+  VMContext context,
+  String name,
+) {
+  try {
+    var g = context.getGetter(name);
+    if (g != null) return g;
+  } on StateError {
+    // A core receiver class without such a member.
+  }
+
+  var receiverClass = _receiverClass(context);
+  if (receiverClass == null) return null;
+  return _resolveASTRoot(node)?.getExtensionGetter(receiverClass, name);
+}
+
 /// Resolves the setter [name] on the receiver's class [clazz], falling back to
 /// an extension setter. The mirror of [_resolveGetterOrExtension].
 ASTSetterDeclaration? _resolveSetterOrExtension(
