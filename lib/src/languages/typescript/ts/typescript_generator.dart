@@ -20,6 +20,15 @@ class ApolloCodeGeneratorTypeScript extends ApolloCodeGenerator {
   ApolloCodeGeneratorTypeScript(ApolloSourceCodeStorage codeStorage)
     : super('typescript', codeStorage);
 
+  @override
+  String? typeTestCode(String operand, ASTType type, {required bool negated}) =>
+      jsTypeTest(operand, type, negated: negated);
+
+  /// TypeScript's own `as`: a static assertion, not checked at run time.
+  @override
+  String typeCastCode(String operand, ASTType type) =>
+      '$operand as ${generateASTType(type)}';
+
   // TypeScript has native `?.`, `!` and `??`, but a nullable *type* is written
   // `T | null` (or an optional `?:` member), not a `T?` suffix — so the type
   // suffix stays off (best-effort: nullability is dropped from type positions).

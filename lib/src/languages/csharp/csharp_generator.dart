@@ -17,6 +17,19 @@ class ApolloCodeGeneratorCSharp extends ApolloCodeGenerator {
   ApolloCodeGeneratorCSharp(ApolloSourceCodeStorage codeStorage)
     : super('csharp', codeStorage);
 
+  /// `x is T`, and a C-style cast — which throws like a Dart cast, where
+  /// `x as T` would yield `null`.
+  @override
+  String? typeTestCode(String operand, ASTType type, {required bool negated}) {
+    if (type.nullable) return null;
+    var test = '$operand is ${generateASTType(type)}';
+    return negated ? '!($test)' : test;
+  }
+
+  @override
+  String typeCastCode(String operand, ASTType type) =>
+      '(${generateASTType(type)}) $operand';
+
   /// C# has had null-conditional access (`a?.b`, `a?[i]`) since C# 6 and the
   /// null-forgiving `!` since C# 8, so all three are emitted natively.
   @override

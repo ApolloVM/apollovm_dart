@@ -107,6 +107,31 @@ ASTInvocableDeclaration? _resolveLocalFunctionOrExtension(
   return null;
 }
 
+/// Resolves a getter named by a **bare identifier** (`return value;` inside a
+/// class or extension member): a getter visible from [context] — the
+/// enclosing class's own and inherited ones — then an extension getter on the
+/// receiver's class, so one extension member can read another. `null` when
+/// there is none.
+///
+/// The core classes signal an unknown member by throwing (see
+/// [_resolveFunctionOrExtension]), so that throw just means "not here".
+ASTGetterDeclaration? resolveBareGetter(
+  ASTNode node,
+  VMContext context,
+  String name,
+) {
+  try {
+    var g = context.getGetter(name);
+    if (g != null) return g;
+  } on StateError {
+    // A core receiver class without such a member.
+  }
+
+  var receiverClass = _receiverClass(context);
+  if (receiverClass == null) return null;
+  return _resolveASTRoot(node)?.getExtensionGetter(receiverClass, name);
+}
+
 /// Resolves the setter [name] on the receiver's class [clazz], falling back to
 /// an extension setter. The mirror of [_resolveGetterOrExtension].
 ASTSetterDeclaration? _resolveSetterOrExtension(
@@ -1365,6 +1390,129 @@ class ASTExpressionNullAssertion extends ASTExpression {
     var s = '$expression!';
     return asGroup ? '($s)' : s;
   }
+}
+
+/// [ASTExpression] for a **type test**: `expr is T`, or `expr is! T` when
+/// [negated].
+///
+/// True when the value's runtime type is [type] or a subtype — a subclass or
+/// an implementer included. `null` passes only a nullable [type] (`int?`) or
+/// one that accepts `Null` (`dynamic`), as in Dart.
+class ASTExpressionTypeTest extends ASTExpression {
+  ASTExpression expression;
+
+  ASTType type;
+
+  final bool negated;
+
+  ASTExpressionTypeTest(this.expression, this.type, {this.negated = false});
+
+  /// A binary-like form: a parent groups it (`(a is B) == c`).
+  @override
+  bool get isComplex => true;
+
+  @override
+  Iterable<ASTNode> get children => [expression, type];
+
+  @override
+  void resolveNode(ASTNode? parentNode) {
+    super.resolveNode(parentNode);
+    expression.resolveNode(this);
+    type.resolveNode(this);
+  }
+
+  @override
+  ASTType resolveType(VMContext? context) => ASTTypeBool.instance;
+
+  @override
+  FutureOr<ASTValue> run(VMContext parentContext, ASTRunStatus runStatus) {
+    var context = defineRunContext(parentContext);
+    return expression.run(context, runStatus).resolveMapped((value) {
+      return _isInstance(context, value, type).resolveMapped((ok) {
+        return ASTValueBool(negated ? !ok : ok);
+      });
+    });
+  }
+
+  @override
+  String toString({bool asGroup = false}) {
+    var s = '$expression ${negated ? 'is!' : 'is'} $type';
+    return asGroup ? '($s)' : s;
+  }
+}
+
+/// [ASTExpression] for a **type cast**: `expr as T`.
+///
+/// Evaluates to the value unchanged when it is an instance of [type] (see
+/// [ASTExpressionTypeTest]); otherwise throws [ApolloVMCastException], as a
+/// failed Dart cast throws.
+class ASTExpressionTypeCast extends ASTExpression {
+  ASTExpression expression;
+
+  ASTType type;
+
+  ASTExpressionTypeCast(this.expression, this.type);
+
+  /// A parent groups it: `(a as B).m()`.
+  @override
+  bool get isComplex => true;
+
+  @override
+  Iterable<ASTNode> get children => [expression, type];
+
+  @override
+  void resolveNode(ASTNode? parentNode) {
+    super.resolveNode(parentNode);
+    expression.resolveNode(this);
+    type.resolveNode(this);
+  }
+
+  @override
+  FutureOr<ASTType> resolveType(VMContext? context) =>
+      type.resolveType(context);
+
+  @override
+  FutureOr<ASTValue> run(VMContext parentContext, ASTRunStatus runStatus) {
+    var context = defineRunContext(parentContext);
+    return expression.run(context, runStatus).resolveMapped((value) {
+      return _isInstance(context, value, type).resolveMapped((ok) {
+        if (ok) return value;
+        return value.resolveType(context).resolveMapped((valueType) {
+          throw ApolloVMCastException(
+            "Type '$valueType' is not a subtype of type '$type' in type cast.",
+          );
+        });
+      });
+    });
+  }
+
+  @override
+  String toString({bool asGroup = false}) {
+    var s = '$expression as $type';
+    return asGroup ? '($s)' : s;
+  }
+}
+
+/// Whether [value] is an instance of [type] at run time, resolving [type]
+/// first (an alias, a generic parameter).
+///
+/// Stricter than assignability in two ways, as Dart's `is` is: `null` is an
+/// instance only of a nullable type (`null is Object` is false), and an `int`
+/// is not a `double` — the int-to-double rule is for literals, not a runtime
+/// relation.
+FutureOr<bool> _isInstance(VMContext context, ASTValue value, ASTType type) {
+  return type.resolveType(context).resolveMapped((resolved) {
+    return _astValueIsNull(context, value).resolveMapped((isNull) {
+      if (isNull) {
+        return resolved.nullable ||
+            resolved is ASTTypeDynamic ||
+            resolved is ASTTypeVar ||
+            resolved is ASTTypeNull;
+      }
+      if (resolved is ASTTypeDouble && value is ASTValueInt) return false;
+      return value.isInstanceOfAsync(resolved);
+    });
+  });
 }
 
 /// [ASTExpression] for the null-coalescing operation `a ?? b`.

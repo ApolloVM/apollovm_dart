@@ -22,6 +22,33 @@ class ApolloCodeGeneratorPython extends ApolloCodeGenerator {
   ApolloCodeGeneratorPython(ApolloSourceCodeStorage codeStorage)
     : super('python', codeStorage);
 
+  /// The `isinstance` class (or tuple of classes) for [type].
+  String? _isinstanceTarget(ASTType type) {
+    if (type.nullable) return null;
+    if (type is ASTTypeInt) return 'int';
+    if (type is ASTTypeDouble) return 'float';
+    if (type is ASTTypeNum) return '(int, float)';
+    if (type is ASTTypeBool) return 'bool';
+    if (type is ASTTypeString) return 'str';
+    if (type is ASTTypeArray) return 'list';
+    if (type is ASTTypeMap) return 'dict';
+    if (type is ASTTypeSet) return 'set';
+    if (isClassType(type)) return type.name;
+    return null;
+  }
+
+  @override
+  String? typeTestCode(String operand, ASTType type, {required bool negated}) {
+    var target = _isinstanceTarget(type);
+    if (target == null) return null;
+    var test = 'isinstance($operand, $target)';
+    return negated ? 'not $test' : test;
+  }
+
+  /// Python has no checked cast: the value is used as it is.
+  @override
+  String typeCastCode(String operand, ASTType type) => operand;
+
   static const String _tab = '    ';
 
   /// Python keyword arguments are emitted as `name=value` (no spaces).

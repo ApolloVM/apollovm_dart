@@ -150,6 +150,8 @@ class ASTNodeTag {
   static const int constructorAssertInitializer = 125;
   static const int constructorSuperInitializer = 126;
   static const int constructorRedirectInitializer = 127;
+  static const int expressionTypeTest = 128;
+  static const int expressionTypeCast = 129;
 
   /// Tags that once existed and must never be handed out again.
   ///

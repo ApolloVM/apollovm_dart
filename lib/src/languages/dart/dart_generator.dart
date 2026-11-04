@@ -22,6 +22,14 @@ class ApolloCodeGeneratorDart extends ApolloCodeGenerator {
   bool get supportsConstructorForms => true;
 
   @override
+  String typeTestCode(String operand, ASTType type, {required bool negated}) =>
+      '$operand ${negated ? 'is!' : 'is'} ${generateASTType(type)}';
+
+  @override
+  String typeCastCode(String operand, ASTType type) =>
+      '$operand as ${generateASTType(type)}';
+
+  @override
   bool get supportsNullableTypeSuffix => true;
 
   @override

@@ -294,6 +294,17 @@ class ASTScopeVariable<T> extends ASTVariable {
 
     return variable.resolveMapped((v) {
       if (v == null) {
+        // A bare read of a getter of the enclosing class (or extension):
+        // `return value;` for `int get value => …`. Members come before
+        // top-level names, as in Dart; a local or parameter of the same name
+        // was already found above, so it still shadows the getter.
+        var getter = resolveBareGetter(this, context, name);
+        if (getter != null) {
+          return _readGetter(context, getter).resolveMapped(
+            (value) => ASTRuntimeVariable(getter.returnType, name, value),
+          );
+        }
+
         // A bare reference to a `static` field of the enclosing class (e.g.
         // `count` inside a `static` method of the class that declares it). The
         // AST identifier resolves to the field declaration; route reads/writes
@@ -318,6 +329,29 @@ class ASTScopeVariable<T> extends ASTVariable {
       }
       return v;
     });
+  }
+
+  /// Runs [getter] for a bare read. A class getter runs against the current
+  /// instance, and is looked up again on the instance's own class first: a
+  /// bare `value` dispatches to a subclass override exactly as `this.value`
+  /// does, rather than to the getter of the class the read is written in.
+  static FutureOr<ASTValue> _readGetter(
+    VMContext context,
+    ASTGetterDeclaration getter,
+  ) {
+    if (getter is ASTClassGetterDeclaration) {
+      var instance = context.getClassInstance();
+      if (instance != null) {
+        if (instance is ASTClassInstance) {
+          var override = instance.clazz.getGetter(getter.name, context);
+          if (override is ASTClassGetterDeclaration) {
+            return override.objectCall(context, instance);
+          }
+        }
+        return getter.objectCall(context, instance);
+      }
+    }
+    return getter.call(context);
   }
 
   ASTNode? resolvedIdentifier;

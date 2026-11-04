@@ -20,6 +20,14 @@ class ApolloCodeGeneratorJavaScript extends ApolloCodeGenerator {
   ApolloCodeGeneratorJavaScript(ApolloSourceCodeStorage codeStorage)
     : super('javascript', codeStorage);
 
+  @override
+  String? typeTestCode(String operand, ASTType type, {required bool negated}) =>
+      jsTypeTest(operand, type, negated: negated);
+
+  /// JavaScript has no cast: the value is used as it is.
+  @override
+  String typeCastCode(String operand, ASTType type) => operand;
+
   /// Optional chaining (`a?.b`, `a?.[i]`) is ES2020.
   @override
   bool get supportsNullAwareOperators => true;
