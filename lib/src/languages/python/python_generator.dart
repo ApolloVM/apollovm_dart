@@ -100,6 +100,10 @@ class ApolloCodeGeneratorPython extends ApolloCodeGenerator {
     StringBuffer? out,
     String indent = '',
   }) {
+    if (type is ASTTypeRecord) {
+      return generateASTTypeRecord(type, out: out, indent: indent);
+    }
+
     out ??= newOutput();
 
     out.write(normalizeTypeName(type.name));

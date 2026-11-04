@@ -534,7 +534,9 @@ abstract class ApolloCodeGenerator
   }) {
     out ??= newOutput();
 
-    if (type is ASTTypeArray) {
+    if (type is ASTTypeRecord) {
+      generateASTTypeRecord(type, out: out, indent: indent);
+    } else if (type is ASTTypeArray) {
       generateASTTypeArray(type, out: out, indent: indent);
     } else if (type is ASTTypeArray2D) {
       generateASTTypeArray2D(type, out: out, indent: indent);
@@ -553,6 +555,32 @@ abstract class ApolloCodeGenerator
     }
 
     return out;
+  }
+
+  /// Renders a record type. Only Dart has records; every other target refuses
+  /// rather than lower one to a tuple, a list or an object with a different
+  /// equality.
+  StringBuffer generateASTTypeRecord(
+    ASTTypeRecord type, {
+    StringBuffer? out,
+    String indent = '',
+  }) {
+    throw UnsupportedSyntaxError(
+      "Language '$language' has no record type: $type",
+    );
+  }
+
+  /// Emits a record literal. Only Dart has records — see
+  /// [generateASTTypeRecord].
+  StringBuffer generateASTExpressionRecordLiteral(
+    ASTExpressionRecordLiteral expression, {
+    StringBuffer? out,
+    String indent = '',
+    bool headIndented = true,
+  }) {
+    throw UnsupportedSyntaxError(
+      "Language '$language' has no record literal: $expression",
+    );
   }
 
   /// Renders a function type. The default drops the signature generics and
@@ -1723,6 +1751,13 @@ abstract class ApolloCodeGenerator
       );
     } else if (expression is ASTExpressionNullAssertion) {
       return generateASTExpressionNullAssertion(
+        expression,
+        out: out,
+        indent: indent,
+        headIndented: headIndented,
+      );
+    } else if (expression is ASTExpressionRecordLiteral) {
+      return generateASTExpressionRecordLiteral(
         expression,
         out: out,
         indent: indent,

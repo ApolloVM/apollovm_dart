@@ -3166,6 +3166,13 @@ abstract class ASTInvocableDeclaration<
     VMContext context,
     Object? returnValue,
   ) {
+    // `return null;` from a function with a (nullable) return type returns
+    // `null` — not `void`, which is what a type that has no value for `null`
+    // (`String?`, a record type) converts it to.
+    if (returnValue is ASTValueNull && returnType is! ASTTypeVoid) {
+      return returnValue as ASTValue<T>;
+    }
+
     var ret = returnType.toValue(context, returnValue);
     return ret.resolveMapped((resolved) {
       resolved ??= ASTValueVoid.instance as ASTValue<T>;

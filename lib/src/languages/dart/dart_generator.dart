@@ -461,6 +461,66 @@ class ApolloCodeGeneratorDart extends ApolloCodeGenerator {
   }
 
   @override
+  StringBuffer generateASTTypeRecord(
+    ASTTypeRecord type, {
+    StringBuffer? out,
+    String indent = '',
+  }) {
+    out ??= newOutput();
+
+    out.write('(');
+    var positional = type.positionalTypes;
+    for (var i = 0; i < positional.length; ++i) {
+      if (i > 0) out.write(', ');
+      generateASTType(positional[i], out: out);
+    }
+
+    var named = type.namedTypes;
+    if (named.isNotEmpty) {
+      if (positional.isNotEmpty) out.write(', ');
+      out.write('{');
+      var first = true;
+      for (var e in named.entries) {
+        if (!first) out.write(', ');
+        first = false;
+        generateASTType(e.value, out: out);
+        out.write(' ${e.key}');
+      }
+      out.write('}');
+    } else if (positional.length == 1) {
+      // `(int)` is a parenthesized type; a one-field record needs the comma.
+      out.write(',');
+    }
+
+    out.write(')');
+    return out;
+  }
+
+  @override
+  StringBuffer generateASTExpressionRecordLiteral(
+    ASTExpressionRecordLiteral expression, {
+    StringBuffer? out,
+    String indent = '',
+    bool headIndented = true,
+  }) {
+    out ??= newOutput();
+    if (headIndented) out.write(indent);
+
+    out.write('(');
+    var fields = expression.fields;
+    for (var i = 0; i < fields.length; ++i) {
+      if (i > 0) out.write(', ');
+      var name = fields[i].name;
+      if (name != null) out.write('$name: ');
+      generateASTExpression(fields[i].value, out: out, headIndented: false);
+    }
+    // `(x)` is a parenthesized expression; a one-field record needs the comma.
+    if (fields.length == 1 && fields.single.name == null) out.write(',');
+    out.write(')');
+    return out;
+  }
+
+  @override
   StringBuffer generateASTTypeFunction(
     ASTTypeFunction type, {
     StringBuffer? out,

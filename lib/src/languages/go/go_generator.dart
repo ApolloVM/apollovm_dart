@@ -1543,6 +1543,10 @@ class ApolloCodeGeneratorGo extends ApolloCodeGenerator {
     StringBuffer? out,
     String indent = '',
   }) {
+    if (type is ASTTypeRecord) {
+      return generateASTTypeRecord(type, out: out, indent: indent);
+    }
+
     // A nullable `T?` becomes a Go pointer `*T`, which is the only Go form that
     // can hold `nil` for a value type. Types that are *already* nilable in Go —
     // a slice, a map, an interface — stay as they are.

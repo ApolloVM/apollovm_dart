@@ -131,6 +131,10 @@ class ASTTypeEntryKind {
 
   /// An [ASTTypeSet], by element type.
   static const int set = 0x17;
+
+  /// An [ASTTypeRecord]: its positional field types, then its named fields
+  /// (name, type) sorted by name.
+  static const int record = 0x18;
 }
 
 /// Identifiers for the [ASTType] singletons that must decode back to the very
@@ -309,6 +313,13 @@ class ASTTypePoolWriter {
         b.write('|k:${intern(type.keyType)}|v:${intern(type.valueType)}');
       case ASTTypeSet():
         b.write('|e:${intern(type.elementType)}');
+      case ASTTypeRecord():
+        for (var t in type.positionalTypes) {
+          b.write('|p:${intern(t)}');
+        }
+        for (var e in type.namedTypes.entries) {
+          b.write('|n:${e.key}=${intern(e.value)}');
+        }
       case ASTTypeNum():
         b.write('|b:${type.bits}');
       case ASTTypeVar():
@@ -368,6 +379,14 @@ class ASTTypePoolWriter {
       case ASTTypeSet():
         out.writeByte(ASTTypeEntryKind.set);
         out.writeLeb128UnsignedInt(intern(type.elementType));
+      case ASTTypeRecord():
+        out.writeByte(ASTTypeEntryKind.record);
+        _writeTypeList(out, type.positionalTypes);
+        out.writeLeb128UnsignedInt(type.namedTypes.length);
+        for (var e in type.namedTypes.entries) {
+          out.writeLeb128UnsignedInt(_strings.intern(e.key));
+          out.writeLeb128UnsignedInt(intern(e.value));
+        }
       case ASTTypeFuture():
         out.writeByte(ASTTypeEntryKind.future);
         out.writeLeb128UnsignedInt(intern(type.futureValueType));
@@ -595,6 +614,15 @@ class ASTTypePoolReader {
         type = ASTTypeMap(k, v);
       case ASTTypeEntryKind.set:
         type = ASTTypeSet(ref());
+      case ASTTypeEntryKind.record:
+        var positional = typeList() ?? const <ASTType>[];
+        var namedCount = input.readLeb128UnsignedInt();
+        var named = <String, ASTType>{};
+        for (var i = 0; i < namedCount; ++i) {
+          var name = strings[input.readLeb128UnsignedInt()];
+          named[name] = ref();
+        }
+        type = ASTTypeRecord(positional, named);
       case ASTTypeEntryKind.future:
         type = ASTTypeFuture(ref());
       case ASTTypeEntryKind.function:
