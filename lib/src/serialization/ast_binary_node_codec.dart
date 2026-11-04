@@ -27,18 +27,38 @@ class ASTNodeCodec<N extends Object> {
   /// Rebuilds an [N]. The tag has already been consumed.
   final N Function(ASTBinaryReadContext r) decode;
 
+  /// When set (the `when:` argument), this codec handles only the [N]s it
+  /// accepts — a second layout for one class, picked by content.
+  ///
+  /// It is how a node kind gains fields without changing its original layout:
+  /// the nodes that use the new fields get their own tag, and every other node
+  /// keeps the old one byte for byte.
+  ///
+  /// Private because its type mentions [N] in a parameter position: read
+  /// through an `ASTNodeCodec<Object>` it would fail a runtime type check. Use
+  /// [isConditional] and [matches].
+  final bool Function(N node)? _when;
+
   const ASTNodeCodec(
     this.tag,
     this.className, {
     required this.encode,
     required this.decode,
+    this._when,
   });
+
+  /// Whether this codec handles only some instances of [N] (see `when:`).
+  bool get isConditional => _when != null;
 
   /// Whether [node] is handled by this codec.
   ///
   /// An `is` test rather than a `runtimeType` lookup: around twenty AST classes
   /// are generic, and every instantiation of one has a distinct `runtimeType`.
-  bool matches(Object node) => node is N;
+  bool matches(Object node) {
+    if (node is! N) return false;
+    final when = _when;
+    return when == null || when(node);
+  }
 
   /// [encode] without a static type, for the registry's dispatch.
   void encodeAny(ASTBinaryWriteContext w, Object node) => encode(w, node as N);

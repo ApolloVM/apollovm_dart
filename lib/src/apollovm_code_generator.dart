@@ -51,6 +51,7 @@ abstract class ApolloCodeGenerator
     } else if (node is ASTRoot) {
       return generateASTRoot(node, out: out, indent: indent);
     } else if (node is ASTClassNormal) {
+      checkConstructorForms(node);
       return generateASTClass(node, out: out, indent: indent);
     } else if (node is ASTExtension) {
       return generateASTExtension(node, out: out, indent: indent);
@@ -118,6 +119,7 @@ abstract class ApolloCodeGenerator
     generateASTBlock(root, out: out, withBrackets: false);
 
     for (var clazz in root.classes) {
+      checkConstructorForms(clazz);
       generateASTClass(clazz, out: out);
     }
 

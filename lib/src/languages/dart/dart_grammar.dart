@@ -790,21 +790,124 @@ class DartGrammarDefinition extends DartGrammarLexer {
             );
           });
 
+  /// A constructor: `A(…)`, a **named** one `A.zero(…)`, a `factory` one, each
+  /// optionally `const`, then an optional initializer list and a body — `;`,
+  /// a block, or (for a factory) `=> expr;`.
   Parser<ASTClassConstructorDeclaration> classConstructorDefaultDeclaration() =>
-      (constToken().trimHidden().optional() &
+      (constKeyword().trimHidden().optional() &
+              factoryToken().trimHidden().optional() &
               identifier() &
+              (char('.') & identifier()).optional() &
               constructorParametersDeclaration() &
-              (char(';').trim() | codeBlock()))
+              ref0(constructorInitializerList).optional() &
+              (char(';').trim() | ref0(arrowBody) | ref0(codeBlock)))
           .map((v) {
-            var className = v[1];
-            var parameters = v[2] as ASTConstructorParametersDeclaration;
-            var optionalBlock = v[3];
+            var isFactory = v[1] != null;
+            var className = v[2] as String;
+            var nameOpt = v[3] as List?;
+            var name = nameOpt != null ? nameOpt[1] as String : '';
+            var parameters = v[4] as ASTConstructorParametersDeclaration;
+            var initializers = v[5] as List<ASTConstructorInitializer>?;
+            var optionalBlock = v[6];
             var block = optionalBlock is ASTBlock ? optionalBlock : null;
             return ASTClassConstructorDeclaration(
               ASTType(className),
-              '',
+              name,
               parameters,
               block: block,
+              isFactory: isFactory,
+              initializers: initializers,
+            );
+          });
+
+  /// `: entry, entry, …` after a constructor's parameters.
+  Parser<List<ASTConstructorInitializer>> constructorInitializerList() =>
+      (char(':').trimHidden() &
+              ref0(constructorInitializer) &
+              (char(',').trimHidden() & ref0(constructorInitializer)).star())
+          .map((v) {
+            return <ASTConstructorInitializer>[
+              v[1] as ASTConstructorInitializer,
+              for (var e in v[2] as List) e[1] as ASTConstructorInitializer,
+            ];
+          });
+
+  /// One initializer-list entry. The `this(…)` redirect is tried before the
+  /// field form, which also starts with `this.`.
+  Parser<ASTConstructorInitializer> constructorInitializer() =>
+      (ref0(constructorSuperInitializer) |
+              ref0(constructorRedirectInitializer) |
+              ref0(constructorAssertInitializer) |
+              ref0(constructorFieldInitializer))
+          .cast<ASTConstructorInitializer>();
+
+  /// `super(…)` / `super.named(…)`.
+  Parser<ASTConstructorSuperInitializer> constructorSuperInitializer() =>
+      (superToken().trimHidden() &
+              (char('.') & identifier()).optional() &
+              char('(').trimHidden() &
+              ref0(callArguments).optional() &
+              char(')').trimHidden())
+          .map((v) {
+            var (name, args, named) = _delegationParts(v);
+            return ASTConstructorSuperInitializer(name, args, named);
+          });
+
+  /// `this(…)` / `this.named(…)`: a redirecting constructor.
+  Parser<ASTConstructorRedirectInitializer> constructorRedirectInitializer() =>
+      (thisToken().trimHidden() &
+              (char('.') & identifier()).optional() &
+              char('(').trimHidden() &
+              ref0(callArguments).optional() &
+              char(')').trimHidden())
+          .map((v) {
+            var (name, args, named) = _delegationParts(v);
+            return ASTConstructorRedirectInitializer(name, args, named);
+          });
+
+  /// The target name and arguments of a `super(…)` / `this(…)` entry.
+  (String, List<ASTExpression>, Map<String, ASTExpression>?) _delegationParts(
+    List v,
+  ) {
+    var nameOpt = v[1] as List?;
+    var argsRec =
+        v[3]
+            as ({
+              List<ASTExpression> positional,
+              Map<String, ASTExpression>? named,
+            })?;
+    return (
+      nameOpt != null ? nameOpt[1] as String : '',
+      argsRec?.positional ?? <ASTExpression>[],
+      argsRec?.named,
+    );
+  }
+
+  /// `assert(condition[, message])`.
+  Parser<ASTConstructorAssertInitializer> constructorAssertInitializer() =>
+      (assertToken().trimHidden() &
+              char('(').trimHidden() &
+              ref0(expression) &
+              (char(',').trimHidden() & ref0(expression)).optional() &
+              char(',').trimHidden().optional() &
+              char(')').trimHidden())
+          .map((v) {
+            var message = (v[3] as List?)?[1] as ASTExpression?;
+            return ASTConstructorAssertInitializer(
+              ASTStatementAssert(v[2] as ASTExpression, message),
+            );
+          });
+
+  /// `x = expr` or `this.x = expr`.
+  Parser<ASTConstructorFieldInitializer> constructorFieldInitializer() =>
+      ((thisToken().trimHidden() & char('.')).optional() &
+              identifier() &
+              (char('=') & char('=').not()).trimHidden() &
+              ref0(expression))
+          .map((v) {
+            return ASTConstructorFieldInitializer(
+              v[1] as String,
+              v[3] as ASTExpression,
             );
           });
 

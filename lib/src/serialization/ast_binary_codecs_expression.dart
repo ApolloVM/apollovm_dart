@@ -20,8 +20,9 @@ List<ASTExpressionChainFunctionInvocation>? _readChain(
   ASTBinaryReadContext r,
 ) => r.nodes<ASTExpressionChainFunctionInvocation>();
 
-/// Writes the named arguments of a call (`foo(a: 1, b: 2)`).
-void _writeNamedArguments(
+/// Writes the named arguments of a call (`foo(a: 1, b: 2)`). Shared with the
+/// constructor initializer codecs (`super(a: 1)`).
+void writeNamedArguments(
   ASTBinaryWriteContext w,
   Map<String, ASTExpression>? named,
 ) {
@@ -36,7 +37,7 @@ void _writeNamedArguments(
   }
 }
 
-Map<String, ASTExpression>? _readNamedArguments(ASTBinaryReadContext r) {
+Map<String, ASTExpression>? readNamedArguments(ASTBinaryReadContext r) {
   var n = r.uint();
   if (n == 0) return null;
   var named = <String, ASTExpression>{};
@@ -410,7 +411,7 @@ final List<ASTNodeCodec> expressionCodecs = [
       w.str(n.name);
       w.nodes(n.arguments);
       _writeChain(w, n);
-      _writeNamedArguments(w, n.namedArguments);
+      writeNamedArguments(w, n.namedArguments);
     },
     decode: (r) {
       var variable = r.node<ASTVariable>();
@@ -424,7 +425,7 @@ final List<ASTNodeCodec> expressionCodecs = [
         arguments,
         _readChain(r),
       );
-      node.namedArguments = _readNamedArguments(r);
+      node.namedArguments = readNamedArguments(r);
       return node;
     },
   ),
@@ -439,7 +440,7 @@ final List<ASTNodeCodec> expressionCodecs = [
       _writeChain(w, n);
       w.boolean(n.isNullAware);
       w.boolean(n.assertReceiver);
-      _writeNamedArguments(w, n.namedArguments);
+      writeNamedArguments(w, n.namedArguments);
     },
     decode: (r) {
       var variable = r.node<ASTVariable>();
@@ -455,7 +456,7 @@ final List<ASTNodeCodec> expressionCodecs = [
         isNullAware,
         r.boolean(),
       );
-      node.namedArguments = _readNamedArguments(r);
+      node.namedArguments = readNamedArguments(r);
       return node;
     },
   ),
@@ -468,7 +469,7 @@ final List<ASTNodeCodec> expressionCodecs = [
       w.str(n.name);
       w.nodes(n.arguments);
       _writeChain(w, n);
-      _writeNamedArguments(w, n.namedArguments);
+      writeNamedArguments(w, n.namedArguments);
     },
     decode: (r) {
       var expression = r.node<ASTExpression>();
@@ -480,7 +481,7 @@ final List<ASTNodeCodec> expressionCodecs = [
         arguments,
         _readChain(r),
       );
-      node.namedArguments = _readNamedArguments(r);
+      node.namedArguments = readNamedArguments(r);
       return node;
     },
   ),
@@ -491,7 +492,7 @@ final List<ASTNodeCodec> expressionCodecs = [
     encode: (w, n) {
       w.str(n.name);
       w.nodes(n.arguments);
-      _writeNamedArguments(w, n.namedArguments);
+      writeNamedArguments(w, n.namedArguments);
     },
     decode: (r) {
       var name = r.str();
@@ -499,7 +500,7 @@ final List<ASTNodeCodec> expressionCodecs = [
         name,
         r.nodeList<ASTExpression>(),
       );
-      node.namedArguments = _readNamedArguments(r);
+      node.namedArguments = readNamedArguments(r);
       return node;
     },
   ),
@@ -511,7 +512,7 @@ final List<ASTNodeCodec> expressionCodecs = [
       w.str(n.name);
       w.nodes(n.arguments);
       _writeChain(w, n);
-      _writeNamedArguments(w, n.namedArguments);
+      writeNamedArguments(w, n.namedArguments);
     },
     decode: (r) {
       var name = r.str();
@@ -521,7 +522,7 @@ final List<ASTNodeCodec> expressionCodecs = [
         arguments,
         _readChain(r),
       );
-      node.namedArguments = _readNamedArguments(r);
+      node.namedArguments = readNamedArguments(r);
       return node;
     },
   ),

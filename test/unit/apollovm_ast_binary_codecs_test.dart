@@ -627,7 +627,11 @@ void main() {
     });
 
     test('an unknown node tag', () {
-      var (bytes, s, t) = _write((w) => w.uint(0x7E));
+      // Looked up rather than hard-coded: tags are handed out over time, and a
+      // fixed "unused" number silently becomes a real node kind.
+      var unknownTag = [for (var t = 1; t < 0x80; ++t) t]
+          .firstWhere((t) => ASTCodecRegistry.byTag(t) == null);
+      var (bytes, s, t) = _write((w) => w.uint(unknownTag));
       expect(
         () => _read(bytes, s, t).node<ASTValue>(),
         throwsA(

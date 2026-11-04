@@ -3,6 +3,7 @@
 // Please refer to the LICENSE and AUTHORS files for details.
 
 import 'apollovm_code_storage.dart';
+import 'apollovm_parser.dart' show UnsupportedSyntaxError;
 import 'ast/apollovm_ast_expression.dart';
 import 'ast/apollovm_ast_statement.dart';
 import 'ast/apollovm_ast_toplevel.dart';
@@ -30,6 +31,42 @@ abstract class ApolloGenerator<
   D toStorageData(O out);
 
   O newOutput();
+
+  /// Whether this target can express Dart's richer constructor forms: named
+  /// constructors (`A.zero()`), `factory` constructors and initializer lists
+  /// (`: x = v`, `super(…)`, `this(…)`). Only Dart can today.
+  bool get supportsConstructorForms => false;
+
+  /// Throws an [UnsupportedSyntaxError] if [clazz] declares a constructor form
+  /// this target can't express (see [supportsConstructorForms]).
+  ///
+  /// Refusing is deliberate: most targets emit a single constructor per class,
+  /// so a named or factory constructor would be silently dropped or merged,
+  /// and a dropped initializer list leaves fields unset or skips the
+  /// superclass constructor — code that compiles and does something else.
+  void checkConstructorForms(ASTClassNormal clazz) {
+    if (supportsConstructorForms) return;
+
+    for (var set in clazz.constructors) {
+      for (var c in set.functions) {
+        String? form;
+        if (c.isFactory) {
+          form = 'the factory constructor';
+        } else if (c.name.isNotEmpty) {
+          form = 'the named constructor';
+        } else if (c.initializers.isNotEmpty) {
+          form = 'the initializer list of constructor';
+        }
+
+        if (form != null) {
+          throw UnsupportedSyntaxError(
+            "Language '$language' can't generate $form `${c.signatureName}` "
+            "yet.",
+          );
+        }
+      }
+    }
+  }
 
   O generateASTRoot(ASTRoot root, {O? out});
 

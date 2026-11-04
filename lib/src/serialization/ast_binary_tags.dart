@@ -141,6 +141,16 @@ class ASTNodeTag {
   static const int valueSet = 121;
   static const int expressionSetLiteral = 122;
 
+  /// An [ASTClassConstructorDeclaration] that is a `factory` or has an
+  /// initializer list. A plain constructor keeps [classConstructorDeclaration]
+  /// and its original layout, so an image without these forms is still
+  /// readable by a build that predates them.
+  static const int classConstructorDeclarationExtended = 123;
+  static const int constructorFieldInitializer = 124;
+  static const int constructorAssertInitializer = 125;
+  static const int constructorSuperInitializer = 126;
+  static const int constructorRedirectInitializer = 127;
+
   /// Tags that once existed and must never be handed out again.
   ///
   /// Empty today. When a node kind is removed, its number moves here rather

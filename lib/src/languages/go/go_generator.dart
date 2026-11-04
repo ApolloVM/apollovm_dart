@@ -189,6 +189,7 @@ class ApolloCodeGeneratorGo extends ApolloCodeGenerator {
     var body = newOutput();
 
     for (var clazz in root.classes) {
+      checkConstructorForms(clazz);
       generateASTClass(clazz, out: body);
     }
 
