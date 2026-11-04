@@ -81,19 +81,31 @@ void main() {
       await _compile('class A { int x = 5; } int f(A a) { return a?.x; }');
     });
 
-    test('a null literal in a concrete numeric slot is a clean error', () async {
+    test('a null literal in a nullable numeric slot is boxed', () async {
+      // `int?` is boxed (a pointer, 0 = null), so `null` has an encoding.
+      var r = await _compileAndMaybeRun(
+        'int f(int b) { int? x = null; return x ?? b; }',
+        'f',
+        [4],
+      );
+      if (r != null) expect(r, 4);
+    });
+
+    test('a null literal in a String? slot is the null pointer', () async {
+      var r = await _compileAndMaybeRun(
+        'int f() { String? s = null; return s == null ? 1 : 0; }',
+        'f',
+        [],
+      );
+      if (r != null) expect(r, 1);
+    });
+
+    test('a null literal in a non-nullable slot is a clean error', () async {
       // `int` is i64 in Wasm and has no encoding for `null`, so this is an
       // explicit unsupported-construct error — not a silent miscompilation, and
       // not a module that fails to validate.
       await expectLater(
-        _compile('int f(int b) { int? x = null; return x ?? b; }'),
-        throwsA(isA<UnsupportedSyntaxError>()),
-      );
-    });
-
-    test('a null literal in a String slot is a clean error', () async {
-      await expectLater(
-        _compile('int f() { String? s = null; return 0; }'),
+        _compile('int f(int b) { int x = null; return b; }'),
         throwsA(isA<UnsupportedSyntaxError>()),
       );
     });

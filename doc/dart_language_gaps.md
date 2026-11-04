@@ -28,7 +28,7 @@ that version, or a static-analysis-only change).
 |:--|:--|:--:|:--|
 | 2.0  | Sound type system (subtyping) | ⚠️ | Runtime type checks follow the class hierarchy: a subclass or implementer goes in a variable, parameter, return value or field of its supertype (`A a = B();`), and a supertype is rejected in a subtype slot. What's missing is the *static* side: there is no compile-time subtype checker, and type arguments aren't compared across a hierarchy (generics are erased). |
 | 2.1  | `int` literal where a `double` is expected | ✅ | `double d = 1;` runs. |
-| 2.2  | Set literals (`{1, 2}`) | ✅ | `{1, 2}`, `<T>{}` and `Set<T>` as a type, with `length` / `contains` / `add` / `remove` / `for-in`; a bare `{}` stays an empty map. Generated for every target (Go and Lua through their idioms); the Wasm backend refuses one. |
+| 2.2  | Set literals (`{1, 2}`) | ✅ | `{1, 2}`, `<T>{}` and `Set<T>` as a type, with `length` / `contains` / `add` / `remove` / `for-in`; a bare `{}` stays an empty map. Generated for every target (Go and Lua through their idioms); compiled to Wasm (since 2.35.0) with distinct elements, `length` / `isEmpty` / `isNotEmpty` and printing. |
 | 2.3  | Spread operator (`...`, `...?`) | ❌ | Not parsed in list or map literals. |
 | 2.3  | Collection `if` | ❌ | `[1, if (c) 2]` does not parse. |
 | 2.3  | Collection `for` | ❌ | `[for (var e in l) e]` does not parse. |

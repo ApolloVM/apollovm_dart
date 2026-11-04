@@ -319,6 +319,18 @@ class ApolloRunnerWasm extends ApolloRunner {
     );
     loadedModule = module;
 
+    // Top-level variable initializers run in `__init_globals`, once per module
+    // instance (the function guards itself), before the first entry call.
+    var globalsInit = module.getFunction(_globalsInitFunctionName);
+    if (globalsInit != null) {
+      var initFn = globalsInit.function;
+      if (initFn is Function(List)) {
+        Function.apply(initFn, [const []]);
+      } else {
+        Function.apply(initFn, const []);
+      }
+    }
+
     var f = module.getFunction(functionName);
     if (f == null) {
       throw StateError("Can't find function: $functionName");
@@ -335,7 +347,17 @@ class ApolloRunnerWasm extends ApolloRunner {
       for (var i = 0; i < allParams.length && i < paramTypes.length; ++i) {
         var pt = paramTypes[i];
         var arg = allParams[i];
-        if (pt.tag == _tagString && arg is String) {
+        if (arg == null &&
+            (pt.tag == _tagString ||
+                pt.tag == _tagObject ||
+                pt.tag == _tagInstance ||
+                pt.isList ||
+                pt.isMap)) {
+          // `null` for a nullable parameter is the pointer 0: a nullable
+          // `String`/`List`/`Map`/instance is a bare pointer, and a nullable
+          // `int`/`double`/`bool` is a boxed `Object` (see `_boxPtrNull`).
+          allParams[i] = _boxPtrNull;
+        } else if (pt.tag == _tagString && arg is String) {
           allParams[i] = allocAndWriteString(arg);
         } else if (pt.tag == _tagBool && arg is bool) {
           // `bool` is an i32 (0/1) in the Wasm ABI.
@@ -475,8 +497,12 @@ class ApolloRunnerWasm extends ApolloRunner {
           astFunction?.returnType is ASTTypeString ||
           sigReturn?.tag == _tagString;
       // `bool` return: an i32 (0/1).
+      // A `bool?` is a boxed `Object` (tag 5), decoded below — not an i32.
       var returnsBool =
-          astFunction?.returnType is ASTTypeBool || sigReturn?.tag == _tagBool;
+          sigReturn?.tag != _tagObject &&
+          ((astFunction?.returnType is ASTTypeBool &&
+                  !astFunction!.returnType.nullable) ||
+              sigReturn?.tag == _tagBool);
       // `List` return: an i32 pointer to a list header.
       var listReturn = astFunction?.returnType is ASTTypeArray
           ? _elemTagOf((astFunction!.returnType as ASTTypeArray).componentType)
@@ -505,7 +531,15 @@ class ApolloRunnerWasm extends ApolloRunner {
           objectReturn is ASTTypeDynamic ||
           sigReturn?.tag == _tagObject;
 
-      if (returnsString) {
+      // A `String?`/`List?`/`Map?` return of `null` is the pointer 0, which no
+      // allocation ever yields.
+      var nullPointer =
+          res == _boxPtrNull &&
+          (returnsString || listReturn != null || mapReturn != null);
+
+      if (nullPointer) {
+        res = null;
+      } else if (returnsString) {
         res = decodeString(res as int);
       } else if (returnsBool && res is! bool) {
         res = (res as num) != 0;
@@ -734,6 +768,11 @@ class ApolloRunnerWasm extends ApolloRunner {
   static const int _tagObject = 5; // `Object`/`dynamic` element: a boxed value.
   static const int _tagList = 6;
   static const int _tagMap = 7;
+  static const int _tagInstance = 8; // A class instance: a bare heap pointer.
+
+  /// The export running the top-level variable initializers. Must match
+  /// `ApolloGeneratorWasm.globalsInitFunctionName`.
+  static const String _globalsInitFunctionName = '__init_globals';
 
   // Boxed-`Object` cell layout (16 bytes): `[tag:i32 @0][typeId:i32 @4]
   // [payload:8 @8]`. Tags must match `wasm_generator.dart`'s `_boxTag*`.
