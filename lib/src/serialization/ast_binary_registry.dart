@@ -43,6 +43,16 @@ class ASTCodecRegistry {
     for (var c in ordered) c.tag: c,
   };
 
+  /// The codecs that pick their nodes by content (see [ASTNodeCodec.when]).
+  ///
+  /// They are checked on every lookup, ahead of the per-type cache below: two
+  /// instances of one runtime type can need different codecs, so the cache can
+  /// only remember the unconditional answer.
+  static final List<ASTNodeCodec> _conditional = [
+    for (var c in ordered)
+      if (c.isConditional) c,
+  ];
+
   /// Memoized dispatch, keyed on the concrete runtime type.
   ///
   /// A plain `Map<Type, codec>` alone would be wrong — around twenty AST
@@ -60,6 +70,15 @@ class ASTCodecRegistry {
   /// — an external function's closure, a running future, a bound runtime value
   /// — which the VM injects rather than a parser producing.
   static ASTNodeCodec codecFor(Object node, [String declarationPath = '']) {
+    // Exact class only: an `is` match would also claim a subclass — one with
+    // its own codec, or one in [excluded] — and encode it as its parent.
+    if (_conditional.isNotEmpty) {
+      var className = _classNameOf(node);
+      for (var c in _conditional) {
+        if (c.className == className && c.matches(node)) return c;
+      }
+    }
+
     var cached = _resolved[node.runtimeType];
     if (cached != null) return cached;
 
@@ -77,6 +96,7 @@ class ASTCodecRegistry {
 
     if (reason == null) {
       for (var c in ordered) {
+        if (c.isConditional) continue;
         if (c.matches(node)) {
           return _resolved[node.runtimeType] = c;
         }

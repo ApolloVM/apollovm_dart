@@ -19,6 +19,9 @@ class ApolloCodeGeneratorDart extends ApolloCodeGenerator {
     : super('dart', codeStorage);
 
   @override
+  bool get supportsConstructorForms => true;
+
+  @override
   bool get supportsNullableTypeSuffix => true;
 
   @override
@@ -419,6 +422,8 @@ class ApolloCodeGeneratorDart extends ApolloCodeGenerator {
 
     out.write(indent);
 
+    if (c.isFactory) out.write('factory ');
+
     out.write(c.classType.name);
     if (c.name.isNotEmpty) {
       out.write('.');
@@ -539,6 +544,52 @@ class ApolloCodeGeneratorDart extends ApolloCodeGenerator {
     return out;
   }
 
+  /// One initializer-list entry: `x = e`, `assert(c, m)`, `super.n(…)` or
+  /// `this.n(…)`.
+  void _generateConstructorInitializer(
+    ASTConstructorInitializer initializer,
+    StringBuffer out,
+  ) {
+    switch (initializer) {
+      case ASTConstructorFieldInitializer():
+        out.write(initializer.fieldName);
+        out.write(' = ');
+        generateASTExpression(initializer.value, out: out, headIndented: false);
+      case ASTConstructorAssertInitializer():
+        out.write('assert(');
+        generateASTExpression(
+          initializer.condition,
+          out: out,
+          headIndented: false,
+        );
+        var message = initializer.message;
+        if (message != null) {
+          out.write(', ');
+          generateASTExpression(message, out: out, headIndented: false);
+        }
+        out.write(')');
+      case ASTConstructorInvocationInitializer():
+        out.write(initializer.keyword);
+        if (initializer.constructorName.isNotEmpty) {
+          out.write('.');
+          out.write(initializer.constructorName);
+        }
+        out.write('(');
+        var wrote = 0;
+        for (var a in initializer.arguments) {
+          if (wrote++ > 0) out.write(', ');
+          generateASTExpression(a, out: out, headIndented: false);
+        }
+        for (var e in [...?initializer.namedArguments?.entries]) {
+          if (wrote++ > 0) out.write(', ');
+          out.write(e.key);
+          out.write(': ');
+          generateASTExpression(e.value, out: out, headIndented: false);
+        }
+        out.write(')');
+    }
+  }
+
   void _generateFunctionParamsAndBlock(
     ASTInvocableDeclaration f,
     StringBuffer blockCode,
@@ -553,6 +604,14 @@ class ApolloCodeGeneratorDart extends ApolloCodeGenerator {
 
     if (f is ASTFunctionDeclaration && f.modifiers.isAsync) {
       out.write(' async');
+    }
+
+    if (f is ASTClassConstructorDeclaration && f.initializers.isNotEmpty) {
+      out.write(' : ');
+      for (var i = 0; i < f.initializers.length; ++i) {
+        if (i > 0) out.write(', ');
+        _generateConstructorInitializer(f.initializers[i], out);
+      }
     }
 
     var blockStr = blockCode.toString();

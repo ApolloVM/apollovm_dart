@@ -323,6 +323,8 @@ Same legend and **Wasm** column semantics as the table above.
 | Primary constructors (class header)¹⁷                         | ✅ | 🚫  | 🚧 | 🚫  | 🚧 | 🚫  | 🚫  | 🚫  | 🚫  | ✅¹⁷ |
 | Private named parameters (`this._x` → `x:`)¹⁸                 | ✅ | 🚫  | 🚫  | 🚫  | 🚫  | 🚫  | 🚫  | 🚫  | 🚫  | ✅¹⁸ |
 | Super parameters (`B(super.x)`)¹⁹                             | ✅ | 🚫  | 🚫  | 🚫  | 🚫  | 🚫  | 🚫  | 🚫  | 🚫  | ✅¹⁹ |
+| Named & `factory` constructors (`A.zero()`)²⁰                 | ✅ | 🚧 | 🚧 | 🚧 | 🚧 | 🚧 | 🚧 | 🚧 | 🚧 | 🚧 |
+| Initializer lists (`: x = v`, `super(…)`, `this(…)`)²⁰         | ✅ | 🚧 | 🚧 | 🚧 | 🚧 | 🚧 | 🚧 | 🚧 | 🚧 | 🚧 |
 
 ¹ Lua is table-based: "fields" are table entries (`obj.x`), "constructors" are factory/`setmetatable`
 idioms, methods are `function Obj:method`. &nbsp;
@@ -364,10 +366,10 @@ fields; `super.method()` / `super.getter` / `super.field` reach the parent, and 
 subclass override wins. Works for the languages that record their base class:
 Dart, Java (`extends`), C# / TS / JS (`: Base` / `extends`), Python. Kotlin's
 `class B : A()` base clause and Go embedding aren't parsed yet (`🚧`), and the
-Wasm backend doesn't compile inheritance yet. Constructor initializer lists with
-an explicit `: super(v)` call are not parsed yet — set an inherited field with a
-**super parameter** (`B(super.x)`, footnote 19) or from the constructor
-body. &nbsp;
+Wasm backend doesn't compile inheritance yet. A Dart subclass constructor runs
+its superclass constructor — body included — through an explicit `: super(v)` /
+`: super.named(v)` initializer (footnote 20); the *implicit* superclass call
+Dart makes when there is none is not made yet. &nbsp;
 ¹⁴ **Getters and setters** are parsed and executed on classes, extensions and
 enum bodies (an enum member declares them like any other class member):
 `get name => …` / `get name { … }` (with or without an explicit return type) and
@@ -402,10 +404,10 @@ still declare members, `extends` and `implements`. It is **desugared as it is
 parsed** into the classic form — the induced fields plus a constructor whose
 parameters are `this.x` formals — so every runner, generator and codec (Wasm
 included) sees a shape it already handles, and Dart output comes back in the
-classic form. Not supported: a named primary constructor
+classic form. Not supported yet: a named primary constructor
 (`class Point.custom(…)`), `class const Point(…)`, and the in-body `this : …`
-form, all of which need constructor features ApolloVM does not have yet (named
-constructors, compile-time constants, initializer lists). Kotlin and C# have
+form. The constructor kinds they build on now exist (footnote 20), except
+compile-time constants. Kotlin and C# have
 their own header/primary-constructor syntax but do not parse it yet (`🚧`). &nbsp;
 ¹⁸ A **private named parameter** is an initializing formal whose field is
 private: `Point({required this._x})` writes `_x` but is passed as `x:` at the
@@ -421,10 +423,26 @@ an inherited one is written; ApolloVM assigns that field on the instance being
 built. Dart output spells it `super.` again (and `this.` for an own field), and
 the distinction is re-derived from the class hierarchy when a binary AST is
 decoded, so it needs no format change. The targets with no equivalent name the
-parameter and drop the qualifier. What is *not* supported is the rest of the
-initializer list: an explicit `: super(v)` call, and running the superclass
-constructor's **body** — no subclass instantiation does that yet, so a
-superclass constructor that computes rather than assigns is not reproduced.
+parameter and drop the qualifier. With an explicit `: super(…)` initializer the
+super parameters are also passed to the superclass constructor, as in Dart
+(footnote 20); without one no superclass constructor runs, so one that computes
+rather than assigns is not reproduced. &nbsp;
+²⁰ **Named constructors** (`A.zero()`, private `A._()`), **`factory`
+constructors** (unnamed or named, with a block or `=> expr` body) and
+**initializer lists** run in Dart: `x = v` / `this.x = v` field initializers,
+`assert(cond, msg)`, `super(…)` / `super.named(…)` — which runs the superclass
+constructor in full, body included, before the subclass body — and redirecting
+`this(…)` / `this.named(…)`. Entries run in order, after the initializing
+formals and before the body. A call site reaches a named constructor with
+`A.zero()`, `new A.zero()` or `const A.zero()`. Dart output writes every form
+back as declared, and the binary AST keeps them: a factory or a constructor with
+an initializer list has its own node tag, while a plain constructor (named or
+not) keeps its original layout, so an image without these forms still loads in
+an older build. Every other target — Wasm included — refuses a class using them
+with `UnsupportedSyntaxError` rather than drop a constructor or skip its
+initializers. Not supported yet: the implicit superclass constructor call (see
+footnote 13), redirecting factories (`factory A() = B;`) and `const`
+canonicalization (`const` is accepted and ignored).
 
 > Per-language behavior is normalized to a shared AST, so types and constructs map
 > cleanly when translating between languages (e.g. C# `string` ⇄ Dart `String`,

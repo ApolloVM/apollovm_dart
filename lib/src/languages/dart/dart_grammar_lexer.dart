@@ -85,7 +85,9 @@ abstract class DartGrammarLexer extends BaseGrammarLexer {
 
   Parser extendsToken() => ref1(token, 'extends');
 
-  Parser factoryToken() => ref1(token, 'factory');
+  // Whole word: `factory` is a built-in identifier, so a member named
+  // `factoryReset()` must not read as `factory` + `Reset()`.
+  Parser factoryToken() => _keywordToken('factory');
 
   Parser extensionToken() => _keywordToken('extension');
 

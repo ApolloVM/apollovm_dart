@@ -302,6 +302,8 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
   /// signature = the constructor's value params, returns an i32 object pointer)
   /// and one per non-static instance method (`this` prepended as param 0).
   List<ASTFunctionDeclaration> _buildClassFunctions(ASTClassNormal clazz) {
+    checkConstructorForms(clazz);
+
     var result = <ASTFunctionDeclaration>[];
 
     var constructors = clazz.constructors;

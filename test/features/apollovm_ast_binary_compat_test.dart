@@ -9,6 +9,7 @@ import 'package:apollovm/apollovm_serialization.dart';
 // The container internals are needed to synthesize files a current writer
 // cannot produce — a future section, a future minimum reader version.
 import 'package:apollovm/src/serialization/ast_binary_container.dart';
+import 'package:apollovm/src/serialization/ast_binary_registry.dart';
 import 'package:apollovm/src/serialization/crc32.dart';
 import 'package:test/test.dart';
 
@@ -234,7 +235,11 @@ void main() {
 
       var ast = container.requirePayloadOf(ASTBinarySection.astRoot);
       var broken = Uint8List.fromList(ast);
-      broken[0] = 0x7E; // A tag no build assigns.
+      // A single-byte tag no build assigns. Looked up rather than hard-coded:
+      // tags are handed out over time, and a fixed number silently becomes a
+      // real node kind.
+      broken[0] = [for (var t = 1; t < 0x80; ++t) t]
+          .firstWhere((t) => ASTCodecRegistry.byTag(t) == null);
 
       var rebuilt = _rebuild([
         for (var s in container.sections)

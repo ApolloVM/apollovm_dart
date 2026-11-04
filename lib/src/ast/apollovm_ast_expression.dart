@@ -3515,11 +3515,53 @@ class ASTExpressionObjectFunctionInvocation
     return null;
   }
 
+  bool _receiverIsNotClass = false;
+
+  /// If the receiver names a class (`A.zero(…)`, not `a.zero(…)`) that declares
+  /// a constructor called [name], returns that **named constructor**.
+  ///
+  /// Dart forbids a static member and a constructor with the same name, so
+  /// trying the constructor first can't shadow a static method.
+  FutureOr<ASTClassConstructorDeclaration?> _resolveNamedConstructor(
+    VMContext parentContext,
+  ) {
+    // Only a bare name can denote a class, and what a name denotes at a call
+    // site doesn't change between runs: once the receiver turned out not to
+    // be a class, ordinary method calls skip this extra receiver evaluation.
+    if (_isSuper || _receiverIsNotClass || variable is! ASTScopeVariable) {
+      return null;
+    }
+
+    return _getVariableValue(parentContext).resolveMapped((obj) {
+      if (obj is! ASTClassStaticAccessor) {
+        _receiverIsNotClass = true;
+        return null;
+      }
+
+      var clazz = obj.clazz;
+      if (clazz is! ASTClassNormal) return null;
+      if (!clazz.containsConstructorWithName(name)) return null;
+
+      return clazz.getConstructor(
+        name,
+        _getASTFunctionSignature(),
+        parentContext,
+      );
+    });
+  }
+
   @override
   FutureOr<ASTInvocableDeclaration> _getFunction(VMContext parentContext) {
     var prefixed = _resolvePrefixedInvocable(parentContext);
     if (prefixed != null) return prefixed;
 
+    return _resolveNamedConstructor(parentContext).resolveMapped((ctor) {
+      if (ctor != null) return ctor;
+      return _getMethod(parentContext);
+    });
+  }
+
+  FutureOr<ASTInvocableDeclaration> _getMethod(VMContext parentContext) {
     return _getFunctionClass(parentContext).resolveMapped((clazz) {
       var fSignature = _getASTFunctionSignature();
 

@@ -1,3 +1,63 @@
+## 2.32.0
+
+The Dart constructor kinds beyond the plain unnamed one. All four were
+syntax errors; they now parse, run, generate back to Dart and survive the
+binary AST. See [`doc/dart_language_gaps.md`](doc/dart_language_gaps.md).
+
+### Named constructors
+
+```dart
+class Point {
+  int x;
+  int y;
+  Point(this.x, this.y);
+  Point.origin() : x = 0, y = 0;
+}
+var p = Point.origin();   // was: [SyntaxError] "$" expected
+```
+
+Declared with `this.x` formals, an initializer list and/or a body (private
+ones such as `Point._()` included), and called as `Point.origin()`,
+`new Point.origin()` or `const Point.origin()`. As in Dart, a class that
+declares only named constructors has no unnamed one.
+
+### Initializer lists
+
+`R(int w, int h) : assert(w > 0), w = w, this.h = h, area = w * h;` —
+field initializers and `assert`s run in order, after the `this.x` formals and
+before the body.
+
+### `super(…)` and `this(…)`
+
+`B(int v) : super(v + 1)` and `: super.named(v)` now run the superclass
+constructor **in full, body included**, before the subclass body. Until now
+the superclass constructor never ran. Super parameters (`B(super.x)`) are
+passed along to the explicit `super(…)`. A redirecting constructor
+(`Point.diagonal(int v) : this(v, v);`) hands the same instance to the target.
+
+What is still missing is the *implicit* superclass call that Dart makes when a
+subclass constructor has no `super(…)`. Without an explicit one, the
+superclass constructor still does not run.
+
+### Factory constructors
+
+`factory Shape(String kind) { … }` and `factory Shape.square() => …;` run their
+body like a static method; the instance is whatever it returns, an existing one
+included. Redirecting factories (`factory A() = B;`) are not supported yet.
+
+### Translation and the binary AST
+
+- **Other targets refuse.** Every target except Dart, Wasm included, throws
+  `UnsupportedSyntaxError` for a class that uses these forms. Most of them emit
+  only one constructor per class, so the alternative was dropping constructors
+  or initializers silently.
+- **Old images still load.** A factory, or a constructor with an initializer
+  list, is written under its own node tag (`123`). Its initializers use new
+  tags `124`–`127`. Every other constructor, named ones included, keeps its
+  original layout, so an image without these forms still loads in an older
+  build. To allow this, `ASTNodeCodec` gained a `when:` predicate: one class
+  can have a second, content-selected layout.
+
 ## 2.31.1
 
 Dependency refresh only; no API or behavior changes.

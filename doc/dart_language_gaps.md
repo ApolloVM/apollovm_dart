@@ -8,8 +8,8 @@ The feature list follows the official
 version by version, plus a second table for core constructs that predate the
 versioned evolution list (Dart 1.x / 2.0 baseline).
 
-- **Measured against:** ApolloVM `2.31.0` (`lib/src/languages/dart/`), Dart SDK `3.13.3`.
-- **Date:** 2026-09-09.
+- **Measured against:** ApolloVM `2.32.0` (`lib/src/languages/dart/`), Dart SDK `3.13.5`.
+- **Date:** 2026-11-04 (constructor rows; the rest was last probed on 2026-09-09 against `2.31.0`).
 - **Method:** every row was probed by loading a minimal source unit through
   `ApolloVM.loadCodeUnit('dart', …)` and, when it parsed, executing it with the
   Dart runner — so a ✅ means *parsed and ran*, not "the grammar mentions it".
@@ -45,7 +45,7 @@ that version, or a static-analysis-only change).
 | 2.15 | Constructor tear-offs (`A.new`, `A.named`) | ❌ | `var c = A.new;` fails (`Can't find class[A] getter[new]`). Plain function tear-offs are missing too — see table 2. |
 | 2.16 | — | ➖ | No language features. |
 | 2.17 | Enhanced enums (fields, constructors, methods) | ✅ | Constructor arguments, fields, methods and accessors (`int get i => …`, `set x(v) { … }`), plus `.index`, `.name`, `E.values`. |
-| 2.17 | Super-initializer parameters (`B(super.x)`) | ✅ | Positional, named (with `required`), defaulted, and in a primary constructor header; the value is assigned to the inherited field, through any depth of superclass. The rest of the initializer list — an explicit `: super(v)` — is still missing (see table 2), as is running the superclass constructor's *body*. |
+| 2.17 | Super-initializer parameters (`B(super.x)`) | ✅ | Positional, named (with `required`), defaulted, and in a primary constructor header; the value is assigned to the inherited field, through any depth of superclass. With an explicit `: super(…)` they are also passed to the superclass constructor; without one, no superclass constructor runs (see table 2). |
 | 2.17 | Named arguments anywhere in the argument list | ✅ | `g(b: 1, 2)` runs. |
 | 2.18 | Inference flowing between arguments of a generic call | ❌ | No generic inference engine; generics are erased at runtime. |
 | 2.19 | Unnamed libraries (`library;`) | ❌ | Does not parse. `library foo;` *appears* to parse only because it matches a top-level variable declaration (type `library`, name `foo`) — a false positive, not support. |
@@ -66,7 +66,7 @@ that version, or a static-analysis-only change).
 | 3.10 | Dot shorthands (`E e = .a;`) | ❌ | Does not parse. |
 | 3.11 | — | ➖ | No language features. |
 | 3.12 | Private named parameters (`A({required this._x})`) | ✅ | The leading `_` is stripped from the parameter name, so callers write `A(x: 3)` while the field stays `_x`. A name with no valid public form (`__x`, `_`) is left alone. |
-| 3.13 | Primary constructors (`class A(final int x) {}`) | ⚠️ | The class-header form is supported — declaring (`var`/`final`) and plain parameters, named/optional groups, `required`, defaults, a `;` body — and is desugared into fields plus an ordinary constructor. A *named* primary constructor (`class A.custom(…)`), `class const A(…)` and the in-body `this : …` form are not: they need named constructors, compile-time constants and initializer lists (see table 2). |
+| 3.13 | Primary constructors (`class A(final int x) {}`) | ⚠️ | The class-header form is supported — declaring (`var`/`final`) and plain parameters, named/optional groups, `required`, defaults, a `;` body — and is desugared into fields plus an ordinary constructor. A *named* primary constructor (`class A.custom(…)`), `class const A(…)` and the in-body `this : …` form are not yet parsed. Named constructors and initializer lists now exist (table 2); compile-time constants do not. |
 
 -----------------------------
 
@@ -77,11 +77,11 @@ above, but they are the largest part of the gap.
 
 | Feature | ApolloVM | Notes |
 |:--|:--:|:--|
-| Named constructors (`A.named(…)`) | ❌ | The class body parser accepts one unnamed constructor per class (its name is fixed to `''`). |
-| Factory constructors (`factory A.zero()`) | ❌ | The `factory` token exists in the lexer but is never used by the grammar. |
-| Constructor initializer lists (`A(int v) : x = v`) | ❌ | Use `this.x` parameters or a constructor body instead. |
-| Redirecting constructors (`A.zero() : this(0)`) | ❌ | Follows from the two rows above. |
-| `super(…)` constructor calls | ❌ | The superclass constructor is never invoked, so its *body* never runs. An inherited **field** can be initialized with a super parameter (`B(super.x)`, Dart 2.17) instead. |
+| Named constructors (`A.named(…)`) | ✅ | Declared with `this.x` formals, an initializer list and/or a body, private ones (`A._()`) included; called as `A.named(…)`, `new A.named(…)` or `const A.named(…)`, with positional and named arguments. Declaring only named constructors removes the unnamed one. |
+| Factory constructors (`factory A.zero()`) | ✅ | Unnamed or named, with a block or `=> expr` body; the body runs like a static method and its returned value is the instance (an existing one included). A factory that returns nothing is a runtime error. *Redirecting* factories (`factory A() = B;`) do not parse. |
+| Constructor initializer lists (`A(int v) : x = v`) | ✅ | `x = v` and `this.x = v` field initializers and `assert(cond[, msg])`, run in order after the initializing formals and before the body. |
+| Redirecting constructors (`A.zero() : this(0)`) | ✅ | `this(…)` and `this.named(…)`; the target runs in full — formals, initializer list and body — on the same instance. Redirecting to a factory is a runtime error. |
+| `super(…)` constructor calls | ⚠️ | An **explicit** `: super(…)` / `: super.named(…)` runs the superclass constructor in full, body included, before the subclass body, through any depth; super parameters are passed along. The **implicit** call Dart makes when a subclass constructor has no `super(…)` is not made: the superclass constructor then does not run (inherited field initializers still apply). It is left out because the AST does not record a class's source language, and Python/JS/TS/Kotlin have no implicit superclass call. |
 | `const` constructors / canonicalization | ⚠️ | `const` is parsed and discarded; `const A(1)` builds an ordinary instance, with no compile-time constant evaluation or identity canonicalization. |
 | Mixins (`mixin M { … }`, `class A with M`) | ❌ | Neither the declaration nor the `with` clause parses. |
 | Operator overloading (`A operator +(A o)`) | ❌ | The `operator` token exists in the lexer but is unused. |
@@ -109,9 +109,11 @@ above, but they are the largest part of the gap.
 ## 3. What already works
 
 For contrast, the Dart constructs verified as parsing **and** running:
-classes, fields (with initializers), unnamed constructors with `this.x` /
-`required` / named / optional-positional / defaulted / **private named** /
-**super** parameters, **primary constructors** in the class header, methods,
+classes, fields (with initializers), unnamed and **named** constructors with
+`this.x` / `required` / named / optional-positional / defaulted / **private
+named** / **super** parameters, **initializer lists** (fields, `assert`,
+`super(…)`, `this(…)`), **factory** constructors, **primary constructors** in
+the class header, methods,
 `static` members, `abstract`, `extends` with inherited members and
 `super.method()`, generic **classes** and instantiation, enums (including rich
 enums with constructor args, fields, methods and accessors), extensions, getters

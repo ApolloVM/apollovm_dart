@@ -8,6 +8,8 @@ import '../ast/apollovm_ast_statement.dart';
 import '../ast/apollovm_ast_toplevel.dart';
 import '../ast/apollovm_ast_type.dart';
 import '../ast/apollovm_ast_variable.dart';
+import 'ast_binary_codecs_expression.dart'
+    show readNamedArguments, writeNamedArguments;
 import 'ast_binary_codecs_statement.dart';
 import 'ast_binary_context.dart';
 import 'ast_binary_node_codec.dart';
@@ -18,6 +20,24 @@ void _writeParameters(ASTBinaryWriteContext w, ASTParametersDeclaration p) {
   w.nodes(p.positionalParameters);
   w.nodes(p.optionalParameters);
   w.nodes(p.namedParameters);
+}
+
+/// Writes a `super(…)` / `this(…)` initializer: target name, then arguments.
+void _writeDelegation(
+  ASTBinaryWriteContext w,
+  ASTConstructorInvocationInitializer n,
+) {
+  w.str(n.constructorName);
+  w.nodes(n.arguments);
+  writeNamedArguments(w, n.namedArguments);
+}
+
+(String, List<ASTExpression>, Map<String, ASTExpression>?) _readDelegation(
+  ASTBinaryReadContext r,
+) {
+  var name = r.str();
+  var arguments = r.nodeList<ASTExpression>();
+  return (name, arguments, readNamedArguments(r));
 }
 
 ASTFunctionParametersDeclaration _readFunctionParameters(
@@ -268,6 +288,84 @@ final List<ASTNodeCodec> toplevelCodecs = [
       );
       _fillBlock(r, f);
       return f;
+    },
+  ),
+
+  // A `factory` or a constructor with an initializer list: the plain layout
+  // below, plus those two. Conditional, so a plain constructor keeps the
+  // original tag and an image without these forms stays readable by a build
+  // that predates them.
+  ASTNodeCodec<ASTClassConstructorDeclaration>(
+    ASTNodeTag.classConstructorDeclarationExtended,
+    'ASTClassConstructorDeclaration',
+    when: (n) => n.hasExtendedForm,
+    encode: (w, n) => w.inDeclaration(n.signatureName, () {
+      w.str(n.name);
+      w.type(n.classType);
+      _writeParameters(w, n.parameters);
+      w.modifiers(n.modifiers);
+      w.boolean(n.isFactory);
+      w.nodes(n.initializers);
+      writeBlockBody(w, n);
+    }),
+    decode: (r) {
+      var name = r.str();
+      var classType = r.type();
+      var parameters = _readConstructorParameters(r);
+      var modifiers = r.modifiers();
+      var isFactory = r.boolean();
+      var initializers = r.nodeList<ASTConstructorInitializer>();
+      var c = ASTClassConstructorDeclaration(
+        classType,
+        name,
+        parameters,
+        modifiers: modifiers,
+        isFactory: isFactory,
+        initializers: initializers,
+      );
+      _fillBlock(r, c);
+      return c;
+    },
+  ),
+
+  ASTNodeCodec<ASTConstructorFieldInitializer>(
+    ASTNodeTag.constructorFieldInitializer,
+    'ASTConstructorFieldInitializer',
+    encode: (w, n) {
+      w.str(n.fieldName);
+      w.node(n.value);
+    },
+    decode: (r) {
+      var fieldName = r.str();
+      return ASTConstructorFieldInitializer(fieldName, r.node<ASTExpression>());
+    },
+  ),
+
+  ASTNodeCodec<ASTConstructorAssertInitializer>(
+    ASTNodeTag.constructorAssertInitializer,
+    'ASTConstructorAssertInitializer',
+    encode: (w, n) => w.node(n.assertion),
+    decode: (r) =>
+        ASTConstructorAssertInitializer(r.node<ASTStatementAssert>()),
+  ),
+
+  ASTNodeCodec<ASTConstructorSuperInitializer>(
+    ASTNodeTag.constructorSuperInitializer,
+    'ASTConstructorSuperInitializer',
+    encode: _writeDelegation,
+    decode: (r) {
+      var (name, args, named) = _readDelegation(r);
+      return ASTConstructorSuperInitializer(name, args, named);
+    },
+  ),
+
+  ASTNodeCodec<ASTConstructorRedirectInitializer>(
+    ASTNodeTag.constructorRedirectInitializer,
+    'ASTConstructorRedirectInitializer',
+    encode: _writeDelegation,
+    decode: (r) {
+      var (name, args, named) = _readDelegation(r);
+      return ASTConstructorRedirectInitializer(name, args, named);
     },
   ),
 
