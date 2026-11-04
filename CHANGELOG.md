@@ -1,3 +1,91 @@
+## 2.35.0
+
+The Wasm backend now compiles every Dart example of the web playground:
+nullable values, top-level variables, setters, extensions, records and set
+literals, plus fixes to `async` methods.
+
+### Nullable values
+
+- **`int?`, `double?`, `num?` and `bool?` are stored boxed.** They use the
+  same representation as an `Object`: a pointer, where 0 is `null`.
+  `String?`, `List?`, `Map?` and class types are already pointers, and 0 is
+  their `null`. This applies to locals, parameters, fields, returns and
+  globals.
+- **Silently wrong results fixed:**
+  - a `String?` holding `null` came back as `""`, so `??` never fell back;
+  - `s?.length` and `l?[0]` on `null` gave `0` instead of `null`.
+- **`null` crosses the host boundary.** A `null` argument for a nullable
+  parameter used to fail with `Cannot convert null to a BigInt`. A `null`
+  return now reaches the caller as `null`.
+- **`??=`** compiles, and is assigned only when the target is `null`. Before,
+  it failed with `Wasm Operator not supported: nullCoalesce`.
+- **`??`** unboxes `int? ?? int` to a plain `int`, and tests a nullable
+  pointer against 0.
+- **`== null`** works on a nullable pointer. Before, it was constant `false`.
+- **`!`** unboxes the value. On `null` it raises
+  `ApolloVMNullPointerException: Null check operator used on a null value`,
+  which a `catch` inside the function catches; elsewhere it traps. It used to
+  pass `null` through.
+- **`?.`, `?[`, `!.` and member-access chains** work on any receiver
+  expression: `a.next.name`, `a.next?.next?.name`, `a.next!.name`,
+  `head.next.value = 20`, and on top-level variables and fields. Nullable
+  class-typed fields (`Node? next`) compile.
+- **Printing** a `null` `String?` or instance gives `null`.
+
+### Top-level variables
+
+Top-level variables compile to module globals. Before, compilation crashed
+with `Can't find local variable`. A literal number seeds its global. Any
+other initializer (`final List<String> log = [];`) runs in an exported
+`__init_globals`, which the runner calls once per module instance before the
+entry function. Locals shadow them, and `g++`, compound assignment,
+interpolation and method calls (`log.add(…)`) work on them, and on `static`
+fields too.
+
+### Setters
+
+A setter compiles to a method named `x=`. `obj.x = v`, compound assignment
+(which reads through the getter) and a bare `x = v` inside the class call it.
+A bare getter name inside the class reads through the getter. Static setters
+are still refused.
+
+### Extensions
+
+Extension methods and getters on a core type (`int`, `String`, …) or a user
+class compile to functions that take the receiver first. A call picks the
+extension by the receiver's static type; a member the class declares itself
+wins. Inside an extension, `this.toUpperCase()` and other implicit-`this`
+calls work. Extension setters and `static` extension members are refused.
+
+### Records and set literals
+
+- **A record compiles to a heap struct:** positional fields first, then named
+  ones sorted by name. Supported: literals, `r.$1` / `r.name`, structural
+  `==` (nested records too), printing in Dart's format (`(1,)`,
+  `(a: 1, b: 2)`), and records as list and set elements.
+- **A set literal compiles to the list layout,** skipping elements equal to
+  one already in, and keeping insertion order. Supported: `length`,
+  `isEmpty` / `isNotEmpty`, printing (`{1, 2}`).
+
+### Fixes
+
+- **`async` methods:** `var x = await doubleIt(n)` on a sibling `static`
+  method typed `x` as `Future<int>`. With a typed local, Chrome rejected the
+  module. The class-method wrappers dropped the `async` modifier, so their
+  Wasm return type was `Future<T>`. Inside an `async` method, an awaited
+  sibling `static` is now resolved as a module function, not a host import.
+- **A call used as a statement inside a loop** (`next('x');`) left its result
+  on the stack, and the module failed to validate.
+- **`?:`** takes its type from its arms when the static type is `dynamic`,
+  e.g. inside a setter. Before, it could produce an `i32` block for `int`
+  arms.
+- **A `double` field initialized with an int literal** (`double c = 0;`) is
+  converted. Before, the module failed to validate. Field assignments convert
+  too.
+- **A list literal whose element type is unknown statically** (`[a, 5]`,
+  where `a` is a parameter) takes its type from the elements. Before, it
+  stored boxes that a `List<int>` parameter misread.
+
 ## 2.34.0
 
 Two gaps from [`doc/dart_language_gaps.md`](doc/dart_language_gaps.md):

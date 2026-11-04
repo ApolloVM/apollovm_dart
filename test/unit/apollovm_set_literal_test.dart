@@ -307,17 +307,13 @@ void main() {
       );
     });
 
-    test(
-      'Wasm refuses a set literal instead of lowering it to a list',
-      () async {
-        var vm = await _load(
-          'class C { static int run() { var s = {1, 2}; return s.length; } }',
-        );
-        expect(
-          () => vm.generateAllIn<BytesOutput>('wasm').allEntries(),
-          throwsA(isA<UnsupportedSyntaxError>()),
-        );
-      },
-    );
+    // Run in the Wasm runtime by `test/wasm/apollovm_wasm_dart_features_test.dart`.
+    test('Wasm compiles a set literal', () async {
+      var vm = await _load(
+        'class C { static int run() { var s = {1, 2, 1}; return s.length; } }',
+      );
+      var modules = await vm.generateAllIn<BytesOutput>('wasm').allEntries();
+      expect(modules.values.first.values.first.output(), isNotEmpty);
+    });
   });
 }

@@ -101,11 +101,11 @@ The **Wasm** column shows what the on-the-fly WebAssembly compiler currently sup
 | Parameter default values         | ✅ | 🚫  | ✅ | 🚫 | ✅ | 🚫  | 🚫  | 🚫  | ✅ | ✅ |
 | String interpolation / concat    | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | List & map / dict literals       | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Set literals (`{1, 2}`)¹⁷        | ✅ | 🚧 | 🚧 | 🧩¹⁷ | 🚧 | 🚧 | 🚧 | 🧩¹⁷ | 🚧 | 🚧 |
-| Top-level variables¹⁸            | ✅ | 🚫 | ✅ | ✅ | 🚫 | ✅ | ✅ | ✅ | ✅ | 🚧 |
-| Records (`(1, 'a')`, `r.$1`)¹⁹   | ✅ | 🚫 | 🚫 | 🚫 | 🚧 | 🚫 | 🚧 | 🚫 | 🚧 | 🚧 |
+| Set literals (`{1, 2}`)¹⁷        | ✅ | 🚧 | 🚧 | 🧩¹⁷ | 🚧 | 🚧 | 🚧 | 🧩¹⁷ | 🚧 | 🧩¹⁷ |
+| Top-level variables¹⁸            | ✅ | 🚫 | ✅ | ✅ | 🚫 | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Records (`(1, 'a')`, `r.$1`)¹⁹   | ✅ | 🚫 | 🚫 | 🚫 | 🚧 | 🚫 | 🚧 | 🚫 | 🚧 | 🧩¹⁹ |
 | Index access (`a[i]`, nested `m[i][j]`)¹² | ✅ | 🧩 | 🧩 | 🧩 | 🧩 | 🧩 | 🧩 | 🧩 | 🧩 | ✅ |
-| `null` / `None` / `nil`¹³        | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 🧩¹³ |
+| `null` / `None` / `nil`¹³        | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅¹³ |
 
 ¹ Lua numeric-for (`for i = a, b do`). &nbsp; ² Lua `repeat … until`. &nbsp;
 ³ Kotlin `when`. &nbsp; ⁴ Python `match` / `case`. &nbsp;
@@ -127,9 +127,9 @@ compound assignment (`a[i] += 1`). **Chained/nested** access and assignment
 **Dart** source; the other languages currently parse a single `[...]` only (`🧩`),
 with nested-index parsing being extended per grammar. &nbsp;
 ¹³ The null *literal* and its per-language spelling (`null` / `nil` / `None`).
-Wasm has no null value of its own and represents it as a boxed pointer, so it is
-`🧩` — see [Null safety](#null-safety) for the operators (`??`, `?.`, `!`, …) and
-the Wasm limits. &nbsp;
+Wasm has no null value of its own: a nullable value is a pointer, and the
+pointer 0 is `null` — see [Null safety](#null-safety) for the operators (`??`,
+`?.`, `!`, …). &nbsp;
 ¹⁴ A control-flow body may be a single statement without braces
 (`for (var e in l) print(e);`), on `if`/`else`/`else if` and on every loop. A
 dangling `else` binds to the nearest `if`, as in each target language. Python's
@@ -154,8 +154,10 @@ Java `new HashSet<T>(){{ add(…); }}`, Kotlin `mutableSetOf<T>(…)`, C#
 `new HashSet<T>(){…}`, JS/TS `new Set([…])`, Python `{…}` (`set()` when empty),
 and — for the two languages with no set type (`🧩`) — Go
 `map[T]struct{}{…: {}}` and Lua `{ [e] = true }`. The other grammars do not
-*parse* a set literal yet (`🚧`), and the Wasm backend refuses to compile one
-rather than lower it to a list and lose the uniqueness. &nbsp;
+*parse* a set literal yet (`🚧`). Wasm compiles a set literal, keeping its
+distinct elements (by value, records included) in insertion order, with
+`length`, `isEmpty`/`isNotEmpty` and printing; the other set methods aren't
+compiled yet (`🧩`). &nbsp;
 ¹⁸ A **top-level variable** is readable and writable from any function or
 method of its module, from a class-method entry point, and — through `import` —
 from another module; an imported function or class uses its own module's
@@ -165,7 +167,10 @@ declaration order, when the module first runs (Dart initializes lazily, so a
 forward reference in an initializer fails here). Generated code declares the
 variables before the functions, which Lua's `local` needs, and Python output
 adds the `global x` a function assigning one needs. Java and C# have no
-top-level variables (`🚫`), and the Wasm backend doesn't compile them yet. &nbsp;
+top-level variables (`🚫`). Wasm compiles them to module globals: a literal
+number seeds its global, and any other initializer runs in the exported
+`__init_globals`, which the runner calls once per module instance before the
+entry function. &nbsp;
 ¹⁹ A **record** is parsed from **Dart** source: literals `(1, 'a')`,
 `(x: 1, y: 2)`, `(1, name: 'n', 2)` and `(1,)`, and types `(int, String)`,
 `({int x, int y})`, `(int, {String name})`, `(int,)` and `(int, int)?`, also as
@@ -176,7 +181,10 @@ types. A record reaches the host as a `VMRecord`. Only Dart output can express
 one, and every other target refuses it with `UnsupportedSyntaxError`. C#,
 TypeScript and Python have tuples (`🚧`), but no named fields with the same
 equality. Destructuring and `switch` on records need patterns, which aren't
-supported yet.
+supported yet. Wasm compiles a record to a heap struct: literals, field access,
+structural `==`, printing, and records as list and set elements. Not compiled
+yet (`🧩`): `r is (…)`, records as map keys or in an `Object` slot, and a record
+passed to or returned from the host.
 
 ### Null safety
 
@@ -201,12 +209,12 @@ in the error path (a value that should have thrown is used instead).
 
 | Feature | Dart | Java | Kotlin | Go | C# | JS | TS | Lua | Python | Wasm |
 |---|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|
-| Nullable type `T?`               | ✅ | 🚫 | ✅¹ | 🧩² | 🚫 | 🚫 | 🧩³ | 🚫 | 🚫 | 🧩⁴ |
-| `??` (null-coalescing)           | ✅ | 🧩⁵ | ✅⁶ | 🧩⁷ | ✅ | ✅ | ✅ | 🧩⁸ | 🧩⁹ | 🧩⁴ |
-| `??=` (null-coalescing assign)   | ✅ | 🧩⁵ | 🧩⁶ | 🚧¹⁰ | ✅ | ✅ | ✅ | 🧩⁸ | 🧩⁹ | 🧩⁴ |
-| `?.` (null-aware access)         | ✅ | 🧩¹¹ | ✅ | 🚧¹² | ✅ | ✅ | ✅ | 🧩¹¹ | 🧩¹¹ | 🧩⁴ |
-| `?[` (null-aware index)          | ✅ | 🧩¹¹ | ✅¹³ | 🚧¹² | ✅ | ✅¹⁴ | ✅¹⁴ | 🧩¹¹ | 🧩¹¹ | 🧩⁴ |
-| `!` (null assertion)             | ✅ | ⚠️ | ✅¹⁵ | 🧩¹⁶ | ✅ | 🚫¹⁷ | ✅ | ⚠️ | ⚠️ | 🧩⁴ |
+| Nullable type `T?`               | ✅ | 🚫 | ✅¹ | 🧩² | 🚫 | 🚫 | 🧩³ | 🚫 | 🚫 | ✅⁴ |
+| `??` (null-coalescing)           | ✅ | 🧩⁵ | ✅⁶ | 🧩⁷ | ✅ | ✅ | ✅ | 🧩⁸ | 🧩⁹ | ✅⁴ |
+| `??=` (null-coalescing assign)   | ✅ | 🧩⁵ | 🧩⁶ | 🚧¹⁰ | ✅ | ✅ | ✅ | 🧩⁸ | 🧩⁹ | ✅⁴ |
+| `?.` (null-aware access)         | ✅ | 🧩¹¹ | ✅ | 🚧¹² | ✅ | ✅ | ✅ | 🧩¹¹ | 🧩¹¹ | ✅⁴ |
+| `?[` (null-aware index)          | ✅ | 🧩¹¹ | ✅¹³ | 🚧¹² | ✅ | ✅¹⁴ | ✅¹⁴ | 🧩¹¹ | 🧩¹¹ | ✅⁴ |
+| `!` (null assertion)             | ✅ | ⚠️ | ✅¹⁵ | 🧩¹⁶ | ✅ | 🚫¹⁷ | ✅ | ⚠️ | ⚠️ | ✅⁴ |
 | Cascades `..` / `?..`            | ✅ | 🧩 | 🧩 | 🧩 | 🧩 | 🧩 | 🧩 | 🧩 | 🧩 | 🚧 |
 | `x == null` / `x != null`        | ✅ | ✅ | ✅ | ✅¹⁸ | ✅ | ✅ | ✅ | ✅¹⁹ | ✅²⁰ | ✅ |
 | Static null-safety analysis²¹    | ✅ | 🚫 | 🚫 | 🚫 | 🚫 | 🚫 | 🚫 | 🚫 | 🚫 | 🚫 |
@@ -220,12 +228,16 @@ value takes its address through a generated `func goPtr[T any](v T) *T` helper
 `List<int>?` stays `[]int`, not `*[]int`. &nbsp;
 ³ TypeScript renders nullable *types* without the suffix — `T?` on a member is
 not valid TS — while the null-aware *operators* are native. &nbsp;
-⁴ Wasm has no null value of its own, so `null` is the boxed-`Object` pointer `0`.
-That covers everything that stays boxed: a `var` / `Object?` local, a ternary
-arm, a `List<Object>` element, `??`, `== null`, and string interpolation (which
-prints `null`). A slot with a concrete Wasm type has no encoding for it — an
-`int` is an i64 — and is reported as an `UnsupportedSyntaxError` naming the type
-rather than compiled into a module that fails to validate. &nbsp;
+⁴ Wasm has no null value of its own, so `null` is the pointer `0`. A nullable
+reference (`String?`, `List<int>?`, `Node?`) is already a pointer; a nullable
+`int?` / `double?` / `bool?` is stored boxed, like an `Object`, since its i64 /
+f64 / i32 has no spare value for `null`. That holds for locals, parameters,
+fields, returns and top-level variables, so `??`, `??=`, `?.`, `?[`, `== null`
+and string interpolation (which prints `null`) all see a real `null`, and the
+host passes and receives `null` through them. `!` unboxes the value, and on
+`null` raises the null-check error (catchable inside a `try`). A `null` in a
+non-nullable slot (`int x = null`) is reported as an `UnsupportedSyntaxError`.
+&nbsp;
 ⁵ Java has no null-coalescing operator; emitted as the ternary
 `(a != null ? a : b)`, and `a ??= b` as `a = (a != null ? a : b)`. &nbsp;
 ⁶ Kotlin's null-coalescing is the Elvis operator `a ?: b`. It has no `??=`, so
@@ -339,8 +351,8 @@ Same legend and **Wasm** column semantics as the table above.
 | Enums (rich: ctor args, fields, methods)⁶                     | ✅ | ✅ | ✅ | 🚧 | ✅ | 🚫  | ✅ | 🚫  | ✅ | ✅⁶ |
 | Generics (generic classes + instantiation + type erasure)    | ✅ | ✅ | ✅ | 🚧 | ✅ | 🚫  | ✅ | 🚫  | 🚫  | 🚧 |
 | Type inference (`var` / `val` / `auto`)                       | ✅ | ✅ | ✅ | ✅ | ✅ | 🚫  | ✅ | 🚫  | 🚫  | ✅⁵ |
-| Extensions (methods + getters)¹¹                              | ✅ | 🚫  | ✅ | 🚫  | 🧩¹² | 🚫  | 🚫  | 🚫  | 🚫  | 🚧 |
-| Getters / setters¹⁴                                           | ✅¹⁴ | 🚧 | 🧩¹⁴ | 🚫  | 🚧 | 🚧 | 🚧 | 🚫  | 🚧 | 🚧 |
+| Extensions (methods + getters)¹¹                              | ✅ | 🚫  | ✅ | 🚫  | 🧩¹² | 🚫  | 🚫  | 🚫  | 🚫  | ✅¹¹ |
+| Getters / setters¹⁴                                           | ✅¹⁴ | 🚧 | 🧩¹⁴ | 🚫  | 🚧 | 🚧 | 🚧 | 🚫  | 🚧 | ✅¹⁴ |
 | Annotations / metadata (`@…`)¹⁵                               | 🧩¹⁵ | 🚧 | 🚧 | 🚫  | 🚧 | 🚫  | 🚧 | 🚫  | 🚧 | 🚫  |
 | `required` named parameters                                   | ✅ | 🚫  | 🧩¹⁶ | 🚫  | 🧩¹⁶ | 🚫  | 🚫  | 🚫  | 🧩¹⁶ | ✅ |
 | Primary constructors (class header)¹⁷                         | ✅ | 🚫  | 🚧 | 🚫  | 🚧 | 🚫  | 🚫  | 🚫  | 🚫  | ✅¹⁷ |
@@ -382,7 +394,10 @@ outside its declaration: Dart `extension E on T { ... }`, Kotlin top-level `fun 
 over an extension member, and an extension is visible only within its own module (not carried
 across `import`). The languages marked `🚫` have no equivalent construct — prototype patching,
 monkey patching and metatables are not the same thing — so generating an extension for them
-throws `UnsupportedSyntaxError` rather than emitting a semantically different shim. &nbsp;
+throws `UnsupportedSyntaxError` rather than emitting a semantically different shim.
+Wasm compiles each extension method and getter to a function taking the
+receiver first, chosen by the receiver's static type; extension setters and
+`static` extension members are refused. &nbsp;
 ¹² C# has no extension *property*, so an extension declaring a getter cannot be emitted as C#;
 its methods round-trip, with `this`/`self` translated both ways. &nbsp;
 ¹³ A subclass inherits its superclass's methods, fields, getters and `static`
@@ -420,7 +435,8 @@ accessor with `UnsupportedSyntaxError` rather than dropping it. A getter can be
 read by its bare name inside a class or extension member (`return value;`); it
 dispatches on the receiver like `this.value`, and a local or parameter of the
 same name shadows it. Not yet supported, for getters and setters alike:
-`static` accessors and top-level accessors. &nbsp;
+`static` accessors and top-level accessors. Wasm compiles instance getters and
+setters, including the compound and unqualified forms above. &nbsp;
 ¹⁵ Dart annotations (`@override`, `@Deprecated('x')`, `@pragma(...)`,
 `@a.B(1)`) are accepted wherever Dart allows them — top-level declarations,
 class and enum members, enum entries, extension members, parameters and local
@@ -989,11 +1005,11 @@ on the fly, without the need for any third-party tools.
 - **Status:** *Wasm support is under active development. It already compiles a broad subset of
 the AST — functions, full control flow (`if`/`for`/`for-each`/`while`/`do-while`/`switch`/
 `break`/`continue`/ternary), arithmetic/comparison/logical/bitwise operators, `try`/`catch`/`throw`,
-classes, closures, lists/maps, `async`/`await` (via Asyncify), and `null` within
-its boxed-`Object` domain; see the [feature table](#supported-features). Constructs not yet
+classes with getters and setters, extensions, closures, lists/maps/sets, records,
+top-level variables, `async`/`await` (via Asyncify), and nullable values with the
+null-aware operators; see the [feature table](#supported-features). Constructs not yet
 compiled to Wasm are limited to a few higher-level features (e.g. non-integer `switch`),
-and a `null` in a slot with a concrete Wasm type (an `int` is an i64) is reported as an
-unsupported construct rather than mis-compiled — see [Null safety](#null-safety).*
+and are reported as unsupported rather than mis-compiled — see [Null safety](#null-safety).*
 
 Example compiling Dart code to WebAssembly (Wasm):
 ```dart

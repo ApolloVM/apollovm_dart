@@ -271,12 +271,23 @@ void main() {
       }
     });
 
-    test('Wasm rejects an extension', () async {
+    // Run in the Wasm runtime by `test/wasm/apollovm_wasm_dart_features_test.dart`.
+    test('Wasm compiles an extension', () async {
       var vm = await _load(
-        'extension NumExt on int { int doubled() { return this * 2; } }',
+        'extension NumExt on int { int doubled() { return this * 2; } }\n'
+        'int run(int a) { return a.doubled(); }',
+      );
+      var modules = await vm.generateAllIn<BytesOutput>('wasm').allEntries();
+      expect(modules.values.first.values.first.output(), isNotEmpty);
+    });
+
+    test('Wasm still rejects an extension setter', () async {
+      var vm = await _load(
+        'class P { int x = 0; }\n'
+        'extension PExt on P { set y(int v) { this.x = v; } }',
       );
       expect(
-        () => vm.generateAllIn<BytesOutput>('wasm'),
+        () => vm.generateAllIn<BytesOutput>('wasm').allEntries(),
         throwsA(isA<UnsupportedSyntaxError>()),
       );
     });
