@@ -2648,9 +2648,9 @@ class DartGrammarDefinition extends DartGrammarLexer {
 
   Parser<ASTExpressionMapLiteral> expressionMapEmptyLiteral() =>
       ((char('<').trimHidden() &
-                      simpleType() &
+                      simpleOrRecordType() &
                       char(',').trimHidden() &
-                      simpleType() &
+                      simpleOrRecordType() &
                       char('>').trimHidden())
                   .optional() &
               char('{').trimHidden() &
@@ -2667,9 +2667,9 @@ class DartGrammarDefinition extends DartGrammarLexer {
 
   Parser<ASTExpressionMapLiteral> expressionMapLiteral() =>
       ((char('<').trimHidden() &
-                      simpleType() &
+                      simpleOrRecordType() &
                       char(',').trimHidden() &
-                      simpleType() &
+                      simpleOrRecordType() &
                       char('>').trimHidden())
                   .optional() &
               char('{').trimHidden() &
@@ -2704,7 +2704,7 @@ class DartGrammarDefinition extends DartGrammarLexer {
   /// as in Dart, so `<int>{}` is the only way to write an empty set.
   Parser<ASTExpressionSetLiteral> expressionSetEmptyLiteral() =>
       (char('<').trimHidden() &
-              simpleType() &
+              simpleOrRecordType() &
               char('>').trimHidden() &
               char('{').trimHidden() &
               char('}').trimHidden())
@@ -2715,7 +2715,7 @@ class DartGrammarDefinition extends DartGrammarLexer {
   /// Tried after the map rules, which claim `{}` and any `key: value` body, so
   /// what reaches here is a braced list of plain expressions.
   Parser<ASTExpressionSetLiteral> expressionSetLiteral() =>
-      ((char('<').trimHidden() & simpleType() & char('>').trimHidden())
+      ((char('<').trimHidden() & simpleOrRecordType() & char('>').trimHidden())
                   .optional() &
               char('{').trimHidden() &
               ref0(expression) &

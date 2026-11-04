@@ -235,6 +235,28 @@ void main() {
       );
     });
 
+    test('`var x = f([a, 2])` with an untyped element infers `f`', () async {
+      expect(
+        await _run(
+          'int f(List<int> v) { return v.length; }\n'
+          'int g(int a) { var x = f([a, 2]); return x; }\n'
+          'int run() { return g(1); }',
+        ),
+        equals(2),
+      );
+    });
+
+    test('record type arguments on set and map literals', () async {
+      expect(
+        await _run(
+          'int run() { var s = <(int, int)>{(1, 2)}; var e = <(int, int)>{}; '
+          'var m = <String, (int, int)>{"a": (3, 4)}; '
+          r'return s.length + e.length * 10 + m["a"]!.$2 * 100; }',
+        ),
+        equals(401),
+      );
+    });
+
     test('a nullable getter returning `null` is `null`', () async {
       expect(
         await _run(

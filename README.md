@@ -169,7 +169,7 @@ top-level variables (`🚫`), and the Wasm backend doesn't compile them yet. &nb
 ¹⁹ A **record** is parsed from **Dart** source: literals `(1, 'a')`,
 `(x: 1, y: 2)`, `(1, name: 'n', 2)` and `(1,)`, and types `(int, String)`,
 `({int x, int y})`, `(int, {String name})`, `(int,)` and `(int, int)?`, also as
-collection type arguments (`List<(int, int)>`). Fields read as `r.$1` / `r.name`,
+collection type arguments (`List<(int, int)>`, `<(int, int)>{}`). Fields read as `r.$1` / `r.name`,
 `==` and `hashCode` are structural (records work as set elements and map keys),
 `'$r'` renders as Dart does, and `r is (int, int)` tests the shape and field
 types. A record reaches the host as a `VMRecord`. Only Dart output can express

@@ -53,7 +53,7 @@ print((1, x: 2) == (1, x: 2)); // true
   interleaved, and `(1,)`. Fields are evaluated in source order.
 - **Types:** `(int, String)`, `({int x, int y})`, `(int, {String name})`,
   `(int,)`, nullable `(int, int)?`, and inside collection types
-  (`List<(int, int)>`). A record type accepts a record of the same shape whose
+  (`List<(int, int)>`, `<(int, int)>{}`, `<String, (int, int)>{}`). A record type accepts a record of the same shape whose
   fields it accepts, so `(num, num)` accepts `(1, 2.5)`.
 - **Field access:** `r.$1`, `r.name`. A missing field is a runtime error.
 - **Equality and `toString` are Dart's:** structural `==` and `hashCode`, so
@@ -73,6 +73,10 @@ print((1, x: 2) == (1, x: 2)); // true
   function a non-null value. It now returns `null`.
 - **`var x = C().m()` was typed as `C`** (the receiver), so the first
   assignment failed. It now has the call's return type.
+- **`var x = f([a, 2])` failed** when `f` takes a `List<int>` and `a` has no
+  static type, because inferring `x` matched `List<dynamic>` against
+  `List<int>` strictly. An argument whose type arguments are unknown now
+  matches; the call is still checked against the actual values when it runs.
 - **`l[0].field` didn't parse,** and a field read off an instance kept in a
   collection failed. Both work now, including `pairs[i].$2`.
 

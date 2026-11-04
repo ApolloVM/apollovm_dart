@@ -2870,11 +2870,25 @@ abstract class ASTParametersDeclaration<P extends ASTParameterDeclaration> {
 
     if (exactType) {
       if (param.type != type) return false;
-    } else if (type is! ASTTypeDynamic && !param.type.acceptsAssignment(type)) {
+    } else if (type is! ASTTypeDynamic &&
+        !param.type.acceptsAssignment(type) &&
+        !_unknownTypeArguments(param.type, type)) {
       return false;
     }
 
     return true;
+  }
+
+  /// Whether [type] is [paramType]'s generic type with only `dynamic` type
+  /// arguments: an argument whose element type isn't known statically, like
+  /// `[a, 2]` with an untyped `a` for a `List<int>` parameter. It may well
+  /// fit — that's checked when the call runs, against the actual values.
+  static bool _unknownTypeArguments(ASTType paramType, ASTType type) {
+    var generics = type.generics;
+    return generics != null &&
+        generics.isNotEmpty &&
+        type.name == paramType.name &&
+        generics.every((g) => g is ASTTypeDynamic);
   }
 
   @override
