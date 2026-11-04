@@ -235,6 +235,16 @@ void main() {
       );
     });
 
+    test('a nullable getter returning `null` is `null`', () async {
+      expect(
+        await _run(
+          'class A { String? get s => null; }\n'
+          'int run() { var a = A(); return a.s == null ? 1 : 0; }',
+        ),
+        equals(1),
+      );
+    });
+
     test(
       '`return null` from a nullable `String?` / `List?` is `null`',
       () async {

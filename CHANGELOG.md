@@ -69,8 +69,8 @@ print((1, x: 2) == (1, x: 2)); // true
 ### Other fixes
 
 - **`return null` from a nullable function returned the wrong value.** From a
-  `String?` function it gave `void`, and from a `List<int>?` function a
-  non-null value. It now returns `null`.
+  `String?` function or getter it gave `void`, and from a `List<int>?`
+  function a non-null value. It now returns `null`.
 - **`var x = C().m()` was typed as `C`** (the receiver), so the first
   assignment failed. It now has the call's return type.
 - **`l[0].field` didn't parse,** and a field read off an instance kept in a

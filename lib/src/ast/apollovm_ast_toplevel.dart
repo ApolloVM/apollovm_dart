@@ -4393,6 +4393,11 @@ class ASTGetterDeclaration<T> extends ASTBlock {
     ASTNode? node,
     Object? returnValue,
   ) {
+    // As for a function: a getter returning `null` returns `null`, not `void`.
+    if (returnValue is ASTValueNull && returnType is! ASTTypeVoid) {
+      return returnValue as ASTValue<T>;
+    }
+
     return resolveRuntimeType(
       context,
       returnValue is ASTNode ? returnValue : node,
