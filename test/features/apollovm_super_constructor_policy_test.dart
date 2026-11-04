@@ -126,6 +126,20 @@ void main() {
       );
     });
 
+    test('an inherited-field formal before a super parameter', () async {
+      // `this.x` names an inherited field (ApolloVM reads it as `super.x`);
+      // only `y` is a parameter of A, so only `y` is passed to it.
+      expect(
+        await _run(
+          'dart',
+          'class A { int x = 0; int y; A(this.y); }'
+              ' class B extends A { B(this.x, super.y); }'
+              ' class M { static int run() { var b = B(1, 2); return b.x * 10 + b.y; } }',
+        ),
+        equals(12),
+      );
+    });
+
     test('the language survives the binary AST', () async {
       var vm = await _load(
         'dart',
@@ -171,6 +185,58 @@ void main() {
           reason: b,
         );
       }
+    });
+  });
+
+  group('Explicit super(…) / this(…) statements — Java, JavaScript', () {
+    test(
+      'Java: `super(v);` delegates, with no implicit `super()` too',
+      () async {
+        expect(
+          await _run(
+            'java11',
+            'class A { int x = 0; int n = 0; A(int v) { x = v; n = n + 1; } }'
+                ' class B extends A { int y = 0; B(int v) { super(v + 1); y = x * 2; } }'
+                ' class M { static int run(Object[] a) { B b = new B(4); '
+                'return b.x * 100 + b.y * 10 + b.n; } }',
+          ),
+          equals(5 * 100 + 10 * 10 + 1),
+        );
+      },
+    );
+
+    test('Java: `this(…);` redirects', () async {
+      expect(
+        await _run(
+          'java11',
+          'class A { int x = 0; A(int v) { x = v; } A() { this(9); } }'
+              ' class M { static int run(Object[] a) { A o = new A(); return o.x; } }',
+        ),
+        equals(9),
+      );
+    });
+
+    test('JavaScript: `super(v)` in a declared constructor', () async {
+      expect(
+        await _run(
+          'javascript',
+          'class A { constructor(v) { this.x = v; } }'
+              ' class B extends A { constructor(v) { super(v); this.y = 1; } }'
+              ' class M { static run(a) { var b = new B(7); return b.x + b.y; } }',
+        ),
+        equals(8),
+      );
+    });
+
+    test('Java: the statement is written back unchanged', () async {
+      var vm = await _load(
+        'java11',
+        'class A { int x = 0; A(int v) { x = v; } }'
+            ' class B extends A { B(int v) { super(v); } }',
+      );
+      var code = (await vm.generateAllCodeIn('java11').writeAllSources())
+          .toString();
+      expect(code, contains('super(v);'));
     });
   });
 

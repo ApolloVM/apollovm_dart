@@ -319,11 +319,22 @@ abstract class ASTClass<T> extends ASTEntryPointBlock {
   /// How this class's constructors reach the superclass constructor, per the
   /// language of the module declaring it (see [ASTRoot.language]).
   ASTSuperConstructorPolicy get superConstructorPolicy {
+    var cached = _superConstructorPolicy;
+    if (cached != null) return cached;
+
     for (ASTNode? n = parentNode; n != null; n = n.parentNode) {
-      if (n is ASTRoot) return n.superConstructorPolicy;
+      if (n is ASTRoot) {
+        // Fixed once the class is attached and its root knows its language:
+        // computed once instead of on every instantiation.
+        var policy = n.superConstructorPolicy;
+        if (n.language != null) _superConstructorPolicy = policy;
+        return policy;
+      }
     }
     return ASTSuperConstructorPolicy.none;
   }
+
+  ASTSuperConstructorPolicy? _superConstructorPolicy;
 
   /// Resolves a function/constructor visible from inside this class. Checks this
   /// class's own functions, then the superclass chain (inherited methods), then
@@ -3499,11 +3510,12 @@ sealed class ASTConstructorInvocationInitializer
   /// The class whose constructor [constructorName] is invoked.
   ASTClass? targetClass(ASTClassConstructorDeclaration constructor);
 
-  /// The positional and named values passed to the target, before the
-  /// explicit [arguments]: none, except for `super` (see
+  /// The positional and named values passed to [target], before the explicit
+  /// [arguments]: none, except for `super` (see
   /// [ASTConstructorSuperInitializer]).
   FutureOr<(List<ASTValue>, Map<String, ASTValue>)> implicitArguments(
     ASTClassConstructorDeclaration constructor,
+    ASTClassConstructorDeclaration target,
     VMContext context,
     Set<String> suppliedParameters,
   ) => (<ASTValue>[], <String, ASTValue>{});
@@ -3524,8 +3536,18 @@ sealed class ASTConstructorInvocationInitializer
       );
     }
 
-    // Dart has no constructor overloading, so the name alone picks it.
-    var target = clazz.getConstructor(constructorName, null, context);
+    // Dart has no constructor overloading, so the name alone picks it. Java
+    // does (`A(int v)` and `A()`): there the explicit arguments choose.
+    var overloaded = clazz.getConstructorWithName(
+      constructorName,
+    ) is ASTConstructorSetMultiple;
+    var target = clazz.getConstructor(
+      constructorName,
+      overloaded
+          ? ASTFunctionSignature.from(arguments, this.namedArguments)
+          : null,
+      context,
+    );
     if (target == null) {
       throw ApolloVMRuntimeError(
         "Can't find constructor `${clazz.name}"
@@ -3544,22 +3566,11 @@ sealed class ASTConstructorInvocationInitializer
     var runStatus = ASTRunStatus();
     var (positional, named) = await implicitArguments(
       constructor,
+      target,
       context,
       suppliedParameters,
     );
 
-    // A super parameter the target doesn't declare stays field-only: an
-    // initializing formal for an inherited field (`B(this.x)`, which ApolloVM
-    // reads as `super.x`) must keep working when the superclass constructor
-    // takes no such parameter.
-    var targetParameters = target.parameters;
-    var capacity =
-        (targetParameters.positionalParameters?.length ?? 0) +
-        (targetParameters.optionalParameters?.length ?? 0);
-    if (positional.length > capacity) {
-      positional = positional.sublist(0, capacity);
-    }
-    named.removeWhere((name, _) => target.getParameterByName(name) == null);
     for (var a in arguments) {
       positional.add(await a.run(context, runStatus));
     }
@@ -3646,31 +3657,53 @@ class ASTConstructorSuperInitializer
   @override
   Future<(List<ASTValue>, Map<String, ASTValue>)> implicitArguments(
     ASTClassConstructorDeclaration constructor,
+    ASTClassConstructorDeclaration target,
     VMContext context,
     Set<String> suppliedParameters,
   ) async {
-    var positional = <ASTValue>[];
-    var named = <String, ASTValue>{};
-
     // Every parameter is declared in [context] — an omitted one as its default
     // or `null` — so "was it passed?" has to come from the call itself.
     bool forwards(ASTConstructorParameterDeclaration p) =>
         suppliedParameters.contains(p.name) || p.defaultValue != null;
 
     var parameters = constructor.parameters;
-    for (var p in [...?parameters.positionalParameters]) {
-      if (!p.superParameter) continue;
-      positional.add(await _value(context, p));
-    }
+    var forwarded = <ASTConstructorParameterDeclaration>[
+      for (var p in [...?parameters.positionalParameters])
+        if (p.superParameter) p,
+    ];
     for (var p in [...?parameters.optionalParameters]) {
       if (!p.superParameter) continue;
       // Positions must stay aligned: once one is left out, so are the rest.
       if (!forwards(p)) break;
-      positional.add(await _value(context, p));
+      forwarded.add(p);
     }
 
+    // More than the target can take: an initializing formal for an inherited
+    // field (`B(this.x)`, which ApolloVM reads as `super.x` — the binary AST
+    // doesn't record the spelling) is among them. Those the target has no
+    // parameter for stay field-only; only then is the tail cut.
+    var targetParameters = target.parameters;
+    var capacity =
+        (targetParameters.positionalParameters?.length ?? 0) +
+        (targetParameters.optionalParameters?.length ?? 0);
+    if (forwarded.length > capacity) {
+      forwarded = [
+        for (var p in forwarded)
+          if (target.getParameterByName(p.name) != null ||
+              target.getParameterByName(p.fieldName) != null)
+            p,
+      ];
+      if (forwarded.length > capacity) {
+        forwarded = forwarded.sublist(0, capacity);
+      }
+    }
+
+    var positional = [for (var p in forwarded) await _value(context, p)];
+
+    var named = <String, ASTValue>{};
     for (var p in [...?parameters.namedParameters]) {
       if (!p.superParameter || !forwards(p)) continue;
+      if (target.getParameterByName(p.name) == null) continue;
       named[p.name] = await _value(context, p);
     }
 
@@ -3878,10 +3911,14 @@ class ASTClassConstructorDeclaration<T>
         }
       }
 
-      // The explicit initializers, then — in Dart/Java/C# — the implicit
+      // The explicit initializers; a leading `super(…)` / `this(…)` statement
+      // in the body (Java, JS, TS); then — in Dart/Java/C# — the implicit
       // `super()` when none of them delegates.
-      var implicitSuper = _implicitSuperInitializer(parentClass);
-      var entries = [...initializers, ?implicitSuper];
+      var bodyDelegation = _bodyDelegation;
+      var implicitSuper = bodyDelegation == null
+          ? _implicitSuperInitializer(parentClass)
+          : null;
+      var entries = [...initializers, ?bodyDelegation, ?implicitSuper];
 
       if (entries.isNotEmpty) {
         var supplied = _suppliedParameterNames(namedParameters).toSet();
@@ -3909,11 +3946,56 @@ class ASTClassConstructorDeclaration<T>
         }
       }
 
-      await run(context, ASTRunStatus());
+      // The leading delegation statement already ran as an initializer.
+      await _runStatements(
+        context,
+        ASTRunStatus(),
+        bodyDelegation == null ? 0 : 1,
+      );
     } finally {
       VMContext.setCurrent(prevContext);
     }
   }
+
+  /// A `super(…)` or `this(…)` call written as the **first statement** of the
+  /// body — how Java, JavaScript and TypeScript spell the delegation Dart
+  /// writes in an initializer list — as the equivalent initializer, or `null`.
+  ///
+  /// It is run as that initializer (on the same instance, before the rest of
+  /// the body) instead of as a call to a function named `super`, and it
+  /// suppresses the implicit `super()`. The statement itself stays in the
+  /// body, so the source language's generator writes it back unchanged.
+  ASTConstructorInvocationInitializer? get _bodyDelegation {
+    if (_bodyDelegationResolved) return _bodyDelegationCache;
+    _bodyDelegationResolved = true;
+
+    if (initializers.isNotEmpty || statements.isEmpty) return null;
+
+    var first = statements.first;
+    if (first is! ASTStatementExpression) return null;
+    var call = first.expression;
+    if (call is! ASTExpressionLocalFunctionInvocation) return null;
+
+    var name = call.name;
+    ASTConstructorInvocationInitializer? delegation;
+    if (name == 'super') {
+      delegation = ASTConstructorSuperInitializer(
+        '',
+        call.arguments,
+        call.namedArguments,
+      );
+    } else if (name == 'this') {
+      delegation = ASTConstructorRedirectInitializer(
+        '',
+        call.arguments,
+        call.namedArguments,
+      );
+    }
+    return _bodyDelegationCache = delegation?..resolveNode(this);
+  }
+
+  bool _bodyDelegationResolved = false;
+  ASTConstructorInvocationInitializer? _bodyDelegationCache;
 
   /// The `super()` a constructor makes without writing it, or `null`.
   ///
@@ -3995,15 +4077,19 @@ class ASTClassConstructorDeclaration<T>
   }
 
   @override
-  FutureOr<ASTValue> run(
+  FutureOr<ASTValue> run(VMContext parentContext, ASTRunStatus runStatus) =>
+      _runStatements(parentContext, runStatus, 0);
+
+  Future<ASTValue> _runStatements(
     VMContext parentContext,
     ASTRunStatus runStatus,
+    int start,
   ) async {
     var blockContext = defineRunContext(parentContext);
 
     FutureOr<ASTValue> returnValue = ASTValueVoid.instance;
 
-    for (var stm in statements) {
+    for (var stm in statements.skip(start)) {
       var ret = await stm.run(blockContext, runStatus);
 
       if (runStatus.returned) {

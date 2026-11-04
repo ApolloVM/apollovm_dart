@@ -2519,6 +2519,10 @@ abstract class ApolloCodeGenerator
     String? test;
     if (type is ASTTypeInt) {
       test = 'Number.isInteger($operand)';
+    } else if (type is ASTTypeDouble) {
+      // "An int is not a double", as the VM has it. JS can't tell `1.0` from
+      // `1`, so an integral double tests false here.
+      test = "(typeof $operand === 'number' && !Number.isInteger($operand))";
     } else if (type is ASTTypeNum) {
       test = "typeof $operand === 'number'";
     } else if (type is ASTTypeString) {
@@ -3157,12 +3161,19 @@ abstract class ApolloCodeGenerator
       // "variable"; generating it means generating that expression, not a name.
       out ??= newOutput();
       if (headIndented) out.write(indent);
-      return generateASTExpression(
-        variable.expression,
+      // A compound receiver needs its own parentheses — `(x as A).v`,
+      // `(a + b).isEven` — or the member access binds to its last operand.
+      var receiver = variable.expression;
+      var group = receiver.isComplex;
+      if (group) out.write('(');
+      generateASTExpression(
+        receiver,
         out: out,
         indent: indent,
         headIndented: false,
       );
+      if (group) out.write(')');
+      return out;
     } else if (variable is ASTScopeVariable) {
       return generateASTScopeVariable(
         variable,

@@ -378,8 +378,11 @@ its super parameters to it); JavaScript, TypeScript and Python let a subclass
 without a constructor *inherit* its parent's, every argument forwarded, and
 make no implicit call from a declared one (Python's `__init__` doesn't call the
 parent's). Dart's explicit `: super(v)` / `: super.named(v)` is covered in
-footnote 20; explicit `super(v);` statements in Java/JS/TS bodies, C#
-`: base(v)` and Python `super().__init__(…)` aren't parsed yet. &nbsp;
+footnote 20. In Java, JavaScript and TypeScript, a `super(v);` (or Java
+`this(v);`) as the first statement of a constructor body delegates the same way
+— on the same instance, in place of the implicit call — and is written back
+unchanged; C# `: base(v)` and Python `super().__init__(…)` aren't parsed yet.
+&nbsp;
 ¹⁴ **Getters and setters** are parsed and executed on classes, extensions and
 enum bodies (an enum member declares them like any other class member):
 `get name => …` / `get name { … }` (with or without an explicit return type) and
