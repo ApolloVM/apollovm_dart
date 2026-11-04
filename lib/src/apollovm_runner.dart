@@ -93,19 +93,25 @@ abstract class ApolloRunner implements VMTypeResolver {
     ASTValue? paramVal,
     VMContext context,
   ) {
-    if (paramVal is ASTClassInstance) {
-      var f = paramVal.clazz.getFunction(
-        'toString',
-        ASTFunctionSignature.from(null, null),
-        context,
-      );
-      if (f is ASTClassFunctionDeclaration) {
-        return f
-            .objectCall(context, paramVal, positionalParameters: const [])
-            .resolveMapped((ret) => ret.getValue(context));
-      }
+    // An instance — directly, or inside a collection — prints through its
+    // `toString()` when it has one.
+    if (paramVal is ASTClassInstance || paramVal is VMObject) {
+      return valueToDisplayString(paramVal, context);
     }
-    return paramVal?.getValue(context);
+    return paramVal?.getValue(context).resolveMapped((v) {
+      // An `Object`-typed argument holding an instance (`print(l[0])`).
+      if (v is VMObject || v is ASTClassInstance) {
+        return valueToDisplayString(v, context);
+      }
+      if (v is Iterable || v is Map) {
+        return valueToDisplayString(v, context).resolveMapped((s) {
+          // Only a collection holding an instance changes; keep the value
+          // itself otherwise, so hosts still receive the plain object.
+          return s == '$v' ? v : s;
+        });
+      }
+      return v;
+    });
   }
 
   /// The external [print] function to map.

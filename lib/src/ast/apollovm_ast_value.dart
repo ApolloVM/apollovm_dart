@@ -1289,11 +1289,9 @@ class ASTValueStringExpression<T> extends ASTValue<String> {
 
   @override
   FutureOr<String> getValue(VMContext context) {
-    var res = expression
+    return expression
         .run(context, ASTRunStatus())
-        .resolveMapped((result) => result.getValue(context))
-        .resolveMapped((res) => '$res');
-    return res;
+        .resolveMapped((result) => valueToDisplayString(result, context));
   }
 
   @override
@@ -1333,7 +1331,7 @@ class ASTValueStringVariable<T> extends ASTValue<String> {
   @override
   FutureOr<String> getValue(VMContext context) {
     return variable.getValue(context).resolveMapped((value) {
-      return value.getValue(context).resolveMapped((v) => '$v');
+      return valueToDisplayString(value, context);
     });
   }
 
@@ -1381,10 +1379,21 @@ class ASTValueStringConcatenation extends ASTValue<String> {
     }
   }
 
+  /// Evaluates the parts **in order**, each after the previous one finished:
+  /// an interpolated expression can have side effects (`'${c.b()} ${c.count}'`
+  /// must read `count` after `b()` ran), so they must not run concurrently.
   @override
   FutureOr<String> getValue(VMContext context) {
-    var vsFuture = values.map((e) => e.getValue(context));
-    return vsFuture.resolveAllJoined((l) => l.join());
+    var parts = <String>[];
+    FutureOr<String> from(int i) {
+      if (i >= values.length) return parts.join();
+      return values[i].getValue(context).resolveMapped((s) {
+        parts.add(s);
+        return from(i + 1);
+      });
+    }
+
+    return from(0);
   }
 
   @override
@@ -1523,6 +1532,76 @@ class ASTValueReadKey<T> extends ASTValue<T> {
 }
 
 /// [ASTValue] for an object class instance.
+/// The text of [value] for string interpolation and `print`: a class instance
+/// with a user-defined `toString()` renders through it — also inside a `List`,
+/// `Set` or `Map`, as Dart does — and anything else keeps its default form.
+FutureOr<String> valueToDisplayString(Object? value, VMContext context) {
+  if (value == null || value is String || value is num || value is bool) {
+    return '$value';
+  }
+  if (value is VMObject) {
+    var clazz = value.type.getClass();
+    if (clazz is ASTClass<VMObject>) {
+      return valueToDisplayString(
+        ASTClassInstance<VMObject>(clazz, value),
+        context,
+      );
+    }
+    return '$value';
+  }
+  if (value is ASTClassInstance) {
+    var f = value.clazz.getFunction(
+      'toString',
+      ASTFunctionSignature.from(null, null),
+      context,
+    );
+    if (f is ASTClassFunctionDeclaration) {
+      return f
+          .objectCall(context, value, positionalParameters: const [])
+          .resolveMapped((ret) => ret.getValue(context))
+          .resolveMapped((s) => '$s');
+    }
+    return value.getValue(context).resolveMapped((v) => '$v');
+  }
+  if (value is ASTValue) {
+    return value.getValue(context).resolveMapped((v) {
+      // A value that is its own payload (a `VMObject` is an `ASTValue`) would
+      // recurse forever.
+      if (identical(v, value)) return '$v';
+      return valueToDisplayString(v, context);
+    });
+  }
+  if (value is List || value is Set) {
+    var items = (value as Iterable).toList();
+    var open = value is List ? '[' : '{';
+    var close = value is List ? ']' : '}';
+    return _joinDisplayStrings(
+      items,
+      context,
+    ).resolveMapped((parts) => '$open${parts.join(', ')}$close');
+  }
+  if (value is Map) {
+    var entries = value.entries.toList();
+    return _joinDisplayStrings([
+      for (var e in entries) ...[e.key, e.value],
+    ], context).resolveMapped((parts) {
+      var pairs = [
+        for (var i = 0; i < parts.length; i += 2)
+          '${parts[i]}: ${parts[i + 1]}',
+      ];
+      return '{${pairs.join(', ')}}';
+    });
+  }
+  return '$value';
+}
+
+FutureOr<List<String>> _joinDisplayStrings(
+  List items,
+  VMContext context,
+) async {
+  return [for (var e in items) await valueToDisplayString(e, context)];
+}
+
 class ASTClassInstance<V extends ASTValue> extends ASTValue<V> {
   final ASTClass<V> clazz;
   final V _object;

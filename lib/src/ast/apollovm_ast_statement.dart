@@ -2131,6 +2131,13 @@ class ASTStatementTryCatch extends ASTStatement {
             ? error.value
             : ASTValueString(error.toString());
 
+        // A `return f()` in the `try` whose `f()` threw left its (failed)
+        // future as the pending return value; the function would await it
+        // again and rethrow. The `try` didn't return: drop that state.
+        runStatus.returned = false;
+        runStatus.returnedValue = null;
+        runStatus.returnedFutureValue = null;
+
         for (var c in catches) {
           var t = c.exceptionType;
           if (t == null ||

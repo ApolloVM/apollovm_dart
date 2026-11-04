@@ -1062,6 +1062,10 @@ class ASTClassNormal extends ASTClass<VMObject> {
   /// access. Static fields belong to the class, not to each instance.
   Map<String, ASTValue>? _staticFieldValues;
 
+  /// The in-progress initialization of [_staticFieldValues], so concurrent
+  /// first reads all wait for it (instead of reading a half-filled store).
+  Future<Map<String, ASTValue>>? _staticFieldsInit;
+
   /// Whether [name] is a `static` field declared on this class.
   bool hasStaticField(String name, {bool caseInsensitive = false}) {
     var f = getField(name, caseInsensitive: caseInsensitive);
@@ -1074,16 +1078,18 @@ class ASTClassNormal extends ASTClass<VMObject> {
   ) async {
     var store = _staticFieldValues;
     if (store != null) return store;
-    store = _staticFieldValues = <String, ASTValue>{};
-    for (var field in _fields.values) {
-      if (!field.modifiers.isStatic) continue;
-      if (field is ASTClassFieldWithInitialValue) {
-        store[field.name] = await field.getInitialValue(context, runStatus);
-      } else {
-        store[field.name] = ASTValueNull.instance;
+    return _staticFieldsInit ??= () async {
+      var store = <String, ASTValue>{};
+      for (var field in _fields.values) {
+        if (!field.modifiers.isStatic) continue;
+        if (field is ASTClassFieldWithInitialValue) {
+          store[field.name] = await field.getInitialValue(context, runStatus);
+        } else {
+          store[field.name] = ASTValueNull.instance;
+        }
       }
-    }
-    return store;
+      return _staticFieldValues = store;
+    }();
   }
 
   String _resolveStaticFieldName(

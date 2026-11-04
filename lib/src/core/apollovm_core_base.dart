@@ -803,6 +803,9 @@ class CoreClassInt extends CoreClassPrimitive<int> {
 
   /// `sign` is a property in Dart; also kept as a method for Java-style calls.
   late final ASTExternalClassGetter _getterSign;
+  late final ASTExternalClassGetter _getterIsEven;
+  late final ASTExternalClassGetter _getterIsOdd;
+  late final ASTExternalClassGetter _getterIsNegative;
   late final ASTExternalClassFunction _functionToDouble;
 
   // Inherited from `num`: `int` implements these as identities or as `String`
@@ -868,6 +871,24 @@ class CoreClassInt extends CoreClassPrimitive<int> {
       'sign',
       ASTTypeInt.instance,
       (Object? o) => o is int ? o.sign : null,
+    );
+
+    _getterIsEven = _externalClassGetter(
+      'isEven',
+      ASTTypeBool.instance,
+      (Object? o) => o is int ? o.isEven : null,
+    );
+
+    _getterIsOdd = _externalClassGetter(
+      'isOdd',
+      ASTTypeBool.instance,
+      (Object? o) => o is int ? o.isOdd : null,
+    );
+
+    _getterIsNegative = _externalClassGetter(
+      'isNegative',
+      ASTTypeBool.instance,
+      (Object? o) => o is int ? o.isNegative : null,
     );
 
     _functionClamp = _externalClassFunctionArgs2(
@@ -975,6 +996,12 @@ class CoreClassInt extends CoreClassPrimitive<int> {
     switch (fName) {
       case 'sign':
         return _getterSign;
+      case 'isEven':
+        return _getterIsEven;
+      case 'isOdd':
+        return _getterIsOdd;
+      case 'isNegative':
+        return _getterIsNegative;
     }
 
     throw StateError("Can't find core getter: $coreName.$fName");
@@ -1367,6 +1394,18 @@ class CoreClassList<T> extends CoreClassBase<List<T>> {
 
   late final ASTExternalClassFunction _functionSublist;
 
+  late final ASTExternalClassGetter _getterReversed;
+  late final ASTExternalClassFunction _functionJoin;
+  late final ASTExternalClassFunction _functionSort;
+  late final ASTExternalClassFunction _functionToList;
+  late final ASTExternalClassFunction _functionMap;
+  late final ASTExternalClassFunction _functionWhere;
+  late final ASTExternalClassFunction _functionAny;
+  late final ASTExternalClassFunction _functionEvery;
+  late final ASTExternalClassFunction _functionForEach;
+  late final ASTExternalClassFunction _functionReduce;
+  late final ASTExternalClassFunction _functionFold;
+
   late final ASTExternalFunction _functionValueOf;
 
   FutureOr<ASTType> _resolveComponentType(VMContext? context, ASTNode? node) {
@@ -1563,6 +1602,143 @@ class CoreClassList<T> extends CoreClassBase<List<T>> {
       },
     );
 
+    ASTFunctionParameterDeclaration fnParam(String name, [int index = 0]) =>
+        ASTFunctionParameterDeclaration(ASTTypeFunction(), name, index, false);
+
+    _getterReversed = _externalClassGetter(
+      'reversed',
+      ASTTypeArray.instanceOfDynamic,
+      (Object? o) => o is List ? o.reversed.toList() : null,
+    );
+
+    _functionJoin = _externalClassFunctionArgs1(
+      'join',
+      ASTTypeString.instance,
+      ASTFunctionParameterDeclaration(
+        ASTTypeString.instance,
+        'separator',
+        0,
+        true,
+      ),
+      (List o, dynamic separator) => o.join(separator ?? ''),
+    );
+
+    _functionSort = _externalClassFunctionArgs1(
+      'sort',
+      ASTTypeVoid.instance,
+      ASTFunctionParameterDeclaration(ASTTypeFunction(), 'compare', 0, true),
+      (List o, dynamic compare) async {
+        if (compare is _CoreCallback) {
+          await _sortWith(o, compare);
+        } else {
+          o.sort();
+        }
+        return null;
+      },
+      _callbackResolver,
+    );
+
+    _functionToList = _externalClassFunctionArgs0(
+      'toList',
+      ASTTypeArray.instanceOfDynamic,
+      (List o) => o.toList(),
+    );
+
+    _functionMap = _externalClassFunctionArgs1(
+      'map',
+      ASTTypeArray.instanceOfDynamic,
+      fnParam('f'),
+      (List o, _CoreCallback f) async => [
+        for (var e in o) await f([e]),
+      ],
+      _callbackResolver,
+    );
+
+    _functionWhere = _externalClassFunctionArgs1(
+      'where',
+      ASTTypeArray.instanceOfDynamic,
+      fnParam('test'),
+      (List o, _CoreCallback test) async => [
+        for (var e in o)
+          if (await test([e]) == true) e,
+      ],
+      _callbackResolver,
+    );
+
+    _functionAny = _externalClassFunctionArgs1(
+      'any',
+      ASTTypeBool.instance,
+      fnParam('test'),
+      (List o, _CoreCallback test) async {
+        for (var e in o) {
+          if (await test([e]) == true) return true;
+        }
+        return false;
+      },
+      _callbackResolver,
+    );
+
+    _functionEvery = _externalClassFunctionArgs1(
+      'every',
+      ASTTypeBool.instance,
+      fnParam('test'),
+      (List o, _CoreCallback test) async {
+        for (var e in o) {
+          if (await test([e]) != true) return false;
+        }
+        return true;
+      },
+      _callbackResolver,
+    );
+
+    _functionForEach = _externalClassFunctionArgs1(
+      'forEach',
+      ASTTypeVoid.instance,
+      fnParam('action'),
+      (List o, _CoreCallback action) async {
+        for (var e in o.toList()) {
+          await action([e]);
+        }
+        return null;
+      },
+      _callbackResolver,
+    );
+
+    _functionReduce = _externalClassFunctionArgs1(
+      'reduce',
+      ASTTypeDynamic.instance,
+      fnParam('combine'),
+      (List o, _CoreCallback combine) async {
+        if (o.isEmpty) throw StateError('No element');
+        var acc = o.first;
+        for (var e in o.skip(1)) {
+          acc = await combine([acc, e]);
+        }
+        return acc;
+      },
+      _callbackResolver,
+    );
+
+    _functionFold = _externalClassFunctionArgs2(
+      'fold',
+      ASTTypeDynamic.instance,
+      ASTFunctionParameterDeclaration(
+        ASTTypeDynamic.instance,
+        'initialValue',
+        0,
+        false,
+      ),
+      fnParam('combine', 1),
+      (List o, dynamic initial, _CoreCallback combine) async {
+        var acc = initial;
+        for (var e in o) {
+          acc = await combine([acc, e]);
+        }
+        return acc;
+      },
+      _callbackResolver,
+    );
+
     _functionValueOf = _externalStaticFunctionArgs1(
       'valueOf',
       ASTTypeArray.instanceOfObject,
@@ -1607,6 +1783,8 @@ class CoreClassList<T> extends CoreClassBase<List<T>> {
         return _getterFirst;
       case 'last':
         return _getterLast;
+      case 'reversed':
+        return _getterReversed;
     }
 
     throw StateError("Can't find core getter: $coreName.$fName");
@@ -1653,6 +1831,27 @@ class CoreClassList<T> extends CoreClassBase<List<T>> {
 
       case 'sublist':
         return _functionSublist;
+
+      case 'join':
+        return _functionJoin;
+      case 'sort':
+        return _functionSort;
+      case 'toList':
+        return _functionToList;
+      case 'map':
+        return _functionMap;
+      case 'where':
+        return _functionWhere;
+      case 'any':
+        return _functionAny;
+      case 'every':
+        return _functionEvery;
+      case 'forEach':
+        return _functionForEach;
+      case 'reduce':
+        return _functionReduce;
+      case 'fold':
+        return _functionFold;
 
       case 'valueOf':
         return _functionValueOf;
@@ -1801,6 +2000,10 @@ class CoreClassMap extends CoreClassBase<Map<dynamic, dynamic>> {
   late final ASTExternalClassFunction _functionIsEmpty;
   late final ASTExternalClassFunction _functionIsNotEmpty;
 
+  late final ASTExternalClassGetter _getterEntries;
+  late final ASTExternalClassFunction _functionForEach;
+  late final ASTExternalClassFunction _functionPutIfAbsent;
+
   /// Resolves `.keys`/`.values` to `List<keyType>` / `List<valueType>` from the
   /// actual map value, so iterating them yields properly-typed elements.
   FutureOr<ASTType> _resolveEntryListType(
@@ -1823,6 +2026,46 @@ class CoreClassMap extends CoreClassBase<Map<dynamic, dynamic>> {
   }
 
   CoreClassMap._() : super(ASTTypeMap.instanceOfDynamicOfDynamic, 'Map') {
+    // An entry reads as a record `(key: k, value: v)`: `e.key` / `e.value`.
+    _getterEntries = _externalClassGetter(
+      'entries',
+      ASTTypeArray.instanceOfDynamic,
+      (Object? o) => o is Map
+          ? [
+              for (var e in o.entries)
+                VMRecord([], {
+                  'key': ASTValue.fromValue(e.key),
+                  'value': ASTValue.fromValue(e.value),
+                }),
+            ]
+          : null,
+    );
+
+    _functionForEach = _externalClassFunctionArgs1(
+      'forEach',
+      ASTTypeVoid.instance,
+      ASTFunctionParameterDeclaration(ASTTypeFunction(), 'action', 0, false),
+      (Map o, _CoreCallback action) async {
+        for (var e in o.entries.toList()) {
+          await action([e.key, e.value]);
+        }
+        return null;
+      },
+      _callbackResolver,
+    );
+
+    _functionPutIfAbsent = _externalClassFunctionArgs2(
+      'putIfAbsent',
+      ASTTypeDynamic.instance,
+      ASTFunctionParameterDeclaration(ASTTypeDynamic.instance, 'key', 0, false),
+      ASTFunctionParameterDeclaration(ASTTypeFunction(), 'ifAbsent', 1, false),
+      (Map o, dynamic key, _CoreCallback ifAbsent) async {
+        if (!o.containsKey(key)) o[key] = await ifAbsent([]);
+        return o[key];
+      },
+      _callbackResolver,
+    );
+
     _getterLength = _externalClassGetter(
       'length',
       ASTTypeInt.instance,
@@ -1926,6 +2169,8 @@ class CoreClassMap extends CoreClassBase<Map<dynamic, dynamic>> {
         return _getterKeys;
       case 'values':
         return _getterValues;
+      case 'entries':
+        return _getterEntries;
     }
 
     throw StateError("Can't find core getter: $coreName.$fName");
@@ -1945,6 +2190,10 @@ class CoreClassMap extends CoreClassBase<Map<dynamic, dynamic>> {
         return _functionContainsValue;
       case 'remove':
         return _functionRemove;
+      case 'forEach':
+        return _functionForEach;
+      case 'putIfAbsent':
+        return _functionPutIfAbsent;
       case 'clear':
         return _functionClear;
       case 'length':
@@ -2366,4 +2615,56 @@ class CoreClassSet extends CoreClassBase<Set<dynamic>> {
 
   @override
   void resolveNodeConstructors(ASTNode? parentNode) {}
+}
+
+/// A function argument (a closure) of a core method, callable from Dart: it
+/// runs the script function with the given Dart values and returns its Dart
+/// result (`list.map((x) => x * 2)`).
+class _CoreCallback {
+  final ASTValueFunction function;
+  final VMContext context;
+
+  _CoreCallback(this.function, this.context);
+
+  Future<Object?> call(List<Object?> args) async {
+    var params = [
+      for (var a in args) a is ASTValue ? a : ASTValue.fromValue(a),
+    ];
+    var result = await function.call(context, positionalParameters: params);
+    return await result.getValue(context);
+  }
+}
+
+/// Resolves a core method's parameter: a function argument becomes a
+/// [_CoreCallback], anything else its Dart value.
+FutureOr<dynamic> _callbackResolver(ASTValue? paramVal, VMContext context) {
+  if (paramVal is ASTValueFunction) return _CoreCallback(paramVal, context);
+  return paramVal?.getValue(context);
+}
+
+/// Sorts [list] in place with an `async` [compare] (a script comparator),
+/// keeping equal elements in order (a merge sort).
+Future<void> _sortWith(List list, _CoreCallback compare) async {
+  Future<List> sort(List l) async {
+    if (l.length < 2) return l;
+    var mid = l.length ~/ 2;
+    var a = await sort(l.sublist(0, mid));
+    var b = await sort(l.sublist(mid));
+    var out = [];
+    var i = 0, j = 0;
+    while (i < a.length && j < b.length) {
+      var c = await compare([a[i], b[j]]);
+      if ((c as num) <= 0) {
+        out.add(a[i++]);
+      } else {
+        out.add(b[j++]);
+      }
+    }
+    out.addAll(a.sublist(i));
+    out.addAll(b.sublist(j));
+    return out;
+  }
+
+  var sorted = await sort(list);
+  list.setAll(0, sorted);
 }
