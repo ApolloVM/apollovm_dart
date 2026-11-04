@@ -163,7 +163,13 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     // Top-level variables are module globals. Literal scalar initializers seed
     // the global directly; any other initializer runs in `__init_globals`.
     var topLevelGlobals = _collectTopLevelGlobals(root);
-    var globalsInit = _buildGlobalsInitFunction(topLevelGlobals);
+    var staticFieldGlobals = _collectStaticFieldGlobals(root);
+    // Static fields first: they are registered first, and a top-level
+    // initializer may read one.
+    var globalsInit = _buildGlobalsInitFunction([
+      ...staticFieldGlobals,
+      ...topLevelGlobals,
+    ]);
 
     var extensionFunctions = [
       for (var (i, ext) in root.extensions.indexed)
@@ -193,17 +199,11 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     );
 
     // Register a module global for each `static` field, up front (before any
-    // enum-entry global) so global indices are stable. Only literal `int`/
-    // `double`/`bool` initializers are seeded; others start at 0.
-    for (var clazz in root.classes) {
-      for (var field in clazz.fields) {
-        if (!field.modifiers.isStatic) continue;
-        module.registerStaticFieldGlobal(
-          '${clazz.name}.${field.name}',
-          field.type,
-          _staticFieldInitNum(field),
-        );
-      }
+    // enum-entry global) so global indices are stable. A literal `int`/
+    // `double`/`bool` initializer seeds it; any other runs in
+    // `__init_globals`.
+    for (var g in staticFieldGlobals) {
+      module.registerStaticFieldGlobal(g.name, g.type, g.seed ?? 0);
     }
 
     // Top-level variable globals, after the static-field ones. Keyed by the
@@ -329,29 +329,57 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
           );
         }
       }
-      num? seed;
-      if (value == null) {
-        seed = 0;
-      } else if (value is ASTExpressionLiteral && !_isNullableScalar(type)) {
-        var raw = value.value;
-        // Only a literal of the slot's own scalar kind seeds it directly: an
-        // `Object flag = true` global holds a box, built in `__init_globals`.
-        if (raw is ASTValueBool && type is ASTTypeBool) {
-          seed = raw.value ? 1 : 0;
-        } else if (raw is ASTValueInt && type is ASTTypeInt) {
-          seed = raw.value;
-        } else if (raw is ASTValueInt && type is ASTTypeDouble) {
-          seed = raw.value.toDouble();
-        } else if (raw is ASTValueDouble && type is ASTTypeDouble) {
-          seed = raw.value;
-        }
-      }
+      var seed = _globalSeed(type, value);
       globals.add((
         name: v.name,
         type: _wasmSlotType(type),
         seed: seed,
         init: seed == null ? value : null,
       ));
+    }
+    return globals;
+  }
+
+  /// The constant a global of declared [type] with initializer [value] is
+  /// seeded with, or `null` when the initializer must run in
+  /// `__init_globals`. No initializer seeds 0 (`null` for a boxed slot).
+  num? _globalSeed(ASTType type, ASTExpression? value) {
+    if (value == null) return 0;
+    if (value is! ASTExpressionLiteral || _isNullableScalar(type)) return null;
+    var raw = value.value;
+    // Only a literal of the slot's own scalar kind seeds it directly: an
+    // `Object flag = true` global holds a box, built in `__init_globals`.
+    if (raw is ASTValueBool && type is ASTTypeBool) return raw.value ? 1 : 0;
+    if (raw is ASTValueInt && type is ASTTypeInt) return raw.value;
+    if (raw is ASTValueInt && type is ASTTypeDouble) {
+      return raw.value.toDouble();
+    }
+    if (raw is ASTValueDouble && type is ASTTypeDouble) return raw.value;
+    return null;
+  }
+
+  /// The `static` fields of [root]'s classes, keyed `Class.field`, with their
+  /// global type and literal seed; a field whose initializer isn't a literal
+  /// of its type (`static List<int> xs = [1, 2]`, `static int n = 2 + 3`)
+  /// carries it as `init`, to run in `__init_globals`.
+  List<({String name, ASTType type, num? seed, ASTExpression? init})>
+  _collectStaticFieldGlobals(ASTRoot root) {
+    var globals =
+        <({String name, ASTType type, num? seed, ASTExpression? init})>[];
+    for (var clazz in root.classes) {
+      for (var field in clazz.fields) {
+        if (!field.modifiers.isStatic) continue;
+        var value = field is ASTClassFieldWithInitialValue
+            ? field.initialValue
+            : null;
+        var seed = _globalSeed(field.type, value);
+        globals.add((
+          name: '${clazz.name}.${field.name}',
+          type: _wasmSlotType(field.type),
+          seed: seed,
+          init: seed == null ? value : null,
+        ));
+      }
     }
     return globals;
   }
@@ -405,6 +433,24 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       ),
     );
     return f;
+  }
+
+  /// Whether [name], as a receiver, names a class (not shadowed by a local).
+  bool _isClassReceiver(WasmContext context, String name) =>
+      context.getLocalVariable(name) == null &&
+      !context.isFieldAccess(name) &&
+      (context.module?.classDeclarations.containsKey(name) ?? false);
+
+  /// The global key of `className.field` when [className] names a class (see
+  /// [_isClassReceiver]) that has a `static` field [field], else `null`.
+  String? _qualifiedStaticFieldKey(
+    WasmContext context,
+    String className,
+    String field,
+  ) {
+    if (!_isClassReceiver(context, className)) return null;
+    var key = '$className.$field';
+    return context.module!.staticFieldGlobalIndexOf(key) != null ? key : null;
   }
 
   /// The module global key of a bare [name]: a `static` field of the current
@@ -483,25 +529,6 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       }
     }
     return result;
-  }
-
-  /// The seed value for a `static` field global: the field's literal `int` /
-  /// `double` / `bool` initializer (bool as `0`/`1`), or `0` when there is no
-  /// initializer or it is not a compile-time literal.
-  num _staticFieldInitNum(ASTClassField field) {
-    if (field is ASTClassFieldWithInitialValue) {
-      try {
-        var v = field.getInitialValueNoContext();
-        if (v is ASTValue) {
-          var raw = v.getValueNoContext();
-          if (raw is bool) return raw ? 1 : 0;
-          if (raw is num) return raw;
-        }
-      } catch (_) {
-        // Non-literal initializer: leave the global at 0.
-      }
-    }
-    return 0;
   }
 
   /// The `"Class.field"` key of a bare `static` field [name] of the current
@@ -2184,7 +2211,59 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       }
     }
 
+    // `C.m(args)`: a `static` method of class `C`.
+    if (_isClassReceiver(context, varName)) {
+      var supplied =
+          expression.arguments.length +
+          (expression.namedArguments?.length ?? 0);
+      var staticIndex = context.module!.staticMethodIndexForCall(
+        varName,
+        expression.name,
+        supplied,
+      );
+      if (staticIndex == null) {
+        throw StateError(
+          "Can't resolve the static method `$varName.${expression.name}` "
+          "with $supplied argument(s).",
+        );
+      }
+      return _emitResolvedCall(
+        ASTExpressionLocalFunctionInvocation(
+          expression.name,
+          expression.arguments,
+        )..namedArguments = expression.namedArguments,
+        staticIndex,
+        out: out,
+        context: context,
+      );
+    }
+
+    // `int.parse(s)`.
+    if (varName == 'int' &&
+        expression.name == 'parse' &&
+        expression.arguments.length == 1 &&
+        context.getLocalVariable('int') == null) {
+      return _generateIntParse(
+        expression.arguments[0],
+        out: out,
+        context: context,
+      );
+    }
+
     var localVar = _getLocalVariable(context, varName);
+
+    // Methods of `int` / `double` / `num` (`n.toString()`, `d.round()`, …).
+    if (localVar.type is ASTTypeNum &&
+        !identical(localVar.type, _astTypeInt32)) {
+      var handled = _tryGenerateNumMethod(
+        expression,
+        localVar,
+        varName,
+        out: out,
+        context: context,
+      );
+      if (handled != null) return handled;
+    }
 
     // List.add(x)
     if (localVar.type is ASTTypeArray &&
@@ -2283,6 +2362,294 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       "Wasm method `.${expression.name}` on ${localVar.type} "
       "is not supported yet.",
     );
+  }
+
+  /// Methods of a number held in local [recv] (`int` as i64, `double` as f64):
+  /// `toString`, `toDouble`, `toInt`, `round`, `floor`, `ceil`, `truncate`,
+  /// `abs` and `clamp`. Returns `null` for any other method.
+  BytesOutput? _tryGenerateNumMethod(
+    ASTExpressionObjectFunctionInvocation expression,
+    ({ASTType type, int index}) recv,
+    String recvName, {
+    required BytesOutput out,
+    required WasmContext context,
+  }) {
+    var name = expression.name;
+    var args = expression.arguments;
+    var isDouble = recv.type is ASTTypeDouble;
+    ASTType recvStack = isDouble ? _astTypeDouble64 : _astTypeInt64;
+
+    const noArgs = {
+      'toString',
+      'toDouble',
+      'toInt',
+      'round',
+      'floor',
+      'ceil',
+      'truncate',
+      'abs',
+    };
+    if (!(noArgs.contains(name) && args.isEmpty) &&
+        !(name == 'clamp' && args.length == 2)) {
+      return null;
+    }
+
+    final s0 = context.stackLength;
+    _localVariableGet(out, context, recv.index, recvName);
+    context.stackPush(recvStack, "`$recvName`");
+
+    void result(ASTType t, String desc) => context.stackReplace(t, desc);
+
+    // f64 -> i64, rounding with [op] (`f64.floor`/`ceil`/`trunc`) first.
+    void toIntWith(int? op) {
+      if (op != null) out.writeByte(op);
+      out.writeByte(Wasm64.f64TruncateToI64Signed);
+      result(_astTypeInt64, "`$recvName.$name()`");
+    }
+
+    switch (name) {
+      case 'toString':
+        _emitNumberToString(out, context, recvStack);
+      case 'toDouble':
+        if (!isDouble) out.writeByte(Wasm64.i64ConvertToF64Signed);
+        result(_astTypeDouble64, "`$recvName.toDouble()`");
+      case 'toInt' || 'truncate':
+        if (isDouble) toIntWith(null);
+      case 'floor':
+        if (isDouble) toIntWith(Wasm64.f64Floor);
+      case 'ceil':
+        if (isDouble) toIntWith(Wasm64.f64Ceil);
+      case 'round':
+        if (isDouble) {
+          // Dart rounds half away from zero (`f64.nearest` rounds half to
+          // even): x < 0 ? ceil(x - 0.5) : floor(x + 0.5).
+          var x = context.scratchLocal(_astTypeDouble64, 2200);
+          out.write(Wasm.localTee(x));
+          out.write(Wasm64.f64Const(0));
+          out.writeByte(Wasm64.f64LessThan);
+          out.write(Wasm.ifInstruction(WasmType.f64Type));
+          out.write(Wasm.localGet(x));
+          out.write(Wasm64.f64Const(0.5));
+          out.writeByte(Wasm64.f64Subtract);
+          out.writeByte(Wasm64.f64Ceil);
+          out.writeByte(Wasm.elseInstruction);
+          out.write(Wasm.localGet(x));
+          out.write(Wasm64.f64Const(0.5));
+          out.writeByte(Wasm64.f64Add);
+          out.writeByte(Wasm64.f64Floor);
+          out.writeByte(Wasm.end);
+          toIntWith(null);
+        }
+      case 'abs':
+        if (isDouble) {
+          out.writeByte(Wasm64.f64Absolute);
+        } else {
+          // x < 0 ? -x : x
+          var x = context.scratchLocal(_astTypeInt64, 2201);
+          out.write(Wasm.localTee(x));
+          out.write(Wasm64.i64Const(0));
+          out.write(Wasm.localGet(x));
+          out.writeByte(Wasm64.i64Subtract);
+          out.write(Wasm.localGet(x));
+          out.write(Wasm.localGet(x));
+          out.write(Wasm64.i64Const(0));
+          out.writeByte(Wasm64.i64LessThanSigned);
+          out.writeByte(Wasm.select);
+        }
+      case 'clamp':
+        // max(lo, min(x, hi)), with both bounds converted to the receiver's
+        // kind.
+        var x = context.scratchLocal(recvStack, 2202);
+        var lo = context.scratchLocal(recvStack, 2203);
+        out.write(Wasm.localSet(x));
+        context.stackDrop();
+        for (var (i, bound) in [(0, lo), (1, x)]) {
+          generateASTExpression(args[i], out: out, context: context);
+          _autoConvertStackTypes(
+            context.stackGet(0)!.type,
+            recvStack,
+            out: out,
+            context: context,
+          );
+          context.stackDrop();
+          if (i == 0) {
+            out.write(Wasm.localSet(bound));
+          }
+        }
+        // Stack: hi. min(x, hi), then max(lo, that).
+        var hi = context.scratchLocal(recvStack, 2204);
+        out.write(Wasm.localSet(hi));
+        if (isDouble) {
+          out.write(Wasm.localGet(x));
+          out.write(Wasm.localGet(hi));
+          out.writeByte(Wasm64.f64Min);
+          out.write(Wasm.localGet(lo));
+          out.writeByte(Wasm64.f64Max);
+        } else {
+          // m = x < hi ? x : hi ; m > lo ? m : lo
+          out.write(Wasm.localGet(x));
+          out.write(Wasm.localGet(hi));
+          out.write(Wasm.localGet(x));
+          out.write(Wasm.localGet(hi));
+          out.writeByte(Wasm64.i64LessThanSigned);
+          out.writeByte(Wasm.select);
+          out.write(Wasm.localTee(x));
+          out.write(Wasm.localGet(lo));
+          out.write(Wasm.localGet(x));
+          out.write(Wasm.localGet(lo));
+          out.writeByte(Wasm64.i64GreaterThanSigned);
+          out.writeByte(Wasm.select);
+        }
+        context.stackPush(recvStack, "`$recvName.clamp(…)`");
+    }
+
+    context.assertStackLength(s0 + 1, "After `$recvName.$name()`");
+    return out;
+  }
+
+  /// `int.parse(s)`: decimal digits with an optional sign, surrounded by
+  /// optional whitespace. Anything else traps (the interpreter throws a
+  /// `FormatException`).
+  BytesOutput _generateIntParse(
+    ASTExpression source, {
+    required BytesOutput out,
+    required WasmContext context,
+  }) {
+    context.module!.requiresMemory = true;
+    final s0 = context.stackLength;
+    generateASTExpression(source, out: out, context: context);
+    context.stackDrop();
+
+    var s = context.scratchLocal(_astTypeString, 2210); // string ptr
+    var i = context.scratchLocal(_astTypeString, 2211);
+    var end = context.scratchLocal(_astTypeString, 2212);
+    var neg = context.scratchLocal(_astTypeString, 2213);
+    var c = context.scratchLocal(_astTypeString, 2214);
+    var acc = context.scratchLocal(_astTypeInt64, 2215);
+
+    void byteAt(int index) {
+      out.write(Wasm.localGet(s));
+      out.write(Wasm.localGet(index));
+      out.writeByte(Wasm32.i32Add);
+      out.write(Wasm32.i32Load8U(0, 4));
+    }
+
+    // Moves [index] by [step] while it is inside [i, end) and on a byte <= ' '.
+    void skipSpaces(int index, int step, {required bool fromEnd}) {
+      out.write(Wasm.block(WasmType.voidType));
+      out.write(Wasm.loop(WasmType.voidType));
+      out.write(Wasm.localGet(i));
+      out.write(Wasm.localGet(end));
+      out.writeByte(Wasm32.i32GreaterThanOrEqualsUnsigned);
+      out.write(Wasm.brIf(1));
+      if (fromEnd) {
+        out.write(Wasm.localGet(s));
+        out.write(Wasm.localGet(end));
+        out.writeByte(Wasm32.i32Add);
+        out.write(Wasm32.i32Load8U(0, 3)); // byte end-1
+      } else {
+        byteAt(index);
+      }
+      out.write(Wasm32.i32Const(32));
+      out.writeByte(Wasm32.i32GreaterThanUnsigned);
+      out.write(Wasm.brIf(1));
+      out.write(Wasm.localGet(index));
+      out.write(Wasm32.i32Const(step));
+      out.writeByte(Wasm32.i32Add);
+      out.write(Wasm.localSet(index));
+      out.write(Wasm.br(0));
+      out.writeByte(Wasm.end);
+      out.writeByte(Wasm.end);
+    }
+
+    out.write(Wasm.localTee(s), description: "[OP] int.parse");
+    out.write(Wasm32.i32Load(2, 0));
+    out.write(Wasm.localSet(end));
+    out.write(Wasm32.i32Const(0));
+    out.write(Wasm.localSet(i));
+    out.write(Wasm32.i32Const(0));
+    out.write(Wasm.localSet(neg));
+    out.write(Wasm64.i64Const(0));
+    out.write(Wasm.localSet(acc));
+
+    skipSpaces(i, 1, fromEnd: false);
+    skipSpaces(end, -1, fromEnd: true);
+
+    // An optional sign.
+    out.write(Wasm.localGet(i));
+    out.write(Wasm.localGet(end));
+    out.writeByte(Wasm32.i32LessThanUnsigned);
+    out.write(Wasm.ifInstruction(WasmType.voidType));
+    byteAt(i);
+    out.write(Wasm.localTee(c));
+    out.write(Wasm32.i32Const(45)); // '-'
+    out.writeByte(Wasm32.i32Equals);
+    out.write(Wasm.localGet(c));
+    out.write(Wasm32.i32Const(43)); // '+'
+    out.writeByte(Wasm32.i32Equals);
+    out.writeByte(Wasm32.i32BitwiseOr);
+    out.write(Wasm.ifInstruction(WasmType.voidType));
+    out.write(Wasm.localGet(c));
+    out.write(Wasm32.i32Const(45));
+    out.writeByte(Wasm32.i32Equals);
+    out.write(Wasm.localSet(neg));
+    out.write(Wasm.localGet(i));
+    out.write(Wasm32.i32Const(1));
+    out.writeByte(Wasm32.i32Add);
+    out.write(Wasm.localSet(i));
+    out.writeByte(Wasm.end);
+    out.writeByte(Wasm.end);
+
+    // No digits: a format error.
+    out.write(Wasm.localGet(i));
+    out.write(Wasm.localGet(end));
+    out.writeByte(Wasm32.i32GreaterThanOrEqualsUnsigned);
+    out.write(Wasm.ifInstruction(WasmType.voidType));
+    out.writeByte(Wasm.unreachable, description: "[OP] int.parse: no digits");
+    out.writeByte(Wasm.end);
+
+    // acc = acc * 10 + digit, for each byte in [i, end).
+    out.write(Wasm.block(WasmType.voidType));
+    out.write(Wasm.loop(WasmType.voidType));
+    out.write(Wasm.localGet(i));
+    out.write(Wasm.localGet(end));
+    out.writeByte(Wasm32.i32GreaterThanOrEqualsUnsigned);
+    out.write(Wasm.brIf(1));
+    byteAt(i);
+    out.write(Wasm32.i32Const(48));
+    out.writeByte(Wasm32.i32Subtract);
+    out.write(Wasm.localTee(c));
+    out.write(Wasm32.i32Const(9));
+    out.writeByte(Wasm32.i32GreaterThanUnsigned);
+    out.write(Wasm.ifInstruction(WasmType.voidType));
+    out.writeByte(Wasm.unreachable, description: "[OP] int.parse: not a digit");
+    out.writeByte(Wasm.end);
+    out.write(Wasm.localGet(acc));
+    out.write(Wasm64.i64Const(10));
+    out.writeByte(Wasm64.i64Multiply);
+    out.write(Wasm.localGet(c));
+    out.writeByte(Wasm32.i32ExtendToI64Unsigned);
+    out.writeByte(Wasm64.i64Add);
+    out.write(Wasm.localSet(acc));
+    out.write(Wasm.localGet(i));
+    out.write(Wasm32.i32Const(1));
+    out.writeByte(Wasm32.i32Add);
+    out.write(Wasm.localSet(i));
+    out.write(Wasm.br(0));
+    out.writeByte(Wasm.end);
+    out.writeByte(Wasm.end);
+
+    // neg ? -acc : acc
+    out.write(Wasm64.i64Const(0));
+    out.write(Wasm.localGet(acc));
+    out.writeByte(Wasm64.i64Subtract);
+    out.write(Wasm.localGet(acc));
+    out.write(Wasm.localGet(neg));
+    out.writeByte(Wasm.select);
+
+    context.stackPush(_astTypeInt64, "int.parse result");
+    context.assertStackLength(s0 + 1, "After int.parse");
+    return out;
   }
 
   /// Lowers `recv.method(args)` to a call of the synthesized method function
@@ -2694,7 +3061,9 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       t is ASTTypeBool ||
       t is ASTTypeArray ||
       t is ASTTypeMap ||
-      t is ASTTypeRecord;
+      t is ASTTypeRecord ||
+      // A class instance (`List<P>`, `List<Shape>`): its i32 pointer.
+      _isPointerType(t);
 
   // === Records =======================================================
   //
@@ -3607,7 +3976,6 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     var name = expression.name;
     var positionalArgs = expression.arguments;
     var namedArgs = expression.namedArguments;
-    var arguments = positionalArgs;
     // Total arity = positional + named; used to resolve the callee (Wasm
     // functions are positional/fixed-arity at the bytecode level).
     var argsCount = positionalArgs.length + (namedArgs?.length ?? 0);
@@ -3723,7 +4091,66 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       }
     }
 
+    return _emitResolvedCall(
+      expression,
+      calleeIndex,
+      out: out,
+      context: context,
+    );
+  }
+
+  /// Emits the call of the module function at [calleeIndex] for the
+  /// invocation [expression] (its arguments are ordered against the callee's
+  /// parameters, filling defaults), pushing the result.
+  BytesOutput _emitResolvedCall(
+    ASTExpressionLocalFunctionInvocation expression,
+    int calleeIndex, {
+    required BytesOutput out,
+    required WasmContext context,
+  }) {
+    var name = expression.name;
+    var positionalArgs = expression.arguments;
+    var namedArgs = expression.namedArguments;
+    List<ASTExpression> arguments;
+
     var callee = context.functionByIndex(calleeIndex)!;
+
+    // A named local function calling itself (`int fact(int x) { … fact(x - 1)
+    // … }`): it is a closure, whose signature takes the hidden environment
+    // pointer first. Pass the function's own environment (or null when it
+    // captures nothing).
+    var calleeClosure = context.module?.closureInfo(callee);
+    if (calleeClosure != null) {
+      var ownEnv =
+          calleeClosure.captures.isNotEmpty && context.closureEnvLocalIndex >= 0
+          ? context.closureEnvLocalIndex
+          : null;
+      if (calleeClosure.captures.isNotEmpty && ownEnv == null) {
+        // Called from its enclosing function: the local holding the function
+        // value carries the environment.
+        var localFn = context.getLocalVariable(name);
+        if (localFn != null && localFn.type is ASTTypeFunction) {
+          return _emitIndirectCall(
+            expression,
+            localFn.type as ASTTypeFunction,
+            localFn.index,
+            out: out,
+            context: context,
+          );
+        }
+        throw UnsupportedSyntaxError(
+          "Wasm can't call the capturing local function `$name` from outside "
+          "its own body without a function value.",
+        );
+      }
+      return _emitDirectClosureCall(
+        expression,
+        callee,
+        out: out,
+        context: context,
+        envLocal: ownEnv,
+      );
+    }
 
     // Reorder/merge named arguments into the callee's positional order and fill
     // omitted parameters that have defaults (no-op for purely-positional calls
@@ -3811,6 +4238,7 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     ASTFunctionDeclaration fn, {
     BytesOutput? out,
     WasmContext? context,
+    int? envLocal,
   }) {
     out ??= newOutput();
     context ??= WasmContext();
@@ -3822,11 +4250,19 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
 
     final stackLng0 = context.stackLength;
 
-    // Argument 0: the (unused) environment pointer — null.
-    out.write(
-      Wasm32.i32Const(0),
-      description: "[OP] direct closure call: null env",
-    );
+    // Argument 0: the environment pointer — the caller's own [envLocal] for a
+    // closure calling itself, otherwise null (a capture-free closure).
+    if (envLocal != null) {
+      out.write(
+        Wasm.localGet(envLocal),
+        description: "[OP] direct closure call: own env",
+      );
+    } else {
+      out.write(
+        Wasm32.i32Const(0),
+        description: "[OP] direct closure call: null env",
+      );
+    }
     context.stackPush(_astTypeInt32, "direct closure null env");
 
     // Real arguments, converted to the closure's parameter types.
@@ -6984,6 +7420,21 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     );
     if (enumPtr != null) return enumPtr;
 
+    // `C.n`: a `static` field of class `C`, read from its module global.
+    var staticKey = _qualifiedStaticFieldKey(context, varName, name);
+    if (staticKey != null) {
+      var module = context.module!;
+      out.write(
+        Wasm.globalGet(module.staticFieldGlobalIndexOf(staticKey)!),
+        description: "[OP] static field get `$staticKey`",
+      );
+      context.stackPush(
+        _wasmStackTypeFor(module.staticFieldTypeOf(staticKey)!),
+        "static field `$staticKey`",
+      );
+      return out;
+    }
+
     var localVar = _getLocalVariable(context, varName);
 
     var listType = localVar.type;
@@ -7160,6 +7611,33 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
         _emitElemLoad(out, elemType, 0);
         context.stackPush(_elemStackType(elemType), "$varName.$name");
         context.assertStackLength(s0 + 1, "After .$name");
+        return out;
+      }
+    }
+
+    // `n.isEven` / `n.isOdd` / `n.isNegative` on a number (an i32 bool).
+    if (listType is ASTTypeNum && !identical(listType, _astTypeInt32)) {
+      var isDouble = listType is ASTTypeDouble;
+      if ((name == 'isEven' || name == 'isOdd') && !isDouble) {
+        _localVariableGet(out, context, localVar.index, varName);
+        out.write(Wasm64.i64Const(1));
+        out.writeByte(Wasm64.i64BitwiseAnd);
+        out.writeByte(
+          name == 'isEven' ? Wasm64.i64EqualsToZero : Wasm64.i64WrapToi32,
+        );
+        context.stackPush(_astTypeInt32, "$varName.$name");
+        return out;
+      }
+      if (name == 'isNegative') {
+        _localVariableGet(out, context, localVar.index, varName);
+        if (isDouble) {
+          out.write(Wasm64.f64Const(0));
+          out.writeByte(Wasm64.f64LessThan);
+        } else {
+          out.write(Wasm64.i64Const(0));
+          out.writeByte(Wasm64.i64LessThanSigned);
+        }
+        context.stackPush(_astTypeInt32, "$varName.$name");
         return out;
       }
     }
@@ -8708,12 +9186,21 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
           varType = null;
         }
         if (varType == null && c.variableName != null) {
-          final inferred = _inferTryThrownType(s.tryBlock);
+          // A call in the `try` to a function that may throw can raise a value
+          // of any type, so the thrown values written in the `try` itself
+          // don't settle the variable's type.
+          final callsThrowing = [s.tryBlock, ...s.tryBlock.descendantChildren]
+              .whereType<ASTExpressionLocalFunctionInvocation>()
+              .any((call) => excEligible.contains(call.name));
+          final inferred = callsThrowing
+              ? null
+              : _inferTryThrownType(s.tryBlock);
           if (inferred != null) {
             varType = inferred;
-          } else if (_tryHasThrow(s.tryBlock)) {
-            ok = false;
-            return cur;
+          } else if (callsThrowing || _tryHasThrow(s.tryBlock)) {
+            // Unknown or mixed thrown types: bind the value boxed, built from
+            // its runtime tag (see `bindCatchVar`).
+            varType = ASTTypeObject.instance;
           } else {
             varType = _astTypeInt;
           }
@@ -9090,6 +9577,31 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     List<int> bindCatchVar(_CatchInfo c) {
       if (c.varName == null) return const [];
       final v = context.getLocalVariable(c.varName!)!;
+      if (_isObjectType(v.type)) {
+        // An untyped `catch (e)` whose thrown type isn't known statically: box
+        // the thrown value, so `e` prints / compares as what was thrown. The
+        // exception tags (1 int, 2 double, 3 bool, 4 String, 5 pointer) are
+        // the box tags, and the 8-byte value slot is the box payload.
+        module.requiresHeapGlobal = true;
+        final box = context.scratchLocal(_astTypeString, 62); // i32
+        final code = newOutput();
+        code.write(Wasm32.i32Const(_boxSize));
+        _emitInlineAlloc(code, context);
+        code.write(Wasm.localTee(box));
+        code.write(Wasm32.i32Const(0));
+        code.write(Wasm32.i32Load(2, tagOff));
+        code.write(Wasm32.i32Store(2, _boxTagOffset));
+        code.write(Wasm.localGet(box));
+        code.write(Wasm32.i32Const(0));
+        code.write(Wasm32.i32Store(2, _boxTypeIdOffset));
+        code.write(Wasm.localGet(box));
+        code.write(Wasm32.i32Const(0));
+        code.write(Wasm64.i64Load(3, valOff));
+        code.write(Wasm64.i64Store(3, _boxPayloadOffset));
+        code.write(Wasm.localGet(box));
+        code.write(Wasm.localSet(v.index));
+        return code.output();
+      }
       final kind = v.type.wasmType;
       return [
         ...Wasm32.i32Const(0),
@@ -10201,6 +10713,12 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     out.write(Wasm.localSet(dataScratch));
 
     var eLocal = _getLocalVariable(context, forEach.variableName);
+    // A `var` loop variable that couldn't be typed statically (`for (var p in
+    // l)` over `var l = [P(1)]`) takes the iterable's element type.
+    if (_isObjectType(eLocal.type) && !_isObjectType(elemType)) {
+      context.updateLocalVariableType(forEach.variableName, elemType);
+      eLocal = _getLocalVariable(context, forEach.variableName);
+    }
 
     // i = 0
     out.write(Wasm32.i32Const(0));
@@ -11093,6 +11611,14 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       // later hold `null`), `String? s = <box>` unwraps the box. A declared
       // record type takes its own layout: `(double, int) r = (1, 2);`.
       _convertTopToSlot(out, context, statement.type);
+    } else if (statement.type is ASTTypeVar &&
+        _hasDynamicTypeArgument(localVar.type) &&
+        _sameCollectionKind(initType, localVar.type) &&
+        !_hasDynamicTypeArgument(initType)) {
+      // `var l = [P(1), P(2)]` resolved statically as `List<dynamic>`, but the
+      // literal was built as a `List<P>`: the local takes the built type, or
+      // its elements would be read as boxes.
+      context.updateLocalVariableType(name, initType);
     } else if (_isObjectType(localVar.type) && !_isObjectType(initType)) {
       // A `var`/`Object`/`dynamic` local whose initializer has a concrete type:
       // refine to it so method/field access and the local's Wasm width are
@@ -11169,6 +11695,10 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
         out: out,
         context: context,
       );
+    }
+    var unfolded = _unfoldCallChain(expression);
+    if (unfolded != null) {
+      return generateASTExpression(unfolded, out: out, context: context);
     }
     var viaReceiverTemp = _tryGenerateWithReceiverTemp(
       expression,
@@ -11265,7 +11795,21 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
         context: context,
       );
     } else if (expression is ASTExpressionGroupFunctionInvocation) {
-      return generateASTExpressionGroupFunctionInvocation(expression, out: out);
+      // `(a - b).abs()`: a member call whose receiver is an expression; a
+      // chained `.toString()` after it calls on that result in turn.
+      ASTExpression call = ASTExpressionObjectFunctionInvocation(
+        ASTExpressionVariable(expression.expression),
+        expression.name,
+        expression.arguments,
+      )..namedArguments = expression.namedArguments;
+      for (var link in expression.chainFunctionInvocation ?? const []) {
+        call = ASTExpressionObjectFunctionInvocation(
+          ASTExpressionVariable(call),
+          link.name,
+          link.arguments,
+        )..namedArguments = link.namedArguments;
+      }
+      return generateASTExpression(call, out: out, context: context);
     } else if (expression is ASTExpressionObjectSetterAssignment) {
       return _generateObjectSetterAssignment(
         expression,
@@ -11491,6 +12035,68 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     }
   }
 
+  /// Whether [a] and [b] are both lists, both maps or both sets.
+  bool _sameCollectionKind(ASTType a, ASTType b) =>
+      (a is ASTTypeArray && b is ASTTypeArray) ||
+      (a is ASTTypeMap && b is ASTTypeMap) ||
+      (a is ASTTypeSet && b is ASTTypeSet);
+
+  /// Whether [t] is a collection with a `dynamic` (or `var`) type argument.
+  bool _hasDynamicTypeArgument(ASTType t) {
+    if (t is! ASTTypeArray && t is! ASTTypeMap && t is! ASTTypeSet) {
+      return false;
+    }
+    return t.generics?.any((g) => g is ASTTypeDynamic || g is ASTTypeVar) ??
+        false;
+  }
+
+  /// `a.f().g()` / `a.x.g()`: a member access or call carrying a chain of
+  /// further calls, rebuilt as nested calls on expression receivers (each link
+  /// calls on the previous result), or `null` when [expression] has no chain.
+  /// After a `?.`, every link is null-aware too, so a `null` short-circuits
+  /// the rest of the chain.
+  ASTExpression? _unfoldCallChain(ASTExpression expression) {
+    ASTExpression base;
+    List<ASTExpressionChainFunctionInvocation>? chain;
+    bool nullAware;
+    switch (expression) {
+      case ASTExpressionObjectFunctionInvocation e:
+        chain = e.chainFunctionInvocation;
+        nullAware = e.isNullAware;
+        base = ASTExpressionObjectFunctionInvocation(
+          e.variable,
+          e.name,
+          e.arguments,
+          null,
+          e.isNullAware,
+          e.assertReceiver,
+        )..namedArguments = e.namedArguments;
+      case ASTExpressionObjectGetterAccess e:
+        chain = e.chainFunctionInvocation;
+        nullAware = e.isNullAware;
+        base = ASTExpressionObjectGetterAccess(
+          e.variable,
+          e.name,
+          null,
+          e.isNullAware,
+          e.assertReceiver,
+        );
+      default:
+        return null;
+    }
+    if (chain == null || chain.isEmpty) return null;
+    for (var link in chain) {
+      base = ASTExpressionObjectFunctionInvocation(
+        ASTExpressionVariable(base),
+        link.name,
+        link.arguments,
+        null,
+        nullAware,
+      )..namedArguments = link.namedArguments;
+    }
+    return base;
+  }
+
   /// A Wasm `const 0` of [type] (`null` for an i32 pointer).
   List<int> _wasmZeroConst(WasmType type) {
     if (type == WasmType.i64Type) return Wasm64.i64Const(0);
@@ -11661,6 +12267,44 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     context ??= WasmContext();
 
     var recvName = expression.variable.name;
+
+    // `C.n = v`: a `static` field of class `C`, stored to its module global.
+    // Like any assignment, the value stays as a phantom virtual entry.
+    var staticKey = _qualifiedStaticFieldKey(
+      context,
+      recvName,
+      expression.name,
+    );
+    if (staticKey != null) {
+      var module = context.module!;
+      if (expression.operator == ASTAssignmentOperator.set) {
+        generateASTExpression(
+          expression.expression,
+          out: out,
+          context: context,
+        );
+      } else {
+        generateASTExpressionOperation(
+          ASTExpressionOperation(
+            ASTExpressionObjectGetterAccess(
+              expression.variable,
+              expression.name,
+            ),
+            expression.operator.asASTExpressionOperator!,
+            expression.expression,
+          ),
+          out: out,
+          context: context,
+        );
+      }
+      _convertTopToSlot(out, context, module.staticFieldTypeOf(staticKey)!);
+      out.write(
+        Wasm.globalSet(module.staticFieldGlobalIndexOf(staticKey)!),
+        description: "[OP] static field set `$staticKey`",
+      );
+      return out;
+    }
+
     var recvVar = _getLocalVariable(context, recvName);
     var layout = context.module?.layoutForType(recvVar.type);
     if (layout != null &&
