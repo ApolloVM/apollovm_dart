@@ -50,9 +50,8 @@ ASTInvocableDeclaration? _resolveFunctionOrExtension(
 
   if (f != null) return f;
 
-  var extensionFunction = _resolveASTRoot(
-    node,
-  )?.getExtensionFunction(clazz, name, parametersSignature);
+  var extensionFunction = _resolveASTRoot(node)
+      ?.getExtensionFunction(clazz, name, parametersSignature);
   if (extensionFunction != null) return extensionFunction;
 
   if (classLookupError != null) throw classLookupError;
@@ -99,9 +98,8 @@ ASTInvocableDeclaration? _resolveLocalFunctionOrExtension(
 
   var receiverClass = _receiverClass(context);
   if (receiverClass != null) {
-    var extensionFunction = _resolveASTRoot(
-      node,
-    )?.getExtensionFunction(receiverClass, name, parametersSignature);
+    var extensionFunction = _resolveASTRoot(node)
+        ?.getExtensionFunction(receiverClass, name, parametersSignature);
     if (extensionFunction != null) return extensionFunction;
   }
 
@@ -556,9 +554,8 @@ class ASTExpressionListLiteral extends ASTExpression {
       return ASTTypeArray(type);
     }
 
-    return ASTExpression.typeFromExpressions(
-      valuesExpressions,
-    ).resolveMapped((elementsType) => ASTTypeArray(elementsType));
+    return ASTExpression.typeFromExpressions(valuesExpressions)
+        .resolveMapped((elementsType) => ASTTypeArray(elementsType));
   }
 
   @override
@@ -623,9 +620,8 @@ class ASTExpressionSetLiteral extends ASTExpression {
       return ASTTypeSet(type);
     }
 
-    return ASTExpression.typeFromExpressions(
-      valuesExpressions,
-    ).resolveMapped((elementsType) => ASTTypeSet(elementsType));
+    return ASTExpression.typeFromExpressions(valuesExpressions)
+        .resolveMapped((elementsType) => ASTTypeSet(elementsType));
   }
 
   @override
@@ -707,9 +703,8 @@ class ASTExpressionMapLiteral extends ASTExpression {
     if (kt != null && vt != null) {
       return ASTTypeMap(kt, vt);
     }
-    return resolveKeyType(
-      context,
-    ).resolveBoth(resolveValueType(context), (k, v) => ASTTypeMap(k, v));
+    return resolveKeyType(context)
+        .resolveBoth(resolveValueType(context), (k, v) => ASTTypeMap(k, v));
   }
 
   @override

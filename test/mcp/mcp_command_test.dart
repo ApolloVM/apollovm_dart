@@ -27,22 +27,19 @@ Future<String> runMcp(List<String> args) async {
 
 void main() {
   group('mcp list', () {
-    test(
-      'emits the core + LSP tools (no repo tools without a workspace)',
-      () async {
-        final tools = jsonDecode(await runMcp(['list'])) as List;
-        final names = tools.map((t) => (t as Map)['name']);
-        expect(names, containsAll(allToolNames));
-        // The repository tools are only surfaced when a workspace is configured.
-        expect(names, isNot(contains('apollovm.fs.read')));
-        for (final t in tools) {
-          // Every tool advertises an object input schema (properties may be empty
-          // for no-argument tools such as apollovm.git.status).
-          expect((t as Map)['inputSchema'], isA<Map>());
-          expect((t['inputSchema'] as Map)['properties'], isA<Map>());
-        }
-      },
-    );
+    test('emits the core + LSP tools (no repo tools without a workspace)', () async {
+      final tools = jsonDecode(await runMcp(['list'])) as List;
+      final names = tools.map((t) => (t as Map)['name']);
+      expect(names, containsAll(allToolNames));
+      // The repository tools are only surfaced when a workspace is configured.
+      expect(names, isNot(contains('apollovm.fs.read')));
+      for (final t in tools) {
+        // Every tool advertises an object input schema (properties may be empty
+        // for no-argument tools such as apollovm.git.status).
+        expect((t as Map)['inputSchema'], isA<Map>());
+        expect((t['inputSchema'] as Map)['properties'], isA<Map>());
+      }
+    });
 
     test('includes the repository tools with --workspace', () async {
       final tools =
@@ -81,38 +78,34 @@ void main() {
 
   group('mcp call', () {
     test('executes source passed via --source', () async {
-      final r =
-          jsonDecode(
-                await runMcp([
-                  'call',
-                  'execute',
-                  '-l',
-                  'dart',
-                  '-s',
-                  'int main(List a){ print("cli"); return 7; }',
-                ]),
-              )
-              as Map;
+      final r = jsonDecode(
+        await runMcp([
+          'call',
+          'execute',
+          '-l',
+          'dart',
+          '-s',
+          'int main(List a){ print("cli"); return 7; }',
+        ]),
+      ) as Map;
       expect(r['isError'], isFalse);
       expect(r['result'], 7);
       expect(r['output'], ['cli']);
     });
 
     test('translates go->dart', () async {
-      final r =
-          jsonDecode(
-                await runMcp([
-                  'call',
-                  'translate',
-                  '--from',
-                  'go',
-                  '--to',
-                  'dart',
-                  '-s',
-                  'package main\nfunc Add(a int, b int) int { return a + b }\n',
-                ]),
-              )
-              as Map;
+      final r = jsonDecode(
+        await runMcp([
+          'call',
+          'translate',
+          '--from',
+          'go',
+          '--to',
+          'dart',
+          '-s',
+          'package main\nfunc Add(a int, b int) int { return a + b }\n',
+        ]),
+      ) as Map;
       expect(r['isError'], isFalse);
       expect(r['generated'], contains('int Add(int a, int b)'));
     });
@@ -207,9 +200,9 @@ void main() {
     });
 
     test('the JSON form names the repository tools too', () async {
-      final info =
-          jsonDecode(await runMcp(['info', '--json', '--workspace', '.']))
-              as Map;
+      final info = jsonDecode(
+        await runMcp(['info', '--json', '--workspace', '.']),
+      ) as Map;
       expect(info['repositoryTools'], containsAll(repoToolNames));
     });
   });

@@ -139,9 +139,9 @@ void main() {
       // Underlying InMemory reports canWrite: true; the guard masks it.
       expect(guarded().capabilities.canWrite, isFalse);
       expect(
-        guarded(
-          config: const RepoConfig(allowWrite: true),
-        ).capabilities.canWrite,
+        guarded(config: const RepoConfig(allowWrite: true))
+            .capabilities
+            .canWrite,
         isTrue,
       );
     });

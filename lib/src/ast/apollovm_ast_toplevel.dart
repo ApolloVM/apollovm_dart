@@ -1938,11 +1938,10 @@ class ASTConstructorParameterDeclaration<T> extends ASTParameterDeclaration {
     this.index,
     this.optional, {
     this.thisParameter = false,
-    bool superParameter = false,
-    String? fieldName,
+    this._superParameter = false,
+    this._fieldName,
     super.isRequired,
-  }) : _fieldName = fieldName,
-       _superParameter = superParameter;
+  });
 
   @override
   void resolveNode(ASTNode? parentNode) {
@@ -3227,29 +3226,26 @@ class ASTFunctionDeclaration<T>
 
     if (parameters.isEmpty) {
       return returnType.callCasted(<R>() {
-            return () {
-              return call(parentContext).resolveMapped((astValue) {
-                    return astValue.getValue(parentContext);
-                  })
-                  as R;
-            };
-          })
-          as F;
+        return () {
+          return call(parentContext).resolveMapped((astValue) {
+            return astValue.getValue(parentContext);
+          }) as R;
+        };
+      }) as F;
     } else if (parameters.positionalParametersSize == 1) {
       if (parameters.optionalParametersSize == 0) {
         if (parameters.namedParametersSize == 0) {
           return returnType.callCasted(<R>() {
-                return (Object? a0) {
-                  return call(
-                        parentContext,
-                        positionalParameters: [a0],
-                      ).resolveMapped((astValue) {
-                        return astValue.getValue(parentContext);
-                      })
-                      as R;
-                };
-              })
-              as F;
+            return (Object? a0) {
+              return call(
+                    parentContext,
+                    positionalParameters: [a0],
+                  ).resolveMapped((astValue) {
+                    return astValue.getValue(parentContext);
+                  })
+                  as R;
+            };
+          }) as F;
         }
       }
     }
@@ -3681,8 +3677,10 @@ class ASTSetterDeclaration<T> extends ASTBlock {
   }
 }
 
-typedef ParameterValueResolver =
-    FutureOr<dynamic> Function(ASTValue? paramVal, VMContext context);
+typedef ParameterValueResolver = FutureOr<dynamic> Function(
+  ASTValue? paramVal,
+  VMContext context,
+);
 
 /// An AST External Getter.
 class ASTExternalGetter<T> extends ASTGetterDeclaration<T> {

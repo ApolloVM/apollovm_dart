@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import '../../ast/apollovm_ast_toplevel.dart';
+
 import 'package:async_extension/async_extension.dart';
 
 import 'wasm_runtime_generic.dart'

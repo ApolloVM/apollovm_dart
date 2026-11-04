@@ -115,15 +115,13 @@ void main() {
         equals(0),
       );
       expect(
-        (await ASTTypeDouble.instance.toDefaultValue(
-          context,
-        ))?.getValueNoContext(),
+        (await ASTTypeDouble.instance.toDefaultValue(context))
+            ?.getValueNoContext(),
         equals(0.0),
       );
       expect(
-        (await ASTTypeBool.instance.toDefaultValue(
-          context,
-        ))?.getValueNoContext(),
+        (await ASTTypeBool.instance.toDefaultValue(context))
+            ?.getValueNoContext(),
         isFalse,
       );
     });

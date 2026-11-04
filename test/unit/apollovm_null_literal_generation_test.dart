@@ -44,16 +44,14 @@ void main() {
       var spelling = entry.value;
 
       test('$language spells the null *expression* `$spelling`', () {
-        var out = _generatorFor(
-          language,
-        ).generateASTExpressionNullValue(ASTExpressionNullValue());
+        var out = _generatorFor(language)
+            .generateASTExpressionNullValue(ASTExpressionNullValue());
         expect(out.toString(), spelling);
       });
 
       test('$language spells the null *value* `$spelling`', () {
-        var out = _generatorFor(
-          language,
-        ).generateASTValueNull(ASTValueNull.instance);
+        var out = _generatorFor(language)
+            .generateASTValueNull(ASTValueNull.instance);
         expect(out.toString(), spelling);
       });
     }

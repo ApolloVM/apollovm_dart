@@ -348,9 +348,8 @@ void main() {
       expect(back.placeholder, 'calc');
       expect(back.range.start.character, 13);
       expect(
-        PrepareRenameResult.fromJson({
-          'range': prep.range.toJson(),
-        }).placeholder,
+        PrepareRenameResult.fromJson({'range': prep.range.toJson()})
+            .placeholder,
         '',
       );
     });

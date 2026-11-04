@@ -363,80 +363,74 @@ int makeAge(int seed) { return seed; }
       expect(members.first['kind'], SymbolKind.enumMember);
     });
 
-    test(
-      'documentSymbol range spans a member body, not just its signature',
-      () async {
-        final c = _Client();
-        await c.open(richUri, rich);
-        final resp = await c.request('textDocument/documentSymbol', {
-          'textDocument': _td(richUri),
-        });
-        final roots = (resp['result'] as List).cast<Map>();
-        final byName = {for (final s in roots) s['name']: s};
+    test('documentSymbol range spans a member body, not just its signature', () async {
+      final c = _Client();
+      await c.open(richUri, rich);
+      final resp = await c.request('textDocument/documentSymbol', {
+        'textDocument': _td(richUri),
+      });
+      final roots = (resp['result'] as List).cast<Map>();
+      final byName = {for (final s in roots) s['name']: s};
 
-        Range rangeOf(Map sym) =>
-            Range.fromJson((sym['range'] as Map).cast<String, Object?>());
-        Range selOf(Map sym) => Range.fromJson(
-          (sym['selectionRange'] as Map).cast<String, Object?>(),
-        );
+      Range rangeOf(Map sym) =>
+          Range.fromJson((sym['range'] as Map).cast<String, Object?>());
+      Range selOf(Map sym) => Range.fromJson(
+        (sym['selectionRange'] as Map).cast<String, Object?>(),
+      );
 
-        // Top-level function: the range must reach the closing brace on its line,
-        // well past the name in `selectionRange`.
-        final makeAge = byName['makeAge']!;
-        expect(rangeOf(makeAge).end.line, selOf(makeAge).end.line);
-        expect(
-          rangeOf(makeAge).end.character,
-          greaterThan(selOf(makeAge).end.character),
-          reason: 'range should include the { return seed; } body',
-        );
+      // Top-level function: the range must reach the closing brace on its line,
+      // well past the name in `selectionRange`.
+      final makeAge = byName['makeAge']!;
+      expect(rangeOf(makeAge).end.line, selOf(makeAge).end.line);
+      expect(
+        rangeOf(makeAge).end.character,
+        greaterThan(selOf(makeAge).end.character),
+        reason: 'range should include the { return seed; } body',
+      );
 
-        // Method inside a class: same expectation for `bark`.
-        final dog = byName['Dog']!;
-        final bark = (dog['children'] as List).cast<Map>().firstWhere(
-          (m) => m['name'] == 'bark',
-        );
-        expect(
-          rangeOf(bark).end.character,
-          greaterThan(selOf(bark).end.character),
-          reason: 'method range should include its body',
-        );
-      },
-    );
+      // Method inside a class: same expectation for `bark`.
+      final dog = byName['Dog']!;
+      final bark = (dog['children'] as List).cast<Map>().firstWhere(
+        (m) => m['name'] == 'bark',
+      );
+      expect(
+        rangeOf(bark).end.character,
+        greaterThan(selOf(bark).end.character),
+        reason: 'method range should include its body',
+      );
+    });
 
-    test(
-      'documentSymbol range skips named-parameter braces to reach the body',
-      () async {
-        // The `{ ... }` of Dart named parameters must not be mistaken for the
-        // method body; the range should extend to the real body's closing brace.
-        const named = '''
+    test('documentSymbol range skips named-parameter braces to reach the body', () async {
+      // The `{ ... }` of Dart named parameters must not be mistaken for the
+      // method body; the range should extend to the real body's closing brace.
+      const named = '''
 class Box {
   int add({int a = 1, int b = 2}) {
     return a + b;
   }
 }
 ''';
-        const namedUri = 'file:///ws/named.dart';
-        final c = _Client();
-        await c.open(namedUri, named);
-        final resp = await c.request('textDocument/documentSymbol', {
-          'textDocument': _td(namedUri),
-        });
-        final roots = (resp['result'] as List).cast<Map>();
-        final box = roots.firstWhere((s) => s['name'] == 'Box');
-        final add = (box['children'] as List).cast<Map>().firstWhere(
-          (m) => m['name'] == 'add',
-        );
-        final range = Range.fromJson(
-          (add['range'] as Map).cast<String, Object?>(),
-        );
-        // `named` line 3 (0-based) is the method's closing `  }`.
-        expect(
-          range.end.line,
-          3,
-          reason: 'range must reach the body brace, not the params brace',
-        );
-      },
-    );
+      const namedUri = 'file:///ws/named.dart';
+      final c = _Client();
+      await c.open(namedUri, named);
+      final resp = await c.request('textDocument/documentSymbol', {
+        'textDocument': _td(namedUri),
+      });
+      final roots = (resp['result'] as List).cast<Map>();
+      final box = roots.firstWhere((s) => s['name'] == 'Box');
+      final add = (box['children'] as List).cast<Map>().firstWhere(
+        (m) => m['name'] == 'add',
+      );
+      final range = Range.fromJson(
+        (add['range'] as Map).cast<String, Object?>(),
+      );
+      // `named` line 3 (0-based) is the method's closing `  }`.
+      expect(
+        range.end.line,
+        3,
+        reason: 'range must reach the body brace, not the params brace',
+      );
+    });
 
     test(
       'enum members after the constant list are parsed as real members',
@@ -489,12 +483,10 @@ enum Color {
       },
     );
 
-    test(
-      'documentSymbol range covers expression bodies (class and enum)',
-      () async {
-        // `=> expr;` and Kotlin's brace-less `= expr` members must be fully
-        // selectable: the range spans the expression, not just the signature.
-        const src = '''
+    test('documentSymbol range covers expression bodies (class and enum)', () async {
+      // `=> expr;` and Kotlin's brace-less `= expr` members must be fully
+      // selectable: the range spans the expression, not just the signature.
+      const src = '''
 class Foo {
   int square(int n) => n * n;
   Map<int, int> pairs() => {1: 2, 3: 4};
@@ -510,47 +502,42 @@ class Calc {
   }
 }
 ''';
-        const uri = 'file:///ws/expr.dart';
-        final c = _Client();
-        await c.open(uri, src);
-        final resp = await c.request('textDocument/documentSymbol', {
-          'textDocument': _td(uri),
-        });
-        final roots = (resp['result'] as List).cast<Map>();
+      const uri = 'file:///ws/expr.dart';
+      final c = _Client();
+      await c.open(uri, src);
+      final resp = await c.request('textDocument/documentSymbol', {
+        'textDocument': _td(uri),
+      });
+      final roots = (resp['result'] as List).cast<Map>();
 
-        Map childOf(String parent, String child) =>
-            ((roots.firstWhere((s) => s['name'] == parent)['children'] as List)
-                    .cast<Map>())
-                .firstWhere((m) => m['name'] == child);
-        Range rangeOf(Map m) =>
-            Range.fromJson((m['range'] as Map).cast<String, Object?>());
+      Map childOf(String parent, String child) =>
+          ((roots.firstWhere((s) => s['name'] == parent)['children'] as List)
+                  .cast<Map>())
+              .firstWhere((m) => m['name'] == child);
+      Range rangeOf(Map m) =>
+          Range.fromJson((m['range'] as Map).cast<String, Object?>());
 
-        // Class `=> expr;` reaches past the `;` (line 1 ends at `;`).
-        final square = rangeOf(childOf('Foo', 'square'));
-        expect(square.end.line, 1);
-        expect(square.end.character, greaterThan(28));
+      // Class `=> expr;` reaches past the `;` (line 1 ends at `;`).
+      final square = rangeOf(childOf('Foo', 'square'));
+      expect(square.end.line, 1);
+      expect(square.end.character, greaterThan(28));
 
-        // Map-literal body: balanced braces don't corrupt the following member.
-        final pairs = rangeOf(childOf('Foo', 'pairs'));
-        expect(pairs.end.line, 2);
+      // Map-literal body: balanced braces don't corrupt the following member.
+      final pairs = rangeOf(childOf('Foo', 'pairs'));
+      expect(pairs.end.line, 2);
 
-        // Enum expression-body method includes its expression.
-        final doubled = rangeOf(childOf('Sign', 'doubled'));
-        expect(doubled.end.line, 6);
-        expect(doubled.end.character, greaterThan(18));
+      // Enum expression-body method includes its expression.
+      final doubled = rangeOf(childOf('Sign', 'doubled'));
+      expect(doubled.end.line, 6);
+      expect(doubled.end.character, greaterThan(18));
 
-        // Kotlin brace-less `= expr` is bounded to its own line and does not
-        // swallow the next member — `run` is recognized with its own block body.
-        final sum = rangeOf(childOf('Calc', 'sum'));
-        expect(
-          sum.end.line,
-          9,
-          reason: 'brace-less body must stop at its line',
-        );
-        final run = rangeOf(childOf('Calc', 'run'));
-        expect(run.end.line, 12, reason: 'run keeps its own block body');
-      },
-    );
+      // Kotlin brace-less `= expr` is bounded to its own line and does not
+      // swallow the next member — `run` is recognized with its own block body.
+      final sum = rangeOf(childOf('Calc', 'sum'));
+      expect(sum.end.line, 9, reason: 'brace-less body must stop at its line');
+      final run = rangeOf(childOf('Calc', 'run'));
+      expect(run.end.line, 12, reason: 'run keeps its own block body');
+    });
 
     test(
       'documentSymbol range covers a body-less constructor signature',

@@ -1270,12 +1270,7 @@ sealed class VMContext {
   /// The runtime block of this context.
   final ASTBlock block;
 
-  VMContext(
-    this.block, {
-    this.parent,
-    VMTypeResolver? typeResolver,
-    this.importManager,
-  }) : _typeResolver = typeResolver;
+  VMContext(this.block, {this.parent, this._typeResolver, this.importManager});
 
   FutureOr<bool> import(String path) {
     final parent = this.parent;

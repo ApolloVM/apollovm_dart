@@ -14,8 +14,10 @@ import '../transport/json_rpc.dart';
 /// Handles a server->client request (rare; e.g. `window/showMessageRequest`).
 /// Return the result, or throw [ResponseError]; returning null replies with a
 /// null result.
-typedef ServerRequestHandler =
-    FutureOr<Object?> Function(String method, Object? params);
+typedef ServerRequestHandler = FutureOr<Object?> Function(
+  String method,
+  Object? params,
+);
 
 /// A client for the ApolloVM [LspServer].
 ///

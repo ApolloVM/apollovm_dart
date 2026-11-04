@@ -47,40 +47,37 @@ void main() {
   setUpWasmRuntime();
 
   group('Wasm Asyncify via ApolloRunnerWasm (real suspension)', () {
-    test(
-      'executeFunction drives an async fn that awaits a host Future',
-      () async {
-        var runner = await _wasmRunner(r'''
+    test('executeFunction drives an async fn that awaits a host Future', () async {
+      var runner = await _wasmRunner(r'''
         Future<int> compute(int n) async {
           int v = await hostDouble(n);
           return v + 1;
         }
       ''');
-        if (runner == null) {
-          fail(
-            'Wasm runtime not supported (`wasm_run` native library unavailable).',
-          );
-        }
-
-        var awaited = false;
-        runner.mapWasmAsyncFunction('hostDouble', const [WasmValueType.i64], (
-          args,
-        ) async {
-          await Future<void>.delayed(const Duration(milliseconds: 5));
-          awaited = true;
-          return _asInt(args[0]) * 2;
-        });
-
-        var r = await runner.executeFunction(
-          '',
-          'compute',
-          positionalParameters: [10],
+      if (runner == null) {
+        fail(
+          'Wasm runtime not supported (`wasm_run` native library unavailable).',
         );
+      }
 
-        expect(r.getValueNoContext(), equals(21)); // host(10)=20; +1 => 21
-        expect(awaited, isTrue, reason: 'a real Future was awaited');
-      },
-    );
+      var awaited = false;
+      runner.mapWasmAsyncFunction('hostDouble', const [WasmValueType.i64], (
+        args,
+      ) async {
+        await Future<void>.delayed(const Duration(milliseconds: 5));
+        awaited = true;
+        return _asInt(args[0]) * 2;
+      });
+
+      var r = await runner.executeFunction(
+        '',
+        'compute',
+        positionalParameters: [10],
+      );
+
+      expect(r.getValueNoContext(), equals(21)); // host(10)=20; +1 => 21
+      expect(awaited, isTrue, reason: 'a real Future was awaited');
+    });
 
     test('locals set before the await survive the suspension', () async {
       var runner = await _wasmRunner(r'''

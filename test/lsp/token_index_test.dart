@@ -74,9 +74,8 @@ enum Color { red, green, blue }
     // An enum constant is a constructor invocation, so its range must cover the
     // whole entry — like a class member's range covers its parameters and body.
     String rangeOf(String src, String name) {
-      final d = TokenIndex.scan(src).declarations.firstWhere(
-        (d) => d.kind == DeclKind.enumMember && d.name == name,
-      );
+      final d = TokenIndex.scan(src).declarations
+          .firstWhere((d) => d.kind == DeclKind.enumMember && d.name == name);
       return src.substring(d.fullStart, d.fullEnd);
     }
 
@@ -94,9 +93,8 @@ enum Planet {
       expect(rangeOf(src, 'earth'), 'earth(5.97, 6371)');
       expect(rangeOf(src, 'mars'), 'mars(0.642, 3389)');
       // The name span stays on the name alone, for selection/definition.
-      final earth = TokenIndex.scan(
-        src,
-      ).declarations.firstWhere((d) => d.name == 'earth');
+      final earth = TokenIndex.scan(src).declarations
+          .firstWhere((d) => d.name == 'earth');
       expect(src.substring(earth.nameStart, earth.nameEnd), 'earth');
     });
 
@@ -238,9 +236,8 @@ class Config {
 
     test('the name span still covers only the name', () {
       const src = 'class Box {\n  int width;\n}\n';
-      final d = TokenIndex.scan(
-        src,
-      ).declarations.firstWhere((d) => d.name == 'width');
+      final d = TokenIndex.scan(src).declarations
+          .firstWhere((d) => d.name == 'width');
       expect(src.substring(d.nameStart, d.nameEnd), 'width');
     });
   });

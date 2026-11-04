@@ -2,6 +2,9 @@
 
 Dependency refresh only; no API or behavior changes.
 
+**Minimum Dart SDK is now 3.13.0** (was 3.10.0): `petitparser 7.1.0` and
+`web 1.1.2` require it, so the old floor could no longer resolve.
+
 - `crypto: ^3.0.8`
 - `petitparser: ^7.1.0`
 - `web: ^1.1.2`

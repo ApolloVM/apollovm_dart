@@ -19,7 +19,7 @@ screenshots:
     path: example/apollovm-logo.png
 
 environment:
-  sdk: '>=3.10.0 <4.0.0'
+  sdk: '>=3.13.0 <4.0.0'
 
 dependencies:
   swiss_knife: ^3.3.14

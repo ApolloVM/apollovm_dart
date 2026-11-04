@@ -91,24 +91,17 @@ void main() {
       },
     );
 
-    test(
-      'two modules extending `int` do not pollute the shared core class',
-      () async {
-        var a = await _parseRoot(
-          'extension A on int { int m() { return 1; } }',
-        );
-        var b = await _parseRoot(
-          'extension B on int { int m() { return 2; } }',
-        );
+    test('two modules extending `int` do not pollute the shared core class', () async {
+      var a = await _parseRoot('extension A on int { int m() { return 1; } }');
+      var b = await _parseRoot('extension B on int { int m() { return 2; } }');
 
-        // Both resolve to the same `CoreClassInt` singleton, but neither injected
-        // `m` into it: the core class knows no member named `m`.
-        var classA = a.extensions.single.targetClass!;
-        var classB = b.extensions.single.targetClass!;
-        expect(identical(classA, classB), isTrue);
-        expect(classA.getFunctionWithName('m'), isNull);
-      },
-    );
+      // Both resolve to the same `CoreClassInt` singleton, but neither injected
+      // `m` into it: the core class knows no member named `m`.
+      var classA = a.extensions.single.targetClass!;
+      var classB = b.extensions.single.targetClass!;
+      expect(identical(classA, classB), isTrue);
+      expect(classA.getFunctionWithName('m'), isNull);
+    });
   });
 
   group('Extension dispatch', () {
@@ -252,18 +245,15 @@ void main() {
       },
     );
 
-    test(
-      'an unknown getter on such a receiver reports the original error',
-      () async {
-        expect(
-          () => _run(
-            'extension ListExt on List { int get doubledLength { return 1; } }\n'
-            'int run() { var l = [1]; return l.nope; }',
-          ),
-          throwsA(isA<StateError>()),
-        );
-      },
-    );
+    test('an unknown getter on such a receiver reports the original error', () async {
+      expect(
+        () => _run(
+          'extension ListExt on List { int get doubledLength { return 1; } }\n'
+          'int run() { var l = [1]; return l.nope; }',
+        ),
+        throwsA(isA<StateError>()),
+      );
+    });
   });
 
   group('Extension code generation', () {

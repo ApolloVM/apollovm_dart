@@ -65,8 +65,7 @@ List<Tool> buildCodeTools() => [
   ),
   Tool(
     name: codeReferencesToolName,
-    description:
-        'References to the symbol at a line/character position within the file.',
+    description: 'References to the symbol at a line/character position within the file.',
     inputSchema: ObjectSchema(
       properties: {
         'path': _pathSchema,
