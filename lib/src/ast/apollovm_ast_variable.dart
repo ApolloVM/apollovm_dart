@@ -144,6 +144,14 @@ class ASTClassFieldWithInitialValue<T> extends ASTClassField<T> {
 
   ASTExpression get initialValue => _initialValueExpression;
 
+  /// Links the initializer to this field, so it resolves names through the
+  /// class (`static int b = C.a + 1;` finds `C`).
+  @override
+  void resolveNode(ASTNode? parentNode) {
+    super.resolveNode(parentNode);
+    _initialValueExpression.resolveNode(this);
+  }
+
   FutureOr<ASTValue> getInitialValue(
     VMContext context,
     ASTRunStatus runStatus,

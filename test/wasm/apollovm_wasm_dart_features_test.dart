@@ -617,5 +617,48 @@ int f() {
         returns: 23167,
       );
     });
+
+    test('nested for-each loops keep their own state', () async {
+      await _check(
+        r'''
+int f() {
+  List<List<int>> grid = [[1, 2], [-1, 5], [3, 4]];
+  var sum = 0;
+  outer: for (List<int> row in grid) {
+    for (int v in row) {
+      if (v < 0) continue outer;
+      sum += v;
+    }
+    sum += 100;
+  }
+  return sum;
+}
+''',
+        'f',
+        [],
+        returns: 210,
+      );
+    });
+
+    test('a clamp inside a clamp bound', () async {
+      await _check(
+        'int f(int n, int m) { return n.clamp(0, m.clamp(1, 5)); }',
+        'f',
+        [9, 3],
+        returns: 3,
+      );
+    });
+
+    test('a chain of user operators', () async {
+      await _check(
+        r'''
+class V { int x; V(this.x); V operator +(V o) => V(x + o.x); }
+int f() { var a = V(1); return (a + V(2) + V(3) + V(4) + V(5)).x; }
+''',
+        'f',
+        [],
+        returns: 15,
+      );
+    });
   });
 }

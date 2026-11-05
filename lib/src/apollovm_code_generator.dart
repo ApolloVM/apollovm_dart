@@ -1039,6 +1039,10 @@ abstract class ApolloCodeGenerator
   /// `break outer;` / `continue outer;`).
   bool get supportsLabels => true;
 
+  /// Whether a label may name a non-loop statement (`outer: { … break outer;
+  /// … }`). Go and Kotlin `break` only to a labeled loop.
+  bool get supportsLabeledBlocks => true;
+
   /// Throws an [UnsupportedSyntaxError] for a [label] this target can't
   /// express: dropping it would make `break outer;` leave only the inner loop.
   void checkLabelSupport(String? label, String construct) {
@@ -1075,6 +1079,13 @@ abstract class ApolloCodeGenerator
     String indent = '',
     bool headIndented = true,
   }) {
+    checkLabelSupport(statement.label, 'statement');
+    if (!supportsLabeledBlocks && statement.statement is! ASTStatementLoop) {
+      throw UnsupportedSyntaxError(
+        "Language '$language' can only label a loop, not "
+        "`${statement.label}: ${statement.statement}`.",
+      );
+    }
     out ??= newOutput();
     if (headIndented) out.write(indent);
     out.write(labelPrefix(statement.label));

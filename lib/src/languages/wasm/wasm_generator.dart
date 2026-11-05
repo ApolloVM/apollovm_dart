@@ -2,6 +2,7 @@
 // This code is governed by the Apache License, Version 2.0.
 // Please refer to the LICENSE and AUTHORS files for details.
 
+import 'dart:async';
 import 'dart:collection';
 import 'dart:convert';
 import 'dart:typed_data';
@@ -2497,11 +2498,12 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       case 'clamp':
         // max(lo, min(x, hi)), with both bounds converted to the receiver's
         // kind.
-        var x = context.scratchLocal(recvStack, 2202);
-        var lo = context.scratchLocal(recvStack, 2203);
-        out.write(Wasm.localSet(x));
+        // The bounds are generated first, with the receiver still on the Wasm
+        // stack, and only then stored: a `clamp` nested in a bound
+        // (`n.clamp(0, m.clamp(1, 5))`) uses the same scratch locals, and
+        // must be done with them before this one writes them.
         context.stackDrop();
-        for (var (i, bound) in [(0, lo), (1, x)]) {
+        for (var i = 0; i < 2; i++) {
           generateASTExpression(args[i], out: out, context: context);
           _autoConvertStackTypes(
             context.stackGet(0)!.type,
@@ -2510,13 +2512,14 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
             context: context,
           );
           context.stackDrop();
-          if (i == 0) {
-            out.write(Wasm.localSet(bound));
-          }
         }
-        // Stack: hi. min(x, hi), then max(lo, that).
+        // Stack: x, lo, hi. min(x, hi), then max(lo, that).
+        var x = context.scratchLocal(recvStack, 2202);
+        var lo = context.scratchLocal(recvStack, 2203);
         var hi = context.scratchLocal(recvStack, 2204);
         out.write(Wasm.localSet(hi));
+        out.write(Wasm.localSet(lo));
+        out.write(Wasm.localSet(x));
         if (isDouble) {
           out.write(Wasm.localGet(x));
           out.write(Wasm.localGet(hi));
@@ -3585,8 +3588,10 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
   ASTExpression? _userOperatorCall(
     ASTExpressionOperation expression,
     ASTType leftType,
-    WasmContext context,
-  ) {
+    WasmContext context, {
+    ASTExpression? left,
+    ASTExpression? right,
+  }) {
     var module = context.module;
     if (module == null || !module.classLayouts.containsKey(leftType.name)) {
       return null;
@@ -3598,12 +3603,17 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       return null;
     }
     var negate = op == ASTExpressionOperator.notEquals;
+    // `a == null` never calls `operator ==` (Dart): a pointer test.
+    if ((negate || op == ASTExpressionOperator.equals) &&
+        expression.expression2 is ASTExpressionNullValue) {
+      return null;
+    }
     var name = 'operator${negate ? '==' : getASTExpressionOperatorText(op)}';
     if (module.methodIndexForCall(leftType.name, name, 1) == null) return null;
     ASTExpression call = ASTExpressionObjectFunctionInvocation(
-      ASTExpressionVariable(expression.expression1),
+      ASTExpressionVariable(left ?? expression.expression1),
       name,
-      [expression.expression2],
+      [right ?? expression.expression2],
     );
     return negate ? ASTExpressionNegation(call) : call;
   }
@@ -4205,8 +4215,12 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     // captures nothing).
     var calleeClosure = context.module?.closureInfo(callee);
     if (calleeClosure != null) {
+      // Only the callee's own body holds its environment: another closure's
+      // `__env` has a different layout.
       var ownEnv =
-          calleeClosure.captures.isNotEmpty && context.closureEnvLocalIndex >= 0
+          calleeClosure.captures.isNotEmpty &&
+              context.closureEnvLocalIndex >= 0 &&
+              identical(context.closureFunction, callee)
           ? context.closureEnvLocalIndex
           : null;
       if (calleeClosure.captures.isNotEmpty && ownEnv == null) {
@@ -5625,7 +5639,15 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     // A user-declared operator of the left operand's class (`a + b` with
     // `V operator +(V o)`): a call of its `operator+` method; `a != b` is
     // `!(a == b)` with a declared `operator ==`.
-    var userOperator = _userOperatorCall(expression, stackType1, context);
+    var userOperator = _userOperatorCall(
+      expression,
+      stackType1,
+      context,
+      // The operands are already compiled: the call replays their code
+      // instead of generating them again (twice per level of `a + b + c`).
+      left: _WasmCompiledExpression(exp1Out, stackType1, expression1),
+      right: _WasmCompiledExpression(exp2Out, stackType2, expression2),
+    );
     if (userOperator != null) {
       context.stackDrop(); // operand 2 (stack2)
       context.stackDrop(); // operand 1 (stack1)
@@ -8138,6 +8160,7 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
         '__env',
         _astTypeInt32,
       );
+      context.closureFunction = f;
       // Real parameters with their inferred (concrete) types.
       var params = f.parameters.allParameters;
       for (var i = 0; i < params.length; ++i) {
@@ -10884,9 +10907,14 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     var elemType = iterType.componentType;
     var size = _elemSize(elemType);
 
-    var listScratch = context.scratchLocal(_astTypeString, 7);
-    var iScratch = context.scratchLocal(_astTypeString, 8);
-    var dataScratch = context.scratchLocal(_astTypeString, 10);
+    // One set of iteration locals per nesting level: an inner for-each must
+    // not overwrite the outer loop's list, index and data pointer. (The
+    // outermost level keeps slots 7, 8 and 10.)
+    var depth = context.forEachDepth;
+    int slot(int base) => depth == 0 ? base : 40000 + depth * 16 + base;
+    var listScratch = context.scratchLocal(_astTypeString, slot(7));
+    var iScratch = context.scratchLocal(_astTypeString, slot(8));
+    var dataScratch = context.scratchLocal(_astTypeString, slot(10));
     out.write(Wasm.localSet(listScratch));
     context.stackDrop(); // iterable consumed
 
@@ -10940,7 +10968,12 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
 
     // body (a `return` inside emits `return` directly; no extra check needed)
     context.pushLoopFrame(breakLevel: breakLevel, continueLevel: continueLevel);
-    generateASTBlock(forEach.loopBlock, out: out, context: context);
+    context.forEachDepth++;
+    try {
+      generateASTBlock(forEach.loopBlock, out: out, context: context);
+    } finally {
+      context.forEachDepth--;
+    }
     context.popLoopFrame();
 
     out.writeByte(Wasm.end); // continue block
@@ -11877,6 +11910,16 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     BytesOutput? out,
     WasmContext? context,
   }) {
+    if (expression is _WasmCompiledExpression) {
+      out ??= newOutput();
+      context ??= WasmContext();
+      out.writeBytes(expression.code);
+      context.stackPush(
+        expression.stackType,
+        "compiled `${expression.source}`",
+      );
+      return out;
+    }
     if (expression is ASTExpressionNullValue) {
       return generateASTExpressionNullValue(
         expression,
@@ -16415,6 +16458,14 @@ class WasmContext {
   int closureEnvLocalIndex = -1;
   final Map<String, ({ASTType type, int offset})> capturedVariables = {};
 
+  /// The closure whose body is being generated (owner of
+  /// [closureEnvLocalIndex]), or `null` when not a closure.
+  ASTFunctionDeclaration? closureFunction;
+
+  /// How many `for-each` loop bodies enclose the code being generated: each
+  /// level keeps its iteration state in its own scratch locals.
+  int forEachDepth = 0;
+
   /// Local variables of the function currently being generated that hold a
   /// capture-free, call-only closure: their declaration is elided and `v(x)`
   /// lowers to a direct `call` of the mapped closure (no env / no
@@ -17146,4 +17197,33 @@ extension _ASTParametersDeclarationExtension
     ...?optionalParameters?.declaredVariables(),
     ...?namedParameters?.declaredVariables(),
   ];
+}
+
+/// An expression the Wasm generator already compiled: generating it replays
+/// [code] and pushes [stackType]. Used to hand compiled operands to a
+/// synthesized call (a user operator) without generating them again.
+class _WasmCompiledExpression extends ASTExpression {
+  final BytesOutput code;
+  final ASTType stackType;
+
+  /// The expression [code] was compiled from (for types and messages).
+  final ASTExpression source;
+
+  _WasmCompiledExpression(this.code, this.stackType, this.source);
+
+  @override
+  bool get isComplex => source.isComplex;
+
+  @override
+  Iterable<ASTNode> get children => const [];
+
+  @override
+  FutureOr<ASTType> resolveType(VMContext? context) => stackType;
+
+  @override
+  FutureOr<ASTValue> run(VMContext parentContext, ASTRunStatus runStatus) =>
+      throw UnsupportedError("A compiled Wasm operand doesn't run: $source");
+
+  @override
+  String toString({bool asGroup = false}) => source.toString();
 }

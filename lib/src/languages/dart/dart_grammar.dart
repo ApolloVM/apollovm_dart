@@ -497,7 +497,15 @@ class DartGrammarDefinition extends DartGrammarLexer {
   /// with M`) that it doesn't declare itself. A later mixin wins over an
   /// earlier one, and the class's own members over all of them.
   void _applyMixins(ASTRoot root) {
-    for (var entry in _classMixins.entries) {
+    // Only this unit's classes: the map outlives a parse that failed after a
+    // `with` clause, and its stale entries belong to classes of that source.
+    var entries = [
+      for (var clazz in root.classes)
+        if (_classMixins.containsKey(clazz))
+          MapEntry(clazz, _classMixins[clazz]!),
+    ];
+    _classMixins.clear();
+    for (var entry in entries) {
       var clazz = entry.key;
       for (var mixinName in entry.value.reversed) {
         var mixin = root.getClass(mixinName);

@@ -24,6 +24,10 @@ class ApolloCodeGeneratorKotlin extends ApolloCodeGenerator {
   @override
   String labelPrefix(String label) => '$label@ ';
 
+  /// `outer@ { … }` is a labeled lambda, not a block `break` can leave.
+  @override
+  bool get supportsLabeledBlocks => false;
+
   @override
   String typeTestCode(String operand, ASTType type, {required bool negated}) =>
       '$operand ${negated ? '!is' : 'is'} ${generateASTType(type)}';

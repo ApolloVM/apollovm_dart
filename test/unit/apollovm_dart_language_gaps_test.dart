@@ -356,5 +356,97 @@ int f() { List<P> l = [P(1)]; l.add(P(5)); var t = 0; for (var p in l) { t += p.
         6,
       );
     });
+
+    test('a static initializer reads another static of its class', () async {
+      expect(
+        await _value('''
+class C {
+  static int a = 1;
+  static int b = C.a + 1;
+  static int count = 0;
+  static final C instance = C();
+  C() { C.count = C.count + 10; }
+}
+String f() => '\${C.b} \${C.instance != null} \${C.count}';
+'''),
+        '2 true 10',
+      );
+    });
+
+    test('a receiver call runs once', () async {
+      expect(
+        await _value('''
+class C { int v = 0; C bump() { v++; return this; } int get g => v; }
+int n = 0;
+C make() { n++; return C(); }
+String f() {
+  make().bump();
+  var a = n;
+  make().bump().bump();
+  var b = n;
+  var x = make().bump().v;
+  var c = n;
+  var y = make().g;
+  return '\$a \$b \$c \$n \$x \$y';
+}
+'''),
+        '1 2 3 4 1 0',
+      );
+    });
+
+    test('a user == is not called with null', () async {
+      expect(
+        await _value('''
+class P { int x; P(this.x); bool operator ==(Object o) => (o as P).x == x; }
+String f() { P? q = null; var p = P(1); return '\${p == q} \${p != q} \${p == P(1)}'; }
+'''),
+        'false true true',
+      );
+    });
+
+    test('spreading a Map is refused', () async {
+      expect(
+        () => _value(
+          'int f() { var m = {1: 2}; var s = {...m}; return s.length; }',
+        ),
+        throwsA(isA<ApolloVMRuntimeError>()),
+      );
+    });
+
+    test('a failed parse leaves no mixin behind', () async {
+      var vm = ApolloVM();
+      expect(
+        await vm
+            .loadCodeUnit(
+              SourceCodeUnit(
+                'dart',
+                'mixin M {} class A with M {} !!!',
+                id: 'x',
+              ),
+            )
+            .catchError((_) => false),
+        isFalse,
+      );
+      expect(await _value('class A {} int f() => 3;'), 3);
+    });
+
+    test('Go and Kotlin refuse a labeled block', () async {
+      var vm = await _load(
+        'int f() { var n = 0; b: { n = 1; if (n > 0) break b; n = 2; } return n; }',
+      );
+      expect(
+        await _value(
+          'int f() { var n = 0; b: { n = 1; if (n > 0) break b; n = 2; } return n; }',
+        ),
+        1,
+      );
+      for (var lang in ['go', 'kotlin']) {
+        expect(
+          () => vm.generateAllCodeIn(lang).writeAllSources(),
+          throwsA(isA<UnsupportedSyntaxError>()),
+          reason: lang,
+        );
+      }
+    });
   });
 }

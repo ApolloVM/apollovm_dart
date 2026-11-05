@@ -23,6 +23,10 @@ class ApolloCodeGeneratorGo extends ApolloCodeGenerator {
   ApolloCodeGeneratorGo(ApolloSourceCodeStorage codeStorage)
     : super('go', codeStorage);
 
+  /// Go's `break label` must name an enclosing `for` / `switch` / `select`.
+  @override
+  bool get supportsLabeledBlocks => false;
+
   /// The fixed receiver name used for struct methods.
   static const String _receiver = 'o';
 

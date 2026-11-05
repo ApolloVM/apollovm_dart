@@ -636,8 +636,19 @@ class ASTCollectionSpread extends ASTCollectionElement {
       throw ApolloVMNullPointerException("Can't spread `null`: $expression");
     }
     var raw = await value.getValue(context);
-    Iterable items = raw is Map ? raw.entries : raw as Iterable;
-    return [for (var e in items) e is ASTValue ? e : ASTValue.fromValue(e)];
+    if (raw is Map) {
+      // Dart rejects `[...m]`, and `{...m}` builds a Map — map literals don't
+      // take spreads here yet, so `{...m}` parsed as a Set: refuse it rather
+      // than build a Set of entries.
+      throw ApolloVMRuntimeError(
+        "Can't spread a Map into a List or Set (map spreads aren't "
+        "supported yet): $expression",
+      );
+    }
+    if (raw is! Iterable) {
+      throw ApolloVMRuntimeError("Can't spread a non-Iterable: $expression");
+    }
+    return [for (var e in raw) e is ASTValue ? e : ASTValue.fromValue(e)];
   }
 
   @override
@@ -2699,6 +2710,11 @@ class ASTExpressionOperation extends ASTExpression {
     var instance = ASTExpressionVariableEntryAccess._asInstanceValue(val1);
     if (instance is! ASTClassInstance) return null;
     var negate = operator == ASTExpressionOperator.notEquals;
+    // Dart never calls `operator ==` with `null`: `a == null` is false.
+    if ((negate || operator == ASTExpressionOperator.equals) &&
+        val2 is ASTValueNull) {
+      return ASTValueBool(negate);
+    }
     var symbol = negate ? '==' : getASTExpressionOperatorText(operator);
     var f = instance.clazz.getFunction(
       'operator$symbol',
@@ -4118,6 +4134,13 @@ class ASTExpressionObjectFunctionInvocation
   }
 
   FutureOr<ASTValue> _getVariableValue(VMContext parentContext) {
+    // The receiver this run already evaluated (see [run]).
+    var evaluated = Zone.current[_receiverZoneKey];
+    if (evaluated is ASTValue) return evaluated;
+    return _evaluateReceiver(parentContext);
+  }
+
+  FutureOr<ASTValue> _evaluateReceiver(VMContext parentContext) {
     if (_isSuper) {
       // `super` is the current instance; the superclass drives method dispatch
       // (see `_getObjectClass`).
@@ -4135,6 +4158,14 @@ class ASTExpressionObjectFunctionInvocation
         .getValue(parentContext)
         .resolveMapped(ASTExpressionVariableEntryAccess._asInstanceValue);
   }
+
+  /// The zone key under which [run] hands the receiver it evaluated to the
+  /// steps that read it again (one key per invocation node).
+  final Object _receiverZoneKey = Object();
+
+  /// Whether reading the receiver can run code (`make().bump()`, `a.b.m()`),
+  /// so [run] must evaluate it only once. A plain name is just looked up.
+  bool get _receiverHasEffects => !_isSuper && variable is! ASTScopeVariable;
 
   FutureOr<ASTClass> _getObjectClass(VMContext parentContext) {
     if (_isSuper) {
@@ -4173,6 +4204,33 @@ class ASTExpressionObjectFunctionInvocation
 
   @override
   FutureOr<ASTType> resolveType(VMContext? context) {
+    // A receiver that runs code (`make().bump()`) is typed from its static
+    // type, not evaluated just to find the method's class.
+    if (context != null &&
+        _receiverHasEffects &&
+        Zone.current[_receiverZoneKey] == null) {
+      return variable.resolveType(context).resolveMapped((type) {
+        ASTType result;
+        try {
+          var f = _resolveFunctionOrExtension(
+            this,
+            type.getClass(),
+            name,
+            _getASTFunctionSignature(),
+            context,
+          );
+          if (f == null) return ASTTypeDynamic.instance;
+          result = f.resolveType(context);
+        } on StateError {
+          return ASTTypeDynamic.instance;
+        }
+        if (hasChainFunctionInvocation) {
+          result = _chainResultType(context, result);
+        }
+        return isNullAware ? result.asNullable() : result;
+      });
+    }
+
     if (context == null || !isNullAware) return super.resolveType(context);
 
     // A null-aware invocation (`obj?.m()`) short-circuits to `null` on a null
@@ -4286,6 +4344,22 @@ class ASTExpressionObjectFunctionInvocation
 
   @override
   FutureOr<ASTValue> run(VMContext parentContext, ASTRunStatus runStatus) {
+    // A receiver that runs code (`make().bump()`) is evaluated once, here, and
+    // every later step reads that value: re-reading it would call `make()`
+    // again. (A recursive run of this node evaluates its own receiver, as
+    // [_evaluateReceiver] bypasses the zone value.)
+    if (_receiverHasEffects) {
+      return _evaluateReceiver(parentContext).resolveMapped((obj) {
+        return runZoned(
+          () => _run(parentContext, runStatus),
+          zoneValues: {_receiverZoneKey: obj},
+        );
+      });
+    }
+    return _run(parentContext, runStatus);
+  }
+
+  FutureOr<ASTValue> _run(VMContext parentContext, ASTRunStatus runStatus) {
     // Whole-module import prefix (`p.member(...)`): call the imported function/
     // constructor directly (no receiver object).
     var prefixed = _resolvePrefixedInvocable(parentContext);
@@ -4764,6 +4838,13 @@ class ASTExpressionObjectGetterAccess extends ASTExpressionGetterAccess
   }
 
   FutureOr<ASTValue> _getVariableValue(VMContext parentContext) {
+    // The receiver this run already evaluated (see [run]).
+    var evaluated = Zone.current[_receiverZoneKey];
+    if (evaluated is ASTValue) return evaluated;
+    return _evaluateReceiver(parentContext);
+  }
+
+  FutureOr<ASTValue> _evaluateReceiver(VMContext parentContext) {
     if (_isSuper) {
       var obj = parentContext.getClassInstance();
       if (obj == null) {
@@ -4774,6 +4855,43 @@ class ASTExpressionObjectGetterAccess extends ASTExpressionGetterAccess
       return obj;
     }
     return variable.getValue(parentContext).resolveMapped(_asClassInstance);
+  }
+
+  /// The zone key under which [run] hands the receiver it evaluated to the
+  /// steps that read it again (one key per access node).
+  final Object _receiverZoneKey = Object();
+
+  /// Whether reading the receiver runs code (`make().v`, `P(3).twice().x`),
+  /// so it must be evaluated only once per [run] — and never just to compute
+  /// a type. A plain name (`a.v`) is just looked up.
+  bool get _receiverRunsCode => !_isSuper && variable is ASTExpressionVariable;
+
+  /// [_receiverRunsCode], outside a [run] that already evaluated it.
+  bool get _receiverHasEffects =>
+      _receiverRunsCode && Zone.current[_receiverZoneKey] == null;
+
+  /// This access's type from the receiver's *static* type, for a receiver that
+  /// must not be evaluated just to type it ([_receiverHasEffects]).
+  FutureOr<ASTType> _staticAccessType(VMContext context) {
+    return variable.resolveType(context).resolveMapped((type) {
+      if (type is ASTTypeRecord) {
+        return _nullableIf(type.fieldType(name) ?? ASTTypeDynamic.instance);
+      }
+      ASTClass? clazz;
+      try {
+        clazz = type.getClass();
+      } catch (_) {
+        clazz = null;
+      }
+      if (clazz == null) return ASTTypeDynamic.instance;
+      var fieldType = clazz is ASTClassNormal
+          ? clazz.getField(name)?.type
+          : null;
+      if (fieldType != null) return _nullableIf(fieldType);
+      var getter = _resolveGetterOrExtension(this, clazz, name, context);
+      if (getter != null) return _nullableIf(getter.returnType);
+      return ASTTypeDynamic.instance;
+    });
   }
 
   /// A collection keeps an instance's bare [VMObject] (`l[0]`), which has
@@ -4900,6 +5018,8 @@ class ASTExpressionObjectGetterAccess extends ASTExpressionGetterAccess
       return super.resolveType(context);
     }
 
+    if (_receiverHasEffects) return _staticAccessType(context);
+
     return _getVariableValue(context).resolveMapped((obj) {
       // Null-aware access (`obj?.field`) on a `null` receiver evaluates to
       // `null`, and a `null` receiver has no class to resolve the getter
@@ -4960,6 +5080,8 @@ class ASTExpressionObjectGetterAccess extends ASTExpressionGetterAccess
     var staticFieldType = _staticFieldClass()?.getField(name)?.type;
     if (staticFieldType != null) return staticFieldType;
 
+    if (_receiverHasEffects) return _staticAccessType(context);
+
     return _getVariableValue(context).resolveMapped((obj) {
       // See `resolveType`: a short-circuited null-aware access has no receiver
       // class to resolve against.
@@ -4988,6 +5110,21 @@ class ASTExpressionObjectGetterAccess extends ASTExpressionGetterAccess
 
   @override
   FutureOr<ASTValue> run(VMContext parentContext, ASTRunStatus runStatus) {
+    // A receiver that runs code (`make().v`) is evaluated once, here; every
+    // later step reads that value instead of calling `make()` again. (A
+    // recursive run of this node evaluates its own.)
+    if (_receiverRunsCode) {
+      return _evaluateReceiver(parentContext).resolveMapped((obj) {
+        return runZoned(
+          () => _run(parentContext, runStatus),
+          zoneValues: {_receiverZoneKey: obj},
+        );
+      });
+    }
+    return _run(parentContext, runStatus);
+  }
+
+  FutureOr<ASTValue> _run(VMContext parentContext, ASTRunStatus runStatus) {
     var enumEntry = _resolveEnumEntry(parentContext, runStatus);
     if (enumEntry != null) {
       return enumEntry.resolveMapped(

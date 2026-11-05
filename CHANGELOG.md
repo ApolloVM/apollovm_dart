@@ -12,7 +12,8 @@ methods. Several interpreter bugs are fixed too.
 - **Labeled loops.** `outer: for (…)` with `break outer;` / `continue outer;`,
   from nested loops and from inside a `switch`. Generated for Dart, Java, Go,
   JS/TS (`outer: for`) and Kotlin (`outer@ for`, `continue@outer`). C#, Lua and
-  Python refuse them with `UnsupportedSyntaxError`.
+  Python refuse them with `UnsupportedSyntaxError`, and Go and Kotlin refuse a
+  labeled block (`b: { … break b; }`), which they can't express.
 - **Collection elements** in list and set literals: `if (c) a else b`,
   `for (var i = 0; i < n; i++) i`, `for (var e in l) e`, `...l` and `...?l`,
   nested in each other. Regenerated as Dart and kept by the binary format
@@ -63,6 +64,15 @@ methods. Several interpreter bugs are fixed too.
   - two `for (var i …)` loops in one function declared an extra local, which
     shifted the types of the scratch locals;
   - a `var` typed `dynamic` in one loop and as a class in another clashed.
+- **Wrong results fixed:**
+  - nested `for-each` loops shared their iteration locals, so after the inner
+    loop the outer one resumed over the inner list;
+  - `n.clamp(0, m.clamp(1, 5))` clamped `m` instead of `n`;
+  - a closure calling a *different* capturing local function passed its own
+    environment.
+- A chain of user operators (`a + b + c + …`) compiles each operand once; it
+  used to compile them again at every level. `a == null` doesn't call a user
+  `operator ==`.
 
 ### Interpreter
 
@@ -82,7 +92,15 @@ methods. Several interpreter bugs are fixed too.
   - Interpolation parts run in order: `'${c.b()} ${c.count}'` read `count`
     before `b()`.
 - **`static` fields.** Concurrent first reads of a class's `static` fields no
-  longer see a half-initialized store (`'${C.n} ${C.s}'` read `null`).
+  longer see a half-initialized store (`'${C.n} ${C.s}'` read `null`). A
+  `static` initializer can read another `static` of its class
+  (`static int b = C.a + 1;`, or a `static final C instance = C();` whose
+  constructor updates `C.count`).
+- **A receiver runs once.** `make().bump()`, `make().bump().v` and
+  `make().g` used to call `make()` two to seven times.
+- **`p == null`** is `false` without calling a user `operator ==`.
+- **Spreading a `Map`** (`{...m}`) is refused: map literals don't take spreads
+  yet, so `{...m}` silently built a `Set` of entries.
 - **Other fixes:**
   - `s += '…$x'` on a `String`, and compound assignment with a `dynamic`
     operand.

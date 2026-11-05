@@ -1078,19 +1078,29 @@ class ASTClassNormal extends ASTClass<VMObject> {
   ) async {
     var store = _staticFieldValues;
     if (store != null) return store;
-    return _staticFieldsInit ??= () async {
+    // A read from inside the initialization itself (`static int b = C.a + 1;`,
+    // or a constructor run by `static final C i = C();` that touches another
+    // static) sees the store filled so far: awaiting [_staticFieldsInit] there
+    // would wait for itself, forever.
+    var partial = Zone.current[_staticInitZoneKey];
+    if (partial is Map<String, ASTValue>) return partial;
+    return _staticFieldsInit ??= () {
       var store = <String, ASTValue>{};
-      for (var field in _fields.values) {
-        if (!field.modifiers.isStatic) continue;
-        if (field is ASTClassFieldWithInitialValue) {
-          store[field.name] = await field.getInitialValue(context, runStatus);
-        } else {
-          store[field.name] = ASTValueNull.instance;
+      return runZoned(() async {
+        for (var field in _fields.values) {
+          if (!field.modifiers.isStatic) continue;
+          store[field.name] = field is ASTClassFieldWithInitialValue
+              ? await field.getInitialValue(context, runStatus)
+              : ASTValueNull.instance;
         }
-      }
-      return _staticFieldValues = store;
+        return _staticFieldValues = store;
+      }, zoneValues: {_staticInitZoneKey: store});
     }();
   }
+
+  /// The zone key under which [_ensureStaticFields] exposes the store being
+  /// filled to the initializers it runs (one key per class).
+  final Object _staticInitZoneKey = Object();
 
   String _resolveStaticFieldName(
     Map<String, ASTValue> store,
