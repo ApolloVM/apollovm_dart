@@ -341,6 +341,37 @@ final List<ASTNodeCodec> statementCodecs = [
     decode: (r) => ASTStatementContinue(),
   ),
 
+  // A labeled `break label;` / `continue label;`: conditional, so a plain
+  // `break;` keeps its original tag and layout.
+  ASTNodeCodec<ASTStatementBreak>(
+    ASTNodeTag.statementBreakLabeled,
+    'ASTStatementBreak',
+    when: (n) => n.label != null,
+    encode: (w, n) => w.str(n.label!),
+    decode: (r) => ASTStatementBreak(label: r.str()),
+  ),
+
+  ASTNodeCodec<ASTStatementContinue>(
+    ASTNodeTag.statementContinueLabeled,
+    'ASTStatementContinue',
+    when: (n) => n.label != null,
+    encode: (w, n) => w.str(n.label!),
+    decode: (r) => ASTStatementContinue(label: r.str()),
+  ),
+
+  ASTNodeCodec<ASTStatementLabeled>(
+    ASTNodeTag.statementLabeled,
+    'ASTStatementLabeled',
+    encode: (w, n) {
+      w.str(n.label);
+      w.node(n.statement);
+    },
+    decode: (r) {
+      var label = r.str();
+      return ASTStatementLabeled(label, r.node<ASTStatement>());
+    },
+  ),
+
   // --- Switch ---------------------------------------------------------------
   ASTNodeCodec<ASTStatementSwitch>(
     ASTNodeTag.statementSwitch,

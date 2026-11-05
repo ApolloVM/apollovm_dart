@@ -1398,7 +1398,14 @@ class ASTBranchIfElseIfsElseBlock extends ASTBranch {
   }
 }
 
-class ASTStatementWhileLoop extends ASTStatement {
+/// A loop statement, which can carry a [label] (`outer: while (…)`).
+abstract class ASTStatementLoop extends ASTStatement {
+  /// This loop's label, set by an enclosing [ASTStatementLabeled]: a
+  /// `break`/`continue` naming it targets this loop.
+  String? label;
+}
+
+class ASTStatementWhileLoop extends ASTStatementLoop {
   final ASTExpression conditionExpression;
 
   final ASTBlock loopBlock;
@@ -1458,10 +1465,14 @@ class ASTStatementWhileLoop extends ASTStatement {
 
         if (runStatus.returned) break;
         if (runStatus.broke) {
-          runStatus.broke = false;
+          // A `break outer;` aimed at an enclosing statement keeps its flag
+          // and propagates.
+          if (runStatus.claims(label)) runStatus.broke = false;
           break;
         }
         if (runStatus.continued) {
+          // `continue outer;` of an enclosing loop: leave this one.
+          if (!runStatus.claims(label)) break;
           runStatus.continued = false;
           continue;
         }
@@ -1478,7 +1489,7 @@ class ASTStatementWhileLoop extends ASTStatement {
 }
 
 /// [ASTStatement] for a `do { } while (cond)` loop: the body runs at least once.
-class ASTStatementDoWhileLoop extends ASTStatement {
+class ASTStatementDoWhileLoop extends ASTStatementLoop {
   final ASTBlock loopBlock;
 
   final ASTExpression conditionExpression;
@@ -1521,10 +1532,11 @@ class ASTStatementDoWhileLoop extends ASTStatement {
 
         if (runStatus.returned) break;
         if (runStatus.broke) {
-          runStatus.broke = false;
+          if (runStatus.claims(label)) runStatus.broke = false;
           break;
         }
         if (runStatus.continued) {
+          if (!runStatus.claims(label)) break;
           runStatus.continued = false;
           // Falls through to the condition check below.
         }
@@ -1556,7 +1568,7 @@ class ASTStatementDoWhileLoop extends ASTStatement {
   ASTType resolveType(VMContext? context) => ASTTypeVoid.instance;
 }
 
-class ASTStatementForLoop extends ASTStatement {
+class ASTStatementForLoop extends ASTStatementLoop {
   final ASTStatement initStatement;
 
   final ASTExpression conditionExpression;
@@ -1634,11 +1646,12 @@ class ASTStatementForLoop extends ASTStatement {
 
         if (runStatus.returned) break;
         if (runStatus.broke) {
-          runStatus.broke = false;
+          if (runStatus.claims(label)) runStatus.broke = false;
           break;
         }
         // `continue` still runs the loop's continue/increment expression below.
         if (runStatus.continued) {
+          if (!runStatus.claims(label)) break;
           runStatus.continued = false;
         }
 
@@ -1655,7 +1668,7 @@ class ASTStatementForLoop extends ASTStatement {
   ASTType resolveType(VMContext? context) => ASTTypeVoid.instance;
 }
 
-class ASTStatementForEach extends ASTStatement {
+class ASTStatementForEach extends ASTStatementLoop {
   final ASTType variableType;
   final String variableName;
   final ASTExpression iterableExpression;
@@ -1738,10 +1751,14 @@ class ASTStatementForEach extends ASTStatement {
 
         if (runStatus.returned) break;
         if (runStatus.broke) {
-          runStatus.broke = false;
+          // A `break outer;` aimed at an enclosing statement keeps its flag
+          // and propagates.
+          if (runStatus.claims(label)) runStatus.broke = false;
           break;
         }
         if (runStatus.continued) {
+          // `continue outer;` of an enclosing loop: leave this one.
+          if (!runStatus.claims(label)) break;
           runStatus.continued = false;
           continue;
         }
@@ -1759,36 +1776,92 @@ class ASTStatementForEach extends ASTStatement {
 
 /// [ASTStatement] for `break;` — interrupts the enclosing loop or switch.
 class ASTStatementBreak extends ASTStatement {
+  /// The labeled statement this `break` exits (`break outer;`), or `null`
+  /// for the innermost loop or switch.
+  final String? label;
+
+  ASTStatementBreak({this.label});
+
   @override
   Iterable<ASTNode> get children => [];
 
   @override
   FutureOr<ASTValue> run(VMContext parentContext, ASTRunStatus runStatus) {
-    return runStatus.markBreak();
+    return runStatus.markBreak(label);
   }
 
   @override
   ASTType resolveType(VMContext? context) => ASTTypeVoid.instance;
 
   @override
-  String toString() => 'break;';
+  String toString() => label == null ? 'break;' : 'break $label;';
 }
 
 /// [ASTStatement] for `continue;` — skips to the next loop iteration.
 class ASTStatementContinue extends ASTStatement {
+  /// The labeled loop to continue (`continue outer;`), or `null` for the
+  /// innermost one.
+  final String? label;
+
+  ASTStatementContinue({this.label});
+
   @override
   Iterable<ASTNode> get children => [];
 
   @override
   FutureOr<ASTValue> run(VMContext parentContext, ASTRunStatus runStatus) {
-    return runStatus.markContinue();
+    return runStatus.markContinue(label);
   }
 
   @override
   ASTType resolveType(VMContext? context) => ASTTypeVoid.instance;
 
   @override
-  String toString() => 'continue;';
+  String toString() => label == null ? 'continue;' : 'continue $label;';
+}
+
+/// A labeled statement: `outer: for (…) { … }`. A `break outer;` /
+/// `continue outer;` inside targets it. A labeled loop takes the [label] as
+/// its own (so `continue outer;` continues it); a labeled non-loop statement
+/// is exited by `break outer;`.
+class ASTStatementLabeled extends ASTStatement {
+  final String label;
+  final ASTStatement statement;
+
+  ASTStatementLabeled(this.label, this.statement) {
+    var s = statement;
+    if (s is ASTStatementLoop) s.label = label;
+  }
+
+  @override
+  Iterable<ASTNode> get children => [statement];
+
+  @override
+  void resolveNode(ASTNode? parentNode) {
+    super.resolveNode(parentNode);
+    statement.resolveNode(parentNode);
+  }
+
+  @override
+  VMContext defineRunContext(VMContext parentContext) => parentContext;
+
+  @override
+  FutureOr<ASTValue> run(VMContext parentContext, ASTRunStatus runStatus) {
+    return statement.run(parentContext, runStatus).resolveMapped((v) {
+      // `break label;` from a non-loop statement ends here.
+      if (runStatus.broke && runStatus.label == label) {
+        runStatus.broke = false;
+        runStatus.label = null;
+      }
+      return v;
+    });
+  }
+
+  @override
+  ASTType resolveType(VMContext? context) => ASTTypeVoid.instance;
+
+  @override
+  String toString() => '$label: $statement';
 }
 
 /// A single `case <value>:` (or `default:`) clause of an [ASTStatementSwitch].
@@ -1876,7 +1949,8 @@ class ASTStatementSwitch extends ASTStatement {
         // Only the matched clause runs (Kotlin `when` / Python `match`).
         await cases[startIndex].block.run(context, runStatus);
         // `break` is implicit here, so consume any that bubbled up.
-        if (runStatus.broke) runStatus.broke = false;
+        // (A labeled `break outer;` targets an enclosing statement: keep it.)
+        if (runStatus.broke && runStatus.label == null) runStatus.broke = false;
         return ASTValueVoid.instance;
       }
 
@@ -1888,7 +1962,7 @@ class ASTStatementSwitch extends ASTStatement {
         // loop); `break` is consumed here as it targets this switch.
         if (runStatus.returned || runStatus.continued) break;
         if (runStatus.broke) {
-          runStatus.broke = false;
+          if (runStatus.label == null) runStatus.broke = false;
           break;
         }
       }
@@ -2121,7 +2195,21 @@ class ASTStatementTryCatch extends ASTStatement {
   ) async {
     try {
       try {
-        return await tryBlock.run(parentContext, runStatus);
+        var result = await tryBlock.run(parentContext, runStatus);
+        // A returned value can still be lazy (an interpolated String whose
+        // parts run when read: `return 'ok ${g()}';`): resolve it here, so
+        // what it throws is caught by this `try`.
+        if (runStatus.returned) {
+          var pending =
+              runStatus.returnedFutureValue ?? runStatus.returnedValue;
+          if (pending != null) {
+            var value = await (await pending).resolve(parentContext);
+            runStatus.returnedValue = value;
+            runStatus.returnedFutureValue = null;
+            return value;
+          }
+        }
+        return result;
       } catch (error) {
         // Like Dart's `catch (e)` (which catches any `Object`): user `throw`s
         // surface their thrown value; built-in VM/runtime errors surface as a

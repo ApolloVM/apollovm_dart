@@ -659,7 +659,8 @@ class ApolloCodeGeneratorGo extends ApolloCodeGenerator {
   }) {
     out ??= newOutput();
     if (headIndented) out.write(indent);
-    out.write('break');
+    var label = statement.label;
+    out.write(label == null ? 'break' : labeledJump('break', label));
     return out;
   }
 
@@ -672,7 +673,8 @@ class ApolloCodeGeneratorGo extends ApolloCodeGenerator {
   }) {
     out ??= newOutput();
     if (headIndented) out.write(indent);
-    out.write('continue');
+    var label = statement.label;
+    out.write(label == null ? 'continue' : labeledJump('continue', label));
     return out;
   }
 

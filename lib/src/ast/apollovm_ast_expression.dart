@@ -559,6 +559,257 @@ class ASTExpressionLiteral extends ASTExpression {
 }
 
 /// [ASTExpression] that declares a [List] literal.
+/// An element of a collection literal that isn't a single value: a spread
+/// (`...xs`), a collection `if` or a collection `for`. It [expand]s to zero or
+/// more values in the enclosing literal; it has no value of its own.
+abstract class ASTCollectionElement extends ASTExpression {
+  /// The values this element contributes, in order.
+  Future<List<ASTValue>> expand(VMContext context, ASTRunStatus runStatus);
+
+  @override
+  bool get isComplex => true;
+
+  @override
+  FutureOr<ASTValue> run(VMContext parentContext, ASTRunStatus runStatus) =>
+      throw ApolloVMRuntimeError(
+        "A collection element (`$this`) is only valid inside a list or set "
+        "literal.",
+      );
+
+  /// The values of collection [elements], each expanded in order.
+  static Future<List<ASTValue>> expandAll(
+    List<ASTExpression> elements,
+    VMContext context,
+    ASTRunStatus runStatus,
+  ) async {
+    var values = <ASTValue>[];
+    for (var e in elements) {
+      if (e is ASTCollectionElement) {
+        values.addAll(await e.expand(context, runStatus));
+      } else {
+        values.add(await e.run(context, runStatus));
+      }
+    }
+    return values;
+  }
+
+  /// The element type of a collection holding [elements]: a spread
+  /// contributes its iterable's element type.
+  static FutureOr<ASTType> elementTypeOf(
+    ASTExpression element,
+    VMContext? context,
+  ) {
+    if (element is ASTCollectionElement) return element.elementType(context);
+    return element.resolveType(context);
+  }
+
+  /// The type of the values this element contributes.
+  FutureOr<ASTType> elementType(VMContext? context);
+}
+
+/// `...xs` / `...?xs` in a collection literal.
+class ASTCollectionSpread extends ASTCollectionElement {
+  final ASTExpression expression;
+
+  /// `...?xs`: a `null` [expression] contributes nothing.
+  final bool nullAware;
+
+  ASTCollectionSpread(this.expression, {this.nullAware = false});
+
+  @override
+  Iterable<ASTNode> get children => [expression];
+
+  @override
+  void resolveNode(ASTNode? parentNode) {
+    super.resolveNode(parentNode);
+    expression.resolveNode(this);
+  }
+
+  @override
+  Future<List<ASTValue>> expand(
+    VMContext context,
+    ASTRunStatus runStatus,
+  ) async {
+    var value = await expression.run(context, runStatus);
+    if (value is ASTValueNull) {
+      if (nullAware) return [];
+      throw ApolloVMNullPointerException("Can't spread `null`: $expression");
+    }
+    var raw = await value.getValue(context);
+    Iterable items = raw is Map ? raw.entries : raw as Iterable;
+    return [for (var e in items) e is ASTValue ? e : ASTValue.fromValue(e)];
+  }
+
+  @override
+  FutureOr<ASTType> elementType(VMContext? context) =>
+      expression.resolveType(context).resolveMapped((t) {
+        if (t is ASTTypeArray) return t.componentType;
+        if (t is ASTTypeSet) return t.elementType;
+        return ASTTypeDynamic.instance;
+      });
+
+  @override
+  FutureOr<ASTType> resolveType(VMContext? context) => elementType(context);
+
+  @override
+  String toString({bool asGroup = false}) =>
+      '...${nullAware ? '?' : ''}$expression';
+}
+
+/// `if (cond) a else b` in a collection literal.
+class ASTCollectionIf extends ASTCollectionElement {
+  final ASTExpression condition;
+  final ASTExpression thenElement;
+  final ASTExpression? elseElement;
+
+  ASTCollectionIf(this.condition, this.thenElement, [this.elseElement]);
+
+  @override
+  Iterable<ASTNode> get children => [condition, thenElement, ?elseElement];
+
+  @override
+  void resolveNode(ASTNode? parentNode) {
+    super.resolveNode(parentNode);
+    condition.resolveNode(this);
+    thenElement.resolveNode(this);
+    elseElement?.resolveNode(this);
+  }
+
+  @override
+  Future<List<ASTValue>> expand(
+    VMContext context,
+    ASTRunStatus runStatus,
+  ) async {
+    var cond = await condition.run(context, runStatus);
+    var branch = await cond.getValue(context) == true
+        ? thenElement
+        : elseElement;
+    if (branch == null) return [];
+    return ASTCollectionElement.expandAll([branch], context, runStatus);
+  }
+
+  @override
+  FutureOr<ASTType> elementType(VMContext? context) =>
+      ASTCollectionElement.elementTypeOf(thenElement, context);
+
+  @override
+  FutureOr<ASTType> resolveType(VMContext? context) => elementType(context);
+
+  @override
+  String toString({bool asGroup = false}) =>
+      'if ($condition) $thenElement'
+      '${elseElement != null ? ' else $elseElement' : ''}';
+}
+
+/// `for (var x in xs) element` in a collection literal.
+class ASTCollectionForIn extends ASTCollectionElement {
+  final ASTType variableType;
+  final String variableName;
+  final ASTExpression iterable;
+  final ASTExpression element;
+
+  ASTCollectionForIn(
+    this.variableType,
+    this.variableName,
+    this.iterable,
+    this.element,
+  );
+
+  @override
+  Iterable<ASTNode> get children => [variableType, iterable, element];
+
+  @override
+  void resolveNode(ASTNode? parentNode) {
+    super.resolveNode(parentNode);
+    iterable.resolveNode(this);
+    element.resolveNode(this);
+  }
+
+  @override
+  Future<List<ASTValue>> expand(
+    VMContext context,
+    ASTRunStatus runStatus,
+  ) async {
+    var raw = await (await iterable.run(context, runStatus)).getValue(context);
+    Iterable items = raw is Map ? raw.keys : raw as Iterable;
+    var values = <ASTValue>[];
+    for (var item in items) {
+      var itemValue = item is ASTValue ? item : ASTValue.fromValue(item);
+      var scope = VMScopeContext(context.block, parent: context);
+      scope.declareVariableWithValue(itemValue.type, variableName, itemValue);
+      values.addAll(
+        await ASTCollectionElement.expandAll([element], scope, runStatus),
+      );
+    }
+    return values;
+  }
+
+  @override
+  FutureOr<ASTType> elementType(VMContext? context) => ASTTypeDynamic.instance;
+
+  @override
+  FutureOr<ASTType> resolveType(VMContext? context) => elementType(context);
+
+  @override
+  String toString({bool asGroup = false}) =>
+      'for ($variableType $variableName in $iterable) $element';
+}
+
+/// `for (init; cond; update) element` in a collection literal.
+class ASTCollectionFor extends ASTCollectionElement {
+  final ASTStatement initStatement;
+  final ASTExpression condition;
+  final ASTExpression update;
+  final ASTExpression element;
+
+  ASTCollectionFor(
+    this.initStatement,
+    this.condition,
+    this.update,
+    this.element,
+  );
+
+  @override
+  Iterable<ASTNode> get children => [initStatement, condition, update, element];
+
+  @override
+  void resolveNode(ASTNode? parentNode) {
+    super.resolveNode(parentNode);
+    initStatement.resolveNode(this);
+    condition.resolveNode(this);
+    update.resolveNode(this);
+    element.resolveNode(this);
+  }
+
+  @override
+  Future<List<ASTValue>> expand(
+    VMContext context,
+    ASTRunStatus runStatus,
+  ) async {
+    var scope = VMScopeContext(context.block, parent: context);
+    await initStatement.run(scope, runStatus);
+    var values = <ASTValue>[];
+    while (await (await condition.run(scope, runStatus)).getValue(scope) ==
+        true) {
+      values.addAll(
+        await ASTCollectionElement.expandAll([element], scope, runStatus),
+      );
+      await update.run(scope, runStatus);
+    }
+    return values;
+  }
+
+  @override
+  FutureOr<ASTType> elementType(VMContext? context) => ASTTypeDynamic.instance;
+
+  @override
+  FutureOr<ASTType> resolveType(VMContext? context) => elementType(context);
+
+  @override
+  String toString({bool asGroup = false}) =>
+      'for ($initStatement $condition; $update) $element';
+}
+
 class ASTExpressionListLiteral extends ASTExpression {
   final ASTType? type;
 
@@ -596,10 +847,18 @@ class ASTExpressionListLiteral extends ASTExpression {
         return ASTValueArray(type, []);
       }
 
-      var astValues = valuesExpressions
-          .map((e) => e.run(parentContext, runStatus))
-          .toList()
-          .resolveAll();
+      // Spread / collection `if` / `for` elements expand in order.
+      FutureOr<List<ASTValue>> astValues =
+          valuesExpressions.any((e) => e is ASTCollectionElement)
+          ? ASTCollectionElement.expandAll(
+              valuesExpressions,
+              parentContext,
+              runStatus,
+            )
+          : valuesExpressions
+                .map((e) => e.run(parentContext, runStatus))
+                .toList()
+                .resolveAll();
 
       return astValues.resolveMapped((astValues) {
         return astValues
@@ -663,10 +922,18 @@ class ASTExpressionSetLiteral extends ASTExpression {
         return ASTValueSet(type, {});
       }
 
-      var astValues = valuesExpressions
-          .map((e) => e.run(parentContext, runStatus))
-          .toList()
-          .resolveAll();
+      // Spread / collection `if` / `for` elements expand in order.
+      FutureOr<List<ASTValue>> astValues =
+          valuesExpressions.any((e) => e is ASTCollectionElement)
+          ? ASTCollectionElement.expandAll(
+              valuesExpressions,
+              parentContext,
+              runStatus,
+            )
+          : valuesExpressions
+                .map((e) => e.run(parentContext, runStatus))
+                .toList()
+                .resolveAll();
 
       return astValues.resolveMapped((astValues) {
         return astValues
@@ -1174,6 +1441,17 @@ FutureOr<ASTValue> applyASTAssignmentOperator(
   ASTValue current,
   ASTValue value,
 ) {
+  // `s += x` on a String concatenates — whatever kind of String value either
+  // side is (a literal, an interpolation, a String held in a `var`).
+  if (operator == ASTAssignmentOperator.sum &&
+      (current.type is ASTTypeString || value.type is ASTTypeString)) {
+    return valueToDisplayString(current, context).resolveMapped((a) {
+      return valueToDisplayString(value, context).resolveMapped((b) {
+        return ASTValueString('$a$b');
+      });
+    });
+  }
+
   // An untyped operand (`dynamic`, `var`, `Object` — e.g. a closure parameter
   // in `m.forEach((k, v) { t += v; })`) is resolved to its runtime value
   // first, since the value operators dispatch on the concrete type.
@@ -2404,12 +2682,48 @@ class ASTExpressionOperation extends ASTExpression {
     });
   }
 
+  /// A user-declared operator (`V operator +(V o)`, `bool operator ==(…)`) of
+  /// the left operand's class applied to [val2], or `null` when there is
+  /// none. `a != b` is `!(a == b)`.
+  FutureOr<ASTValue>? _userOperator(
+    VMContext context,
+    ASTExpressionOperator operator,
+    ASTValue val1,
+    ASTValue val2,
+  ) {
+    if (operator == ASTExpressionOperator.nullCoalesce ||
+        operator == ASTExpressionOperator.and ||
+        operator == ASTExpressionOperator.or) {
+      return null;
+    }
+    var instance = ASTExpressionVariableEntryAccess._asInstanceValue(val1);
+    if (instance is! ASTClassInstance) return null;
+    var negate = operator == ASTExpressionOperator.notEquals;
+    var symbol = negate ? '==' : getASTExpressionOperatorText(operator);
+    var f = instance.clazz.getFunction(
+      'operator$symbol',
+      ASTFunctionSignature.from([val2], null),
+      context,
+    );
+    if (f is! ASTClassFunctionDeclaration) return null;
+    return f
+        .objectCall(context, instance, positionalParameters: [val2])
+        .resolveMapped((r) {
+          if (!negate) return r;
+          return r
+              .getValue(context)
+              .resolveMapped((b) => ASTValueBool(b != true));
+        });
+  }
+
   FutureOr<ASTValue> _runOperation(
     VMContext parentContext,
     ASTExpressionOperator operator,
     ASTValue val1,
     ASTValue val2,
   ) {
+    var user = _userOperator(parentContext, operator, val1, val2);
+    if (user != null) return user;
     {
       // Resolve dynamically-typed operands to their concrete runtime type so
       // the operator methods (which dispatch on `ASTValue.type`) work for

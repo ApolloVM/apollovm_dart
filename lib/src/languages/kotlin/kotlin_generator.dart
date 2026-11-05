@@ -4,6 +4,7 @@
 
 import '../../apollovm_code_generator.dart';
 import '../../apollovm_code_storage.dart';
+import '../../apollovm_parser.dart';
 import '../../ast/apollovm_ast_expression.dart';
 import '../../ast/apollovm_ast_statement.dart';
 import '../../ast/apollovm_ast_toplevel.dart';
@@ -15,6 +16,13 @@ import '../../ast/apollovm_ast_variable.dart';
 class ApolloCodeGeneratorKotlin extends ApolloCodeGenerator {
   ApolloCodeGeneratorKotlin(ApolloSourceCodeStorage codeStorage)
     : super('kotlin', codeStorage);
+
+  /// Kotlin labels are `outer@ for (…)` and `break@outer`.
+  @override
+  String labeledJump(String keyword, String label) => '$keyword@$label';
+
+  @override
+  String labelPrefix(String label) => '$label@ ';
 
   @override
   String typeTestCode(String operand, ASTType type, {required bool negated}) =>
@@ -221,6 +229,15 @@ class ApolloCodeGeneratorKotlin extends ApolloCodeGenerator {
     String? receiver,
   }) {
     out ??= newOutput();
+
+    // A class-level static getter needs a `companion object`, which this
+    // generator doesn't emit; refuse rather than turn it into a member.
+    if (getter.modifiers.isStatic) {
+      throw UnsupportedSyntaxError(
+        "Language 'kotlin' can't generate the static getter `${getter.name}` "
+        "yet.",
+      );
+    }
 
     var blockCode = generateASTBlock(
       getter,

@@ -314,6 +314,79 @@ final List<ASTNodeCodec> expressionCodecs = [
     },
   ),
 
+  // Collection-literal elements: `...xs`, `if (c) e`, `for (… in …) e`,
+  // `for (…; …; …) e`.
+  ASTNodeCodec<ASTCollectionSpread>(
+    ASTNodeTag.collectionSpread,
+    'ASTCollectionSpread',
+    encode: (w, n) {
+      w.boolean(n.nullAware);
+      w.node(n.expression);
+    },
+    decode: (r) {
+      var nullAware = r.boolean();
+      return ASTCollectionSpread(r.node<ASTExpression>(), nullAware: nullAware);
+    },
+  ),
+
+  ASTNodeCodec<ASTCollectionIf>(
+    ASTNodeTag.collectionIf,
+    'ASTCollectionIf',
+    encode: (w, n) {
+      w.node(n.condition);
+      w.node(n.thenElement);
+      w.nodeOrNull(n.elseElement);
+    },
+    decode: (r) {
+      var condition = r.node<ASTExpression>();
+      var thenElement = r.node<ASTExpression>();
+      return ASTCollectionIf(
+        condition,
+        thenElement,
+        r.nodeOrNull<ASTExpression>(),
+      );
+    },
+  ),
+
+  ASTNodeCodec<ASTCollectionForIn>(
+    ASTNodeTag.collectionForIn,
+    'ASTCollectionForIn',
+    encode: (w, n) {
+      w.type(n.variableType);
+      w.str(n.variableName);
+      w.node(n.iterable);
+      w.node(n.element);
+    },
+    decode: (r) {
+      var variableType = r.type();
+      var variableName = r.str();
+      var iterable = r.node<ASTExpression>();
+      return ASTCollectionForIn(
+        variableType,
+        variableName,
+        iterable,
+        r.node<ASTExpression>(),
+      );
+    },
+  ),
+
+  ASTNodeCodec<ASTCollectionFor>(
+    ASTNodeTag.collectionFor,
+    'ASTCollectionFor',
+    encode: (w, n) {
+      w.node(n.initStatement);
+      w.node(n.condition);
+      w.node(n.update);
+      w.node(n.element);
+    },
+    decode: (r) {
+      var init = r.node<ASTStatement>();
+      var condition = r.node<ASTExpression>();
+      var update = r.node<ASTExpression>();
+      return ASTCollectionFor(init, condition, update, r.node<ASTExpression>());
+    },
+  ),
+
   ASTNodeCodec<ASTExpressionLiteralFunction>(
     ASTNodeTag.expressionLiteralFunction,
     'ASTExpressionLiteralFunction',

@@ -1349,11 +1349,11 @@ class ASTValueStringVariable<T> extends ASTValue<String> {
     }
   }
 
+  /// The interpolated text, as [getValue] renders it (a user `toString()`
+  /// included, also for instances inside a collection).
   @override
   FutureOr<ASTValue<String>> resolve(VMContext context) {
-    return variable.getValue(context).resolveMapped((value) {
-      return value is ASTValue<String> ? value : ASTValueAsString(value);
-    });
+    return getValue(context).resolveMapped((s) => ASTValueString(s));
   }
 
   @override
@@ -1408,10 +1408,19 @@ class ASTValueStringConcatenation extends ASTValue<String> {
     return vsFuture.resolveAllJoined((l) => l.join());
   }
 
+  /// Resolves the parts in order, as [getValue] does.
   @override
   FutureOr<ASTValue<String>> resolve(VMContext context) {
-    var vsFuture = values.map((e) => e.resolve(context));
-    return vsFuture.resolveAllJoined((vs) => ASTValuesListAsString(vs));
+    var resolved = <ASTValue>[];
+    FutureOr<ASTValue<String>> from(int i) {
+      if (i >= values.length) return ASTValuesListAsString(resolved);
+      return values[i].resolve(context).resolveMapped((v) {
+        resolved.add(v);
+        return from(i + 1);
+      });
+    }
+
+    return from(0);
   }
 
   @override
@@ -1564,7 +1573,12 @@ FutureOr<String> valueToDisplayString(Object? value, VMContext context) {
     return value.getValue(context).resolveMapped((v) => '$v');
   }
   if (value is ASTValue) {
+    var isDouble = value.type is ASTTypeDouble;
     return value.getValue(context).resolveMapped((v) {
+      // A `double` prints as one (`5.0`) even where the platform formats a
+      // whole double without its `.0` (JavaScript): only the static type
+      // tells it apart from an `int` there.
+      if (isDouble && v is num) return ASTTypeDouble.doubleToString(v);
       // A value that is its own payload (a `VMObject` is an `ASTValue`) would
       // recurse forever.
       if (identical(v, value)) return '$v';

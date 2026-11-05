@@ -110,16 +110,35 @@ class ASTRunStatus {
   /// Returns true if some statement demands loop interruption (break).
   bool broke = false;
 
-  /// Signals a `continue` (skip to the next loop iteration).
-  ASTValueVoid markContinue() {
+  /// The label a pending `break`/`continue` targets (`break outer;`), or
+  /// `null` for the innermost loop/switch.
+  String? label;
+
+  /// Signals a `continue` (skip to the next iteration of the innermost loop,
+  /// or of the loop labeled [label]).
+  ASTValueVoid markContinue([String? label]) {
     continued = true;
+    this.label = label;
     return ASTValueVoid.instance;
   }
 
-  /// Signals a `break` (interrupt the enclosing loop or switch).
-  ASTValueVoid markBreak() {
+  /// Signals a `break` (interrupt the innermost loop or switch, or the
+  /// statement labeled [label]).
+  ASTValueVoid markBreak([String? label]) {
     broke = true;
+    this.label = label;
     return ASTValueVoid.instance;
+  }
+
+  /// Whether the pending `break`/`continue` targets a loop (or labeled
+  /// statement) carrying [ownLabel]: an unlabeled one targets the innermost
+  /// loop; a labeled one only the statement with that label — any other
+  /// propagates outward. Claiming it clears the label.
+  bool claims(String? ownLabel) {
+    var target = label;
+    if (target != null && target != ownLabel) return false;
+    label = null;
+    return true;
   }
 
   /// `true` if any control-flow flag interrupts normal block execution.

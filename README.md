@@ -87,6 +87,7 @@ The **Wasm** column shows what the on-the-fly WebAssembly compiler currently sup
 | `switch` / `case`                | ✅ | ✅ | 🧩³ | ✅ | ✅ | ✅ | ✅ | 🚫  | 🧩⁴ | ✅ |
 | `break`                          | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | `continue`                       | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | 🚫  | ✅ | ✅ |
+| Labeled `break` / `continue`²³   | ✅ | ✅ | 🧩²³ | ✅ | 🚫 | ✅ | ✅ | 🚫  | 🚫 | ✅ |
 | `try` / `catch` / `finally`      | ✅ | ✅ | ✅ | 🚧 | ✅ | ✅ | ✅ | 🚫  | ✅ | ✅ |
 | `throw` / `raise`                | ✅ | ✅ | ✅ | 🚧 | ✅ | ✅ | ✅ | 🚫  | ✅ | ✅ |
 | `async` / `await`                | ✅ | 🚫  | 🧩⁷ | 🚫 | ✅ | ✅ | ✅ | 🚫  | ✅ | ✅ |
@@ -94,6 +95,7 @@ The **Wasm** column shows what the on-the-fly WebAssembly compiler currently sup
 | Arithmetic (`+ - * / %`)         | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Comparison / logical             | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Bitwise (`& \| ^ << >> ~`)       | ✅ | ✅ | 🧩⁵ | 🧩¹¹ | ✅ | ✅ | ✅ | 🧩⁶ | ✅ | ✅ |
+| User operators (`V operator +(V o)`)²⁴ | ✅ | 🚫 | 🚧 | 🚫 | 🚧 | 🚫 | 🚫 | 🚧 | 🚧 | ✅ |
 | `++` / `--`, compound assign¹⁵   | ✅ | ✅ | 🧩¹⁵ | ✅ | ✅ | ✅ | ✅ | 🧩¹⁵ | ✅ | ✅ |
 | `assert`¹⁶                       | ✅ | ✅ | ✅ | 🧩¹⁶ | ✅ | 🧩¹⁶ | 🧩¹⁶ | ✅ | ✅ | 🚧 |
 | Lambdas / closures               | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
@@ -101,6 +103,7 @@ The **Wasm** column shows what the on-the-fly WebAssembly compiler currently sup
 | Parameter default values         | ✅ | 🚫  | ✅ | 🚫 | ✅ | 🚫  | 🚫  | 🚫  | ✅ | ✅ |
 | String interpolation / concat    | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | List & map / dict literals       | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Collection `if` / `for` / spread²⁵ | ✅ | 🚫 | 🚧 | 🚫 | 🚧 | 🚧 | 🚧 | 🚫 | 🚧 | 🚧 |
 | Set literals (`{1, 2}`)¹⁷        | ✅ | 🚧 | 🚧 | 🧩¹⁷ | 🚧 | 🚧 | 🚧 | 🧩¹⁷ | 🚧 | 🧩¹⁷ |
 | Top-level variables¹⁸            | ✅ | 🚫 | ✅ | ✅ | 🚫 | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Records (`(1, 'a')`, `r.$1`)¹⁹   | ✅ | 🚫 | 🚫 | 🚫 | 🚧 | 🚫 | 🚧 | 🚫 | 🚧 | 🧩¹⁹ |
@@ -184,7 +187,22 @@ equality. Destructuring and `switch` on records need patterns, which aren't
 supported yet. Wasm compiles a record to a heap struct: literals, field access,
 structural `==`, printing, and records as list and set elements. Not compiled
 yet (`🧩`): `r is (…)`, records as map keys or in an `Object` slot, and a record
-passed to or returned from the host.
+passed to or returned from the host. &nbsp;
+²³ A labeled loop (`outer: for (…)`) with `break outer;` / `continue outer;`,
+from nested loops and from inside a `switch`, is parsed from **Dart** source.
+Kotlin output uses its own syntax (`outer@ for`, `continue@outer`); C#, Lua and
+Python have no labeled loops, and generating them refuses the label with
+`UnsupportedSyntaxError`. &nbsp;
+²⁴ A user-defined binary operator (`+ - * / ~/ % < > <= >= == & | ^ << >>`) is
+parsed from **Dart** source and dispatches on the left operand's class; `!=`
+negates a user `==`. Wasm compiles it to a method call. Other targets refuse to
+generate it with `UnsupportedSyntaxError` — Kotlin `operator fun`, C# `operator`,
+Lua metatables and Python dunder methods would express it (`🚧`). &nbsp;
+²⁵ Collection elements in **Dart** list and set literals —
+`if (c) a else b`, `for (var i = 0; i < n; i++) i`, `for (var e in l) e`,
+`...l` and `...?l`, nested in each other — run in order and are kept by the
+binary format. Every other target, Wasm included, refuses them with
+`UnsupportedSyntaxError` rather than mis-translate them.
 
 ### Null safety
 
@@ -361,6 +379,8 @@ Same legend and **Wasm** column semantics as the table above.
 | Named & `factory` constructors (`A.zero()`)²⁰                 | ✅ | 🚧 | 🚧 | 🚧 | 🚧 | 🚧 | 🚧 | 🚧 | 🚧 | 🚧 |
 | Initializer lists (`: x = v`, `super(…)`, `this(…)`)²⁰         | ✅ | 🚧 | 🚧 | 🚧 | 🚧 | 🚧 | 🚧 | 🚧 | 🚧 | 🚧 |
 | Type tests & casts (`is`, `is!`, `as`)²¹                       | ✅ | 🚧 | 🚧 | 🚧 | 🚧 | 🚧 | 🚧 | 🚫  | 🚧 | 🚧 |
+| Mixins (`mixin M`, `class A with M`)²²                        | 🧩²² | 🧩²² | 🧩²² | 🧩²² | 🧩²² | 🧩²² | 🧩²² | 🚫  | 🧩²² | 🧩²² |
+| Generic functions & methods (`T first<T>(…)`)²²               | ✅ | 🚧 | 🚧 | 🚧 | 🚧 | 🚫  | 🚧 | 🚫  | 🚫  | ✅ |
 
 ¹ Lua is table-based: "fields" are table entries (`obj.x`), "constructors" are factory/`setmetatable`
 idioms, methods are `function Obj:method`. &nbsp;
@@ -434,9 +454,11 @@ the superclass chain. **Only Dart generates them** — Kotlin emits getters
 accessor with `UnsupportedSyntaxError` rather than dropping it. A getter can be
 read by its bare name inside a class or extension member (`return value;`); it
 dispatches on the receiver like `this.value`, and a local or parameter of the
-same name shadows it. Not yet supported, for getters and setters alike:
-`static` accessors and top-level accessors. Wasm compiles instance getters and
-setters, including the compound and unqualified forms above. &nbsp;
+same name shadows it. **`static` getters** (`static int get three => 3;`, read
+as `C.three`) and **top-level getters** (`int get two => 2;`) are parsed and run
+too, and Dart output keeps them; `static` and top-level *setters* aren't parsed
+yet. Wasm compiles instance getters and setters, including the compound and
+unqualified forms above, plus `static` and top-level getters. &nbsp;
 ¹⁵ Dart annotations (`@override`, `@Deprecated('x')`, `@pragma(...)`,
 `@a.B(1)`) are accepted wherever Dart allows them — top-level declarations,
 class and enum members, enum entries, extension members, parameters and local
@@ -507,7 +529,18 @@ C# `is` and `(T) x`; TypeScript/JavaScript `typeof`, `Array.isArray` and
 `instanceof`, with TS `x as T` and no cast in JS; Python `isinstance` and no
 cast. The JS/TS/Python casts are unchecked, as those languages' own are. Go,
 Lua and Wasm refuse with `UnsupportedSyntaxError`. A nullable target type
-(`x is int?`) is generated for Dart and Kotlin only.
+(`x is int?`) is generated for Dart and Kotlin only. &nbsp;
+²² A **mixin** (`mixin M { … }`, applied with `class A with M1, M2`, after an
+`extends` too) is parsed from **Dart** source and flattened as the module
+loads: the class gets a copy of each mixin field, method and accessor it
+doesn't declare itself, a later mixin winning over an earlier one. So every
+target — Dart and Wasm included — generates the flattened class, with the
+mixin as an ordinary class (`🧩`). The mixin must be declared in the same
+module; `on T` is parsed but not checked, and `super` into a mixin isn't
+modelled. **Generic functions and methods** (`T first<T>(List<T> l)`, called
+as `first<int>(l)` or `first(l)`) are parsed from Dart and, like generic
+classes, erased: the other targets emit the erased signature (`Object` /
+`Any`), which doesn't type-check there yet (`🚧`).
 
 > Per-language behavior is normalized to a shared AST, so types and constructs map
 > cleanly when translating between languages (e.g. C# `string` ⇄ Dart `String`,
@@ -1004,10 +1037,13 @@ on the fly, without the need for any third-party tools.
 
 - **Status:** *Wasm support is under active development. It already compiles a broad subset of
 the AST — functions, full control flow (`if`/`for`/`for-each`/`while`/`do-while`/`switch`/
-`break`/`continue`/ternary), arithmetic/comparison/logical/bitwise operators, `try`/`catch`/`throw`,
-classes with getters and setters, extensions, closures, lists/maps/sets, records,
-top-level variables, `async`/`await` (via Asyncify), and nullable values with the
-null-aware operators; see the [feature table](#supported-features). Constructs not yet
+`break`/`continue`, labeled loops, ternary), arithmetic/comparison/logical/bitwise operators,
+`try`/`catch`/`throw` (a `catch` also takes what a called function throws), classes with
+getters and setters, `static` members read from outside the class, user operators, mixins,
+extensions, closures (recursive local functions included), lists/maps/sets (of class
+instances too), records, top-level variables and getters, number methods (`abs`, `clamp`,
+`toInt`, `round`, `isEven`, `int.parse`, …), `async`/`await` (via Asyncify), and nullable
+values with the null-aware operators; see the [feature table](#supported-features). Constructs not yet
 compiled to Wasm are limited to a few higher-level features (e.g. non-integer `switch`),
 and are reported as unsupported rather than mis-compiled — see [Null safety](#null-safety).*
 

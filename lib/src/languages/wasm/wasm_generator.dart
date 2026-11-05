@@ -126,6 +126,11 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     extends ApolloGenerator<BytesOutput, S, D> {
   ApolloGeneratorWasm(S codeStorage) : super('wasm', codeStorage);
 
+  /// An operator method compiles like any method, and a binary operation on
+  /// an instance calls it (see `_userOperatorCall`).
+  @override
+  bool get supportsOperatorMethods => true;
+
   @override
   D toStorageData(BytesOutput out) {
     if (D == Uint8List) {
@@ -176,10 +181,21 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
         ..._buildExtensionFunctions(ext, i),
     ];
 
+    var topLevelGetters = [
+      for (var g in root.getter) _WasmTopLevelGetterFunction(g),
+    ];
+    if (root.setter.isNotEmpty) {
+      throw UnsupportedSyntaxError(
+        'Wasm compilation of top-level setters is not implemented: '
+        '${root.setter.map((s) => s.name).join(', ')}',
+      );
+    }
+
     var baseFunctions = [
       ...topFunctions,
       ...classFunctions,
       ...extensionFunctions,
+      ...topLevelGetters,
       ?globalsInit,
     ];
 
@@ -691,7 +707,29 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     // superclass-chain method lookup as an inherited method.
     for (var getter in clazz.getter) {
       if (getter is! ASTClassGetterDeclaration) continue;
-      if (getter.modifiers.isStatic) continue;
+      if (getter.modifiers.isStatic) {
+        // `static int get two => 2;`: a static 0-arg method `C.two`, which a
+        // `C.two` read calls (Dart forbids a method of the same name).
+        var method = ASTClassFunctionDeclaration(
+          clazz,
+          getter.name,
+          ASTFunctionParametersDeclaration(const []),
+          getter.returnType,
+          modifiers: ASTModifiers(isStatic: true),
+        );
+        method.clazz = clazz;
+        result.add(
+          _WasmStaticMethodFunction(
+            clazz,
+            method,
+            '${clazz.name}.${getter.name}',
+            ASTFunctionParametersDeclaration(const []),
+            getter.returnType,
+            block: getter,
+          ),
+        );
+        continue;
+      }
       // A fabricated 0-arg method carrying the getter's name/return type: used
       // only for resolution (`.method.name` / `.parameters.size`); the body is
       // the getter block passed as `block:` below.
@@ -2446,7 +2484,7 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
         } else {
           // x < 0 ? -x : x
           var x = context.scratchLocal(_astTypeInt64, 2201);
-          out.write(Wasm.localTee(x));
+          out.write(Wasm.localSet(x));
           out.write(Wasm64.i64Const(0));
           out.write(Wasm.localGet(x));
           out.writeByte(Wasm64.i64Subtract);
@@ -2764,6 +2802,9 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
         resultType = _astTypeInt64;
       } else if (returnType is ASTTypeDouble) {
         resultType = _astTypeDouble64;
+      } else if (returnType is ASTTypeBool) {
+        // A bool is an i32 on the stack, as every comparison result is.
+        resultType = _astTypeInt32;
       } else {
         resultType = returnType;
       }
@@ -3538,6 +3579,47 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     }
   }
 
+  /// The call of the user operator method applying [expression]'s operator
+  /// to a left operand of type [leftType] (`a.operator+(b)`), or `null` when
+  /// its class declares none.
+  ASTExpression? _userOperatorCall(
+    ASTExpressionOperation expression,
+    ASTType leftType,
+    WasmContext context,
+  ) {
+    var module = context.module;
+    if (module == null || !module.classLayouts.containsKey(leftType.name)) {
+      return null;
+    }
+    var op = expression.operator;
+    if (op == ASTExpressionOperator.and ||
+        op == ASTExpressionOperator.or ||
+        op == ASTExpressionOperator.nullCoalesce) {
+      return null;
+    }
+    var negate = op == ASTExpressionOperator.notEquals;
+    var name = 'operator${negate ? '==' : getASTExpressionOperatorText(op)}';
+    if (module.methodIndexForCall(leftType.name, name, 1) == null) return null;
+    ASTExpression call = ASTExpressionObjectFunctionInvocation(
+      ASTExpressionVariable(expression.expression1),
+      name,
+      [expression.expression2],
+    );
+    return negate ? ASTExpressionNegation(call) : call;
+  }
+
+  /// Collection `if` / `for` / spread elements aren't compiled to Wasm yet:
+  /// refused, rather than stored as values they aren't.
+  void _refuseCollectionElements(List<ASTExpression> values) {
+    var element = values.firstWhereOrNull((e) => e is ASTCollectionElement);
+    if (element != null) {
+      throw UnsupportedSyntaxError(
+        "Wasm compilation of the collection element `$element` is not "
+        "implemented.",
+      );
+    }
+  }
+
   // === Sets ==========================================================
   //
   // A set has the list layout (`[length][capacity][dataPtr]` + an element
@@ -3554,6 +3636,7 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
   }) {
     out ??= newOutput();
     context ??= WasmContext();
+    _refuseCollectionElements(expression.valuesExpressions);
     var module = context.module!;
     module.requiresMemory = true;
     module.requiresHeapGlobal = true;
@@ -3695,6 +3778,7 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
   }) {
     out ??= newOutput();
     context ??= WasmContext();
+    _refuseCollectionElements(expression.valuesExpressions);
     var module = context.module;
     if (module == null) {
       throw StateError("Can't build a list without a module.");
@@ -4214,6 +4298,9 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
         resultType = _astTypeInt64;
       } else if (returnType is ASTTypeDouble) {
         resultType = _astTypeDouble64;
+      } else if (returnType is ASTTypeBool) {
+        // A bool is an i32 on the stack, as every comparison result is.
+        resultType = _astTypeInt32;
       } else {
         resultType = returnType;
       }
@@ -4296,6 +4383,9 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
         resultType = _astTypeInt64;
       } else if (returnType is ASTTypeDouble) {
         resultType = _astTypeDouble64;
+      } else if (returnType is ASTTypeBool) {
+        // A bool is an i32 on the stack, as every comparison result is.
+        resultType = _astTypeInt32;
       } else {
         resultType = returnType;
       }
@@ -4409,6 +4499,9 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
         resultType = _astTypeInt64;
       } else if (returnType is ASTTypeDouble) {
         resultType = _astTypeDouble64;
+      } else if (returnType is ASTTypeBool) {
+        // A bool is an i32 on the stack, as every comparison result is.
+        resultType = _astTypeInt32;
       } else {
         resultType = returnType;
       }
@@ -5529,6 +5622,16 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     var stackType1 = stack1.type;
     var stackType2 = stack2.type;
 
+    // A user-declared operator of the left operand's class (`a + b` with
+    // `V operator +(V o)`): a call of its `operator+` method; `a != b` is
+    // `!(a == b)` with a declared `operator ==`.
+    var userOperator = _userOperatorCall(expression, stackType1, context);
+    if (userOperator != null) {
+      context.stackDrop(); // operand 2 (stack2)
+      context.stackDrop(); // operand 1 (stack1)
+      return generateASTExpression(userOperator, out: out, context: context);
+    }
+
     // String `+` -> concatenation. Each operand is coerced to a String handle
     // (a String is already a handle; int/double/bool route through the same
     // host converters used by string interpolation), so `String + number`
@@ -6139,6 +6242,22 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
         out: out,
         context: context,
       );
+    }
+
+    // A top-level getter: a call of its 0-arg function.
+    if (context.getLocalVariable(name) == null) {
+      var module = context.module;
+      var getterFn = module?.functions.firstWhereOrNull(
+        (f) => f is _WasmTopLevelGetterFunction && f.name == name,
+      );
+      if (getterFn != null) {
+        return _emitResolvedCall(
+          ASTExpressionLocalFunctionInvocation(name, const []),
+          module!.functionIndexByDeclaration(getterFn),
+          out: out,
+          context: context,
+        );
+      }
     }
 
     var localVar = _getLocalVariable(context, name);
@@ -7435,6 +7554,23 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       return out;
     }
 
+    // `C.two`: a static getter of class `C` (compiled as a static method).
+    if (_isClassReceiver(context, varName)) {
+      var getterIndex = context.module!.staticMethodIndexForCall(
+        varName,
+        name,
+        0,
+      );
+      if (getterIndex != null) {
+        return _emitResolvedCall(
+          ASTExpressionLocalFunctionInvocation(name, const []),
+          getterIndex,
+          out: out,
+          context: context,
+        );
+      }
+    }
+
     var localVar = _getLocalVariable(context, varName);
 
     var listType = localVar.type;
@@ -8021,7 +8157,14 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       }
     }
 
-    var localVariables = f.statements.declaredVariables();
+    // One Wasm local per name: two `for (var i …)` loops share `i`. (A
+    // duplicate entry would declare an extra local, shifting every scratch
+    // local's declared type by one.)
+    var seenLocals = <String>{};
+    var localVariables = [
+      for (var v in f.statements.declaredVariables())
+        if (seenLocals.add(v.key)) v,
+    ];
 
     // Register declared locals before generating the body (which references
     // them, and may also allocate scratch locals).
@@ -9316,8 +9459,38 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
           // `return <throwing call>` inside a `try` would exit before this
           // function's own handler runs — defer rather than miscompile. (Outside
           // a try it is fine: the callee's pending flag propagates to our caller.)
-          if (_countEligibleCalls(s, excEligible) + _countIntDivisions(s) > 0 &&
+          final raising =
+              _countEligibleCalls(s, excEligible) +
+              _countIntDivisions(s) +
+              _countNullAssertions(s);
+          if (raising > 0 &&
               (handlerPc != propagatePc || returnTargetPc >= 0)) {
+            // A single raising operation: compute the value into `$exc_ret`
+            // first, check the pending flag (jumping to the handler if it
+            // raised), and only then return it.
+            if (raising == 1 &&
+                _returnExpression(s) != null &&
+                !f.effectiveReturnType.isVoid) {
+              final cont = newBb();
+              blocks[cur].term = _TCallCheck(
+                captureReturn(s).single,
+                cont,
+                handlerPc,
+              );
+              cur = cont;
+              if (returnTargetPc >= 0) {
+                blocks[cur].term = _TGoto(returnTargetPc);
+              } else {
+                blocks[cur].term = _TReturn(
+                  ASTStatementReturnWithExpression(
+                    ASTExpressionVariableAccess(
+                      ASTScopeVariable(ensureExcRet()),
+                    ),
+                  ),
+                );
+              }
+              return -1;
+            }
             ok = false;
             return cur;
           }
@@ -9778,7 +9951,11 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     );
     for (var v in declaredLocals) {
       outBody.write(Leb128.encodeUnsigned(1));
-      outBody.writeByte(v.type.wasmCode);
+      // The context's (possibly refined) type — a `var r = g(a)` typed
+      // `dynamic` up front is re-typed from its initializer while the body
+      // generates.
+      var type = context.getLocalVariable(v.name)?.type ?? v.type;
+      outBody.writeByte(type.wasmCode);
     }
     for (var t in cfg.temps) {
       outBody.write(Leb128.encodeUnsigned(1));
@@ -10492,6 +10669,13 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     BytesOutput? out,
     WasmContext? context,
   }) {
+    if (statement is ASTStatementLabeled) {
+      return generateASTStatementLabeled(
+        statement,
+        out: out ?? newOutput(),
+        context: context ?? WasmContext(),
+      );
+    }
     if (statement is ASTStatementExpression) {
       return generateASTStatementExpression(
         statement,
@@ -10808,7 +10992,10 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
   }) {
     out ??= newOutput();
     context ??= WasmContext();
-    out.write(Wasm.br(context.breakBranchLabel), description: "[OP] break");
+    out.write(
+      Wasm.br(context.breakBranchLabel(statement.label)),
+      description: "[OP] break ${statement.label ?? ''}",
+    );
     return out;
   }
 
@@ -10820,10 +11007,32 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     out ??= newOutput();
     context ??= WasmContext();
     out.write(
-      Wasm.br(context.continueBranchLabel),
-      description: "[OP] continue",
+      Wasm.br(context.continueBranchLabel(statement.label)),
+      description: "[OP] continue ${statement.label ?? ''}",
     );
     return out;
+  }
+
+  /// `outer: for (…)`: the loop's frame carries the label, the target of a
+  /// `break outer;` / `continue outer;` inside it. A labeled non-loop
+  /// statement isn't compiled.
+  BytesOutput generateASTStatementLabeled(
+    ASTStatementLabeled statement, {
+    required BytesOutput out,
+    required WasmContext context,
+  }) {
+    if (statement.statement is! ASTStatementLoop) {
+      throw UnsupportedSyntaxError(
+        "Wasm compilation of a labeled non-loop statement is not implemented: "
+        "${statement.label}",
+      );
+    }
+    context.pendingLoopLabel = statement.label;
+    return generateASTStatement(
+      statement.statement,
+      out: out,
+      context: context,
+    );
   }
 
   /// Integer `switch` (C-style fall-through). Encoded as nested blocks with an
@@ -12060,6 +12269,12 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
     List<ASTExpressionChainFunctionInvocation>? chain;
     bool nullAware;
     switch (expression) {
+      // `P(3).twice()` / `f().g()`: a call (or constructor) with a chain.
+      case ASTExpressionLocalFunctionInvocation e:
+        chain = e.chainFunctionInvocation;
+        nullAware = false;
+        base = ASTExpressionLocalFunctionInvocation(e.name, e.arguments)
+          ..namedArguments = e.namedArguments;
       case ASTExpressionObjectFunctionInvocation e:
         chain = e.chainFunctionInvocation;
         nullAware = e.isNullAware;
@@ -12627,8 +12842,9 @@ class ApolloGeneratorWasm<S extends ApolloCodeUnitStorage<D>, D extends Object>
       return out;
     }
 
-    // A top-level variable or `static` field reads its module global.
-    if (_globalKey(context, name) != null) {
+    // Not a local: a top-level variable, a `static` field, or a getter (of
+    // `this` or top-level) — read like any bare name.
+    if (context.getLocalVariable(name) == null) {
       generateASTExpressionVariableAccess(
         ASTExpressionVariableAccess(value.variable),
         out: out,
@@ -15239,6 +15455,19 @@ class _WasmMethodFunction extends ASTFunctionDeclaration {
        );
 }
 
+/// A top-level getter (`int get two => 2;`) as a private 0-arg module function:
+/// a bare `two` read calls it.
+class _WasmTopLevelGetterFunction extends ASTFunctionDeclaration {
+  _WasmTopLevelGetterFunction(ASTGetterDeclaration getter)
+    : super(
+        getter.name,
+        ASTFunctionParametersDeclaration(const []),
+        getter.returnType,
+        block: getter,
+        modifiers: ASTModifiers(isPrivate: true),
+      );
+}
+
 /// A synthesized module function for an extension member (`extension E on T`):
 /// a method or getter taking the receiver as `this` (param 0, typed `T`)
 /// followed by its declared parameters. Calls dispatch on the receiver's static
@@ -16100,10 +16329,20 @@ class WasmContext {
   /// Stack of enclosing loops, innermost last. Each frame records the
   /// [controlDepth] of the loop's break target (the outer `block`) and of its
   /// continue target (the inner `block` wrapping the body).
-  final List<({int breakLevel, int continueLevel})> _loopFrames = [];
+  final List<({int breakLevel, int continueLevel, String? label})> _loopFrames =
+      [];
+
+  /// The label of the labeled loop about to be generated (`outer: for …`),
+  /// taken by the next [pushLoopFrame].
+  String? pendingLoopLabel;
 
   void pushLoopFrame({required int breakLevel, required int continueLevel}) {
-    _loopFrames.add((breakLevel: breakLevel, continueLevel: continueLevel));
+    _loopFrames.add((
+      breakLevel: breakLevel,
+      continueLevel: continueLevel,
+      label: pendingLoopLabel,
+    ));
+    pendingLoopLabel = null;
   }
 
   /// Pushes a `switch` frame: `break` targets the switch exit ([breakLevel]),
@@ -16113,28 +16352,41 @@ class WasmContext {
     var continueLevel = _loopFrames.isNotEmpty
         ? _loopFrames.last.continueLevel
         : -1;
-    _loopFrames.add((breakLevel: breakLevel, continueLevel: continueLevel));
+    _loopFrames.add((
+      breakLevel: breakLevel,
+      continueLevel: continueLevel,
+      label: null,
+    ));
   }
 
   void popLoopFrame() => _loopFrames.removeLast();
 
-  /// Relative branch label from the current [controlDepth] to the innermost
-  /// loop's break target, for a `break` statement.
-  int get breakBranchLabel {
+  /// The frame a `break`/`continue` targets: the innermost one, or the loop
+  /// labeled [label].
+  ({int breakLevel, int continueLevel, String? label}) _frameFor(
+    String? label,
+    String keyword,
+  ) {
     if (_loopFrames.isEmpty) {
-      throw StateError("`break` outside of a loop/switch");
+      throw StateError("`$keyword` outside of a loop/switch");
     }
-    return controlDepth - _loopFrames.last.breakLevel;
+    if (label == null) return _loopFrames.last;
+    return _loopFrames.lastWhere(
+      (f) => f.label == label,
+      orElse: () =>
+          throw UnsupportedSyntaxError("No enclosing loop labeled `$label`."),
+    );
   }
 
-  /// Relative branch label to the innermost loop's continue target, for a
-  /// `continue` statement.
-  int get continueBranchLabel {
-    if (_loopFrames.isEmpty) {
-      throw StateError("`continue` outside of a loop");
-    }
-    return controlDepth - _loopFrames.last.continueLevel;
-  }
+  /// Relative branch label from the current [controlDepth] to the innermost
+  /// loop's break target (or the loop labeled [label]), for a `break`.
+  int breakBranchLabel([String? label]) =>
+      controlDepth - _frameFor(label, 'break').breakLevel;
+
+  /// Relative branch label to the innermost loop's continue target (or the
+  /// loop labeled [label]), for a `continue`.
+  int continueBranchLabel([String? label]) =>
+      controlDepth - _frameFor(label, 'continue').continueLevel;
 
   /// Resolves the Wasm function index for a function with [name] and [arity].
   int? functionIndex(String name, int arity) =>
@@ -16222,6 +16474,17 @@ class WasmContext {
     var prev = _localVariables[name];
     if (prev != null) {
       var prevType = prev.type;
+
+      // A `var` resolved as `dynamic` only until its real type is known (two
+      // `for (var p in …)` loops, one over a list typed later): the concrete
+      // declaration wins.
+      bool placeholder(ASTType t) => t is ASTTypeDynamic || t is ASTTypeVar;
+      if (prevType != type && (placeholder(prevType) || placeholder(type))) {
+        if (placeholder(prevType)) {
+          _localVariables[name] = (type: type, index: prev.index);
+        }
+        return prev.index;
+      }
 
       if (prevType != type) {
         throw StateError(
@@ -16819,6 +17082,10 @@ extension _ASTStatementExtension on ASTStatement {
         ...self.initStatement.declaredVariablesTypes(),
         ...self.loopBlock.declaredVariables(),
       ];
+    } else if (self is ASTStatementLabeled) {
+      return self.statement.declaredVariablesTypes();
+    } else if (self is ASTStatementDoWhileLoop) {
+      return self.loopBlock.declaredVariables();
     } else if (self is ASTStatementWhileLoop) {
       return self.loopBlock.declaredVariables();
     } else if (self is ASTStatementForEach) {

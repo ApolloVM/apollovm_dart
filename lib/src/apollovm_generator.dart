@@ -37,6 +37,30 @@ abstract class ApolloGenerator<
   /// (`: x = v`, `super(…)`, `this(…)`). Only Dart can today.
   bool get supportsConstructorForms => false;
 
+  /// Whether this target can express a user-defined operator (`V operator +(V
+  /// o)`), which the AST holds as a method named `operator+`. Dart can; other
+  /// targets would emit an invalid method name, or a method that their `+`
+  /// never calls.
+  bool get supportsOperatorMethods => false;
+
+  /// Throws an [UnsupportedSyntaxError] if [clazz] declares an operator this
+  /// target can't express (see [supportsOperatorMethods]).
+  void checkOperatorMethods(ASTClassNormal clazz) {
+    if (supportsOperatorMethods) return;
+    for (var set in clazz.functions) {
+      for (var f in set.functions) {
+        if (f.name.startsWith('operator') &&
+            f.name.length > 'operator'.length &&
+            !RegExp(r'^\w+$').hasMatch(f.name)) {
+          throw UnsupportedSyntaxError(
+            "Language '$language' can't generate the operator "
+            "`${clazz.name}.${f.name}` yet.",
+          );
+        }
+      }
+    }
+  }
+
   /// Throws an [UnsupportedSyntaxError] if [clazz] declares a constructor form
   /// this target can't express (see [supportsConstructorForms]).
   ///
@@ -45,6 +69,8 @@ abstract class ApolloGenerator<
   /// and a dropped initializer list leaves fields unset or skips the
   /// superclass constructor — code that compiles and does something else.
   void checkConstructorForms(ASTClassNormal clazz) {
+    checkOperatorMethods(clazz);
+
     if (supportsConstructorForms) return;
 
     for (var set in clazz.constructors) {

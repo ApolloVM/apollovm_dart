@@ -17,6 +17,10 @@ class ApolloCodeGeneratorCSharp extends ApolloCodeGenerator {
   ApolloCodeGeneratorCSharp(ApolloSourceCodeStorage codeStorage)
     : super('csharp', codeStorage);
 
+  /// C# has no labeled `break`/`continue` (only `goto`).
+  @override
+  bool get supportsLabels => false;
+
   /// `x is T`, and a C-style cast — which throws like a Dart cast, where
   /// `x as T` would yield `null`.
   @override

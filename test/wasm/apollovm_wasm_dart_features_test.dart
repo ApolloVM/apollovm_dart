@@ -503,4 +503,119 @@ String f() { return 'flag: $flag'; }
       );
     });
   });
+
+  group('Wasm 2.36.0', () {
+    test('a catch of a value thrown by a callee', () async {
+      const src = r'''
+int g(int a) { if (a < 0) throw 'neg'; if (a > 9) throw 99; return a; }
+String f(int a) { try { return 'ok ${g(a)}'; } catch (e) { return 'caught $e'; } }
+''';
+      await _check(src, 'f', [-1], returns: 'caught neg');
+      await _check(src, 'f', [10], returns: 'caught 99');
+      await _check(src, 'f', [3], returns: 'ok 3');
+
+      const viaLocal = r'''
+int g(int a) { if (a < 0) throw 'neg'; return a; }
+String f(int a) { try { var r = g(a); return 'ok $r'; } catch (e) { return 'caught $e'; } }
+''';
+      await _check(viaLocal, 'f', [-1], returns: 'caught neg');
+      await _check(viaLocal, 'f', [4], returns: 'ok 4');
+    });
+
+    test('a recursive local function', () async {
+      await _check(
+        'int f(int n) { int fact(int x) { return x <= 1 ? 1 : x * fact(x - 1); } '
+            'return fact(n); }',
+        'f',
+        [5],
+        returns: 120,
+      );
+    });
+
+    test('lists of class instances', () async {
+      await _check(
+        r'''
+class P { int v; P(this.v); String toString() => 'P$v'; }
+int f() {
+  var l = [P(1), P(2)];
+  List<P> m = [P(10)];
+  m.add(P(20));
+  var t = 0;
+  for (var p in l) { t += p.v; }
+  for (var p in m) { t += p.v; }
+  print('$l');
+  return t + l[1].v;
+}
+''',
+        'f',
+        [],
+        prints: ['[P1, P2]'],
+        returns: 35,
+      );
+    });
+
+    test('static members from outside the class', () async {
+      await _check(
+        r'''
+class C {
+  static int n = 5;
+  static List<int> xs = [1, 2, 3];
+  static int twice(int x) => x * 2;
+  static int get three => 3;
+}
+int f() { C.n = C.n + 1; C.n += 2; return C.n * 100 + C.xs.length * 10 + C.twice(C.three); }
+''',
+        'f',
+        [],
+        returns: 836,
+      );
+    });
+
+    test('number methods', () async {
+      await _check(
+        r'''
+String f(int a, double d) {
+  return '${a.toString()} ${a.abs()} ${a.clamp(-2, 2)} ${a.isEven} ${a.isOdd} '
+      '${d.toInt()} ${d.round()} ${d.floor()} ${d.ceil()} ${int.parse(' 41 ') + 1} '
+      '${(a - 10).abs()}';
+}
+''',
+        'f',
+        [-3, -2.5],
+        returns: '-3 3 -2 false true -2 -3 -3 -2 42 13',
+      );
+    });
+
+    test('labels, operators, getters, mixins and member chains', () async {
+      await _check(
+        r'''
+int get two => 2;
+mixin M { int m() => 9; }
+class V with M {
+  int x;
+  V(this.x);
+  V operator +(V o) => V(x + o.x);
+  bool operator <(V o) => x < o.x;
+  V twice() => V(x * 2);
+}
+int f() {
+  var n = 0;
+  outer: for (var i = 0; i < 3; i++) {
+    for (var j = 0; j < 3; j++) {
+      if (j == 1) continue outer;
+      if (i == 2) break outer;
+      n++;
+    }
+  }
+  var v = V(1) + V(2);
+  var less = V(1) < V(2) ? 1 : 0;
+  return n * 10000 + v.x * 1000 + less * 100 + V(3).twice().x * 10 + V(0).m() - two;
+}
+''',
+        'f',
+        [],
+        returns: 23167,
+      );
+    });
+  });
 }

@@ -731,6 +731,7 @@ abstract class ApolloCodeGenerator
         headIndented: headIndented,
       );
     } else if (statement is ASTStatementBreak) {
+      checkLabelSupport(statement.label, 'break');
       return generateASTStatementBreak(
         statement,
         out: out,
@@ -738,7 +739,16 @@ abstract class ApolloCodeGenerator
         headIndented: headIndented,
       );
     } else if (statement is ASTStatementContinue) {
+      checkLabelSupport(statement.label, 'continue');
       return generateASTStatementContinue(
+        statement,
+        out: out,
+        indent: indent,
+        headIndented: headIndented,
+      );
+    } else if (statement is ASTStatementLabeled) {
+      checkLabelSupport(statement.label, 'statement');
+      return generateASTStatementLabeled(
         statement,
         out: out,
         indent: indent,
@@ -1025,6 +1035,57 @@ abstract class ApolloCodeGenerator
     return out;
   }
 
+  /// Whether this target has labeled statements (`outer: for …` with
+  /// `break outer;` / `continue outer;`).
+  bool get supportsLabels => true;
+
+  /// Throws an [UnsupportedSyntaxError] for a [label] this target can't
+  /// express: dropping it would make `break outer;` leave only the inner loop.
+  void checkLabelSupport(String? label, String construct) {
+    if (label == null || supportsLabels) return;
+    throw UnsupportedSyntaxError(
+      "Language '$language' can't generate the labeled $construct `$label`.",
+    );
+  }
+
+  /// `break label` / `continue label` (without a terminator).
+  String labeledJump(String keyword, String label) => '$keyword $label';
+
+  /// The label prefixed to a labeled statement (`outer: `).
+  String labelPrefix(String label) => '$label: ';
+
+  /// A spread / collection `if` / collection `for` element of a list or set
+  /// literal. Only Dart has them (as written); elsewhere they are refused
+  /// rather than lowered, since the literal would lose its elements.
+  StringBuffer generateASTCollectionElement(
+    ASTCollectionElement element, {
+    StringBuffer? out,
+    String indent = '',
+    bool headIndented = true,
+  }) {
+    throw UnsupportedSyntaxError(
+      "Language '$language' can't generate the collection element "
+      "`$element` yet.",
+    );
+  }
+
+  StringBuffer generateASTStatementLabeled(
+    ASTStatementLabeled statement, {
+    StringBuffer? out,
+    String indent = '',
+    bool headIndented = true,
+  }) {
+    out ??= newOutput();
+    if (headIndented) out.write(indent);
+    out.write(labelPrefix(statement.label));
+    return generateASTStatement(
+      statement.statement,
+      out: out,
+      indent: indent,
+      headIndented: false,
+    );
+  }
+
   StringBuffer generateASTStatementBreak(
     ASTStatementBreak statement, {
     StringBuffer? out,
@@ -1035,7 +1096,9 @@ abstract class ApolloCodeGenerator
 
     if (headIndented) out.write(indent);
 
-    out.write('break;');
+    var label = statement.label;
+    out.write(label == null ? 'break' : labeledJump('break', label));
+    out.write(';');
 
     return out;
   }
@@ -1050,7 +1113,9 @@ abstract class ApolloCodeGenerator
 
     if (headIndented) out.write(indent);
 
-    out.write('continue;');
+    var label = statement.label;
+    out.write(label == null ? 'continue' : labeledJump('continue', label));
+    out.write(';');
 
     return out;
   }
@@ -1658,6 +1723,14 @@ abstract class ApolloCodeGenerator
     String indent = '',
     bool headIndented = true,
   }) {
+    if (expression is ASTCollectionElement) {
+      return generateASTCollectionElement(
+        expression,
+        out: out,
+        indent: indent,
+        headIndented: headIndented,
+      );
+    }
     if (expression is ASTExpressionNullValue) {
       return generateASTExpressionNullValue(
         expression,
