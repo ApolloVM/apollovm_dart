@@ -559,6 +559,268 @@ class ASTExpressionLiteral extends ASTExpression {
 }
 
 /// [ASTExpression] that declares a [List] literal.
+/// An element of a collection literal that isn't a single value: a spread
+/// (`...xs`), a collection `if` or a collection `for`. It [expand]s to zero or
+/// more values in the enclosing literal; it has no value of its own.
+abstract class ASTCollectionElement extends ASTExpression {
+  /// The values this element contributes, in order.
+  Future<List<ASTValue>> expand(VMContext context, ASTRunStatus runStatus);
+
+  @override
+  bool get isComplex => true;
+
+  @override
+  FutureOr<ASTValue> run(VMContext parentContext, ASTRunStatus runStatus) =>
+      throw ApolloVMRuntimeError(
+        "A collection element (`$this`) is only valid inside a list or set "
+        "literal.",
+      );
+
+  /// The values of collection [elements], each expanded in order.
+  static Future<List<ASTValue>> expandAll(
+    List<ASTExpression> elements,
+    VMContext context,
+    ASTRunStatus runStatus,
+  ) async {
+    var values = <ASTValue>[];
+    for (var e in elements) {
+      if (e is ASTCollectionElement) {
+        values.addAll(await e.expand(context, runStatus));
+      } else {
+        values.add(await e.run(context, runStatus));
+      }
+    }
+    return values;
+  }
+
+  /// The element type of a collection holding [elements]: a spread
+  /// contributes its iterable's element type.
+  static FutureOr<ASTType> elementTypeOf(
+    ASTExpression element,
+    VMContext? context,
+  ) {
+    if (element is ASTCollectionElement) return element.elementType(context);
+    return element.resolveType(context);
+  }
+
+  /// The type of the values this element contributes.
+  FutureOr<ASTType> elementType(VMContext? context);
+}
+
+/// `...xs` / `...?xs` in a collection literal.
+class ASTCollectionSpread extends ASTCollectionElement {
+  final ASTExpression expression;
+
+  /// `...?xs`: a `null` [expression] contributes nothing.
+  final bool nullAware;
+
+  ASTCollectionSpread(this.expression, {this.nullAware = false});
+
+  @override
+  Iterable<ASTNode> get children => [expression];
+
+  @override
+  void resolveNode(ASTNode? parentNode) {
+    super.resolveNode(parentNode);
+    expression.resolveNode(this);
+  }
+
+  @override
+  Future<List<ASTValue>> expand(
+    VMContext context,
+    ASTRunStatus runStatus,
+  ) async {
+    var value = await expression.run(context, runStatus);
+    if (value is ASTValueNull) {
+      if (nullAware) return [];
+      throw ApolloVMNullPointerException("Can't spread `null`: $expression");
+    }
+    var raw = await value.getValue(context);
+    if (raw is Map) {
+      // Dart rejects `[...m]`, and `{...m}` builds a Map — map literals don't
+      // take spreads here yet, so `{...m}` parsed as a Set: refuse it rather
+      // than build a Set of entries.
+      throw ApolloVMRuntimeError(
+        "Can't spread a Map into a List or Set (map spreads aren't "
+        "supported yet): $expression",
+      );
+    }
+    if (raw is! Iterable) {
+      throw ApolloVMRuntimeError("Can't spread a non-Iterable: $expression");
+    }
+    return [for (var e in raw) e is ASTValue ? e : ASTValue.fromValue(e)];
+  }
+
+  @override
+  FutureOr<ASTType> elementType(VMContext? context) =>
+      expression.resolveType(context).resolveMapped((t) {
+        if (t is ASTTypeArray) return t.componentType;
+        if (t is ASTTypeSet) return t.elementType;
+        return ASTTypeDynamic.instance;
+      });
+
+  @override
+  FutureOr<ASTType> resolveType(VMContext? context) => elementType(context);
+
+  @override
+  String toString({bool asGroup = false}) =>
+      '...${nullAware ? '?' : ''}$expression';
+}
+
+/// `if (cond) a else b` in a collection literal.
+class ASTCollectionIf extends ASTCollectionElement {
+  final ASTExpression condition;
+  final ASTExpression thenElement;
+  final ASTExpression? elseElement;
+
+  ASTCollectionIf(this.condition, this.thenElement, [this.elseElement]);
+
+  @override
+  Iterable<ASTNode> get children => [condition, thenElement, ?elseElement];
+
+  @override
+  void resolveNode(ASTNode? parentNode) {
+    super.resolveNode(parentNode);
+    condition.resolveNode(this);
+    thenElement.resolveNode(this);
+    elseElement?.resolveNode(this);
+  }
+
+  @override
+  Future<List<ASTValue>> expand(
+    VMContext context,
+    ASTRunStatus runStatus,
+  ) async {
+    var cond = await condition.run(context, runStatus);
+    var branch = await cond.getValue(context) == true
+        ? thenElement
+        : elseElement;
+    if (branch == null) return [];
+    return ASTCollectionElement.expandAll([branch], context, runStatus);
+  }
+
+  @override
+  FutureOr<ASTType> elementType(VMContext? context) =>
+      ASTCollectionElement.elementTypeOf(thenElement, context);
+
+  @override
+  FutureOr<ASTType> resolveType(VMContext? context) => elementType(context);
+
+  @override
+  String toString({bool asGroup = false}) =>
+      'if ($condition) $thenElement'
+      '${elseElement != null ? ' else $elseElement' : ''}';
+}
+
+/// `for (var x in xs) element` in a collection literal.
+class ASTCollectionForIn extends ASTCollectionElement {
+  final ASTType variableType;
+  final String variableName;
+  final ASTExpression iterable;
+  final ASTExpression element;
+
+  ASTCollectionForIn(
+    this.variableType,
+    this.variableName,
+    this.iterable,
+    this.element,
+  );
+
+  @override
+  Iterable<ASTNode> get children => [variableType, iterable, element];
+
+  @override
+  void resolveNode(ASTNode? parentNode) {
+    super.resolveNode(parentNode);
+    iterable.resolveNode(this);
+    element.resolveNode(this);
+  }
+
+  @override
+  Future<List<ASTValue>> expand(
+    VMContext context,
+    ASTRunStatus runStatus,
+  ) async {
+    var raw = await (await iterable.run(context, runStatus)).getValue(context);
+    Iterable items = raw is Map ? raw.keys : raw as Iterable;
+    var values = <ASTValue>[];
+    for (var item in items) {
+      var itemValue = item is ASTValue ? item : ASTValue.fromValue(item);
+      var scope = VMScopeContext(context.block, parent: context);
+      scope.declareVariableWithValue(itemValue.type, variableName, itemValue);
+      values.addAll(
+        await ASTCollectionElement.expandAll([element], scope, runStatus),
+      );
+    }
+    return values;
+  }
+
+  @override
+  FutureOr<ASTType> elementType(VMContext? context) => ASTTypeDynamic.instance;
+
+  @override
+  FutureOr<ASTType> resolveType(VMContext? context) => elementType(context);
+
+  @override
+  String toString({bool asGroup = false}) =>
+      'for ($variableType $variableName in $iterable) $element';
+}
+
+/// `for (init; cond; update) element` in a collection literal.
+class ASTCollectionFor extends ASTCollectionElement {
+  final ASTStatement initStatement;
+  final ASTExpression condition;
+  final ASTExpression update;
+  final ASTExpression element;
+
+  ASTCollectionFor(
+    this.initStatement,
+    this.condition,
+    this.update,
+    this.element,
+  );
+
+  @override
+  Iterable<ASTNode> get children => [initStatement, condition, update, element];
+
+  @override
+  void resolveNode(ASTNode? parentNode) {
+    super.resolveNode(parentNode);
+    initStatement.resolveNode(this);
+    condition.resolveNode(this);
+    update.resolveNode(this);
+    element.resolveNode(this);
+  }
+
+  @override
+  Future<List<ASTValue>> expand(
+    VMContext context,
+    ASTRunStatus runStatus,
+  ) async {
+    var scope = VMScopeContext(context.block, parent: context);
+    await initStatement.run(scope, runStatus);
+    var values = <ASTValue>[];
+    while (await (await condition.run(scope, runStatus)).getValue(scope) ==
+        true) {
+      values.addAll(
+        await ASTCollectionElement.expandAll([element], scope, runStatus),
+      );
+      await update.run(scope, runStatus);
+    }
+    return values;
+  }
+
+  @override
+  FutureOr<ASTType> elementType(VMContext? context) => ASTTypeDynamic.instance;
+
+  @override
+  FutureOr<ASTType> resolveType(VMContext? context) => elementType(context);
+
+  @override
+  String toString({bool asGroup = false}) =>
+      'for ($initStatement $condition; $update) $element';
+}
+
 class ASTExpressionListLiteral extends ASTExpression {
   final ASTType? type;
 
@@ -596,10 +858,18 @@ class ASTExpressionListLiteral extends ASTExpression {
         return ASTValueArray(type, []);
       }
 
-      var astValues = valuesExpressions
-          .map((e) => e.run(parentContext, runStatus))
-          .toList()
-          .resolveAll();
+      // Spread / collection `if` / `for` elements expand in order.
+      FutureOr<List<ASTValue>> astValues =
+          valuesExpressions.any((e) => e is ASTCollectionElement)
+          ? ASTCollectionElement.expandAll(
+              valuesExpressions,
+              parentContext,
+              runStatus,
+            )
+          : valuesExpressions
+                .map((e) => e.run(parentContext, runStatus))
+                .toList()
+                .resolveAll();
 
       return astValues.resolveMapped((astValues) {
         return astValues
@@ -663,10 +933,18 @@ class ASTExpressionSetLiteral extends ASTExpression {
         return ASTValueSet(type, {});
       }
 
-      var astValues = valuesExpressions
-          .map((e) => e.run(parentContext, runStatus))
-          .toList()
-          .resolveAll();
+      // Spread / collection `if` / `for` elements expand in order.
+      FutureOr<List<ASTValue>> astValues =
+          valuesExpressions.any((e) => e is ASTCollectionElement)
+          ? ASTCollectionElement.expandAll(
+              valuesExpressions,
+              parentContext,
+              runStatus,
+            )
+          : valuesExpressions
+                .map((e) => e.run(parentContext, runStatus))
+                .toList()
+                .resolveAll();
 
       return astValues.resolveMapped((astValues) {
         return astValues
@@ -983,7 +1261,9 @@ class ASTExpressionVariableEntryAccess extends ASTExpression {
     // Single index: keep the original statically-typed read path (precise
     // element type + null-pointer diagnostics).
     if (extraIndices.isEmpty) {
-      return _applyIndexTyped(context, runStatus, value, expression);
+      return _asInstanceValue(
+        await _applyIndexTyped(context, runStatus, value, expression),
+      );
     }
 
     // Nested access (`m[0][1]`): read each level dynamically so a typed nested
@@ -991,6 +1271,21 @@ class ASTExpressionVariableEntryAccess extends ASTExpression {
     // intermediate `List` values.
     for (var indexExpr in _indices) {
       value = await _applyIndexDynamic(context, runStatus, value, indexExpr);
+    }
+    return _asInstanceValue(value);
+  }
+
+  /// A collection holds an instance's bare [VMObject]: an element read gives
+  /// back its [ASTClassInstance], so it keeps its class (`print(l[0])` uses
+  /// its `toString()`, `l[0].m()` dispatches).
+  static ASTValue _asInstanceValue(ASTValue value) {
+    Object? raw = value;
+    if (value is! VMObject && value is ASTValueStatic) raw = value.value;
+    if (raw is VMObject) {
+      var clazz = raw.type.getClass();
+      if (clazz is ASTClass<VMObject>) {
+        return ASTClassInstance<VMObject>(clazz, raw);
+      }
     }
     return value;
   }
@@ -1152,6 +1447,48 @@ int _assignmentBitwiseOperand(VMContext context, ASTValue val, String op) {
 /// [ASTAssignmentOperator.nullCoalesce] are handled by their callers, which
 /// must short-circuit before reading [current].
 FutureOr<ASTValue> applyASTAssignmentOperator(
+  VMContext context,
+  ASTAssignmentOperator operator,
+  ASTValue current,
+  ASTValue value,
+) {
+  // `s += x` on a String concatenates — whatever kind of String value either
+  // side is (a literal, an interpolation, a String held in a `var`).
+  if (operator == ASTAssignmentOperator.sum &&
+      (current.type is ASTTypeString || value.type is ASTTypeString)) {
+    return valueToDisplayString(current, context).resolveMapped((a) {
+      return valueToDisplayString(value, context).resolveMapped((b) {
+        return ASTValueString('$a$b');
+      });
+    });
+  }
+
+  // An untyped operand (`dynamic`, `var`, `Object` — e.g. a closure parameter
+  // in `m.forEach((k, v) { t += v; })`) is resolved to its runtime value
+  // first, since the value operators dispatch on the concrete type.
+  if (_isUntypedValue(current) || _isUntypedValue(value)) {
+    return _concretizeValue(context, current).resolveMapped((c) {
+      return _concretizeValue(context, value).resolveMapped((v) {
+        return _applyASTAssignmentOperator(context, operator, c, v);
+      });
+    });
+  }
+  return _applyASTAssignmentOperator(context, operator, current, value);
+}
+
+bool _isUntypedValue(ASTValue v) {
+  final t = v.type;
+  return t is ASTTypeDynamic || t is ASTTypeVar || t is ASTTypeObject;
+}
+
+FutureOr<ASTValue> _concretizeValue(VMContext context, ASTValue val) {
+  if (!_isUntypedValue(val)) return val;
+  return val.getValue(context).resolveMapped((raw) {
+    return raw is ASTValue ? raw : ASTValue.fromValue(raw);
+  });
+}
+
+FutureOr<ASTValue> _applyASTAssignmentOperator(
   VMContext context,
   ASTAssignmentOperator operator,
   ASTValue current,
@@ -2345,10 +2682,65 @@ class ASTExpressionOperation extends ASTExpression {
 
     final operator = this.operator;
 
-    var retVal2 = expression2.run(context, runStatus);
+    // Left to right, as in every supported language: the right operand runs
+    // only after the left one (`a() + b()` calls `a` first).
     var retVal1 = expression1.run(context, runStatus);
 
-    return retVal2.resolveBoth(retVal1, (val2, val1) {
+    return retVal1.resolveMapped((val1) {
+      return expression2.run(context, runStatus).resolveMapped((val2) {
+        return _runOperation(parentContext, operator, val1, val2);
+      });
+    });
+  }
+
+  /// A user-declared operator (`V operator +(V o)`, `bool operator ==(…)`) of
+  /// the left operand's class applied to [val2], or `null` when there is
+  /// none. `a != b` is `!(a == b)`.
+  FutureOr<ASTValue>? _userOperator(
+    VMContext context,
+    ASTExpressionOperator operator,
+    ASTValue val1,
+    ASTValue val2,
+  ) {
+    if (operator == ASTExpressionOperator.nullCoalesce ||
+        operator == ASTExpressionOperator.and ||
+        operator == ASTExpressionOperator.or) {
+      return null;
+    }
+    var instance = ASTExpressionVariableEntryAccess._asInstanceValue(val1);
+    if (instance is! ASTClassInstance) return null;
+    var negate = operator == ASTExpressionOperator.notEquals;
+    // Dart never calls `operator ==` with `null`: `a == null` is false.
+    if ((negate || operator == ASTExpressionOperator.equals) &&
+        val2 is ASTValueNull) {
+      return ASTValueBool(negate);
+    }
+    var symbol = negate ? '==' : getASTExpressionOperatorText(operator);
+    var f = instance.clazz.getFunction(
+      'operator$symbol',
+      ASTFunctionSignature.from([val2], null),
+      context,
+    );
+    if (f is! ASTClassFunctionDeclaration) return null;
+    return f
+        .objectCall(context, instance, positionalParameters: [val2])
+        .resolveMapped((r) {
+          if (!negate) return r;
+          return r
+              .getValue(context)
+              .resolveMapped((b) => ASTValueBool(b != true));
+        });
+  }
+
+  FutureOr<ASTValue> _runOperation(
+    VMContext parentContext,
+    ASTExpressionOperator operator,
+    ASTValue val1,
+    ASTValue val2,
+  ) {
+    var user = _userOperator(parentContext, operator, val1, val2);
+    if (user != null) return user;
+    {
       // Resolve dynamically-typed operands to their concrete runtime type so
       // the operator methods (which dispatch on `ASTValue.type`) work for
       // untyped languages, e.g. JavaScript `a + b` where `a`/`b` are `dynamic`.
@@ -2404,7 +2796,7 @@ class ASTExpressionOperation extends ASTExpression {
           }
         });
       });
-    });
+    }
   }
 
   /// Resolves a "boxed"/untyped operand (`dynamic`, `var`, `Object`) to a
@@ -2868,8 +3260,9 @@ class ASTExpressionVariableAssignment extends ASTExpression {
       return newValue;
     }
 
-    var value = await expression.run(context, runStatus);
+    // `x += e` reads `x` before evaluating `e`, as in Dart.
     var variableValue = await variable.getValue(context);
+    var value = await expression.run(context, runStatus);
 
     FutureOr<ASTValue> result;
 
@@ -3741,6 +4134,13 @@ class ASTExpressionObjectFunctionInvocation
   }
 
   FutureOr<ASTValue> _getVariableValue(VMContext parentContext) {
+    // The receiver this run already evaluated (see [run]).
+    var evaluated = Zone.current[_receiverZoneKey];
+    if (evaluated is ASTValue) return evaluated;
+    return _evaluateReceiver(parentContext);
+  }
+
+  FutureOr<ASTValue> _evaluateReceiver(VMContext parentContext) {
     if (_isSuper) {
       // `super` is the current instance; the superclass drives method dispatch
       // (see `_getObjectClass`).
@@ -3752,8 +4152,20 @@ class ASTExpressionObjectFunctionInvocation
       }
       return obj;
     }
-    return variable.getValue(parentContext);
+    // An instance held untyped (a `var` loop variable over `List<P>`) is
+    // wrapped back into its class instance, so its methods dispatch.
+    return variable
+        .getValue(parentContext)
+        .resolveMapped(ASTExpressionVariableEntryAccess._asInstanceValue);
   }
+
+  /// The zone key under which [run] hands the receiver it evaluated to the
+  /// steps that read it again (one key per invocation node).
+  final Object _receiverZoneKey = Object();
+
+  /// Whether reading the receiver can run code (`make().bump()`, `a.b.m()`),
+  /// so [run] must evaluate it only once. A plain name is just looked up.
+  bool get _receiverHasEffects => !_isSuper && variable is! ASTScopeVariable;
 
   FutureOr<ASTClass> _getObjectClass(VMContext parentContext) {
     if (_isSuper) {
@@ -3792,6 +4204,33 @@ class ASTExpressionObjectFunctionInvocation
 
   @override
   FutureOr<ASTType> resolveType(VMContext? context) {
+    // A receiver that runs code (`make().bump()`) is typed from its static
+    // type, not evaluated just to find the method's class.
+    if (context != null &&
+        _receiverHasEffects &&
+        Zone.current[_receiverZoneKey] == null) {
+      return variable.resolveType(context).resolveMapped((type) {
+        ASTType result;
+        try {
+          var f = _resolveFunctionOrExtension(
+            this,
+            type.getClass(),
+            name,
+            _getASTFunctionSignature(),
+            context,
+          );
+          if (f == null) return ASTTypeDynamic.instance;
+          result = f.resolveType(context);
+        } on StateError {
+          return ASTTypeDynamic.instance;
+        }
+        if (hasChainFunctionInvocation) {
+          result = _chainResultType(context, result);
+        }
+        return isNullAware ? result.asNullable() : result;
+      });
+    }
+
     if (context == null || !isNullAware) return super.resolveType(context);
 
     // A null-aware invocation (`obj?.m()`) short-circuits to `null` on a null
@@ -3905,6 +4344,22 @@ class ASTExpressionObjectFunctionInvocation
 
   @override
   FutureOr<ASTValue> run(VMContext parentContext, ASTRunStatus runStatus) {
+    // A receiver that runs code (`make().bump()`) is evaluated once, here, and
+    // every later step reads that value: re-reading it would call `make()`
+    // again. (A recursive run of this node evaluates its own receiver, as
+    // [_evaluateReceiver] bypasses the zone value.)
+    if (_receiverHasEffects) {
+      return _evaluateReceiver(parentContext).resolveMapped((obj) {
+        return runZoned(
+          () => _run(parentContext, runStatus),
+          zoneValues: {_receiverZoneKey: obj},
+        );
+      });
+    }
+    return _run(parentContext, runStatus);
+  }
+
+  FutureOr<ASTValue> _run(VMContext parentContext, ASTRunStatus runStatus) {
     // Whole-module import prefix (`p.member(...)`): call the imported function/
     // constructor directly (no receiver object).
     var prefixed = _resolvePrefixedInvocable(parentContext);
@@ -3954,6 +4409,67 @@ class ASTExpressionObjectFunctionInvocation
   }
 
   FutureOr<ASTValue> _invoke(VMContext parentContext, ASTRunStatus runStatus) {
+    return _fieldFunctionValue(parentContext, runStatus).resolveMapped((fv) {
+      if (fv != null) return _invokeFieldFunction(parentContext, runStatus, fv);
+      return _invokeMethod(parentContext, runStatus);
+    });
+  }
+
+  /// `h.fn(4)` where `fn` is a field of `h`'s class holding a function value
+  /// (a class can't also declare a method `fn`): that value, else `null`.
+  FutureOr<ASTValueFunction?> _fieldFunctionValue(
+    VMContext parentContext,
+    ASTRunStatus runStatus,
+  ) {
+    if (_isSuper) return null;
+    return _getVariableValue(parentContext).resolveMapped((obj) {
+      if (obj is! ASTClassInstance) return null;
+      var clazz = obj.clazz;
+      if (clazz is! ASTClassNormal || clazz.getField(name) == null) {
+        return null;
+      }
+      return clazz
+          .getInstanceFieldValue(
+            parentContext,
+            runStatus,
+            obj as ASTValue<VMObject>,
+            name,
+          )
+          .resolveMapped((v) => v is ASTValueFunction ? v : null);
+    });
+  }
+
+  FutureOr<ASTValue> _invokeFieldFunction(
+    VMContext parentContext,
+    ASTRunStatus runStatus,
+    ASTValueFunction fv,
+  ) {
+    return _resolveArgumentsValues(
+      parentContext,
+      runStatus,
+      arguments,
+    ).resolveMapped((argumentsValues) {
+      return _resolveNamedArgumentsValues(
+        parentContext,
+        runStatus,
+      ).resolveMapped((namedValues) {
+        var ret = fv.call(
+          parentContext,
+          positionalParameters: argumentsValues,
+          namedParameters: namedValues,
+        );
+        if (!hasChainFunctionInvocation) return ret;
+        return ret.resolveMapped(
+          (prev) => _callChainFunction(parentContext, runStatus, prev),
+        );
+      });
+    });
+  }
+
+  FutureOr<ASTValue> _invokeMethod(
+    VMContext parentContext,
+    ASTRunStatus runStatus,
+  ) {
     return _getFunction(parentContext).resolveMapped((f) {
       return _resolveArgumentsValues(
         parentContext,
@@ -4322,6 +4838,13 @@ class ASTExpressionObjectGetterAccess extends ASTExpressionGetterAccess
   }
 
   FutureOr<ASTValue> _getVariableValue(VMContext parentContext) {
+    // The receiver this run already evaluated (see [run]).
+    var evaluated = Zone.current[_receiverZoneKey];
+    if (evaluated is ASTValue) return evaluated;
+    return _evaluateReceiver(parentContext);
+  }
+
+  FutureOr<ASTValue> _evaluateReceiver(VMContext parentContext) {
     if (_isSuper) {
       var obj = parentContext.getClassInstance();
       if (obj == null) {
@@ -4334,18 +4857,48 @@ class ASTExpressionObjectGetterAccess extends ASTExpressionGetterAccess
     return variable.getValue(parentContext).resolveMapped(_asClassInstance);
   }
 
+  /// The zone key under which [run] hands the receiver it evaluated to the
+  /// steps that read it again (one key per access node).
+  final Object _receiverZoneKey = Object();
+
+  /// Whether reading the receiver runs code (`make().v`, `P(3).twice().x`),
+  /// so it must be evaluated only once per [run] — and never just to compute
+  /// a type. A plain name (`a.v`) is just looked up.
+  bool get _receiverRunsCode => !_isSuper && variable is ASTExpressionVariable;
+
+  /// [_receiverRunsCode], outside a [run] that already evaluated it.
+  bool get _receiverHasEffects =>
+      _receiverRunsCode && Zone.current[_receiverZoneKey] == null;
+
+  /// This access's type from the receiver's *static* type, for a receiver that
+  /// must not be evaluated just to type it ([_receiverHasEffects]).
+  FutureOr<ASTType> _staticAccessType(VMContext context) {
+    return variable.resolveType(context).resolveMapped((type) {
+      if (type is ASTTypeRecord) {
+        return _nullableIf(type.fieldType(name) ?? ASTTypeDynamic.instance);
+      }
+      ASTClass? clazz;
+      try {
+        clazz = type.getClass();
+      } catch (_) {
+        clazz = null;
+      }
+      if (clazz == null) return ASTTypeDynamic.instance;
+      var fieldType = clazz is ASTClassNormal
+          ? clazz.getField(name)?.type
+          : null;
+      if (fieldType != null) return _nullableIf(fieldType);
+      var getter = _resolveGetterOrExtension(this, clazz, name, context);
+      if (getter != null) return _nullableIf(getter.returnType);
+      return ASTTypeDynamic.instance;
+    });
+  }
+
   /// A collection keeps an instance's bare [VMObject] (`l[0]`), which has
   /// no class-instance behaviour of its own: wrap it back into its
   /// [ASTClassInstance], so `l[0].field` reads the field like `a.field`.
-  static ASTValue _asClassInstance(ASTValue value) {
-    if (value is VMObject) {
-      var clazz = value.type.getClass();
-      if (clazz is ASTClass<VMObject>) {
-        return ASTClassInstance<VMObject>(clazz, value);
-      }
-    }
-    return value;
-  }
+  static ASTValue _asClassInstance(ASTValue value) =>
+      ASTExpressionVariableEntryAccess._asInstanceValue(value);
 
   FutureOr<ASTClass> _getObjectClass(VMContext parentContext) {
     if (_isSuper) {
@@ -4465,6 +5018,8 @@ class ASTExpressionObjectGetterAccess extends ASTExpressionGetterAccess
       return super.resolveType(context);
     }
 
+    if (_receiverHasEffects) return _staticAccessType(context);
+
     return _getVariableValue(context).resolveMapped((obj) {
       // Null-aware access (`obj?.field`) on a `null` receiver evaluates to
       // `null`, and a `null` receiver has no class to resolve the getter
@@ -4525,6 +5080,8 @@ class ASTExpressionObjectGetterAccess extends ASTExpressionGetterAccess
     var staticFieldType = _staticFieldClass()?.getField(name)?.type;
     if (staticFieldType != null) return staticFieldType;
 
+    if (_receiverHasEffects) return _staticAccessType(context);
+
     return _getVariableValue(context).resolveMapped((obj) {
       // See `resolveType`: a short-circuited null-aware access has no receiver
       // class to resolve against.
@@ -4553,6 +5110,21 @@ class ASTExpressionObjectGetterAccess extends ASTExpressionGetterAccess
 
   @override
   FutureOr<ASTValue> run(VMContext parentContext, ASTRunStatus runStatus) {
+    // A receiver that runs code (`make().v`) is evaluated once, here; every
+    // later step reads that value instead of calling `make()` again. (A
+    // recursive run of this node evaluates its own.)
+    if (_receiverRunsCode) {
+      return _evaluateReceiver(parentContext).resolveMapped((obj) {
+        return runZoned(
+          () => _run(parentContext, runStatus),
+          zoneValues: {_receiverZoneKey: obj},
+        );
+      });
+    }
+    return _run(parentContext, runStatus);
+  }
+
+  FutureOr<ASTValue> _run(VMContext parentContext, ASTRunStatus runStatus) {
     var enumEntry = _resolveEnumEntry(parentContext, runStatus);
     if (enumEntry != null) {
       return enumEntry.resolveMapped(

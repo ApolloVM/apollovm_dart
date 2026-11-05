@@ -1,3 +1,115 @@
+## 2.36.0
+
+New Dart syntax, run by the interpreter and compiled to Wasm: labeled loops,
+collection `if` / `for` / spread, user operators, generic functions, `static`
+and top-level getters, mixins and member chains on calls and literals. The
+Wasm backend gains catches of what a called function throws, recursive local
+functions, lists of instances, `static` access from outside a class and number
+methods. Several interpreter bugs are fixed too.
+
+### Dart syntax
+
+- **Labeled loops.** `outer: for (…)` with `break outer;` / `continue outer;`,
+  from nested loops and from inside a `switch`. Generated for Dart, Java, Go,
+  JS/TS (`outer: for`) and Kotlin (`outer@ for`, `continue@outer`). C#, Lua and
+  Python refuse them with `UnsupportedSyntaxError`, and Go and Kotlin refuse a
+  labeled block (`b: { … break b; }`), which they can't express.
+- **Collection elements** in list and set literals: `if (c) a else b`,
+  `for (var i = 0; i < n; i++) i`, `for (var e in l) e`, `...l` and `...?l`,
+  nested in each other. Regenerated as Dart and kept by the binary format
+  (new tags 131–137). Other targets and Wasm refuse them.
+- **User operators.** `V operator +(V o)`, and the same for
+  `- * / ~/ % < > <= >= == & | ^ << >>`. They dispatch on the left operand's
+  class, and `!=` negates a user `==`. Dart output keeps them; JS/TS/Kotlin and
+  the other targets refuse them instead of emitting invalid code.
+- **Generic functions and methods**: `T first<T>(List<T> l)`, called as
+  `first<int>(l)` or `first(l)`. Erased at run time, like generic classes.
+- **`static` and top-level getters**: `static int get three => 3;` (read as
+  `C.three`) and `int get two => 2;`. Dart output keeps `static`; Kotlin
+  refuses a `static` getter.
+- **Mixins.** `mixin M { … }` and `class A with M1, M2` (after an `extends`,
+  too). The mixin's fields, methods and accessors are copied into each class
+  that doesn't declare them; a later mixin wins over an earlier one.
+- **Member chains on calls and literals**: `P(3).twice().x`, `P.zero().x`,
+  `g()?.x`, `[1, 2].length`, `{1, 2}.length`, `'abc'.length`.
+- **Parser fix.** A declaration such as `List<String> log` is first tried as a
+  generic function named `List`. That attempt erased `String` as a type, so a
+  later `String f()` parsed with a `dynamic` return.
+
+### Wasm
+
+- **A `catch` of what a called function throws.** An untyped `catch (e)`
+  whose `try` calls a throwing function binds the value boxed from its
+  runtime tag. It used to bind the raw value as an `int`, printing a String's
+  pointer (e.g. `24`).
+  - `return 'ok ${g(a)}'` inside a `try` compiles. The value is computed
+    first, and the handler runs if the call threw.
+  - `var r = g(a);` inside a `try` no longer produces an invalid module.
+- **A recursive local function** passes its environment to itself. The module
+  failed to validate.
+- **Lists of class instances** (`[P(1), P(2)]`, `List<Shape>`, `m.add(P(2))`).
+  A `var` list or loop variable takes the element type, and printing uses a
+  user `toString()`.
+- **`static` members from outside the class**: `C.n`, `C.n = v`, `C.n += v`,
+  `C.m(args)` and `static` getters. A `static` field initializer that isn't a
+  literal number runs in `__init_globals`; before, the field started at 0.
+- **Number methods**: `toString`, `toDouble`, `toInt`, `round`, `floor`,
+  `ceil`, `truncate`, `abs`, `clamp`, `isEven`, `isOdd`, `isNegative`,
+  `int.parse`. Call chains (`a.abs().toString()`, `(a - b).abs()`) used to be
+  ignored after the first call.
+- **New syntax compiled:** labeled `break` / `continue`, user operators, mixins,
+  top-level getters and member chains. A user operator that returns `bool`
+  works as a condition.
+- **Invalid modules fixed:**
+  - two `for (var i …)` loops in one function declared an extra local, which
+    shifted the types of the scratch locals;
+  - a `var` typed `dynamic` in one loop and as a class in another clashed.
+- **Wrong results fixed:**
+  - nested `for-each` loops shared their iteration locals, so after the inner
+    loop the outer one resumed over the inner list;
+  - `n.clamp(0, m.clamp(1, 5))` clamped `m` instead of `n`;
+  - a closure calling a *different* capturing local function passed its own
+    environment.
+- A chain of user operators (`a + b + c + …`) compiles each operand once; it
+  used to compile them again at every level. `a == null` doesn't call a user
+  `operator ==`.
+
+### Interpreter
+
+- **Core methods.**
+  - List: `join`, `sort` (with a comparator), `map`, `where`, `any`, `every`,
+    `fold`, `reduce`, `forEach`, `toList`, `reversed`.
+  - Map: `forEach`, `putIfAbsent`, `entries` (each entry reads `e.key` /
+    `e.value`).
+  - int: `isEven`, `isOdd`, `isNegative`.
+- **A user `toString()`** is used by string interpolation and `print`, also for
+  instances inside a List, Set or Map, and through `print('$l')`.
+- **A `double` prints as one** (`5.0`) in the browser too, where JavaScript
+  formats a whole double without its `.0`.
+- **Left-to-right evaluation.**
+  - `a() + b()` ran `b()` first.
+  - `x += e` reads `x` before `e`.
+  - Interpolation parts run in order: `'${c.b()} ${c.count}'` read `count`
+    before `b()`.
+- **`static` fields.** Concurrent first reads of a class's `static` fields no
+  longer see a half-initialized store (`'${C.n} ${C.s}'` read `null`). A
+  `static` initializer can read another `static` of its class
+  (`static int b = C.a + 1;`, or a `static final C instance = C();` whose
+  constructor updates `C.count`).
+- **A receiver runs once.** `make().bump()`, `make().bump().v` and
+  `make().g` used to call `make()` two to seven times.
+- **`p == null`** is `false` without calling a user `operator ==`.
+- **Spreading a `Map`** (`{...m}`) is refused: map literals don't take spreads
+  yet, so `{...m}` silently built a `Set` of entries.
+- **Other fixes:**
+  - `s += '…$x'` on a `String`, and compound assignment with a `dynamic`
+    operand.
+  - A `dynamic` / `var` value keeps its class instance: a `for (var p in l)`
+    over `List<P>` lost `p`'s class.
+  - `h.fn(4)` calls a function stored in the field `fn`.
+  - `try { return g(); } catch …` and `try { return 'ok ${g()}'; } catch …`
+    catch what `g()` throws.
+
 ## 2.35.0
 
 The Wasm backend now compiles every Dart example of the web playground:

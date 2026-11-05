@@ -156,6 +156,15 @@ class ASTNodeTag {
   // Records (2.34.0).
   static const int expressionRecordLiteral = 130;
 
+  // Labels, and collection `if` / `for` / spread elements (2.35.0).
+  static const int statementLabeled = 131;
+  static const int statementBreakLabeled = 132;
+  static const int statementContinueLabeled = 133;
+  static const int collectionSpread = 134;
+  static const int collectionIf = 135;
+  static const int collectionForIn = 136;
+  static const int collectionFor = 137;
+
   /// Tags that once existed and must never be handed out again.
   ///
   /// Empty today. When a node kind is removed, its number moves here rather

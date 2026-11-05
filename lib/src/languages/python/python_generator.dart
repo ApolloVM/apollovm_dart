@@ -23,6 +23,10 @@ class ApolloCodeGeneratorPython extends ApolloCodeGenerator {
   ApolloCodeGeneratorPython(ApolloSourceCodeStorage codeStorage)
     : super('python', codeStorage);
 
+  /// Python has no labeled loops.
+  @override
+  bool get supportsLabels => false;
+
   /// The `isinstance` class (or tuple of classes) for [type].
   String? _isinstanceTarget(ASTType type) {
     if (type.nullable) return null;

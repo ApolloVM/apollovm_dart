@@ -8,8 +8,8 @@ The feature list follows the official
 version by version, plus a second table for core constructs that predate the
 versioned evolution list (Dart 1.x / 2.0 baseline).
 
-- **Measured against:** ApolloVM `2.34.0` (`lib/src/languages/dart/`), Dart SDK `3.13.5`.
-- **Date:** 2026-11-04 (the records, top-level variable, constructor, subtyping, type-test and getter rows; the rest was last probed on 2026-09-09 against `2.31.0`).
+- **Measured against:** ApolloVM `2.36.0` (`lib/src/languages/dart/`), Dart SDK `3.13.5`.
+- **Date:** 2026-11-04 (the collection element, mixin, operator, label, generic method, accessor, records, top-level variable, constructor, subtyping, type-test and getter rows; the rest was last probed on 2026-09-09 against `2.31.0`).
 - **Method:** every row was probed by loading a minimal source unit through
   `ApolloVM.loadCodeUnit('dart', …)` and, when it parsed, executing it with the
   Dart runner — so a ✅ means *parsed and ran*, not "the grammar mentions it".
@@ -29,9 +29,9 @@ that version, or a static-analysis-only change).
 | 2.0  | Sound type system (subtyping) | ⚠️ | Runtime type checks follow the class hierarchy: a subclass or implementer goes in a variable, parameter, return value or field of its supertype (`A a = B();`), and a supertype is rejected in a subtype slot. What's missing is the *static* side: there is no compile-time subtype checker, and type arguments aren't compared across a hierarchy (generics are erased). |
 | 2.1  | `int` literal where a `double` is expected | ✅ | `double d = 1;` runs. |
 | 2.2  | Set literals (`{1, 2}`) | ✅ | `{1, 2}`, `<T>{}` and `Set<T>` as a type, with `length` / `contains` / `add` / `remove` / `for-in`; a bare `{}` stays an empty map. Generated for every target (Go and Lua through their idioms); compiled to Wasm (since 2.35.0) with distinct elements, `length` / `isEmpty` / `isNotEmpty` and printing. |
-| 2.3  | Spread operator (`...`, `...?`) | ❌ | Not parsed in list or map literals. |
-| 2.3  | Collection `if` | ❌ | `[1, if (c) 2]` does not parse. |
-| 2.3  | Collection `for` | ❌ | `[for (var e in l) e]` does not parse. |
+| 2.3  | Spread operator (`...`, `...?`) | ⚠️ | In list and set literals (since 2.36.0), nested in `if`/`for` elements too; regenerated as Dart and kept by the binary format. Not in map literals. Other targets and Wasm refuse it with an `UnsupportedSyntaxError`. |
+| 2.3  | Collection `if` | ⚠️ | `[1, if (c) 2 else 3]` in list and set literals (since 2.36.0); same scope as the spread row. |
+| 2.3  | Collection `for` | ⚠️ | `[for (var i = 0; i < n; i++) i]` and `[for (var e in l) e]` in list and set literals (since 2.36.0); same scope as the spread row. |
 | 2.4  | Covariance of type variables in super-interfaces | ➖ | Static-checking rule; ApolloVM has no static subtype checker. The `covariant` modifier itself is **not parsed** (see table 2). |
 | 2.5  | `dart:ffi` | ➖ | Library, not language — and out of scope for a sandboxed VM. |
 | 2.6  | `Null` / `FutureOr<T>` subtype rule | ➖ | Static-checking rule. |
@@ -83,22 +83,22 @@ above, but they are the largest part of the gap.
 | Redirecting constructors (`A.zero() : this(0)`) | ✅ | `this(…)` and `this.named(…)`; the target runs in full — formals, initializer list and body — on the same instance. Redirecting to a factory is a runtime error. |
 | `super(…)` constructor calls | ✅ | An explicit `: super(…)` / `: super.named(…)` runs the superclass constructor in full, body included, before the subclass body, through any depth; super parameters are passed along. Without one, the implicit `super()` is made — from a declared constructor and from the default one. The rule is per language (the AST records the language it was parsed from): Java and C# make the same implicit call, while JS/TS/Python inherit a parent constructor instead (see the README, footnote 13). |
 | `const` constructors / canonicalization | ⚠️ | `const` is parsed and discarded; `const A(1)` builds an ordinary instance, with no compile-time constant evaluation or identity canonicalization. |
-| Mixins (`mixin M { … }`, `class A with M`) | ❌ | Neither the declaration nor the `with` clause parses. |
-| Operator overloading (`A operator +(A o)`) | ❌ | The `operator` token exists in the lexer but is unused. |
+| Mixins (`mixin M { … }`, `class A with M`) | ⚠️ | Since 2.36.0: `mixin M { … }` and `with M1, M2` (after an `extends`, too). The mixin's fields, methods and accessors are copied into the class, which wins over them; later mixins win over earlier ones. The mixin must be declared in the same module; `mixin … on T` is parsed but not checked, and `super` calls into a mixin are not modelled. |
+| Operator overloading (`A operator +(A o)`) | ⚠️ | Since 2.36.0, the binary operators `+ - * / ~/ % < > <= >= == & \| ^ << >>` (`!=` negates a user `==`); an operator on an instance dispatches to its class. Dart and Wasm output keep them; other targets refuse with an `UnsupportedSyntaxError`. `[]`, `[]=`, unary `-` and `~` are not parsed. |
 | `is` / `is!` type tests | ✅ | At Dart's relational precedence (`a + b is int`, `x is A && y`, and `x is int ? a : b` stays a conditional). A subclass or implementer passes, `null` passes only a nullable type, an `int` is not a `double`. Generated as each target's idiom (README, footnote 21). Flow-based type promotion isn't modelled, but none is needed at run time: `if (a is B) a.onlyB()` dispatches on the runtime class. |
 | `as` casts | ✅ | Returns the value unchanged when it is an instance, otherwise throws `ApolloVMCastException`. |
 | Generators: `sync*` / `async*`, `yield`, `yield*` | ❌ | Only `async` functions are parsed; there is no `Stream`/`Iterable` generator support. |
 | `await for` (async for-each) | ❌ | Does not parse. |
-| Statement labels, labeled `break`/`continue`, `continue <label>` in `switch` | ❌ | `break`/`continue` are unlabeled only. |
+| Statement labels, labeled `break`/`continue`, `continue <label>` in `switch` | ⚠️ | Since 2.36.0: labeled loops with `break label;` / `continue label;`, from nested loops and from inside a `switch`; generated for Dart, Java, JS/TS, Kotlin, Go and Wasm (Python, Lua and C# refuse). `continue <label>` to a `switch` case label is not supported. |
 | `covariant` parameters | ❌ | Does not parse. |
 | `external` declarations | ❌ | Does not parse. |
 | Hex / binary integer literals (`0xFF`) | ❌ | See the 3.6 row. |
 | Symbol literals (`#foo`) | ❌ | Does not parse. |
-| Generic methods / generic functions (`T first<T>(List<T> l)`) | ❌ | Type parameters are parsed on **classes** only. |
+| Generic methods / generic functions (`T first<T>(List<T> l)`) | ✅ | Since 2.36.0, on top-level functions and methods, with explicit (`first<int>(l)`) or omitted type arguments. Like class generics they are erased at run time. |
 | Old-style function typedefs (`typedef int F(int a);`) | ❌ | Only the `typedef Name = Type;` form parses (see the 2.13 row). |
 | `library` / `part` / `part of` directives | ❌ | Only `import` and `export` (with `show` / `hide` / `as`) are directives. |
 | Top-level variables | ⚠️ | Read and written from any function or method, from a class-method entry point, and across `import`. Names resolve lexically (a function never sees its caller's locals). Initialization is eager and in order, not lazy: an initializer reading a variable declared after it fails. |
-| Top-level getters/setters, `static` getters/setters | ❌ | Accessors are parsed on class and extension bodies only. |
+| Top-level getters/setters, `static` getters/setters | ⚠️ | Since 2.36.0: top-level getters (`int get two => 2;`) and `static` getters (`C.three`), also compiled to Wasm. Top-level and `static` *setters* are not parsed yet. |
 | Unqualified getter read inside a class (`return value;`) | ✅ | Own, inherited and extension getters; dispatches on the receiver like `this.value`; a local or parameter of the same name shadows it. |
 | Function tear-offs (`var f = g;`) | ❌ | A top-level function is not a value: `Can't find variable: 'g'`. |
 | Callable objects (`class A { call(…) }`, then `a(1)`) | ❌ | The declaration parses; invoking the instance does not resolve. |
@@ -122,8 +122,10 @@ getters and setters (including **bare getter reads** inside a member), closures
 and `Function`-typed parameters, `async` / `await`,
 cascades, `try` / `on` / `catch` / `finally` / `throw` / `rethrow`, `assert`,
 all control flow (`if`, `for`, `for-in`, `while`, `do-while`, `switch` on
-`int` / `String`, `break`, `continue`), ternary and null-aware operators,
-list, map & **set** literals (including `const` ones and nested generic types),
+`int` / `String`, `break`, `continue`, **labels**), ternary and null-aware
+operators, **user operators**, **generic functions and methods**, **mixins**,
+**top-level and `static` getters**, list, map & **set** literals (including
+`const` ones, nested generic types and **collection `if` / `for` / spread**),
 string interpolation, raw and triple-quoted strings, `final` / `const` /
 `var` locals, **top-level variables** (lexically scoped, across `import`),
 and **records** (literals, types, `r.$1` / `r.name`, structural equality).

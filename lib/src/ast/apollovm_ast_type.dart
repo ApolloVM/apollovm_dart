@@ -1030,6 +1030,9 @@ class ASTTypeVar extends ASTType<dynamic> {
     // `var`/`final` variable so they remain callable.
     if (v is ASTValueFunction) return v;
 
+    // A class instance keeps its identity and class (see `ASTTypeDynamic`).
+    if (v is ASTClassInstance || v is VMObject) return v as ASTValue;
+
     if (v is ASTValue<dynamic> && v.type == this) {
       return v;
     }
@@ -1074,6 +1077,10 @@ class ASTTypeDynamic extends ASTType<dynamic> {
     // Preserve function values (anonymous functions / closures) so they remain
     // callable when held in a `dynamic`/untyped variable or parameter.
     if (v is ASTValueFunction) return v;
+
+    // A class instance keeps its identity and class: its payload is only the
+    // instance's field storage.
+    if (v is ASTClassInstance || v is VMObject) return v as ASTValue;
 
     if (v is ASTValue && v.type == this) {
       return v;

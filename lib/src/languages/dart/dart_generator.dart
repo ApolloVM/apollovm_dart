@@ -6,6 +6,7 @@ import 'package:collection/collection.dart';
 
 import '../../apollovm_code_generator.dart';
 import '../../apollovm_code_storage.dart';
+import '../../apollovm_parser.dart';
 import '../../ast/apollovm_ast_expression.dart';
 import '../../ast/apollovm_ast_statement.dart';
 import '../../ast/apollovm_ast_toplevel.dart';
@@ -20,6 +21,63 @@ class ApolloCodeGeneratorDart extends ApolloCodeGenerator {
 
   @override
   bool get supportsConstructorForms => true;
+
+  @override
+  bool get supportsOperatorMethods => true;
+
+  @override
+  StringBuffer generateASTCollectionElement(
+    ASTCollectionElement element, {
+    StringBuffer? out,
+    String indent = '',
+    bool headIndented = true,
+  }) {
+    out ??= newOutput();
+    if (headIndented) out.write(indent);
+
+    void expr(ASTExpression e) =>
+        generateASTExpression(e, out: out, indent: indent, headIndented: false);
+
+    switch (element) {
+      case ASTCollectionSpread():
+        out.write(element.nullAware ? '...?' : '...');
+        expr(element.expression);
+      case ASTCollectionIf():
+        out.write('if (');
+        expr(element.condition);
+        out.write(') ');
+        expr(element.thenElement);
+        var elseElement = element.elseElement;
+        if (elseElement != null) {
+          out.write(' else ');
+          expr(elseElement);
+        }
+      case ASTCollectionForIn():
+        out.write('for (');
+        out.write(generateASTType(element.variableType));
+        out.write(' ${element.variableName} in ');
+        expr(element.iterable);
+        out.write(') ');
+        expr(element.element);
+      case ASTCollectionFor():
+        out.write('for (');
+        generateASTStatement(
+          element.initStatement,
+          out: out,
+          indent: indent,
+          headIndented: false,
+        );
+        out.write(' ');
+        expr(element.condition);
+        out.write('; ');
+        expr(element.update);
+        out.write(') ');
+        expr(element.element);
+      default:
+        throw UnsupportedSyntaxError("Can't generate `$element`.");
+    }
+    return out;
+  }
 
   @override
   String typeTestCode(String operand, ASTType type, {required bool negated}) =>
@@ -239,6 +297,7 @@ class ApolloCodeGeneratorDart extends ApolloCodeGenerator {
     );
 
     out.write(indent);
+    if (getter.modifiers.isStatic) out.write('static ');
     out.write(generateASTType(getter.returnType));
     out.write(' get ');
     out.write(getter.name);

@@ -22,6 +22,10 @@ class ApolloCodeGeneratorLua extends ApolloCodeGenerator {
   ApolloCodeGeneratorLua(ApolloSourceCodeStorage codeStorage)
     : super('lua', codeStorage);
 
+  /// Lua has no labeled `break` (only `goto`), nor `continue`.
+  @override
+  bool get supportsLabels => false;
+
   /// Field names of the class currently being generated (for `self.x`).
   Set<String> _currentClassFields = const {};
 
