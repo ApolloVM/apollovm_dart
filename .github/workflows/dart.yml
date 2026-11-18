@@ -13,10 +13,14 @@ jobs:
       - uses: actions/checkout@v6
       - uses: dart-lang/setup-dart@v1
         with:
-          # Pinned: on Dart 3.14.1 the `wasm_run` build hook runs but leaves no
-          # native library, so every native-Wasm test fails with "`WasmRuntime`
-          # not supported on this platform". Unpin once `wasm_run` works there.
-          sdk: 3.14.0
+          # Pinned below 3.14: since Dart 3.14.0, `dart run`/`dart test` bundle
+          # JIT code assets into a per-run temp dir (see
+          # `.dart_tool/native_assets.yaml`) instead of `.dart_tool/lib/`.
+          # `wasm_run` 0.2.0+2 only looks in `.dart_tool/lib/`, so every
+          # native-Wasm test fails with "`WasmRuntime` not supported on this
+          # platform". Unpin once `wasm_run` resolves the library by asset id
+          # (juancastillo0/wasm_run#77) or `apollovm_wasm` locates it itself.
+          sdk: 3.13.7
       - name: Dart version
         run: |
           dart --version
@@ -47,10 +51,14 @@ jobs:
       - uses: actions/checkout@v6
       - uses: dart-lang/setup-dart@v1
         with:
-          # Pinned: on Dart 3.14.1 the `wasm_run` build hook runs but leaves no
-          # native library, so every native-Wasm test fails with "`WasmRuntime`
-          # not supported on this platform". Unpin once `wasm_run` works there.
-          sdk: 3.14.0
+          # Pinned below 3.14: since Dart 3.14.0, `dart run`/`dart test` bundle
+          # JIT code assets into a per-run temp dir (see
+          # `.dart_tool/native_assets.yaml`) instead of `.dart_tool/lib/`.
+          # `wasm_run` 0.2.0+2 only looks in `.dart_tool/lib/`, so every
+          # native-Wasm test fails with "`WasmRuntime` not supported on this
+          # platform". Unpin once `wasm_run` resolves the library by asset id
+          # (juancastillo0/wasm_run#77) or `apollovm_wasm` locates it itself.
+          sdk: 3.13.7
       - name: Dart version
         run: |
           dart --version
@@ -85,10 +93,14 @@ jobs:
       - uses: actions/checkout@v3
       - uses: dart-lang/setup-dart@v1
         with:
-          # Pinned: on Dart 3.14.1 the `wasm_run` build hook runs but leaves no
-          # native library, so every native-Wasm test fails with "`WasmRuntime`
-          # not supported on this platform". Unpin once `wasm_run` works there.
-          sdk: 3.14.0
+          # Pinned below 3.14: since Dart 3.14.0, `dart run`/`dart test` bundle
+          # JIT code assets into a per-run temp dir (see
+          # `.dart_tool/native_assets.yaml`) instead of `.dart_tool/lib/`.
+          # `wasm_run` 0.2.0+2 only looks in `.dart_tool/lib/`, so every
+          # native-Wasm test fails with "`WasmRuntime` not supported on this
+          # platform". Unpin once `wasm_run` resolves the library by asset id
+          # (juancastillo0/wasm_run#77) or `apollovm_wasm` locates it itself.
+          sdk: 3.13.7
       - name: Dart version
         run: |
           dart --version
@@ -108,10 +120,14 @@ jobs:
       - uses: actions/checkout@v3
       - uses: dart-lang/setup-dart@v1
         with:
-          # Pinned: on Dart 3.14.1 the `wasm_run` build hook runs but leaves no
-          # native library, so every native-Wasm test fails with "`WasmRuntime`
-          # not supported on this platform". Unpin once `wasm_run` works there.
-          sdk: 3.14.0
+          # Pinned below 3.14: since Dart 3.14.0, `dart run`/`dart test` bundle
+          # JIT code assets into a per-run temp dir (see
+          # `.dart_tool/native_assets.yaml`) instead of `.dart_tool/lib/`.
+          # `wasm_run` 0.2.0+2 only looks in `.dart_tool/lib/`, so every
+          # native-Wasm test fails with "`WasmRuntime` not supported on this
+          # platform". Unpin once `wasm_run` resolves the library by asset id
+          # (juancastillo0/wasm_run#77) or `apollovm_wasm` locates it itself.
+          sdk: 3.13.7
       - name: Dart version
         run: |
           dart --version
@@ -140,10 +156,14 @@ jobs:
       - uses: actions/checkout@v6
       - uses: dart-lang/setup-dart@v1
         with:
-          # Pinned: on Dart 3.14.1 the `wasm_run` build hook runs but leaves no
-          # native library, so every native-Wasm test fails with "`WasmRuntime`
-          # not supported on this platform". Unpin once `wasm_run` works there.
-          sdk: 3.14.0
+          # Pinned below 3.14: since Dart 3.14.0, `dart run`/`dart test` bundle
+          # JIT code assets into a per-run temp dir (see
+          # `.dart_tool/native_assets.yaml`) instead of `.dart_tool/lib/`.
+          # `wasm_run` 0.2.0+2 only looks in `.dart_tool/lib/`, so every
+          # native-Wasm test fails with "`WasmRuntime` not supported on this
+          # platform". Unpin once `wasm_run` resolves the library by asset id
+          # (juancastillo0/wasm_run#77) or `apollovm_wasm` locates it itself.
+          sdk: 3.13.7
       - name: Dart version
         run: |
           dart --version
