@@ -12,6 +12,11 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - uses: dart-lang/setup-dart@v1
+        with:
+          # Pinned: on Dart 3.14.1 the `wasm_run` build hook runs but leaves no
+          # native library, so every native-Wasm test fails with "`WasmRuntime`
+          # not supported on this platform". Unpin once `wasm_run` works there.
+          sdk: 3.14.0
       - name: Dart version
         run: |
           dart --version
@@ -41,6 +46,11 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - uses: dart-lang/setup-dart@v1
+        with:
+          # Pinned: on Dart 3.14.1 the `wasm_run` build hook runs but leaves no
+          # native library, so every native-Wasm test fails with "`WasmRuntime`
+          # not supported on this platform". Unpin once `wasm_run` works there.
+          sdk: 3.14.0
       - name: Dart version
         run: |
           dart --version
@@ -74,6 +84,11 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - uses: dart-lang/setup-dart@v1
+        with:
+          # Pinned: on Dart 3.14.1 the `wasm_run` build hook runs but leaves no
+          # native library, so every native-Wasm test fails with "`WasmRuntime`
+          # not supported on this platform". Unpin once `wasm_run` works there.
+          sdk: 3.14.0
       - name: Dart version
         run: |
           dart --version
@@ -92,6 +107,11 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - uses: dart-lang/setup-dart@v1
+        with:
+          # Pinned: on Dart 3.14.1 the `wasm_run` build hook runs but leaves no
+          # native library, so every native-Wasm test fails with "`WasmRuntime`
+          # not supported on this platform". Unpin once `wasm_run` works there.
+          sdk: 3.14.0
       - name: Dart version
         run: |
           dart --version
@@ -119,6 +139,11 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - uses: dart-lang/setup-dart@v1
+        with:
+          # Pinned: on Dart 3.14.1 the `wasm_run` build hook runs but leaves no
+          # native library, so every native-Wasm test fails with "`WasmRuntime`
+          # not supported on this platform". Unpin once `wasm_run` works there.
+          sdk: 3.14.0
       - name: Dart version
         run: |
           dart --version
