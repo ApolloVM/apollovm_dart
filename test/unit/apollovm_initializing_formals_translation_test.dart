@@ -180,4 +180,151 @@ class Counter {
       );
     });
   });
+
+  group('Scope of an implicit field read', () {
+    // Each member reads the bare name `email` in a different scope: shadowed
+    // by a loop variable, a catch variable, or (not) by a local of a block
+    // that has already closed. `y` initializes from a field; `total` is
+    // static; `inherited` comes from the superclass.
+    const scopeSource = r'''
+class Base {
+  int inherited = 1;
+}
+
+class Box extends Base {
+  String email = 'field';
+  int x = 2;
+  late int y = x * 2;
+  static int total = 0;
+
+  String loop(List<String> items) {
+    var s = '';
+    for (var email in items) {
+      s = s + email;
+    }
+    return s + email;
+  }
+
+  String caught() {
+    try {
+      throw 'boom';
+    } catch (email) {
+      return 'caught $email';
+    }
+  }
+
+  String closedBlock(bool c) {
+    if (c) {
+      var email = 'inner';
+      print(email);
+    }
+    return email;
+  }
+
+  int counter() {
+    for (var i = 0; i < 2; i++) {
+      x = x + i;
+    }
+    total = total + 1;
+    return total + inherited;
+  }
+}
+''';
+
+    late String js, python, go, lua;
+
+    setUpAll(() async {
+      var vm = await _load('dart', scopeSource);
+      js = await _generate(vm, 'javascript');
+      python = await _generate(vm, 'python');
+      go = await _generate(vm, 'go');
+      lua = await _generate(vm, 'lua');
+    });
+
+    test('a for-in variable shadows the field inside the loop only', () {
+      expect(
+        js,
+        contains('      s = s + email;\n    }\n    return s + this.email;'),
+      );
+      expect(
+        python,
+        contains('            s = s + email\n        return s + self.email'),
+      );
+      expect(go, contains('    s = s + email\n  }\n  return s + o.email'));
+      expect(
+        lua,
+        contains('    s = s .. email\n  end\n  return s .. self.email'),
+      );
+    });
+
+    test('a catch variable shadows the field', () {
+      expect(js, contains(r'return `caught ${email}`;'));
+      expect(python, contains("return f'caught {email}'"));
+    });
+
+    test('a local of a closed block does not shadow a later read', () {
+      // `return this.email;` is the whole statement only in `closedBlock`
+      // (`loop` returns `s + this.email`).
+      expect(js, contains('return this.email;'));
+      expect(js, contains("let email = 'inner';"));
+      expect(
+        python,
+        contains('            print(email)\n        return self.email'),
+      );
+    });
+
+    test('a for-loop body reads and writes the field', () {
+      expect(js, contains('this.x = this.x + i;'));
+      expect(python, contains('self.x = self.x + i'));
+    });
+
+    test('an inherited field is qualified', () {
+      expect(js, contains('this.inherited'));
+      expect(python, contains('self.inherited'));
+    });
+
+    test(
+      'a field initializer is qualified only where the receiver is bound',
+      () {
+        expect(js, contains('y = this.x * 2;'));
+        expect(go, contains('o.y = o.x * 2'));
+        // A Python class-body attribute has no `self`.
+        expect(python, contains('y: int = x * 2'));
+      },
+    );
+
+    test('a static field stays a struct/table member in Go and Lua', () {
+      expect(go, contains('o.total = o.total + 1'));
+      expect(lua, contains('self.total = self.total + 1'));
+      // In JavaScript and Python it is not read through the instance.
+      expect(js, isNot(contains('this.total')));
+      expect(python, isNot(contains('self.total')));
+    });
+  });
+
+  group('Initializing formals in Java and C#', () {
+    const classSource = r'''
+class User {
+  final String email;
+  User(this.email);
+}
+''';
+
+    for (var language in ['java11', 'csharp']) {
+      test('$language writes a typed parameter and an assignment', () async {
+        var vm = await _load('dart', classSource);
+        var code = await _generate(vm, language);
+        expect(
+          code,
+          contains('User(String email) {\n    this.email = email;\n'),
+        );
+        expect(code, isNot(contains('this.email)')));
+
+        // ApolloVM reads the generated constructor back.
+        var reloaded = await _load(language, code);
+        var user = reloaded.getLanguageNamespaces(language).getClass('User');
+        expect(user?.constructors, isNotEmpty);
+      });
+    }
+  });
 }

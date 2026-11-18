@@ -1290,32 +1290,26 @@ class ApolloCodeGeneratorLua extends ApolloCodeGenerator {
 
   /// The Lua expression for the variable interpolated by [value] (`$email`).
   ///
-  /// A field of the current class becomes `self.email`, exactly as a plain
-  /// read does (see [generateASTScopeVariable]). The field check is made from
-  /// [value], not from the variable, because an interpolated variable is not
-  /// linked into the tree itself. Anything else (`$this` → `self`) goes
-  /// through [generateASTVariable]. Used by both string interpolation paths
+  /// Written through [generateASTVariable], as a plain read of the variable
+  /// is: a field of the current class becomes `self.email` (see
+  /// [generateASTScopeVariable]). Used by both string interpolation paths
   /// ([generateASTValueStringVariable] and [_valuePart]).
-  String _interpolatedVariableCode(ASTValueStringVariable value) {
-    var variable = value.variable;
-    if (variable is ASTScopeVariable && !variable.isTypeIdentifier) {
-      var name = variable.name;
-      return _isSelfField(value, name) ? 'self.$name' : name;
-    }
-    return generateASTVariable(variable, headIndented: false).toString();
-  }
+  String _interpolatedVariableCode(ASTValueStringVariable value) =>
+      generateASTVariable(value.variable, headIndented: false).toString();
 
   /// Whether the bare [name], read at [scope], is a field of the current
   /// class, to be written `self.name`.
   ///
   /// When [scope] is linked into the tree, the shared scope resolution decides
-  /// ([resolveImplicitInstanceField]), so a local or parameter that shadows
-  /// the field is left alone. A node the parser never linked has no scope to
-  /// walk, so it falls back to the class's field names, which is what this
-  /// generator used before.
+  /// ([resolveImplicitInstanceField]), so a local, loop or catch variable, or
+  /// parameter that shadows the field is left alone. Static fields count:
+  /// this generator emits them in the class table, read through `self`. A
+  /// node the parser never linked has no scope to walk, so it falls back to
+  /// the class's field names, which is what this generator used before.
   bool _isSelfField(ASTNode scope, String name) {
     if (scope.parentNode != null) {
-      return resolveImplicitInstanceField(scope, name) != null;
+      return resolveImplicitInstanceField(scope, name, includeStatic: true) !=
+          null;
     }
     return _currentClassFields.contains(name);
   }

@@ -1868,33 +1868,32 @@ class ApolloCodeGeneratorGo extends ApolloCodeGenerator {
 
   /// The Go expression for the variable interpolated by [value] (`$email`).
   ///
-  /// Written as a plain read of the variable would be: a field of the current
-  /// struct becomes `o.email`, and the name is mangled like its declaration
-  /// ([_goIdent]). The field check is made from [value], not from the
-  /// variable, because an interpolated variable is not linked into the tree
-  /// itself. Anything else (`$this` → the receiver `o`) goes through
-  /// [generateASTVariable]. Used by both string interpolation paths
+  /// Written through [generateASTVariable], as a plain read of the variable
+  /// is: a field of the current struct becomes `o.email`, `$this` the
+  /// receiver `o`, and the name is mangled like its declaration
+  /// ([_goIdent]). Used by both string interpolation paths
   /// ([generateASTValueStringVariable] and the concatenation parts).
-  String _interpolatedVariableCode(ASTValueStringVariable value) {
-    var variable = value.variable;
-    if (variable is ASTScopeVariable && !variable.isTypeIdentifier) {
-      var name = _goIdent(variable.name);
-      return _isReceiverField(value, variable.name) ? '$_receiver.$name' : name;
-    }
-    return generateASTVariable(variable, headIndented: false).toString();
-  }
+  String _interpolatedVariableCode(ASTValueStringVariable value) =>
+      generateASTVariable(value.variable, headIndented: false).toString();
+
+  /// The factory `NewX` evaluates field initializers with `o` already bound.
+  @override
+  bool get receiverBoundInFieldInitializers => true;
 
   /// Whether the bare [name], read at [scope], is a field of the current
   /// struct, to be written `o.name`.
   ///
   /// When [scope] is linked into the tree, the shared scope resolution decides
-  /// ([resolveImplicitInstanceField]), so a local or parameter that shadows
-  /// the field is left alone. A node the parser never linked has no scope to
-  /// walk, so it falls back to the struct's field names minus the current
-  /// member's parameters, which is what this generator used before.
+  /// ([resolveImplicitInstanceField]), so a local, loop or catch variable, or
+  /// parameter that shadows the field is left alone. Static fields count:
+  /// this generator emits them as struct fields. A node the parser never
+  /// linked has no scope to walk, so it falls back to the struct's field
+  /// names minus the current member's parameters, which is what this
+  /// generator used before.
   bool _isReceiverField(ASTNode scope, String name) {
     if (scope.parentNode != null) {
-      return resolveImplicitInstanceField(scope, name) != null;
+      return resolveImplicitInstanceField(scope, name, includeStatic: true) !=
+          null;
     }
     return _currentClassFields.contains(name) &&
         !_currentMemberParameters.contains(name);

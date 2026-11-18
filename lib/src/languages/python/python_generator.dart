@@ -588,14 +588,13 @@ class ApolloCodeGeneratorPython extends ApolloCodeGenerator {
         out.write(p.name);
       }
       out.write('):\n');
-      var assigned = false;
-      for (var p in params) {
-        if (p.thisParameter) {
-          out.write('$bodyIndent${_tab}self.${p.fieldName} = ${p.name}\n');
-          assigned = true;
-        }
-      }
-      if (!assigned) {
+      writeInitializingFormalAssignments(
+        ctor,
+        out,
+        receiver: 'self',
+        indent: '$bodyIndent$_tab',
+      );
+      if (initializingFormalsOf(ctor).isEmpty) {
         out.write('$bodyIndent${_tab}pass\n');
       }
       out.write('\n');

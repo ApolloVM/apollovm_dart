@@ -24,6 +24,10 @@ class ApolloCodeGeneratorJavaScript extends ApolloCodeGenerator {
   @override
   String? get implicitFieldReceiver => 'this';
 
+  /// A class field initializer evaluates with `this` bound to the instance.
+  @override
+  bool get receiverBoundInFieldInitializers => true;
+
   @override
   String? typeTestCode(String operand, ASTType type, {required bool negated}) =>
       jsTypeTest(operand, type, negated: negated);

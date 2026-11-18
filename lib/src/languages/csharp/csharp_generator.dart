@@ -360,11 +360,13 @@ class ApolloCodeGeneratorCSharp extends ApolloCodeGenerator {
         out.write(params[i].name);
       }
       out.write(') {\n');
-      for (var p in params) {
-        if (p.thisParameter) {
-          out.write('$i2  this.${p.fieldName} = ${p.name};\n');
-        }
-      }
+      writeInitializingFormalAssignments(
+        ctor,
+        out,
+        receiver: 'this',
+        indent: '$i2  ',
+        terminator: ';',
+      );
       out.write(generateASTBlock(ctor, indent: i2, withBrackets: false));
       out.write('$i2}\n\n');
     }
@@ -460,7 +462,17 @@ class ApolloCodeGeneratorCSharp extends ApolloCodeGenerator {
   }) {
     out ??= newOutput();
 
-    var blockCode = generateASTBlock(c, indent: indent, withBrackets: false);
+    // C# has no initializing formals: `User(this.email)` becomes a typed
+    // parameter plus `this.email = email;` ahead of the body.
+    var blockCode = newOutput();
+    writeInitializingFormalAssignments(
+      c,
+      blockCode,
+      receiver: 'this',
+      indent: '$indent  ',
+      terminator: ';',
+    );
+    blockCode.write(generateASTBlock(c, indent: indent, withBrackets: false));
 
     out.write(indent);
 
