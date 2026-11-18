@@ -1,3 +1,19 @@
+## 1.2.2
+
+- **Dart 3.14: the native library is found again.** Since Dart 3.14.0, `dart run` / `dart test`
+  no longer copy the `wasm_run` build hook's library into `.dart_tool/lib/`. They copy it into
+  a temp directory that lasts for the run and record it in `.dart_tool/native_assets.yaml`.
+  `wasm_run` 0.2.0+2 only looks in `.dart_tool/lib/`, so every call into this runtime failed:
+
+  ```
+  Bad state: Unable to locate the `wasm_run` dynamic library.
+  ```
+
+  The library is now looked up, after the existing locations, in the native-assets mapping
+  (the entry for `package:wasm_run/src/rust/frb_generated.io.dart` on this host), and then in
+  the hook's own output (`.dart_tool/hooks_runner/shared/wasm_run/build/*/`). Reported upstream
+  as juancastillo0/wasm_run#81.
+
 ## 1.2.1
 
 - `flutter_rust_bridge: '>=2.12.0 <2.13.0'` (new) — `wasm_run 0.2.0+2` ships Rust bindings

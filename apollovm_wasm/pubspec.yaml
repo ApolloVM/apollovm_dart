@@ -2,7 +2,7 @@ name: apollovm_wasm
 description: >-
   Native (Dart VM) WebAssembly execution for ApolloVM: the wasm_run-backed
   WasmRuntime, kept out of the core package so apollovm stays FFI-free.
-version: 1.2.1
+version: 1.2.2
 repository: https://github.com/ApolloVM/apollovm_dart
 issue_tracker: https://github.com/ApolloVM/apollovm_dart/issues
 
