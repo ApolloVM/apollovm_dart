@@ -1,3 +1,20 @@
+## 2.36.2
+
+- **A failed constructor call now says why.** `User("foo@mail.com")` against
+  a constructor that doesn't match used to fail with
+  `Can't find function "User" …`, as if there were no constructor. It now
+  reports the constructor that exists:
+  - When a parameter's type doesn't exist (often a typo in a field type behind
+    an initializing formal, `final Sring email; User(this.email);`), the
+    error names it, as Dart does: `Type 'Sring' not found: it is the type of
+    the parameter email of the constructor User(Sring email) (the type of the
+    field User.email) …`.
+  - Otherwise it shows the arguments and the declared constructor:
+    `No constructor of P matches the arguments {positionalTypes: [String]}:
+    declared P(int x).`
+
+  A call to a missing function that is not a class keeps the old message.
+
 ## 2.36.1
 
 Translation fixes for a Dart class whose constructor initializes its fields

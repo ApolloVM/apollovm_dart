@@ -3980,11 +3980,85 @@ class ASTExpressionLocalFunctionInvocation
 
     if (f == null) {
       throw ApolloVMRuntimeError(
-        'Can\'t find function "$name" with parameters signature: $fSignature > $arguments',
+        _constructorMismatchMessage(parentContext, fSignature) ??
+            'Can\'t find function "$name" with parameters signature: $fSignature > $arguments',
       );
     }
 
     return f;
+  }
+
+  /// The error for a failed call `Name(…)` where `Name` is a class, so the
+  /// call is a constructor call; `null` when [name] is not a class.
+  ///
+  /// The generic "can't find function" message is misleading there: the
+  /// constructor exists, and what failed is matching it. The most common cause
+  /// is a parameter type that does not exist, for example a typo in a field
+  /// type behind an initializing formal (`final Sring email; User(this.email);`).
+  /// That parameter then has type `Sring`, which no argument matches. Dart
+  /// rejects that program with "Type 'Sring' not found", and so does this
+  /// message.
+  String? _constructorMismatchMessage(
+    VMContext context,
+    ASTFunctionSignature signature,
+  ) {
+    var clazz = _resolveASTRoot(this)?.getClass(name);
+    if (clazz == null) return null;
+
+    var constructor = clazz.getConstructor('', null, context);
+    if (constructor == null) return null;
+
+    var parameters = constructor.parameters.allParameters;
+    var declared = parameters.map((p) => '${p.type} ${p.name}').join(', ');
+
+    for (var p in parameters) {
+      if (!_isUnknownType(context, p.type)) continue;
+      // An initializing formal (`this.email`) takes the field's type.
+      var source = p.thisParameter
+          ? ' (the type of the field `$name.${p.fieldName}`)'
+          : '';
+      return "Type '${p.type.name}' not found: it is the type of the "
+          "parameter `${p.name}` of the constructor `$name($declared)`"
+          "$source, so `$name(…)` can't be called with $signature.";
+    }
+
+    return "No constructor of `$name` matches the arguments $signature: "
+        "declared `$name($declared)`.";
+  }
+
+  /// Whether [type] names no type at all: not a built-in, not a type variable,
+  /// and unknown to the VM's type resolution (user classes in every loaded
+  /// namespace and the core classes). Used by [_constructorMismatchMessage].
+  ///
+  /// It is only consulted after a call has already failed, so a type that
+  /// ApolloVM does not model reads as unknown here without rejecting any
+  /// program that runs.
+  static bool _isUnknownType(VMContext context, ASTType type) {
+    if (type is ASTTypePrimitive ||
+        type is ASTTypeObject ||
+        type is ASTTypeConstructorThis ||
+        type is ASTTypeVar ||
+        type is ASTTypeDynamic ||
+        type is ASTTypeNull ||
+        type is ASTTypeVoid ||
+        type is ASTTypeGenericVariable ||
+        type is ASTTypeArray ||
+        type is ASTTypeMap ||
+        type is ASTTypeSet ||
+        type is ASTTypeFuture ||
+        type is ASTTypeFunction) {
+      return false;
+    }
+
+    try {
+      var resolved = context.typeResolver.resolveType(type.name);
+      // An asynchronous resolver can't be consulted from this synchronous
+      // path; don't claim the type is missing.
+      if (resolved is Future) return false;
+      return resolved == null;
+    } catch (_) {
+      return false;
+    }
   }
 }
 
