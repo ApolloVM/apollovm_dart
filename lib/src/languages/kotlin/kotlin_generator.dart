@@ -436,7 +436,17 @@ class ApolloCodeGeneratorKotlin extends ApolloCodeGenerator {
   }) {
     out ??= newOutput();
 
-    var blockCode = generateASTBlock(c, indent: indent, withBrackets: false);
+    // Initializing formals (`this.x`) become assignments ahead of the body,
+    // where Dart runs them. A secondary constructor may assign a `val` that
+    // has no initializer.
+    var blockCode = newOutput();
+    writeInitializingFormalAssignments(
+      c,
+      blockCode,
+      receiver: 'this',
+      indent: '$indent  ',
+    );
+    blockCode.write(generateASTBlock(c, indent: indent, withBrackets: false));
 
     out.write(indent);
 

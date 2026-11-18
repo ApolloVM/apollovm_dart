@@ -23,6 +23,10 @@ class ApolloCodeGeneratorPython extends ApolloCodeGenerator {
   ApolloCodeGeneratorPython(ApolloSourceCodeStorage codeStorage)
     : super('python', codeStorage);
 
+  /// Python has no implicit receiver: a field is always `self.field`.
+  @override
+  String? get implicitFieldReceiver => 'self';
+
   /// Python has no labeled loops.
   @override
   bool get supportsLabels => false;
@@ -682,7 +686,21 @@ class ApolloCodeGeneratorPython extends ApolloCodeGenerator {
     }
     out.write('):\n');
 
-    _writeSuite(constructor, out, '$indent$_tab');
+    // Initializing formals (`this.x`) become `self.x = x` ahead of the body,
+    // where Dart runs them. With at least one, the suite is no longer empty,
+    // so the body needs no `pass`.
+    var bodyIndent = '$indent$_tab';
+    if (initializingFormalsOf(constructor).isNotEmpty) {
+      writeInitializingFormalAssignments(
+        constructor,
+        out,
+        receiver: 'self',
+        indent: bodyIndent,
+      );
+      generateASTBlock(constructor, out: out, indent: bodyIndent);
+    } else {
+      _writeSuite(constructor, out, bodyIndent);
+    }
     out.write('\n');
 
     return out;
@@ -1549,7 +1567,7 @@ class ApolloCodeGeneratorPython extends ApolloCodeGenerator {
   }) {
     out ??= newOutput();
     out.write("f'{");
-    out.write(value.variable.name);
+    out.write(qualifiedVariableName(value, value.variable.name));
     out.write("}'");
     return out;
   }
@@ -1562,7 +1580,7 @@ class ApolloCodeGeneratorPython extends ApolloCodeGenerator {
         out.write('}');
       } else if (p is ASTValueStringVariable) {
         out.write('{');
-        out.write(p.variable.name);
+        out.write(qualifiedVariableName(p, p.variable.name));
         out.write('}');
       } else if (p is ASTValueStringConcatenation) {
         _writeFStringParts(p.values, out);

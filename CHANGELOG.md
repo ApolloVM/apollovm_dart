@@ -1,3 +1,28 @@
+## 2.36.1
+
+Translation fixes for a Dart class whose constructor initializes its fields
+with initializing formals (`User(this.email);`). The interpreter and the Wasm
+backend already ran such a class; translated, it lost its field values.
+
+- **Initializing formals in generated constructors.** `this.x` and `super.x`
+  parameters are now written as assignments at the top of the constructor
+  body, where Dart runs them: `this.email = email;` (JavaScript, TypeScript),
+  `this.email = email` (Kotlin) and `self.email = email` (Python). Before,
+  these constructors were emitted empty. A private named formal
+  (`{required this._id}`) assigns the private field (`this._id = id`).
+- **Implicit field reads in JavaScript, TypeScript and Python.** A field read
+  inside a member without a receiver (`"User[$email]"`, `count++`,
+  `sum = x + y`) is written `this.email` / `self.email`. Before, it was
+  written bare, which those languages read as an unbound variable.
+  Resolution follows the scope chain, so a parameter or local that shadows the
+  field is left alone.
+- **Go and Lua string interpolation** now qualifies fields as well
+  (`"User[" + o.email + "]"`, `"User[" .. self.email .. "]"`), and both
+  generators stop qualifying a *local* that shadows a field (they only
+  checked parameters).
+- **AST:** the target of `x++` / `x--` is now linked to its parent node, as an
+  assignment target already was, so it resolves through the scope chain.
+
 ## 2.36.0
 
 New Dart syntax, run by the interpreter and compiled to Wasm: labeled loops,

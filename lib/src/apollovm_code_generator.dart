@@ -2623,6 +2623,73 @@ abstract class ApolloCodeGenerator
   /// can't express it.
   String? typeCastCode(String operand, ASTType type) => null;
 
+  /// The receiver this target must write before a bare instance-field read —
+  /// `this` (JavaScript), `self` (Python) — or `null` when a bare field name
+  /// inside a member already means the field (Dart, Java, Kotlin, C#).
+  ///
+  /// A source with an implicit receiver reads `email` for `this.email`;
+  /// emitted verbatim in a target without one, that name is an unbound
+  /// variable. See [qualifiedVariableName].
+  String? get implicitFieldReceiver => null;
+
+  /// The instance field that the bare [name], read at [scope], refers to, or
+  /// `null` when it refers to something else.
+  ///
+  /// Resolution walks the same scope chain the VM does (locals declared before
+  /// [scope], then parameters, then the enclosing class's fields), so a
+  /// parameter or local that shadows the field — `User(email) { … email … }` —
+  /// is left alone. A static field is not an *instance* field: it is read
+  /// through the class, not the receiver.
+  ASTClassField? resolveImplicitInstanceField(ASTNode scope, String name) {
+    var node = scope.getNodeIdentifier(name, requester: scope);
+    if (node is ASTClassField && !node.modifiers.isStatic) return node;
+    return null;
+  }
+
+  /// [name], read at [scope], prefixed with [implicitFieldReceiver] when it is
+  /// an implicit instance-field read (see [resolveImplicitInstanceField]).
+  ///
+  /// Shared by the variable path ([generateASTScopeVariable]) and the
+  /// string-interpolation paths, which write the variable name themselves.
+  String qualifiedVariableName(ASTNode scope, String name) {
+    var receiver = implicitFieldReceiver;
+    if (receiver != null && resolveImplicitInstanceField(scope, name) != null) {
+      return '$receiver.$name';
+    }
+    return name;
+  }
+
+  /// The parameters of [constructor] that initialize a field — `this.x`, and
+  /// `super.x` for an inherited one — in declaration order.
+  ///
+  /// Dart runs these before the constructor body. A target without
+  /// initializing formals has to write them as assignments at the top of the
+  /// body (see [writeInitializingFormalAssignments]).
+  List<ASTConstructorParameterDeclaration> initializingFormalsOf(
+    ASTClassConstructorDeclaration constructor,
+  ) => constructor.parameters.allParameters
+      .where((p) => p.thisParameter)
+      .toList();
+
+  /// Writes one `receiver.field = parameter` assignment per initializing
+  /// formal of [constructor], one per line at [indent], ending each with
+  /// [terminator] (`;` for the C-style targets, empty for Python and Kotlin).
+  ///
+  /// The field is [ASTConstructorParameterDeclaration.fieldName], which differs
+  /// from the parameter name for a private named parameter
+  /// (`{required this._x}` → `this._x = x`).
+  void writeInitializingFormalAssignments(
+    ASTClassConstructorDeclaration constructor,
+    StringBuffer out, {
+    required String receiver,
+    required String indent,
+    String terminator = '',
+  }) {
+    for (var p in initializingFormalsOf(constructor)) {
+      out.write('$indent$receiver.${p.fieldName} = ${p.name}$terminator\n');
+    }
+  }
+
   /// Whether [type] names a user class or interface (`A`, `Box<int>`) rather
   /// than a built-in type. Spelled out instead of read from `runtimeType`,
   /// whose names are minified on the web.
@@ -3343,6 +3410,8 @@ abstract class ApolloCodeGenerator
       var typeIdentifier = variable.typeIdentifier;
       name = typeIdentifier!.name;
       name = normalizeTypeName(name, callingFunction);
+    } else {
+      name = qualifiedVariableName(variable, name);
     }
 
     out.write(name);
