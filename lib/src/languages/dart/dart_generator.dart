@@ -97,6 +97,9 @@ class ApolloCodeGeneratorDart extends ApolloCodeGenerator {
   bool get supportsRequiredParameters => true;
 
   @override
+  bool get supportsInitializingFormals => true;
+
+  @override
   String normalizeTypeName(String typeName, [String? callingFunction]) {
     switch (typeName) {
       case 'Integer':

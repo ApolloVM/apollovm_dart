@@ -20,6 +20,14 @@ class ApolloCodeGeneratorTypeScript extends ApolloCodeGenerator {
   ApolloCodeGeneratorTypeScript(ApolloSourceCodeStorage codeStorage)
     : super('typescript', codeStorage);
 
+  /// TypeScript has no implicit receiver: a field is always `this.field`.
+  @override
+  String? get implicitFieldReceiver => 'this';
+
+  /// A class field initializer evaluates with `this` bound to the instance.
+  @override
+  bool get receiverBoundInFieldInitializers => true;
+
   @override
   String? typeTestCode(String operand, ASTType type, {required bool negated}) =>
       jsTypeTest(operand, type, negated: negated);
@@ -436,7 +444,18 @@ class ApolloCodeGeneratorTypeScript extends ApolloCodeGenerator {
   }) {
     out ??= newOutput();
 
-    var blockCode = generateASTBlock(c, indent: indent, withBrackets: false);
+    // Initializing formals (`this.x`) become assignments ahead of the body,
+    // where Dart runs them. TypeScript allows assigning a `readonly` field
+    // here, in the constructor.
+    var blockCode = newOutput();
+    writeInitializingFormalAssignments(
+      c,
+      blockCode,
+      receiver: 'this',
+      indent: '$indent  ',
+      terminator: ';',
+    );
+    blockCode.write(generateASTBlock(c, indent: indent, withBrackets: false));
 
     out.write(indent);
     out.write('constructor');
@@ -897,7 +916,7 @@ class ApolloCodeGeneratorTypeScript extends ApolloCodeGenerator {
     if (value is ASTValueString) {
       return _escapeTemplateLiteral(value.value);
     } else if (value is ASTValueStringVariable) {
-      return '\${${value.variable.name}}';
+      return '\${${qualifiedVariableName(value, value.variable.name)}}';
     } else if (value is ASTValueStringExpression) {
       var exp = generateASTExpression(value.expression).toString();
       return '\${$exp}';
@@ -933,7 +952,7 @@ class ApolloCodeGeneratorTypeScript extends ApolloCodeGenerator {
     out ??= newOutput();
 
     out.write('`\${');
-    out.write(value.variable.name);
+    out.write(qualifiedVariableName(value, value.variable.name));
     out.write('}`');
 
     return out;

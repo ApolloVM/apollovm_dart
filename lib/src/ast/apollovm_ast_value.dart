@@ -1328,6 +1328,15 @@ class ASTValueStringVariable<T> extends ASTValue<String> {
   @override
   Iterable<ASTNode> get children => [];
 
+  /// Links the interpolated [variable] to this node, so `$email` resolves
+  /// through the scope chain like a plain read of `email`. A code generator
+  /// relies on that to tell a field (`this.email`) from a local.
+  @override
+  void resolveNode(ASTNode? parentNode) {
+    super.resolveNode(parentNode);
+    variable.resolveNode(this);
+  }
+
   @override
   FutureOr<String> getValue(VMContext context) {
     return variable.getValue(context).resolveMapped((value) {

@@ -355,7 +355,17 @@ class ApolloCodeGeneratorJava11 extends ApolloCodeGenerator {
   }) {
     out ??= newOutput();
 
-    var blockCode = generateASTBlock(c, indent: indent, withBrackets: false);
+    // Java has no initializing formals: `User(this.email)` becomes a typed
+    // parameter plus `this.email = email;` ahead of the body.
+    var blockCode = newOutput();
+    writeInitializingFormalAssignments(
+      c,
+      blockCode,
+      receiver: 'this',
+      indent: '$indent  ',
+      terminator: ';',
+    );
+    blockCode.write(generateASTBlock(c, indent: indent, withBrackets: false));
 
     out.write(indent);
 

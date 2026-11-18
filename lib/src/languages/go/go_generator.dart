@@ -1298,10 +1298,9 @@ class ApolloCodeGeneratorGo extends ApolloCodeGenerator {
     bool headIndented = true,
   }) {
     // Field reads inside a struct method become `o.field`, unless a parameter
-    // of the same name shadows the field.
+    // or local of the same name shadows the field.
     if (!variable.isTypeIdentifier &&
-        _currentClassFields.contains(variable.name) &&
-        !_currentMemberParameters.contains(variable.name)) {
+        _isReceiverField(variable, variable.name)) {
       out ??= newOutput();
       if (headIndented) out.write(indent);
       out.write('$_receiver.');
@@ -1823,7 +1822,7 @@ class ApolloCodeGeneratorGo extends ApolloCodeGenerator {
 
     for (var v in value.values) {
       if (v is ASTValueStringVariable) {
-        parts.add((code: v.variable.name, isString: false));
+        parts.add((code: _interpolatedVariableCode(v), isString: false));
       } else if (v is ASTValueStringExpression) {
         var exp = generateASTExpression(v.expression).toString();
         parts.add((code: '($exp)', isString: false));
@@ -1863,8 +1862,41 @@ class ApolloCodeGeneratorGo extends ApolloCodeGenerator {
   }) {
     out ??= newOutput();
     out.write('"" + ');
-    out.write(value.variable.name);
+    out.write(_interpolatedVariableCode(value));
     return out;
+  }
+
+  /// The Go expression for the variable interpolated by [value] (`$email`).
+  ///
+  /// Written through [generateASTVariable], as a plain read of the variable
+  /// is: a field of the current struct becomes `o.email`, `$this` the
+  /// receiver `o`, and the name is mangled like its declaration
+  /// ([_goIdent]). Used by both string interpolation paths
+  /// ([generateASTValueStringVariable] and the concatenation parts).
+  String _interpolatedVariableCode(ASTValueStringVariable value) =>
+      generateASTVariable(value.variable, headIndented: false).toString();
+
+  /// The factory `NewX` evaluates field initializers with `o` already bound.
+  @override
+  bool get receiverBoundInFieldInitializers => true;
+
+  /// Whether the bare [name], read at [scope], is a field of the current
+  /// struct, to be written `o.name`.
+  ///
+  /// When [scope] is linked into the tree, the shared scope resolution decides
+  /// ([resolveImplicitInstanceField]), so a local, loop or catch variable, or
+  /// parameter that shadows the field is left alone. Static fields count:
+  /// this generator emits them as struct fields. A node the parser never
+  /// linked has no scope to walk, so it falls back to the struct's field
+  /// names minus the current member's parameters, which is what this
+  /// generator used before.
+  bool _isReceiverField(ASTNode scope, String name) {
+    if (scope.parentNode != null) {
+      return resolveImplicitInstanceField(scope, name, includeStatic: true) !=
+          null;
+    }
+    return _currentClassFields.contains(name) &&
+        !_currentMemberParameters.contains(name);
   }
 
   @override

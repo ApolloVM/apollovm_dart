@@ -459,7 +459,8 @@ abstract class ApolloCodeGenerator
     }
 
     if (parameter is ASTConstructorParameterDeclaration &&
-        parameter.thisParameter) {
+        parameter.thisParameter &&
+        supportsInitializingFormals) {
       // An initializing formal names the *field*: for a private named
       // parameter (`A({required this._x})`) that is the private name, and the
       // public name callers use is derived from it by the language itself.
@@ -483,6 +484,12 @@ abstract class ApolloCodeGenerator
   /// modifier. Only Dart does; the others express it by the absence of a
   /// default value, so the modifier is dropped there.
   bool get supportsRequiredParameters => false;
+
+  /// Whether this target writes an initializing formal as such (`this.x`,
+  /// `super.x` in the parameter list). Only Dart does. Elsewhere the
+  /// parameter is written typed (`String email`), and the constructor assigns
+  /// the field with [writeInitializingFormalAssignments].
+  bool get supportsInitializingFormals => false;
 
   /// The separator emitted between a parameter and its default value in a
   /// declaration (e.g. ` = ` in Dart/Kotlin/C#/Java, `=` in Python).
@@ -2623,6 +2630,192 @@ abstract class ApolloCodeGenerator
   /// can't express it.
   String? typeCastCode(String operand, ASTType type) => null;
 
+  /// The receiver this target must write before a bare instance-field read —
+  /// `this` (JavaScript), `self` (Python) — or `null` when a bare field name
+  /// inside a member already means the field (Dart, Java, Kotlin, C#).
+  ///
+  /// A source with an implicit receiver reads `email` for `this.email`;
+  /// emitted verbatim in a target without one, that name is an unbound
+  /// variable. See [qualifiedVariableName].
+  String? get implicitFieldReceiver => null;
+
+  /// Whether the receiver is bound in a field initializer of this target, so
+  /// that `int y = x * 2;` may read `x` through it.
+  ///
+  /// JavaScript/TypeScript class fields evaluate with `this` bound; a Python
+  /// class-body attribute (or a Lua class-table default) evaluates once, with
+  /// no `self`, so qualifying there would raise `NameError` at class
+  /// definition.
+  bool get receiverBoundInFieldInitializers => false;
+
+  /// The field of the enclosing class that the bare [name], read at [scope],
+  /// refers to, or `null` when it refers to something else.
+  ///
+  /// This is a lexical-scope walk from [scope] up to the class. On the way
+  /// it checks every binder that can shadow the field:
+  /// - parameters (functions, constructors, lambdas, setters);
+  /// - locals declared earlier in an enclosing block (not in a block that
+  ///   has already closed);
+  /// - a `for (var x …)` / `for (var x in …)` loop variable;
+  /// - a `catch (x, st)` variable.
+  ///
+  /// `getNodeIdentifier` is not used because it sees neither loop nor catch
+  /// variables, and it scans a function's flattened descendants, so it can
+  /// mistake a local of a closed block for a binder.
+  ///
+  /// Fields include inherited ones ([ASTClass.getField]). A static field is
+  /// read through the class rather than a receiver, so it is excluded unless
+  /// [includeStatic] (Go and Lua emit static fields as instance members). A
+  /// read outside any member — a field initializer — resolves only when
+  /// [receiverBoundInFieldInitializers].
+  ASTClassField? resolveImplicitInstanceField(
+    ASTNode scope,
+    String name, {
+    bool includeStatic = false,
+  }) {
+    var inMember = false;
+    ASTNode child = scope;
+    var node = scope.parentNode;
+
+    while (node != null) {
+      if (node is ASTClass) {
+        if (!inMember && !receiverBoundInFieldInitializers) return null;
+        var field = node.getField(name);
+        if (field == null) return null;
+        if (field.modifiers.isStatic && !includeStatic) return null;
+        return field;
+      }
+
+      if (_bindsNameInScope(node, child, name)) return null;
+
+      if (node is ASTClassFunctionDeclaration ||
+          node is ASTClassConstructorDeclaration ||
+          node is ASTGetterDeclaration ||
+          node is ASTSetterDeclaration) {
+        inMember = true;
+      }
+
+      child = node;
+      node = node.parentNode;
+    }
+
+    return null;
+  }
+
+  /// Whether [node], an ancestor of the read being resolved, binds [name] in
+  /// the scope that [child] (the read's ancestor directly below [node], or
+  /// the read itself) sees. Used only by [resolveImplicitInstanceField].
+  ///
+  /// The blocks of `for`, `for-in` and `try` are linked to the *enclosing*
+  /// block, not to their statement, so a block can't just check its own
+  /// statements: it finds the statement that contains [child]
+  /// ([_statementContains]), then checks the binders that statement
+  /// introduces, then the declarations before it.
+  bool _bindsNameInScope(ASTNode node, ASTNode child, String name) {
+    if (node is ASTInvocableDeclaration &&
+        node.getParameterByName(name) != null) {
+      return true;
+    }
+    if (node is ASTSetterDeclaration && node.parameterName == name) {
+      return true;
+    }
+    if (node is! ASTBlock) return false;
+
+    var statements = node.statements;
+    var index = statements.indexWhere((s) => _statementContains(s, child));
+
+    // Not under any statement (for example a local function of the block):
+    // all of the block's locals are visible to it.
+    var preceding = index < 0 ? statements : statements.sublist(0, index);
+    if (preceding.any((s) => _declaresName(s, name))) return true;
+    if (index < 0) return false;
+
+    var statement = statements[index];
+    if (statement is ASTStatementForEach) {
+      return statement.variableName == name &&
+          _nodeContains(statement.loopBlock, child);
+    }
+    if (statement is ASTStatementForLoop) {
+      // The loop variable is visible in the condition, the update and the
+      // body, but not in its own initializer.
+      return _declaresName(statement.initStatement, name) &&
+          !identical(statement.initStatement, child);
+    }
+    if (statement is ASTStatementTryCatch) {
+      return statement.catches.any(
+        (c) =>
+            (c.variableName == name || c.stackTraceName == name) &&
+            _nodeContains(c.block, child),
+      );
+    }
+    return false;
+  }
+
+  /// Whether [statement] declares a local named [name]: `var name = …`, or
+  /// one of a declaration list (`var a = 1, name = 2;`).
+  static bool _declaresName(ASTStatement statement, String name) =>
+      (statement is ASTStatementVariableDeclaration &&
+          statement.name == name) ||
+      (statement is ASTStatementVariableDeclarationList &&
+          statement.declarations.any((d) => d.name == name));
+
+  /// Whether [target] is [statement] or lies inside it, catch blocks
+  /// included (they are not among a try statement's [ASTNode.children]).
+  static bool _statementContains(ASTStatement statement, ASTNode target) {
+    if (_nodeContains(statement, target)) return true;
+    return statement is ASTStatementTryCatch &&
+        statement.catches.any((c) => _nodeContains(c.block, target));
+  }
+
+  /// Whether [target] is [root] or one of its descendants (by identity).
+  static bool _nodeContains(ASTNode root, ASTNode target) =>
+      identical(root, target) ||
+      root.descendantChildren.any((n) => identical(n, target));
+
+  /// [name], read at [scope], prefixed with [implicitFieldReceiver] when it is
+  /// an implicit instance-field read (see [resolveImplicitInstanceField]).
+  ///
+  /// Shared by the variable path ([generateASTScopeVariable]) and the
+  /// string-interpolation paths, which write the variable name themselves.
+  String qualifiedVariableName(ASTNode scope, String name) {
+    var receiver = implicitFieldReceiver;
+    if (receiver != null && resolveImplicitInstanceField(scope, name) != null) {
+      return '$receiver.$name';
+    }
+    return name;
+  }
+
+  /// The parameters of [constructor] that initialize a field — `this.x`, and
+  /// `super.x` for an inherited one — in declaration order.
+  ///
+  /// Dart runs these before the constructor body. A target without
+  /// initializing formals has to write them as assignments at the top of the
+  /// body (see [writeInitializingFormalAssignments]).
+  List<ASTConstructorParameterDeclaration> initializingFormalsOf(
+    ASTClassConstructorDeclaration constructor,
+  ) => constructor.parameters.allParameters
+      .where((p) => p.thisParameter)
+      .toList();
+
+  /// Writes one `receiver.field = parameter` assignment per initializing
+  /// formal of [constructor], one per line at [indent], ending each with
+  /// [terminator] (`;` for the C-style targets, empty for Python and Kotlin).
+  ///
+  /// The field is [ASTConstructorParameterDeclaration.fieldName], which differs
+  /// from the parameter name for a private named parameter
+  /// (`{required this._x}` → `this._x = x`).
+  void writeInitializingFormalAssignments(
+    ASTClassConstructorDeclaration constructor,
+    StringBuffer out, {
+    required String receiver,
+    required String indent,
+    String terminator = '',
+  }) {
+    for (var p in initializingFormalsOf(constructor)) {
+      out.write('$indent$receiver.${p.fieldName} = ${p.name}$terminator\n');
+    }
+  }
+
   /// Whether [type] names a user class or interface (`A`, `Box<int>`) rather
   /// than a built-in type. Spelled out instead of read from `runtimeType`,
   /// whose names are minified on the web.
@@ -3343,6 +3536,8 @@ abstract class ApolloCodeGenerator
       var typeIdentifier = variable.typeIdentifier;
       name = typeIdentifier!.name;
       name = normalizeTypeName(name, callingFunction);
+    } else {
+      name = qualifiedVariableName(variable, name);
     }
 
     out.write(name);

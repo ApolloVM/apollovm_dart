@@ -3494,6 +3494,17 @@ class ASTExpressionVariableDirectOperation extends ASTExpression {
   @override
   Iterable<ASTNode> get children => [variable];
 
+  /// Links the target to this node, as [ASTExpressionVariableAssignment] does,
+  /// so the name resolves through the scope chain: without it the target has
+  /// no parent, and a code generator can't tell that `count++` in a method
+  /// increments a field (`this.count++` in JavaScript, `self.count += 1` in
+  /// Python).
+  @override
+  void resolveNode(ASTNode? parentNode) {
+    super.resolveNode(parentNode);
+    variable.resolveNode(this);
+  }
+
   @override
   FutureOr<ASTType> resolveType(VMContext? context) =>
       variable.resolveType(context);

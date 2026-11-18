@@ -1,3 +1,35 @@
+## 2.36.1
+
+Translation fixes for a Dart class whose constructor initializes its fields
+with initializing formals (`User(this.email);`). The interpreter and the Wasm
+backend already ran such a class; translated, it lost its field values.
+
+- **Initializing formals in generated constructors.** `this.x` and `super.x`
+  parameters are now written as assignments at the top of the constructor
+  body, where Dart runs them: `this.email = email;` (JavaScript, TypeScript),
+  `this.email = email` (Kotlin) and `self.email = email` (Python). Before,
+  these constructors were emitted empty. Java and C# wrote the Dart form
+  `User(this.email) { }`, which neither language accepts; they now write
+  `User(String email) { this.email = email; }`. A private named formal
+  (`{required this._id}`) assigns the private field (`this._id = id`).
+- **Implicit field reads in JavaScript, TypeScript and Python.** A field read
+  inside a member without a receiver (`"User[$email]"`, `count++`,
+  `sum = x + y`) is written `this.email` / `self.email`, inherited fields
+  included. Before, it was written bare, which those languages read as an
+  unbound variable. The read is resolved by a lexical-scope walk, so a
+  parameter, a local declared earlier in an enclosing block, a `for` /
+  `for-in` loop variable or a `catch` variable that shadows the field is left
+  alone. A static field is not qualified, and neither is a Python class-body
+  field initializer, which has no `self`.
+- **Go and Lua string interpolation** now qualifies fields as well
+  (`"User[" + o.email + "]"`, `"User[" .. self.email .. "]"`). Both
+  generators now use the same scope walk, so they stop qualifying a local,
+  loop or catch variable that shadows a field (they only checked
+  parameters).
+- **AST:** the targets of `x++` / `x--` and of string interpolation (`$x`) are
+  now linked to their parent node, as an assignment target already was, so
+  they resolve through the scope chain.
+
 ## 2.36.0
 
 New Dart syntax, run by the interpreter and compiled to Wasm: labeled loops,

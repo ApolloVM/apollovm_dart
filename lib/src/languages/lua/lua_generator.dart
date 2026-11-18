@@ -4,6 +4,7 @@
 
 import '../../apollovm_code_generator.dart';
 import '../../apollovm_code_storage.dart';
+import '../../ast/apollovm_ast_base.dart';
 import '../../ast/apollovm_ast_expression.dart';
 import '../../ast/apollovm_ast_statement.dart';
 import '../../ast/apollovm_ast_toplevel.dart';
@@ -1067,9 +1068,9 @@ class ApolloCodeGeneratorLua extends ApolloCodeGenerator {
     String indent = '',
     bool headIndented = true,
   }) {
-    // Field reads inside a class method become `self.field`.
-    if (!variable.isTypeIdentifier &&
-        _currentClassFields.contains(variable.name)) {
+    // Field reads inside a class method become `self.field`, unless a
+    // parameter or local of the same name shadows the field.
+    if (!variable.isTypeIdentifier && _isSelfField(variable, variable.name)) {
       out ??= newOutput();
       if (headIndented) out.write(indent);
       out.write('self.');
@@ -1260,7 +1261,7 @@ class ApolloCodeGeneratorLua extends ApolloCodeGenerator {
     if (value is ASTValueString) {
       return '"${_escapeString(value.value)}"';
     } else if (value is ASTValueStringVariable) {
-      return value.variable.name;
+      return _interpolatedVariableCode(value);
     } else if (value is ASTValueStringExpression) {
       var inner = generateASTExpression(value.expression).toString();
       // Lua's `..` binds tighter than comparison/logical operators, so an
@@ -1283,8 +1284,34 @@ class ApolloCodeGeneratorLua extends ApolloCodeGenerator {
     bool precededByString = false,
   }) {
     out ??= newOutput();
-    out.write(value.variable.name);
+    out.write(_interpolatedVariableCode(value));
     return out;
+  }
+
+  /// The Lua expression for the variable interpolated by [value] (`$email`).
+  ///
+  /// Written through [generateASTVariable], as a plain read of the variable
+  /// is: a field of the current class becomes `self.email` (see
+  /// [generateASTScopeVariable]). Used by both string interpolation paths
+  /// ([generateASTValueStringVariable] and [_valuePart]).
+  String _interpolatedVariableCode(ASTValueStringVariable value) =>
+      generateASTVariable(value.variable, headIndented: false).toString();
+
+  /// Whether the bare [name], read at [scope], is a field of the current
+  /// class, to be written `self.name`.
+  ///
+  /// When [scope] is linked into the tree, the shared scope resolution decides
+  /// ([resolveImplicitInstanceField]), so a local, loop or catch variable, or
+  /// parameter that shadows the field is left alone. Static fields count:
+  /// this generator emits them in the class table, read through `self`. A
+  /// node the parser never linked has no scope to walk, so it falls back to
+  /// the class's field names, which is what this generator used before.
+  bool _isSelfField(ASTNode scope, String name) {
+    if (scope.parentNode != null) {
+      return resolveImplicitInstanceField(scope, name, includeStatic: true) !=
+          null;
+    }
+    return _currentClassFields.contains(name);
   }
 
   @override

@@ -1,0 +1,350 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<test title="Dart initializing formals (`User(this.email)`) and implicit field reads, translated">
+    <source language="dart">
+        <![CDATA[
+class User {
+  final String email;
+  int logins = 0;
+
+  User(this.email);
+
+  String toString() => "User[$email]";
+
+  String greet(String email) => 'Hi $email from ${this.email}';
+
+  int login() {
+    logins += 1;
+    logins = logins + 10;
+    return logins;
+  }
+
+  String shadow() {
+    var email = 'local';
+    return 'shadow: $email';
+  }
+}
+
+class Point {
+  int x;
+  int y;
+  int sum = 0;
+
+  Point(this.x, this.y) {
+    sum = x + y;
+  }
+
+  String toString() => '($x, $y) = $sum';
+}
+
+void main() {
+  var u1 = User("foo@mail.com");
+  print(u1);
+  print(u1.greet('bar'));
+  print(u1.login());
+  print(u1.shadow());
+  var p = Point(3, 4);
+  print(p);
+}
+        ]]>
+    </source>
+    <call function="main">
+        []
+    </call>
+    <output><![CDATA[["User[foo@mail.com]", "Hi bar from foo@mail.com", 11, "shadow: local", "(3, 4) = 7"]]]></output>
+    <source-generated language="dart"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+  void main() {
+    var u1 = User('foo@mail.com');
+    print(u1);
+    print(u1.greet('bar'));
+    print(u1.login());
+    print(u1.shadow());
+    var p = Point(3, 4);
+    print(p);
+  }
+
+class User {
+
+  final String email;
+  int logins = 0;
+
+  User(this.email);
+
+  String toString() {
+    return 'User[$email]';
+  }
+
+  String greet(String email) {
+    return 'Hi $email from ${this.email}';
+  }
+
+  int login() {
+    logins += 1;
+    logins = logins + 10;
+    return logins;
+  }
+
+  String shadow() {
+    var email = 'local';
+    return 'shadow: $email';
+  }
+
+}
+class Point {
+
+  int x;
+  int y;
+  int sum = 0;
+
+  Point(this.x, this.y) {
+    sum = x + y;
+  }
+
+  String toString() {
+    return '($x, $y) = $sum';
+  }
+
+}
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+    <source-generated language="kotlin"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+  fun main() {
+    var u1 = User("foo@mail.com")
+    print(u1)
+    print(u1.greet("bar"))
+    print(u1.login())
+    print(u1.shadow())
+    var p = Point(3, 4)
+    print(p)
+  }
+
+class User {
+
+  val email: String
+  var logins: Int = 0
+
+  constructor(email: String) {
+    this.email = email
+  }
+
+  fun toString(): String {
+    return "User[$email]"
+  }
+
+  fun greet(email: String): String {
+    return "Hi $email from ${this.email}"
+  }
+
+  fun login(): Int {
+    logins += 1
+    logins = logins + 10
+    return logins
+  }
+
+  fun shadow(): String {
+    var email = "local"
+    return "shadow: $email"
+  }
+
+}
+class Point {
+
+  var x: Int
+  var y: Int
+  var sum: Int = 0
+
+  constructor(x: Int, y: Int) {
+    this.x = x
+    this.y = y
+    sum = x + y
+  }
+
+  fun toString(): String {
+    return "($x, $y) = $sum"
+  }
+
+}
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+    <source-generated language="javascript"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+  function main() {
+    let u1 = User('foo@mail.com');
+    print(u1);
+    print(u1.greet('bar'));
+    print(u1.login());
+    print(u1.shadow());
+    let p = Point(3, 4);
+    print(p);
+  }
+
+class User {
+
+  email;
+  logins = 0;
+
+  constructor(email) {
+    this.email = email;
+  }
+
+  toString() {
+    return `User[${this.email}]`;
+  }
+
+  greet(email) {
+    return `Hi ${email} from ${this.email}`;
+  }
+
+  login() {
+    this.logins += 1;
+    this.logins = this.logins + 10;
+    return this.logins;
+  }
+
+  shadow() {
+    let email = 'local';
+    return `shadow: ${email}`;
+  }
+
+}
+class Point {
+
+  x;
+  y;
+  sum = 0;
+
+  constructor(x, y) {
+    this.x = x;
+    this.y = y;
+    this.sum = x + y;
+  }
+
+  toString() {
+    return `(${this.x}, ${this.y}) = ${this.sum}`;
+  }
+
+}
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+    <source-generated language="typescript"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+  function main(): void {
+    let u1 = User('foo@mail.com');
+    print(u1);
+    print(u1.greet('bar'));
+    print(u1.login());
+    print(u1.shadow());
+    let p = Point(3, 4);
+    print(p);
+  }
+
+class User {
+
+  readonly email: string;
+  logins: number = 0;
+
+  constructor(email: string) {
+    this.email = email;
+  }
+
+  toString(): string {
+    return `User[${this.email}]`;
+  }
+
+  greet(email: string): string {
+    return `Hi ${email} from ${this.email}`;
+  }
+
+  login(): number {
+    this.logins += 1;
+    this.logins = this.logins + 10;
+    return this.logins;
+  }
+
+  shadow(): string {
+    let email = 'local';
+    return `shadow: ${email}`;
+  }
+
+}
+class Point {
+
+  x: number;
+  y: number;
+  sum: number = 0;
+
+  constructor(x: number, y: number) {
+    this.x = x;
+    this.y = y;
+    this.sum = x + y;
+  }
+
+  toString(): string {
+    return `(${this.x}, ${this.y}) = ${this.sum}`;
+  }
+
+}
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+    <source-generated language="python"><![CDATA[<<<< [SOURCES_BEGIN] >>>>
+<<<< NAMESPACE="" >>>>
+<<<< CODE_UNIT_START="/test" >>>>
+def main() -> None:
+    u1: User = User('foo@mail.com')
+    print(u1)
+    print(u1.greet('bar'))
+    print(u1.login())
+    print(u1.shadow())
+    p: Point = Point(3, 4)
+    print(p)
+
+class User:
+    email: str
+    logins: int = 0
+
+    def __init__(self, email: str):
+        self.email = email
+
+    def toString(self) -> str:
+        return f'User[{self.email}]'
+
+    def greet(self, email: str) -> str:
+        return f'Hi {email} from {self.email}'
+
+    def login(self) -> int:
+        self.logins += 1
+        self.logins = self.logins + 10
+        return self.logins
+
+    def shadow(self) -> str:
+        email: str = 'local'
+        return f'shadow: {email}'
+
+
+class Point:
+    x: int
+    y: int
+    sum: int = 0
+
+    def __init__(self, x: int, y: int):
+        self.x = x
+        self.y = y
+        self.sum = x + y
+
+    def toString(self) -> str:
+        return f'({self.x}, {self.y}) = {self.sum}'
+
+
+<<<< CODE_UNIT_END="/test" >>>>
+<<<< [SOURCES_END] >>>>
+]]></source-generated>
+</test>
